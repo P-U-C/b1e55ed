@@ -1,0 +1,37 @@
+# b1e55ed system defaults
+# Surface 1 of 3 (defaults + presets). Secrets belong in env vars.
+
+preset: balanced
+
+brain:
+  cycle_interval_seconds: 1800
+
+universe:
+  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+  max_size: 100
+
+execution:
+  mode: paper  # paper | live
+  paper_start_balance: 10000.0
+  confirmation_threshold_usd: 500.0
+  paper_min_days: 14
+
+karma:
+  enabled: true
+  percentage: 0.005
+  settlement_mode: manual  # manual | daily | weekly | threshold
+  threshold_usd: 50.0
+  treasury_address: ""
+
+logging:
+  level: INFO
+  json_output: false
+
+dashboard:
+  host: "127.0.0.1"
+  port: 5051
+  auth_token: ""
+
+api:
+  host: "127.0.0.1"
+  port: 5050

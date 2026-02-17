@@ -1,0 +1,18 @@
+{
+  "repo": "P-U-C/b1e55ed",
+  "default_branch": "develop",
+  "python": {
+    "requires": ">=3.11",
+    "formatter": "ruff",
+    "typecheck": "mypy"
+  },
+  "config": {
+    "dir": ".b1e55ed",
+    "surfaces": ["config/default.yaml", "config/presets/*.yaml", "env"]
+  },
+  "principles": {
+    "event_contract_is_primitive": true,
+    "hash_chain_all_events": true,
+    "execution_modes": ["paper", "live"]
+  }
+}

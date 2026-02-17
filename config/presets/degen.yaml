@@ -1,0 +1,16 @@
+# Degen preset
+
+weights:
+  curator: 0.20
+  onchain: 0.25
+  tradfi: 0.15
+  social: 0.20
+  technical: 0.15
+  events: 0.05
+
+risk:
+  max_leverage: 5.0
+  max_position_pct: 0.20
+  max_portfolio_heat_pct: 0.10
+  daily_loss_limit_pct: 0.05
+  max_drawdown_pct: 0.40
