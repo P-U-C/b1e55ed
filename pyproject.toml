@@ -1,0 +1,65 @@
+[project]
+name = "b1e55ed"
+version = "2.0.0"
+description = "Sovereign AI trading intelligence with compound learning"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+
+dependencies = [
+    "pydantic>=2.5",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pyarrow>=14.0",
+    "cryptography>=42.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.109",
+    "uvicorn>=0.29",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "pre-commit>=3.5",
+]
+social = [
+    "praw>=7.7",
+    "pytrends>=4.9",
+]
+exchange = [
+    "hyperliquid-python-sdk>=0.7",
+]
+
+[project.scripts]
+b1e55ed = "engine.cli:main"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -v"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["engine", "api", "dashboard"]
