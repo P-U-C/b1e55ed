@@ -43,8 +43,9 @@ class DomainWeights(BaseModel):
     @field_validator("events", mode="after")
     @classmethod
     def weights_must_sum_to_one(cls, v: float, info) -> float:
-        fields = ["curator", "onchain", "tradfi", "social", "technical", "events"]
-        total = sum(float(info.data.get(f, 0.0)) for f in fields)
+        # info.data contains previously validated fields; v is the current field's value
+        prior = ["curator", "onchain", "tradfi", "social", "technical"]
+        total = sum(float(info.data.get(f, 0.0)) for f in prior) + v
         if abs(total - 1.0) > 0.001:
             raise ValueError(f"Domain weights must sum to 1.0, got {total}")
         return v
