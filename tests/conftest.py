@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
+
+# uv/pytest may run without installing the project; ensure repo root is importable.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from engine.core.config import Config
 
