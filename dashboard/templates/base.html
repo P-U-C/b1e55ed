@@ -5,31 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}b1e55ed{% endblock %}</title>
 
-  <!-- Tailwind (utility classes only, CRT overrides in style.css) -->
-  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-  <script>
-    tailwind.config = {
-      theme: { extend: {} },
-      corePlugins: { preflight: false }
-    }
-  </script>
-
   <!-- HTMX -->
   <script src="/static/htmx.min.js"></script>
 
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-
-  <!-- CRT Aesthetic -->
+  <!-- CRT → PUC Aesthetic -->
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
+  <!-- Film grain overlay -->
+  <div class="grain"></div>
+
   <!-- ── Nav ──────────────────────────────────── -->
   <nav class="nav">
-    <button class="nav-hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">☰</button>
+    <button class="nav-hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">≡</button>
 
-    <a href="/" class="nav-logo">b1e55ed</a>
+    <a href="/" class="nav-logo">b1e55<span class="hex">ed</span></a>
 
     <div class="nav-links">
       <a href="/" class="nav-link {% if active_page == 'brain' %}active{% endif %}">Brain</a>
@@ -61,14 +52,6 @@
   <main class="page">
     {% block content %}{% endblock %}
   </main>
-
-  <!-- ── Footer ───────────────────────────────── -->
-  <footer style="text-align:center; padding:1rem; color:var(--text-muted); font-size:0.6875rem; font-family:var(--font-ui);">
-    Hashcash predates Bitcoin (1997).
-  </footer>
-
-  <!-- Init Lucide icons -->
-  <script>lucide.createIcons();</script>
 
   {% block scripts %}{% endblock %}
 </body>

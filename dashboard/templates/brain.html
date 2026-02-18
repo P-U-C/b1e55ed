@@ -26,8 +26,8 @@
       {% for p in positions %}
       <div style="margin-bottom: 0.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:baseline;">
-          <span class="text-bright glow" style="font-weight:600;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
-          <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }}" style="font-weight:500;">
+          <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
+          <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }}" style="font-weight:400;">
             {{ '%+.1f' | format(p.pnl_pct) }}%
           </span>
         </div>
@@ -61,11 +61,11 @@
     {% if convictions %}
       {% for c in convictions %}
       <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
-        <span style="width:3rem; font-weight:500;">{{ c.symbol }}</span>
+        <span style="width:3rem; font-weight:400;">{{ c.symbol }}</span>
         <div class="conviction-bar" style="flex:1;">
           <div class="conviction-bar-fill {{ c.direction }}" style="width:{{ (c.magnitude / 10 * 100) | int }}%;"></div>
         </div>
-        <span style="width:2rem; text-align:right; font-weight:500;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
+        <span style="width:2rem; text-align:right; font-weight:400;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
         <span style="width:4.5rem; font-size:0.75rem;" class="text-dim">{{ c.direction | upper }}</span>
       </div>
       {% endfor %}
