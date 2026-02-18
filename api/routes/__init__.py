@@ -1,6 +1,20 @@
-"""b1e55ed package boundary.
+from __future__ import annotations
 
-0xb1e55ed = "blessed". The name is the first easter egg.
+from fastapi import APIRouter
 
-A grimoire is not a textbook. It is a book of names, invocations, and hard-won procedures.
-"""
+from api.routes import brain, config, health, karma, positions, producers, regime, signals
+
+
+def get_api_router() -> APIRouter:
+    router = APIRouter()
+
+    router.include_router(health.router, tags=["health"])
+    router.include_router(brain.router, tags=["brain"])
+    router.include_router(signals.router, tags=["signals"])
+    router.include_router(positions.router, tags=["positions"])
+    router.include_router(regime.router, tags=["regime"])
+    router.include_router(producers.router, tags=["producers"])
+    router.include_router(config.router, tags=["config"])
+    router.include_router(karma.router, tags=["karma"])
+
+    return router
