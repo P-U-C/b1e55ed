@@ -56,9 +56,7 @@ def test_market_sentiment_producer_publishes_events(monkeypatch, tmp_path) -> No
     pr = MarketSentimentProducer(ctx).run()
     assert pr.events_published == 1
 
-    events = db.get_events(
-        event_type=EventType.SIGNAL_SENTIMENT_V1, source="market-sentiment", limit=10
-    )
+    events = db.get_events(event_type=EventType.SIGNAL_SENTIMENT_V1, source="market-sentiment", limit=10)
     assert len(events) == 1
 
     ev = events[0]

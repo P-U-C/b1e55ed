@@ -107,9 +107,7 @@ class CorrelationAwareSizer:
         portfolio_heat_pct: float = 0.0,
         max_position_pct: float | None = None,
     ) -> float:
-        base_size = self.base.size_usd(
-            equity_usd=equity_usd, conviction_score=conviction_score, max_position_pct=max_position_pct
-        )
+        base_size = self.base.size_usd(equity_usd=equity_usd, conviction_score=conviction_score, max_position_pct=max_position_pct)
         if base_size <= 0:
             return 0.0
 

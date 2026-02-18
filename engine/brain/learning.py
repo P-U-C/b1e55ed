@@ -156,15 +156,13 @@ class LearningLoop:
 
         out: list[dict[str, Any]] = []
         for r in rows:
-            out.append({k: r[k] for k in r.keys()})
+            out.append({k: r[k] for k in r.keys()})  # noqa: SIM118
         return out
 
     def _cold_start_state(self, as_of: datetime) -> tuple[bool, str, float]:
         """Returns (blocked, reason, max_delta_for_this_cycle)."""
 
-        first = self.db.conn.execute(
-            "SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL"
-        ).fetchone()
+        first = self.db.conn.execute("SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL").fetchone()
         if first is None or first["first_closed"] is None:
             return True, "cold_start_no_history", 0.0
 

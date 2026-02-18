@@ -177,7 +177,6 @@ class PriceWSSignalPayload(BaseModel):
     venue: str | None = None
 
 
-
 class CuratorSignalPayload(BaseModel):
     symbol: str
     direction: Literal["bullish", "bearish", "neutral"]

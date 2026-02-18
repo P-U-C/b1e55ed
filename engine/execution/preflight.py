@@ -64,11 +64,7 @@ class Preflight:
         details: dict[str, Any] = {"mode": m}
 
         # Kill switch gate (canonical source of truth)
-        level = (
-            int(kill_switch_level)
-            if kill_switch_level is not None
-            else int(self.kill_switch.level)
-        )
+        level = int(kill_switch_level) if kill_switch_level is not None else int(self.kill_switch.level)
         details["kill_switch_level"] = level
         try:
             self.policy.check_kill_switch(level=level)

@@ -377,9 +377,7 @@ class Database:
             self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _get_last_hash(self) -> str | None:
-        row = self.conn.execute(
-            "SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1"
-        ).fetchone()
+        row = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
         return None if row is None else str(row[0])
 
     @staticmethod
@@ -424,9 +422,7 @@ class Database:
                 ).fetchone()
                 if row is not None:
                     if str(row[1]) != p_hash:
-                        raise DedupeConflictError(
-                            f"dedupe_key conflict for {dedupe_key}: payload changed"
-                        )
+                        raise DedupeConflictError(f"dedupe_key conflict for {dedupe_key}: payload changed")
                     existing = self.conn.execute(
                         "SELECT * FROM events WHERE id = ?",
                         (str(row[0]),),
@@ -502,11 +498,7 @@ class Database:
         out: list[Event] = []
         with self._lock:
             for et, payload, dedupe_key in events:
-                out.append(
-                    self.append_event(
-                        event_type=et, payload=payload, dedupe_key=dedupe_key, source=source
-                    )
-                )
+                out.append(self.append_event(event_type=et, payload=payload, dedupe_key=dedupe_key, source=source))
         return out
 
     def get_events(
@@ -544,10 +536,7 @@ class Database:
         fast=True verifies only the last N events.
         """
 
-        q = (
-            "SELECT id, type, payload, prev_hash, hash FROM events "
-            "ORDER BY created_at ASC, rowid ASC"
-        )
+        q = "SELECT id, type, payload, prev_hash, hash FROM events ORDER BY created_at ASC, rowid ASC"
         rows = self.conn.execute(q).fetchall()
         if fast and len(rows) > last_n:
             rows = rows[-last_n:]

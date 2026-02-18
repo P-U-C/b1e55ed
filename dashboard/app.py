@@ -427,7 +427,14 @@ def system_page(request: Request) -> HTMLResponse:
                 except Exception:
                     last_run = "—"
 
-            producers.append({"name": str(name), "domain": v.get("domain") or "—", "health": health, "last_run": last_run})
+            producers.append(
+                {
+                    "name": str(name),
+                    "domain": v.get("domain") or "—",
+                    "health": health,
+                    "last_run": last_run,
+                }
+            )
 
     ks_res = client.get_kill_switch()
     ks_level = 0
@@ -475,12 +482,16 @@ def config_page(request: Request) -> HTMLResponse:
     client = _api(request)
     cfg_res = client._get_json("/config")
 
-    cfg = cfg_res.data if (cfg_res.ok and isinstance(cfg_res.data, dict)) else {
-        "risk": {},
-        "brain": {},
-        "execution": {},
-        "karma": {},
-    }
+    cfg = (
+        cfg_res.data
+        if (cfg_res.ok and isinstance(cfg_res.data, dict))
+        else {
+            "risk": {},
+            "brain": {},
+            "execution": {},
+            "karma": {},
+        }
+    )
     return templates.TemplateResponse(
         "config.html",
         {
@@ -561,10 +572,7 @@ def kill_dot(request: Request) -> HTMLResponse:
         except Exception:
             level = 0
 
-    html = (
-        f'<div class="kill-dot level-{level}" title="{title}" '
-        'hx-get="/partials/kill-dot" hx-trigger="every 30s" hx-swap="outerHTML"></div>'
-    )
+    html = f'<div class="kill-dot level-{level}" title="{title}" hx-get="/partials/kill-dot" hx-trigger="every 30s" hx-swap="outerHTML"></div>'
     return HTMLResponse(html)
 
 
@@ -579,11 +587,7 @@ def regime_pill(request: Request) -> HTMLResponse:
         regime = str(res.data.get("regime"))
         label = str(res.data.get("regime")).upper()
 
-    html = (
-        f'<span class="regime-pill regime-{regime}" '
-        'hx-get="/partials/regime-pill" hx-trigger="every 30s" hx-swap="outerHTML">'
-        f"{label}</span>"
-    )
+    html = f'<span class="regime-pill regime-{regime}" hx-get="/partials/regime-pill" hx-trigger="every 30s" hx-swap="outerHTML">{label}</span>'
     return HTMLResponse(html)
 
 
@@ -737,7 +741,14 @@ def producers_partial(request: Request) -> HTMLResponse:
                 except Exception:
                     last_run = "—"
 
-            producers.append({"name": str(name), "domain": v.get("domain") or "—", "health": health, "last_run": last_run})
+            producers.append(
+                {
+                    "name": str(name),
+                    "domain": v.get("domain") or "—",
+                    "health": health,
+                    "last_run": last_run,
+                }
+            )
 
     return templates.TemplateResponse(
         "partials/producers_panel.html",

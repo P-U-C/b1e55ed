@@ -201,9 +201,7 @@ def test_full_pipeline_profit_to_karma(tmp_path: Path, monkeypatch: pytest.Monke
     # Brain.
     synth_res = VectorSynthesis(cfg, db).synthesize(cycle_id="cycle-2", symbol="BTC", as_of=now)
     regime = RegimeDetector(db).detect(as_of=now, btc_snapshot=synth_res.snapshot)
-    conv = ConvictionEngine(cfg, db, node_id=ident.node_id).compute(
-        synthesis=synth_res, regime=regime.state.regime, as_of=now
-    )
+    conv = ConvictionEngine(cfg, db, node_id=ident.node_id).compute(synthesis=synth_res, regime=regime.state.regime, as_of=now)
 
     intent = DecisionEngine(cfg, db).decide_and_emit(
         symbol="BTC",
@@ -245,9 +243,7 @@ def test_full_pipeline_profit_to_karma(tmp_path: Path, monkeypatch: pytest.Monke
 
     # Simulate profitable move and close.
     pnl = PnLTracker(db)
-    entry = db.conn.execute(
-        "SELECT entry_price FROM positions WHERE id = ?", (res.position_id,)
-    ).fetchone()[0]
+    entry = db.conn.execute("SELECT entry_price FROM positions WHERE id = ?", (res.position_id,)).fetchone()[0]
     exit_px = float(entry) * 1.10
     realized = pnl.close_position(position_id=res.position_id, exit_price=exit_px, reason="smoke")
     assert realized > 0.0
@@ -322,9 +318,7 @@ def test_event_hash_chain_integrity(tmp_path: Path) -> None:
 
     synth_res = VectorSynthesis(cfg, db).synthesize(cycle_id="cycle-3", symbol="BTC", as_of=now)
     reg = RegimeDetector(db).detect(as_of=now, btc_snapshot=synth_res.snapshot)
-    conv = ConvictionEngine(cfg, db, node_id=ident.node_id).compute(
-        synthesis=synth_res, regime=reg.state.regime, as_of=now
-    )
+    conv = ConvictionEngine(cfg, db, node_id=ident.node_id).compute(synthesis=synth_res, regime=reg.state.regime, as_of=now)
     DecisionEngine(cfg, db).decide_and_emit(
         symbol="BTC",
         pcs=conv.final_conviction,
@@ -336,9 +330,7 @@ def test_event_hash_chain_integrity(tmp_path: Path) -> None:
     assert db.verify_hash_chain(fast=False) is True
 
     # Manual chain check over all events, ordered by insertion.
-    rows = db.conn.execute(
-        "SELECT prev_hash, hash FROM events ORDER BY created_at ASC, rowid ASC"
-    ).fetchall()
+    rows = db.conn.execute("SELECT prev_hash, hash FROM events ORDER BY created_at ASC, rowid ASC").fetchall()
     assert rows, "Expected at least one event in DB"
 
     prev = None

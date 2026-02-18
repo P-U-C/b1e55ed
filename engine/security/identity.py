@@ -40,10 +40,7 @@ def _password() -> str:
     pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
     if pw:
         return pw
-    raise ValueError(
-        "Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) "
-        "or B1E55ED_IDENTITY_PASSWORD."
-    )
+    raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
 
 
 @dataclass

@@ -57,9 +57,7 @@ def _require_password(env_var: str = "B1E55ED_MASTER_PASSWORD") -> str:
     pw = os.environ.get(env_var)
     if pw:
         return pw
-    raise ValueError(
-        f"Missing master password. Set {env_var} or pass password explicitly when constructing Keystore."
-    )
+    raise ValueError(f"Missing master password. Set {env_var} or pass password explicitly when constructing Keystore.")
 
 
 @dataclass(frozen=True)
@@ -345,11 +343,7 @@ class Keystore:
                 present = self._env.has(name)
             elif tier == KeystoreTier.ENCRYPTED_FILE:
                 # For health, "present" means it exists at rest (not just in-memory).
-                present = (
-                    self._tier1 is not None
-                    and self._vault_path.exists()
-                    and self._tier1.has(name)
-                )
+                present = self._tier1 is not None and self._vault_path.exists() and self._tier1.has(name)
             elif tier == KeystoreTier.KEYRING:
                 present = self._tier2 is not None and self._tier2.has(name)
 

@@ -86,13 +86,7 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
 
     repo_root = ctx.repo_root
 
-    banner = (
-        "\n"
-        "0xb1e55ed\n"
-        "b1e55ed setup\n"
-        "\n"
-        "A system without memory repeats mistakes.\n"
-    )
+    banner = "\n0xb1e55ed\nb1e55ed setup\n\nA system without memory repeats mistakes.\n"
     print(banner)
 
     config_dir = repo_root / "config"

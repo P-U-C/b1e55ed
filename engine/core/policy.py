@@ -85,7 +85,7 @@ class TradingPolicyEngine:
         if float(position_notional_usd) > max_allowed:
             raise PolicyViolation(
                 "position_size_limit",
-                f"position ${float(position_notional_usd):.2f} exceeds {self.policy.max_position_size_pct*100:.1f}% of equity (${max_allowed:.2f})",
+                f"position ${float(position_notional_usd):.2f} exceeds {self.policy.max_position_size_pct * 100:.1f}% of equity (${max_allowed:.2f})",
             )
 
     def check_leverage_limit(self, *, leverage: float, regime: str | None = None) -> None:

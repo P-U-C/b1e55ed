@@ -34,9 +34,7 @@ class Event(BaseModel):
     model_config = {"frozen": True}
 
 
-def compute_event_hash(
-    *, prev_hash: str | None, event_type: EventType, payload: dict[str, Any]
-) -> str:
+def compute_event_hash(*, prev_hash: str | None, event_type: EventType, payload: dict[str, Any]) -> str:
     """Compute the canonical SHA-256 event hash.
 
     Hash = sha256((prev_hash or '') + '|' + type + '|' + canonical_payload_json)

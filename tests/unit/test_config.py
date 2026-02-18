@@ -9,15 +9,11 @@ from engine.core.exceptions import ConfigError
 
 
 def test_domain_weights_must_sum_to_one() -> None:
-    w = DomainWeights(
-        curator=0.25, onchain=0.20, tradfi=0.20, social=0.15, technical=0.10, events=0.10
-    )
+    w = DomainWeights(curator=0.25, onchain=0.20, tradfi=0.20, social=0.15, technical=0.10, events=0.10)
     assert w.curator == 0.25
 
 
-def test_config_loads_from_yaml_and_preset_chain(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_config_loads_from_yaml_and_preset_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Ensure env doesn't interfere
     monkeypatch.chdir(tmp_path)
 

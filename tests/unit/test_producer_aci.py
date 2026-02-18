@@ -38,7 +38,7 @@ class DummyClient:
         ("first 1 then 2 then 3", 3),
         ("chain: -1 / 0 / +9", 9),
         ("think 9\nanswer -2", -2),
-        ("JSON-ish {\"score\": 4} trailing 6", 6),
+        ('JSON-ish {"score": 4} trailing 6', 6),
         ("0 0 0", 0),
     ],
 )

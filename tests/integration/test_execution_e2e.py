@@ -31,6 +31,7 @@ def test_execution_pipeline_intent_to_karma(tmp_path: Path) -> None:
     ident = generate_node_identity()
     ks = KillSwitch(config=cfg, db=db)
     from engine.core.policy import TradingPolicy
+
     policy_engine = TradingPolicyEngine(policy=TradingPolicy())
 
     paper = PaperBroker(db=db)

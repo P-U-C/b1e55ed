@@ -86,7 +86,7 @@ def test_cold_start_blocks_weight_adjustment(test_config, temp_dir):
                 """,
                 (f"cycle-{i}", "node", "BTC", "long", 5.0, "1d", _iso(now), "h"),
             )
-            conviction_id = int(db.conn.execute("SELECT last_insert_rowid()") .fetchone()[0])
+            conviction_id = int(db.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
 
             db.conn.execute(
                 """
