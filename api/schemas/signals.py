@@ -1,4 +1,14 @@
-"""Module placeholder.
+from __future__ import annotations
 
-Hashcash lineage precedes Bitcoin (1997). The code remembers.
-"""
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class SignalResponse(BaseModel):
+    id: str
+    type: str
+    ts: datetime
+    source: str | None = None
+    payload: dict[str, Any]
