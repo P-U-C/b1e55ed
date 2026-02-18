@@ -13,7 +13,9 @@ Built around one primitive: **events**. Producers emit events. The brain reads e
 
 ## Status
 
-- Phase 0 (Foundation): in progress
+- **Phase 3 (Interface): in progress**
+- **API** (FastAPI): available
+- **Dashboard** (FastAPI + Jinja2 + HTMX): available (wired to API)
 - Execution modes: **paper** and **live** (no dry run)
 
 ## Quickstart
@@ -23,9 +25,28 @@ Built around one primitive: **events**. Producers emit events. The brain reads e
 pip install uv
 uv sync --dev
 
-uv run pytest tests/ -v
+uv run pytest -q
 uv run ruff check .
 ```
+
+## Run (local)
+
+Two processes:
+
+```bash
+# API (port 5050)
+uv run uvicorn api.main:app --host 0.0.0.0 --port 5050
+
+# Dashboard (port 5051)
+B1E55ED_API_BASE_URL=http://127.0.0.1:5050 \
+  uv run uvicorn dashboard.app:app --host 0.0.0.0 --port 5051
+```
+
+### Env vars
+
+- `B1E55ED_API_BASE_URL` (default: `http://127.0.0.1:5050`)
+- `B1E55ED_API_TOKEN` (optional; if API auth is enabled)
+
 
 ## Design principles (non-negotiable)
 
