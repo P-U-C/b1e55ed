@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}b1e55ed{% endblock %}</title>
+
+  <!-- Tailwind (utility classes only, CRT overrides in style.css) -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {} },
+      corePlugins: { preflight: false }
+    }
+  </script>
+
+  <!-- HTMX -->
+  <script src="/static/htmx.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- CRT Aesthetic -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- ── Nav ──────────────────────────────────── -->
+  <nav class="nav">
+    <button class="nav-hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">☰</button>
+
+    <a href="/" class="nav-logo">b1e55ed</a>
+
+    <div class="nav-links">
+      <a href="/" class="nav-link {% if active_page == 'brain' %}active{% endif %}">Brain</a>
+      <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
+      <a href="/signals" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signals</a>
+      <a href="/social" class="nav-link {% if active_page == 'social' %}active{% endif %}">Social</a>
+      <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Performance</a>
+      <a href="/system" class="nav-link {% if active_page == 'system' %}active{% endif %}">System</a>
+      <a href="/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Config</a>
+    </div>
+
+    <div class="nav-right">
+      <div class="kill-dot level-{{ kill_switch_level | default(0) }}"
+           title="Kill switch: level {{ kill_switch_level | default(0) }}"
+           hx-get="/partials/kill-dot"
+           hx-trigger="every 30s"
+           hx-swap="outerHTML"></div>
+
+      <span class="regime-pill regime-{{ regime | default('unknown') | lower | replace(' ', '_') }}"
+            hx-get="/partials/regime-pill"
+            hx-trigger="every 30s"
+            hx-swap="outerHTML">
+        {{ regime | default('UNKNOWN') | upper }}
+      </span>
+    </div>
+  </nav>
+
+  <!-- ── Page Content ─────────────────────────── -->
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ── Footer ───────────────────────────────── -->
+  <footer style="text-align:center; padding:1rem; color:var(--text-muted); font-size:0.6875rem; font-family:var(--font-ui);">
+    Hashcash predates Bitcoin (1997).
+  </footer>
+
+  <!-- Init Lucide icons -->
+  <script>lucide.createIcons();</script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
