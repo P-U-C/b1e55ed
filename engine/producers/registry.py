@@ -54,20 +54,39 @@ def discover() -> None:
     _DISCOVERED = True
 
 
-def get_producer(name: str) -> type[Producer]:
+def _maybe_discover() -> None:
+    """Lazy discovery.
+
+    If something has already registered producers (e.g. tests), don't
+    auto-import the entire producer package as a side effect of listing.
+    Runtime should call discover() explicitly during startup.
+    """
+
+    if _DISCOVERED:
+        return
+    if _REGISTRY:
+        return
     discover()
+
+
+def get_producer(name: str) -> type[Producer]:
+    # If already registered, don't trigger discovery side effects.
+    if name in _REGISTRY:
+        return _REGISTRY[name]
+
+    _maybe_discover()
     if name not in _REGISTRY:
         raise KeyError(f"unknown producer: {name}")
     return _REGISTRY[name]
 
 
 def list_producers() -> list[str]:
-    discover()
+    _maybe_discover()
     return sorted(_REGISTRY.keys())
 
 
 def list_by_domain(domain: str) -> list[str]:
-    discover()
+    _maybe_discover()
     return sorted([n for n, cls in _REGISTRY.items() if getattr(cls, "domain", None) == domain])
 
 
