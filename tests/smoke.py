@@ -35,7 +35,7 @@ def test_module_imports() -> None:
         "api",
         "dashboard",
     ]
-    
+
     for mod in modules:
         try:
             __import__(mod)
@@ -52,17 +52,15 @@ def test_database_schema() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         db = Database(db_path)
-        
+
         # Check critical tables exist
-        tables = db.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         table_names = {r[0] for r in tables}
-        
+
         required = {"events", "positions", "conviction_scores", "karma_intents"}
         missing = required - table_names
         assert not missing, f"Missing tables: {missing}"
-        
+
         print(f"✅ Database schema valid ({len(table_names)} tables)")
 
 
@@ -75,7 +73,7 @@ def test_config_validation() -> None:
     assert config.preset in ["conservative", "balanced", "degen", "custom"]
     assert 0.0 <= config.weights.technical <= 1.0
     assert config.risk.max_drawdown_pct > 0
-    
+
     print(f"✅ Config validation works (preset={config.preset})")
 
 
@@ -87,7 +85,7 @@ def main() -> int:
         test_database_schema,
         test_config_validation,
     ]
-    
+
     print("Running smoke tests...")
     for test in tests:
         try:
@@ -96,7 +94,7 @@ def main() -> int:
             print(f"\n❌ Smoke test failed: {test.__name__}", file=sys.stderr)
             print(f"   {e}", file=sys.stderr)
             return 1
-    
+
     print("\n✅ All smoke tests passed")
     return 0
 

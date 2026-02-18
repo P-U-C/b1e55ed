@@ -79,7 +79,8 @@ jobs:
         run: uv run safety scan --output json || true
       - name: Check for secrets
         run: |
-          if grep -r "sk-" --include="*.py" --exclude-dir=".venv" . ; then
+          # Exclude legitimate pattern definitions and tests
+          if grep -r "sk-" --include="*.py" --exclude-dir=".venv" --exclude="*redaction.py" --exclude="test_redaction.py" . ; then
             echo "❌ Possible API key found in code"
             exit 1
           fi
