@@ -227,7 +227,15 @@ class Keystore:
     Lookup order is Tier 0 → Tier 1 → Tier 2 by default (env overrides are convenient).
 
     Note: Tier 0 is read-only by design.
+
+    Compatibility: CLI uses `Keystore.default()`, `set()`, and `describe()`.
     """
+
+    @classmethod
+    def default(cls) -> "Keystore":
+        """Default keystore constructor used by the CLI."""
+
+        return cls(enable_keyring=True)
 
     def __init__(
         self,
@@ -268,6 +276,25 @@ class Keystore:
                 os.chmod(self._metadata_path, 0o600)
             except OSError:
                 pass
+
+    def set(self, name: str, value: str, tier: KeystoreTier = KeystoreTier.ENCRYPTED_FILE) -> None:
+        """Compatibility wrapper: store a key."""
+
+        self.store_key(name, value, tier)
+
+    def get(self, name: str) -> str:
+        """Compatibility wrapper: fetch a key."""
+
+        return self.get_key(name)
+
+    def describe(self) -> str:
+        """Human-readable keystore status for CLI output."""
+
+        h = self.key_health()
+        parts = [f"overall={h.get('overall')}"]
+        parts.append(f"tier1={'on' if h.get('tier1_configured') else 'off'}")
+        parts.append(f"tier2={'on' if h.get('tier2_available') else 'off'}")
+        return "Keystore(" + ", ".join(parts) + ")"
 
     def store_key(self, name: str, value: str, tier: KeystoreTier) -> None:
         if tier == KeystoreTier.ENV:
