@@ -1,0 +1,22 @@
+# Balanced preset (source of truth for default domain weights)
+
+weights:
+  curator: 0.25
+  onchain: 0.25
+  tradfi: 0.20
+  social: 0.15
+  technical: 0.10
+  events: 0.05
+
+risk:
+  max_leverage: 2.0
+  max_position_pct: 0.10
+  max_portfolio_heat_pct: 0.06
+  daily_loss_limit_pct: 0.03
+  max_drawdown_pct: 0.30
+
+kill_switch:
+  l1_daily_loss_pct: 0.03
+  l2_portfolio_heat_pct: 0.06
+  l3_crisis_threshold: 2
+  l4_max_drawdown_pct: 0.30
