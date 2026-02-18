@@ -156,7 +156,7 @@ class LearningLoop:
 
         out: list[dict[str, Any]] = []
         for r in rows:
-            out.append({k: r[k] for k in r})
+            out.append({k: r[k] for k in r.keys()})
         return out
 
     def _cold_start_state(self, as_of: datetime) -> tuple[bool, str, float]:
