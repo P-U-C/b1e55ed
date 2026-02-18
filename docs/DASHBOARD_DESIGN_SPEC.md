@@ -148,7 +148,7 @@ Applied sparingly. Only to `--text-bright` elements. Never to body text.
 
 **Nav bar details:**
 - Left: `b1e55ed` wordmark (IBM Plex Mono, `--text-dim`, no logo image)
-- Center: Page links (Brain, Positions, Signals, Performance, System, Config)
+- Center: Page links (Brain, Positions, Signals, Social, Performance, System, Config)
 - Right: Kill switch indicator (colored dot + level), regime pill (color-coded badge)
 - Mobile: Hamburger menu, kill switch + regime always visible
 
@@ -517,7 +517,117 @@ Read + write system configuration. This is a v1 requirement.
 - Server-side: full Pydantic validation before write
 - Invalid values: red border + inline error message below field
 
-### 4.7 Treasury (`/treasury`)
+### 4.7 Social (`/social`)
+
+The social intelligence command center. Dedicated page because this is the fastest-evolving signal domain and the primary source of narrative-level alpha.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  SOCIAL INTELLIGENCE                                      │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  PIPELINE STATUS (panel)                                  │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │  Pipeline: ● ACTIVE    Last run: 12m ago             │ │
+│  │  LLM cost (MTD): $14.20 / $100 budget                │ │
+│  │  Sources: Reddit ● | Farcaster ● | TikTok ○ |       │ │
+│  │           Telegram ● | Polymarket ● | Trends ●       │ │
+│  │  Kill switch: OFF    Error rate: 0.2%                 │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                           │
+├────────────────────────┬─────────────────────────────────┤
+│  SENTIMENT MAP (panel) │  ALERTS (panel)                  │
+│                        │                                  │
+│  BTC   ████░░  +0.6    │  ⚠ ECHO CHAMBER                 │
+│        bullish lean    │  $KIMCHI — 4 sources, same       │
+│  HYPE  █████░  +0.8    │  narrative within 2h. Likely     │
+│        bullish         │  coordinated. Fade signal.       │
+│  ETH   ███░░░  -0.2    │                                  │
+│        neutral/bear    │  ● VELOCITY SPIKE                │
+│  SOL   ████░░  +0.5    │  $BUTTCOIN mentions 3x in 1h.   │
+│        bullish lean    │  Early buzz, no on-chain         │
+│  SUI   ███░░░  -0.1    │  confirmation yet.               │
+│        neutral         │                                  │
+│                        │  ● DIVERGENCE (bearish)          │
+│  Method: LLM scored    │  $VIRTUAL — social buzz up 40%   │
+│  Sources: 6 active     │  but on-chain flow flat.         │
+│  Updated: 12m ago      │  Pump fake probability: high.    │
+│                        │                                  │
+├────────────────────────┴─────────────────────────────────┤
+│  NARRATIVE TRACKER (panel)                                │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │  Rank  Narrative           Velocity  Stage    Age    │ │
+│  │  1     AI agents           ████████  mature   47d    │ │
+│  │  2     RWA / tokenization  ██████    growing  23d    │ │
+│  │  3     BTC ETF staking     █████     early    3d     │ │
+│  │  4     Solana memecoins    ████      fading   62d    │ │
+│  │  5     L2 fee wars         ███       early    8d     │ │
+│  │                                                      │ │
+│  │  [Click narrative for deep view]                     │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                           │
+├──────────────────────────────────────────────────────────┤
+│  CURATOR FEED (panel, live via SSE)                       │
+│                                                           │
+│  Operator-submitted intel + auto-ingested signals.        │
+│                                                           │
+│  15:12  zoz    HYPE  "Hyperliquid team hinting at   ▲ 7  │
+│                       new perp listings"                  │
+│  14:30  auto   BTC   Reddit r/bitcoin sentiment     → 4  │
+│                       neutral, volume declining           │
+│  13:45  auto   SOL   Farcaster dev mentions up 22%  ▲ 5  │
+│  12:00  zoz    ETH   "BlackRock staking ETF is      ▲ 8  │
+│                       structural, not speculative"        │
+│                                                           │
+│  [Submit signal]  [View all]                              │
+│                                                           │
+├──────────────────────────────────────────────────────────┤
+│  SOURCE HEALTH (panel)                                    │
+│                                                           │
+│  Source       Status  Last Hit  Signals/24h  Quality      │
+│  Reddit      ● OK    12m       34           ████░ 0.72   │
+│  Farcaster   ● OK    12m       18           ███░░ 0.65   │
+│  TikTok      ○ DOWN  3d        0            —            │
+│  Telegram    ● OK    45m       8            ████░ 0.70   │
+│  Polymarket  ● OK    12m       12           █████ 0.81   │
+│  Trends      ● OK    6h        4            ███░░ 0.58   │
+│  Nitter/X    ○ DOWN  —         0            —            │
+│                                                           │
+│  Apify: ⚠ Monthly limit exceeded (resets in 12d)         │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Pipeline status:** Top-level health at a glance. Cost tracking matters — LLM-scored sentiment costs money per call. Show budget burn rate and kill switch state.
+
+**Sentiment map:** Per-asset aggregated sentiment with direction and strength. Color-coded bars: green (bullish), red (bearish), gray (neutral). Score is -1 to +1. Updated on each pipeline run.
+
+**Alerts panel:** The high-value output. Three alert types from the social intel pipeline:
+- **Echo chamber:** Coordinated shilling detected (same narrative, multiple "independent" sources within short window). Action: fade.
+- **Velocity spike:** Rapid mention acceleration on a token. Early signal, needs on-chain confirmation.
+- **Divergence:** Social buzz diverging from on-chain reality. Bullish divergence (buzz + flow) = signal. Bearish divergence (buzz, no flow) = pump fake.
+
+Alerts are color-coded by type and show actionable context, not just raw data.
+
+**Narrative tracker:** Ranked list of active market narratives with velocity (rate of mention growth), lifecycle stage (early/growing/mature/fading), and age. Click to expand: key tokens in the narrative, related signals, first-seen date, peak date. This is where narrative rotation gets tracked.
+
+**Curator feed:** Mixed feed of operator-submitted intel (`/signal` command) and auto-ingested signals. Operator signals get the `zoz` tag, auto signals get `auto`. Each has a conviction score. Live via SSE. "Submit signal" opens an inline form (HTMX swap) for quick intel submission without leaving the page.
+
+**Source health:** Per-source operational status. Quality score (0-1) based on historical signal accuracy when available. Shows API limits and degradation notices (Apify, Nitter).
+
+**SSE events for social page:**
+
+| Event | Payload | UI Target |
+|-------|---------|-----------|
+| `social.alert` | Echo chamber/velocity/divergence | Alerts panel (prepend) |
+| `social.sentiment` | Updated sentiment map | Sentiment map (replace) |
+| `social.curator` | New curator signal | Curator feed (prepend) |
+| `social.narrative` | Narrative rank change | Narrative tracker (replace) |
+
+**Mobile:** On mobile, stack in this order: Pipeline status (compressed), Alerts (always visible — this is the action), Sentiment map, Curator feed (collapsed), Narrative tracker (collapsed), Source health (collapsed).
+
+---
+
+### 4.8 Treasury (`/treasury`)
 
 Karma tracking and settlement.
 
@@ -694,6 +804,7 @@ These serve both the dashboard (HTML partials) and external consumers (JSON).
 | GET | `/performance` | HTML: Performance page | Yes |
 | GET | `/system` | HTML: System page | Yes |
 | GET | `/config` | HTML: Config page | Yes |
+| GET | `/social` | HTML: Social Intelligence page | Yes |
 | GET | `/treasury` | HTML: Treasury page | Yes |
 | GET | `/login` | HTML: Login form | No |
 | POST | `/login` | Set cookie, redirect | No |
@@ -711,6 +822,11 @@ These serve both the dashboard (HTML partials) and external consumers (JSON).
 | GET | `/api/karma/intents` | JSON: pending intents | Yes |
 | POST | `/api/karma/settle` | JSON: settlement result | Yes |
 | GET | `/api/karma/receipts` | JSON: receipt history | Yes |
+| GET | `/api/social/sentiment` | JSON: per-asset sentiment | Yes |
+| GET | `/api/social/alerts` | JSON: active social alerts | Yes |
+| GET | `/api/social/narratives` | JSON: narrative rankings | Yes |
+| GET | `/api/social/sources` | JSON: source health | Yes |
+| POST | `/api/social/signal` | JSON: submit curator signal | Yes |
 
 ---
 
@@ -734,7 +850,8 @@ dashboard/
 │   ├── position_service.py   # Position queries
 │   ├── signal_service.py     # Signal aggregation
 │   ├── config_service.py     # Config read/write/validate
-│   └── karma_service.py      # Karma queries, settlement
+│   ├── karma_service.py      # Karma queries, settlement
+│   └── social_service.py     # Social pipeline state, sentiment, narratives
 ├── templates/
 │   ├── base.html             # Shell: nav, head, scripts
 │   ├── login.html            # Token entry
@@ -745,6 +862,7 @@ dashboard/
 │   ├── performance.html      # Performance & Learning
 │   ├── system.html           # System Health
 │   ├── config.html           # Configuration editor
+│   ├── social.html           # Social Intelligence
 │   ├── treasury.html         # Karma Treasury
 │   └── partials/
 │       ├── regime_banner.html
@@ -756,7 +874,11 @@ dashboard/
 │       ├── producer_row.html
 │       ├── position_card.html
 │       ├── quick_actions.html
-│       └── config_section.html
+│       ├── config_section.html
+│       ├── sentiment_map.html
+│       ├── social_alert.html
+│       ├── narrative_row.html
+│       └── curator_signal.html
 └── static/
     ├── style.css             # CRT aesthetic + custom overrides
     └── app.js                # SSE connection, minimal interactivity
@@ -774,6 +896,7 @@ dashboard/
 | Positions page + detail | Ship |
 | Signals page + filtering | Ship |
 | System page (producers, kill switch, events, resources) | Ship |
+| Social Intelligence page | Ship |
 | Config page (read + write) | Ship |
 | Treasury page | Ship |
 | SSE real-time signal feed | Ship |
@@ -833,11 +956,12 @@ Build in this sequence to get something visible fast, then layer quality:
 5. **Positions** — Full page with detail view
 6. **Signals** — Full page with domain filtering
 7. **System** — Producers, kill switch, events, resources
-8. **Config** — Read + write + validation + presets
-9. **Treasury** — Karma view
-10. **Performance** — Last (needs trade data to be meaningful)
-11. **Mobile polish** — Responsive tweaks after all pages work
-12. **Easter eggs** — Last touch
+8. **Social** — Pipeline status, sentiment, alerts, narratives, curator feed, source health
+9. **Config** — Read + write + validation + presets
+10. **Treasury** — Karma view
+11. **Performance** — Last (needs trade data to be meaningful)
+12. **Mobile polish** — Responsive tweaks after all pages work
+13. **Easter eggs** — Last touch
 
 Each step is visually reviewable before moving to the next.
 
