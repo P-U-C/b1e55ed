@@ -1,0 +1,17 @@
+<div class="panel-header">
+  <span class="panel-title">Alerts</span>
+</div>
+{% if alerts %}
+  {% for a in alerts %}
+  <div style="margin-bottom:0.75rem; padding:0.5rem; border-left:3px solid {{ 'var(--red)' if a.type == 'echo_chamber' else ('var(--amber)' if a.type == 'velocity' else 'var(--blue)') }}; background:rgba(255,255,255,0.02);">
+    <div style="font-size:0.65rem; font-weight:400; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.25rem;
+         color:{{ 'var(--red)' if a.type == 'echo_chamber' else ('var(--amber)' if a.type == 'velocity' else 'var(--blue)') }};">
+      {{ a.type | replace('_', ' ') }}
+    </div>
+    <div style="font-size:0.8125rem; font-weight:400; color:var(--text-bright);">{{ a.token }}</div>
+    <div style="font-size:0.75rem; color:var(--text);">{{ a.desc }}</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">No active alerts. Pipeline monitors for echo chambers, velocity spikes, and divergences.</div>
+{% endif %}

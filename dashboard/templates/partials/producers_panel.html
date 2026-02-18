@@ -1,0 +1,15 @@
+<div class="panel-header">
+  <span class="panel-title">Producers</span>
+  <span class="panel-age">{{ producers_healthy }}/{{ producers_total }} healthy</span>
+</div>
+{% for p in producers %}
+<div style="display:flex; align-items:center; gap:0.75rem; padding:5px 0; border-bottom:1px solid var(--border); font-size:0.8125rem;">
+  <span class="dot {{ 'dot-ok' if p.health == 'ok' else ('dot-degraded' if p.health == 'degraded' else 'dot-error') }}"></span>
+  <span style="flex:1; font-weight:400; color:var(--text-bright);">{{ p.name }}</span>
+  <span class="badge badge-{{ p.domain }}">{{ p.domain }}</span>
+  <span class="text-dim" style="font-size:0.7rem; width:5rem; text-align:right;">{{ p.last_run | default('—') }}</span>
+</div>
+{% endfor %}
+{% if not producers %}
+  <div class="empty-state">No producer status yet.</div>
+{% endif %}

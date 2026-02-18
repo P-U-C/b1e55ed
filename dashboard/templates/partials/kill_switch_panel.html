@@ -1,0 +1,36 @@
+<div class="panel-header">
+  <span class="panel-title">Kill Switch</span>
+  <span class="panel-age">Level {{ kill_switch_level }}</span>
+</div>
+<div style="margin-bottom:1rem;">
+  <div style="font-size:1rem; font-weight:400; color:var(--text-bright); margin-bottom:0.75rem;">
+    {{ kill_switch_label | default('NORMAL') }}
+  </div>
+  <div style="display:flex; gap:0.5rem; align-items:center;">
+    {% for i in range(5) %}
+    <div style="flex:1; height:6px; background:{{ 'var(--green)' if i == 0 and kill_switch_level == 0 else ('var(--amber)' if i <= kill_switch_level and kill_switch_level <= 2 else ('var(--red)' if i <= kill_switch_level else 'var(--border)')) }};"></div>
+    {% endfor %}
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-dim); margin-top:0.25rem;">
+    <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1rem; font-size:0.8125rem; margin-bottom:1rem;">
+  <div><span class="text-dim">Auto-escalate</span></div>
+  <div>ON</div>
+  <div><span class="text-dim">Auto-de-escalate</span></div>
+  <div>OFF</div>
+  <div><span class="text-dim">Last change</span></div>
+  <div>{{ kill_switch_last_change | default('never') }}</div>
+</div>
+
+<div style="display:flex; gap:0.5rem;">
+  {% for i in range(5) %}
+  <button class="btn {{ 'btn-danger' if i >= 3 else '' }}" style="padding:6px 12px; font-size:0.65rem;{% if i == kill_switch_level %} border-color:var(--text-bright); color:var(--text-bright);{% endif %}"
+          hx-post="/api/kill-switch?level={{ i }}"
+          hx-confirm="Set kill switch to level {{ i }}?">
+    L{{ i }}
+  </button>
+  {% endfor %}
+</div>

@@ -1,0 +1,40 @@
+<div class="panel-header">
+  <span class="panel-title">Pending Intents</span>
+  <span class="panel-age">{{ intents | length if intents else 0 }}</span>
+</div>
+
+{% if intents %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Trade</th>
+      <th style="text-align:right;">Profit</th>
+      <th style="text-align:right;">Karma</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for i in intents %}
+    <tr>
+      <td class="text-dim">{{ i.id }}</td>
+      <td class="text-bright" style="font-weight:400;">{{ i.trade_id }}</td>
+      <td style="text-align:right;" class="text-bull">${{ '%+.0f' | format(i.profit_usd) }}</td>
+      <td style="text-align:right;" class="data-live">${{ '%.2f' | format(i.karma_usd) }}</td>
+      <td class="text-dim">{{ i.status }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="empty-state">No karma intents. Profitable trade closes generate intents.</div>
+{% endif %}
+
+<div style="margin-top:1rem; display:flex; gap:0.5rem;">
+  <button class="btn" {% if not intents %}disabled{% endif %}
+          hx-post="/api/karma/settle" hx-confirm="Settle all pending karma intents?" hx-target="#settle-result" hx-indicator="#settle-spinner">
+    Settle All
+  </button>
+  <span id="settle-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">settling...</span>
+  <span id="settle-result" class="text-dim" style="font-size:0.75rem;"></span>
+</div>

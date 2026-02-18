@@ -1,0 +1,20 @@
+<div class="panel-header">
+  <span class="panel-title">System Status</span>
+</div>
+<div style="font-size:0.8125rem; display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1.5rem;">
+  <div><span class="text-dim">Last cycle</span></div>
+  <div>
+    <span class="dot {{ 'dot-ok' if cycle_age_min | default(99) < 10 else ('dot-degraded' if cycle_age_min | default(99) < 30 else 'dot-error') }}"></span>
+    {{ cycle_age | default('never') }}
+  </div>
+  <div><span class="text-dim">Producers</span></div>
+  <div>{{ producers_healthy | default(0) }}/{{ producers_total | default(0) }} healthy</div>
+  <div><span class="text-dim">Events today</span></div>
+  <div>{{ events_today | default(0) }}</div>
+  <div><span class="text-dim">DB size</span></div>
+  <div>{{ db_size | default('—') }}</div>
+  <div><span class="text-dim">Uptime</span></div>
+  <div>{{ uptime | default('—') }}</div>
+  <div><span class="text-dim">Karma pending</span></div>
+  <div>{{ karma_pending | default('$0') }}</div>
+</div>
