@@ -6,7 +6,7 @@
   const canvas = document.createElement('canvas');
   canvas.id = 'synapses';
   canvas.style.cssText =
-    'position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.4;';
+    'position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.7;';
   document.body.prepend(canvas);
 
   const ctx = canvas.getContext('2d');
@@ -81,7 +81,7 @@
           const g = WARM_COLOR[1] + (NODE_COLOR[1] - WARM_COLOR[1]) * energy;
           const b = WARM_COLOR[2] + (NODE_COLOR[2] - WARM_COLOR[2]) * energy;
 
-          const lineAlpha = alpha * 0.12 + energy * alpha * 0.2;
+          const lineAlpha = alpha * 0.2 + energy * alpha * 0.35;
 
           ctx.beginPath();
           ctx.moveTo(nodes[i].x, nodes[i].y);
@@ -124,7 +124,7 @@
       const nr = WARM_COLOR[0] + (NODE_COLOR[0] - WARM_COLOR[0]) * n.energy;
       const ng = WARM_COLOR[1] + (NODE_COLOR[1] - WARM_COLOR[1]) * n.energy;
       const nb = WARM_COLOR[2] + (NODE_COLOR[2] - WARM_COLOR[2]) * n.energy;
-      const nodeAlpha = 0.15 + n.energy * 0.5;
+      const nodeAlpha = 0.25 + n.energy * 0.6;
 
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r + n.energy * 2, 0, Math.PI * 2);
@@ -135,7 +135,7 @@
       if (n.energy > 0.3) {
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r + n.energy * 6, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${NODE_COLOR[0]},${NODE_COLOR[1]},${NODE_COLOR[2]},${n.energy * 0.08})`;
+        ctx.fillStyle = `rgba(${NODE_COLOR[0]},${NODE_COLOR[1]},${NODE_COLOR[2]},${n.energy * 0.15})`;
         ctx.fill();
       }
     }
