@@ -82,7 +82,9 @@ a:hover { color: var(--green); }
   left: 0;
   right: 0;
   height: 48px;
-  background: var(--bg);
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -180,12 +182,16 @@ a:hover { color: var(--green); }
   max-width: 1440px;
   margin: 0 auto;
   padding: 72px 24px 48px;
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Panel ───────────────────────────────────── */
 
 .panel {
-  background: var(--bg-raised);
+  background: rgba(17,17,17,0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   border: 1px solid var(--border);
   padding: 24px;
   position: relative;
