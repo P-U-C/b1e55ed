@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Social Intelligence — b1e55ed{% endblock %}
+
+{% block content %}
+
+<!-- Pipeline Status -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; font-size:0.8125rem;">
+    <div>
+      Pipeline: <span class="dot {{ 'dot-ok' if pipeline_active else 'dot-error' }}"></span>
+      <span class="{{ 'text-bull' if pipeline_active else 'text-bear' }}">{{ 'ACTIVE' if pipeline_active else 'DOWN' }}</span>
+    </div>
+    <div class="text-dim">Last run: {{ pipeline_last_run | default('—') }}</div>
+    <div class="text-dim">LLM cost (MTD): <span class="{{ 'text-warn' if llm_cost_pct > 80 else '' }}">${{ '%.2f' | format(llm_cost) }} / ${{ llm_budget }}</span></div>
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      {% for src in sources_brief %}
+      <span class="text-dim" style="font-size:0.7rem;">{{ src.name }} <span class="dot {{ 'dot-ok' if src.ok else 'dot-error' }}"></span></span>
+      {% endfor %}
+    </div>
+    <div class="text-dim">Kill switch: {{ 'OFF' if not social_kill else 'ON' }}</div>
+  </div>
+</div>
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Sentiment Map -->
+  <div class="panel" hx-get="/partials/sentiment-map" hx-trigger="every 60s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Sentiment Map</span>
+      <span class="panel-age">{{ sentiment_age | default('—') }}</span>
+    </div>
+    {% if sentiments %}
+      {% for s in sentiments %}
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+        <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.symbol }}</span>
+        <div class="conviction-bar" style="flex:1;">
+          <div class="conviction-bar-fill {{ 'long' if s.score > 0 else ('short' if s.score < 0 else 'neutral') }}"
+               style="width:{{ (s.score | abs * 50 + 50) | int }}%; margin-left:{{ (50 - s.score | abs * 50) | int if s.score < 0 else 50 }}%;"></div>
+        </div>
+        <span class="data-live" style="width:3rem; text-align:right; font-weight:400;">{{ '%+.1f' | format(s.score) }}</span>
+        <span style="width:5.5rem; font-size:0.7rem; color:var(--text-dim);">{{ s.label }}</span>
+      </div>
+      {% endfor %}
+      <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.75rem;">
+        Method: LLM scored · Sources: {{ sources_active }} active · Updated: {{ sentiment_age | default('—') }}
+      </div>
+    {% else %}
+      <div class="empty-state">No sentiment data yet. Waiting for pipeline run.</div>
+    {% endif %}
+  </div>
+
+  <!-- Alerts -->
+  <div class="panel" hx-get="/partials/social-alerts" hx-trigger="every 30s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Alerts</span>
+    </div>
+    {% if alerts %}
+      {% for a in alerts %}
+      <div style="margin-bottom:0.75rem; padding:0.5rem; border-left:3px solid {{ 'var(--red)' if a.type == 'echo_chamber' else ('var(--amber)' if a.type == 'velocity' else 'var(--blue)') }}; background:rgba(255,255,255,0.02);">
+        <div style="font-size:0.65rem; font-weight:400; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.25rem;
+             color:{{ 'var(--red)' if a.type == 'echo_chamber' else ('var(--amber)' if a.type == 'velocity' else 'var(--blue)') }};">
+          {{ a.type | replace('_', ' ') }}
+        </div>
+        <div style="font-size:0.8125rem; font-weight:400; color:var(--text-bright);">{{ a.token }}</div>
+        <div style="font-size:0.75rem; color:var(--text);">{{ a.desc }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No active alerts. Pipeline monitors for echo chambers, velocity spikes, and divergences.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Narrative Tracker -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Narrative Tracker</span>
+  </div>
+  {% if narratives %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:2rem;">#</th>
+        <th>Narrative</th>
+        <th>Velocity</th>
+        <th>Stage</th>
+        <th style="text-align:right;">Age</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in narratives %}
+      <tr>
+        <td class="text-dim">{{ loop.index }}</td>
+        <td class="text-bright" style="font-weight:400;">{{ n.name }}</td>
+        <td>
+          <div class="conviction-bar" style="width:6rem; display:inline-block; vertical-align:middle;">
+            <div class="conviction-bar-fill long" style="width:{{ n.velocity }}%;"></div>
+          </div>
+        </td>
+        <td><span class="badge" style="color:{{ 'var(--green)' if n.stage == 'growing' else ('var(--amber)' if n.stage == 'mature' else ('var(--red)' if n.stage == 'fading' else 'var(--blue)')) }};">{{ n.stage }}</span></td>
+        <td style="text-align:right;" class="text-dim">{{ n.age }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-state">No narratives tracked yet. Pipeline identifies emerging market themes.</div>
+  {% endif %}
+</div>
+
+<!-- Curator Feed -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Curator Feed</span>
+    <span class="panel-age cursor-blink">live</span>
+  </div>
+  <div id="curator-feed" class="data-dense" hx-get="/partials/curator-feed" hx-trigger="every 30s" hx-swap="innerHTML">
+    {% if curator_signals %}
+      {% for c in curator_signals %}
+      <div class="signal-row">
+        <span class="signal-ts">{{ c.ts }}</span>
+        <span style="width:2.5rem; font-size:0.65rem; color:{{ 'var(--green)' if c.source == 'zoz' else 'var(--text-dim)' }};">{{ c.source }}</span>
+        <span class="signal-asset">{{ c.asset }}</span>
+        <span class="signal-desc">{{ c.desc }}</span>
+        <span class="signal-score data-live {{ 'text-bull' if c.score >= 7 else ('text-warn' if c.score >= 4 else 'text-dim') }}">
+          ▲{{ '%.0f' | format(c.score) }}
+        </span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No curator signals yet. Use /signal to submit intel.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Source Health -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Source Health</span>
+  </div>
+  {% if sources %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Status</th>
+        <th>Last Hit</th>
+        <th style="text-align:right;">Signals/24h</th>
+        <th>Quality</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td class="text-bright" style="font-weight:400;">{{ s.name }}</td>
+        <td><span class="dot {{ 'dot-ok' if s.status == 'ok' else ('dot-degraded' if s.status == 'degraded' else 'dot-error') }}"></span>{{ s.status | upper }}</td>
+        <td class="text-dim">{{ s.last_hit }}</td>
+        <td style="text-align:right;">{{ s.signals_24h }}</td>
+        <td>
+          {% if s.quality %}
+          <div class="conviction-bar" style="width:4rem; display:inline-block; vertical-align:middle;">
+            <div class="conviction-bar-fill long" style="width:{{ (s.quality * 100) | int }}%;"></div>
+          </div>
+          <span class="text-dim" style="font-size:0.7rem;">{{ '%.2f' | format(s.quality) }}</span>
+          {% else %}
+          <span class="text-dim">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if source_warnings %}
+    {% for w in source_warnings %}
+    <div style="margin-top:0.5rem; font-size:0.75rem; color:var(--amber);">{{ w }}</div>
+    {% endfor %}
+  {% endif %}
+  {% else %}
+    <div class="empty-state">No source data available.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

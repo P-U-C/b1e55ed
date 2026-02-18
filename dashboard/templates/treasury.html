@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Treasury — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Totals -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Totals</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Lifetime earned</span></div>
+      <div class="data-live">{{ lifetime_earned | default('$0') }}</div>
+      <div><span class="text-dim">Pending</span></div>
+      <div class="{{ 'text-warn' if pending_amount and pending_amount != '$0' else '' }} data-live">{{ pending_amount | default('$0') }}</div>
+      <div><span class="text-dim">Settled</span></div>
+      <div class="data-live">{{ settled_amount | default('$0') }}</div>
+      <div><span class="text-dim">Receipts</span></div>
+      <div>{{ receipts_count | default(0) }}</div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Settings</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Rate</span></div>
+      <div>{{ karma_rate | default('0.5% of profit') }}</div>
+      <div><span class="text-dim">Mode</span></div>
+      <div>{{ karma_mode | default('manual') }}</div>
+      <div><span class="text-dim">Threshold</span></div>
+      <div>{{ karma_threshold | default('$50') }}</div>
+      <div><span class="text-dim">Treasury</span></div>
+      <div class="text-dim">{{ treasury_addr | default('0xPUC…') }}</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Pending Intents -->
+<div class="panel" style="margin-bottom:1rem;" hx-get="/partials/karma-intents" hx-trigger="every 60s" hx-swap="innerHTML">
+  <div class="panel-header">
+    <span class="panel-title">Pending Intents</span>
+    <span class="panel-age">{{ intents | length if intents else 0 }}</span>
+  </div>
+
+  {% if intents %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Trade</th>
+        <th style="text-align:right;">Profit</th>
+        <th style="text-align:right;">Karma</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in intents %}
+      <tr>
+        <td class="text-dim">{{ i.id }}</td>
+        <td class="text-bright" style="font-weight:400;">{{ i.trade_id }}</td>
+        <td style="text-align:right;" class="text-bull">${{ '%+.0f' | format(i.profit_usd) }}</td>
+        <td style="text-align:right;" class="data-live">${{ '%.2f' | format(i.karma_usd) }}</td>
+        <td class="text-dim">{{ i.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-state">No karma intents. Profitable trade closes generate intents.</div>
+  {% endif %}
+
+  <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+    <button class="btn" {% if not intents %}disabled{% endif %}
+            hx-post="/api/karma/settle" hx-confirm="Settle all pending karma intents?" hx-target="#settle-result" hx-indicator="#settle-spinner">
+      Settle All
+    </button>
+    <span id="settle-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">settling...</span>
+    <span id="settle-result" class="text-dim" style="font-size:0.75rem;"></span>
+  </div>
+</div>
+
+<!-- Receipt History -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Receipt History</span>
+  </div>
+  {% if receipts %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th style="text-align:right;">Trades</th>
+        <th style="text-align:right;">Amount</th>
+        <th>Status</th>
+        <th>Tx</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in receipts %}
+      <tr>
+        <td class="text-dim">{{ r.date }}</td>
+        <td style="text-align:right;">{{ r.trades }}</td>
+        <td style="text-align:right;" class="data-live">${{ '%.2f' | format(r.amount) }}</td>
+        <td class="text-dim">{{ r.status }}</td>
+        <td class="text-dim">{{ r.tx | default('—') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-state">No settlements yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

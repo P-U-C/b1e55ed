@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Brain — b1e55ed{% endblock %}
+
+{% block content %}
+
+<!-- Regime Banner -->
+<div class="regime-banner {{ regime_class | default('transition') }}"
+     hx-get="/partials/regime-banner"
+     hx-trigger="every 30s"
+     hx-swap="outerHTML">
+  <span class="regime-name">{{ regime_name | default('TRANSITION') }}</span>
+  <span class="regime-desc">{{ regime_desc | default('No clear trend') }}</span>
+  <span class="regime-confidence">{{ regime_confidence | default('—') }}</span>
+</div>
+
+<div class="grid" style="margin-bottom: 1rem;">
+
+  <!-- Positions Panel -->
+  <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Positions</span>
+      <span class="panel-age">{{ positions_age | default('—') }}</span>
+    </div>
+
+    {% if positions %}
+      {% for p in positions %}
+      <div style="margin-bottom: 0.75rem;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
+          <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-weight:400;">
+            {{ '%+.1f' | format(p.pnl_pct) }}%
+          </span>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.5rem; margin-top:0.375rem; font-size:0.8125rem;">
+          <div><span class="text-dim">Current</span><br><span class="data-live">${{ '%.2f' | format(p.current) }}</span></div>
+          <div><span class="text-dim">Entry</span><br>${{ '%.2f' | format(p.entry) }}</div>
+          <div><span class="text-dim">Stop</span><br><span class="{{ 'text-warn' if p.near_stop else '' }}">${{ '%.2f' | format(p.stop) }}</span></div>
+          <div><span class="text-dim">Target</span><br>${{ '%.2f' | format(p.target) }}</div>
+        </div>
+        <div style="margin-top:0.25rem; font-size:0.75rem; color:var(--text-dim);">
+          P&L: <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+          {% if p.leverage_warning %}
+            · <span class="text-warn">{{ p.leverage }}x leverage (exceeds max)</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <div style="font-size:0.75rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</div>
+    {% else %}
+      <div class="empty-state">No open positions. Brain decisions will appear here.</div>
+    {% endif %}
+  </div>
+
+  <!-- Conviction Panel -->
+  <div class="panel" hx-get="/partials/conviction" hx-trigger="every 60s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Conviction</span>
+      <span class="panel-age">{{ conviction_age | default('—') }}</span>
+    </div>
+
+    {% if convictions %}
+      {% for c in convictions %}
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+        <span style="width:3rem; font-weight:400;">{{ c.symbol }}</span>
+        <div class="conviction-bar" style="flex:1;">
+          <div class="conviction-bar-fill {{ c.direction }}" style="width:{{ (c.magnitude / 10 * 100) | int }}%;"></div>
+        </div>
+        <span style="width:2rem; text-align:right; font-weight:400;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
+        <span style="width:4.5rem; font-size:0.75rem;" class="text-dim">{{ c.direction | upper }}</span>
+      </div>
+      {% endfor %}
+
+      {% if domain_weights %}
+      <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border-dim);">
+        <div class="panel-title" style="margin-bottom:0.5rem;">Domain Weights</div>
+        {% for w in domain_weights %}
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem; font-size:0.75rem;">
+          <span style="width:5rem; color:var(--text-dim);">{{ w.name }}</span>
+          <div style="flex:1; height:4px; background:var(--border-dim); border-radius:1px;">
+            <div style="width:{{ w.pct }}%; height:100%; background:var(--text-dim); border-radius:1px;"></div>
+          </div>
+          <span style="width:2.5rem; text-align:right; color:var(--text-dim);">{{ w.pct }}%</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">No conviction scores yet. Waiting for first brain cycle.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Signal Feed -->
+<div class="panel" style="margin-bottom: 1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Signal Feed</span>
+    <span class="panel-age cursor-blink">live</span>
+  </div>
+  <div id="signal-feed" class="data-dense"
+       hx-get="/partials/signal-feed"
+       hx-trigger="every 30s"
+       hx-swap="innerHTML">
+    {% if signals %}
+      {% for s in signals %}
+      <div class="signal-row">
+        <span class="signal-ts">{{ s.ts }}</span>
+        <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
+        <span class="signal-asset">{{ s.asset }}</span>
+        <span class="signal-desc">{{ s.desc }}</span>
+        <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
+          {{ s.direction }}{{ '%.0f' | format(s.score) }}
+        </span>
+      </div>
+      {% endfor %}
+      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+        showing {{ signals | length }} of {{ total_signals | default('?') }} signals today
+      </div>
+    {% else %}
+      <div class="empty-state">No signals yet. Waiting for first producer cycle.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- Quick Actions -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Quick Actions</span>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+      <button class="btn"
+              hx-post="/api/brain/run"
+              hx-confirm="Run brain cycle now?"
+              hx-target="#cycle-result"
+              hx-indicator="#cycle-spinner">
+        ▶ Run Brain Cycle
+      </button>
+      <button class="btn {{ 'btn-danger' if kill_switch_level | default(0) > 0 else '' }}"
+              hx-post="/api/kill-switch"
+              hx-confirm="Toggle kill switch?">
+        ⚠ Kill Switch: {{ 'LEVEL %d' | format(kill_switch_level) if kill_switch_level | default(0) > 0 else 'OFF' }}
+      </button>
+    </div>
+    <div id="cycle-result" style="margin-top:0.5rem; font-size:0.8125rem;"></div>
+    <span id="cycle-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">running...</span>
+  </div>
+
+  <!-- System Status -->
+  <div class="panel" hx-get="/partials/system-status" hx-trigger="every 60s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">System Status</span>
+    </div>
+    <div style="font-size:0.8125rem; display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1.5rem;">
+      <div><span class="text-dim">Last cycle</span></div>
+      <div>
+        <span class="dot {{ 'dot-ok' if cycle_age_min | default(99) < 10 else ('dot-degraded' if cycle_age_min | default(99) < 30 else 'dot-error') }}"></span>
+        {{ cycle_age | default('never') }}
+      </div>
+      <div><span class="text-dim">Producers</span></div>
+      <div>{{ producers_healthy | default(0) }}/{{ producers_total | default(0) }} healthy</div>
+      <div><span class="text-dim">Events today</span></div>
+      <div>{{ events_today | default(0) }}</div>
+      <div><span class="text-dim">DB size</span></div>
+      <div>{{ db_size | default('—') }}</div>
+      <div><span class="text-dim">Uptime</span></div>
+      <div>{{ uptime | default('—') }}</div>
+      <div><span class="text-dim">Karma pending</span></div>
+      <div>{{ karma_pending | default('$0') }}</div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

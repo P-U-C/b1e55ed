@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Signals — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+  <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Signals</h1>
+  <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
+    {% for d in domains %}
+    <a href="/signals?domain={{ d.id }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}">{{ d.label }}</a>
+    {% endfor %}
+    <a href="/signals" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
+  </div>
+</div>
+
+<!-- Latest by domain -->
+<div class="grid" style="margin-bottom:1rem;">
+  {% for group in domain_groups %}
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title"><span class="badge badge-{{ group.domain }}">{{ group.domain }}</span></span>
+      <span class="panel-age">{{ group.age | default('—') }}</span>
+    </div>
+    {% if group.signals %}
+      {% for s in group.signals %}
+      <div style="display:flex; align-items:center; gap:0.75rem; padding:4px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
+        <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.asset }}</span>
+        <span style="flex:1; color:var(--text);">{{ s.desc }}</span>
+        <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400;">
+          {{ s.direction }}{{ '%.0f' | format(s.score) }}
+        </span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No recent signals from this domain.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Signal history -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Signal History</span>
+    <span class="panel-age cursor-blink">live</span>
+  </div>
+  <div id="signal-history" class="data-dense"
+       hx-get="/partials/signal-history{% if active_domain %}?domain={{ active_domain }}{% endif %}"
+       hx-trigger="every 30s"
+       hx-swap="innerHTML">
+    {% if signals %}
+      {% for s in signals %}
+      <div class="signal-row">
+        <span class="signal-ts">{{ s.ts }}</span>
+        <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
+        <span class="signal-asset">{{ s.asset }}</span>
+        <span class="signal-desc">{{ s.desc }}</span>
+        <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
+          {{ s.direction }}{{ '%.0f' | format(s.score) }}
+        </span>
+      </div>
+      {% endfor %}
+      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+        showing {{ signals | length }} of {{ total_signals | default('?') }} signals{% if active_domain %} ({{ active_domain }}){% endif %}
+      </div>
+    {% else %}
+      <div class="empty-state">No signals yet. Waiting for first producer cycle.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
