@@ -38,6 +38,7 @@ class EventType(StrEnum):
     SIGNAL_CURATOR_V1 = "signal.curator.v1"
     SIGNAL_ACI_V1 = "signal.aci.v1"
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
+    SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -161,6 +162,19 @@ class OrderbookSignalPayload(BaseModel):
     ask_depth_usd: float | None = None
     imbalance: float | None = None
     lod_score: float | None = None
+
+
+class PriceWSSignalPayload(BaseModel):
+    """Payload for :pydata:`~engine.core.events.EventType.SIGNAL_PRICE_WS_V1`.
+
+    Polling placeholder for a future websocket feed.
+    """
+
+    symbol: str
+    price: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    venue: str | None = None
 
 
 class CuratorSignalPayload(BaseModel):
