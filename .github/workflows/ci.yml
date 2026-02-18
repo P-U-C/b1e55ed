@@ -84,3 +84,35 @@ jobs:
             exit 1
           fi
           echo "✅ No hardcoded secrets found"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Build package
+        run: uv build
+      - name: Verify build artifacts
+        run: |
+          ls -lh dist/
+          test -f dist/*.whl || (echo "❌ No wheel found" && exit 1)
+          test -f dist/*.tar.gz || (echo "❌ No sdist found" && exit 1)
+          echo "✅ Build artifacts created"
+      - name: Test installation in clean venv
+        run: |
+          uv venv test-install
+          source test-install/bin/activate
+          uv pip install dist/*.whl
+          python -c "import engine; import api; import dashboard; print('✅ Package imports work')"
+          python -c "from engine.core.config import Config; c = Config(); print('✅ Config loads')"
+          deactivate
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 7
