@@ -12,15 +12,15 @@ import json
 import sqlite3
 import threading
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from engine.core.events import EventType, canonical_json
 from engine.core.exceptions import DedupeConflictError, EventStoreError
 from engine.core.models import Event, compute_event_hash
-
 
 SCHEMA = """
 -- ============================================================
@@ -362,7 +362,7 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._init_schema()
         self._last_hash = self._get_last_hash()
 
@@ -377,7 +377,9 @@ class Database:
             self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _get_last_hash(self) -> str | None:
-        row = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
+        row = self.conn.execute(
+            "SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1"
+        ).fetchone()
         return None if row is None else str(row[0])
 
     @staticmethod
@@ -501,7 +503,9 @@ class Database:
         with self._lock:
             for et, payload, dedupe_key in events:
                 out.append(
-                    self.append_event(event_type=et, payload=payload, dedupe_key=dedupe_key, source=source)
+                    self.append_event(
+                        event_type=et, payload=payload, dedupe_key=dedupe_key, source=source
+                    )
                 )
         return out
 
@@ -540,7 +544,10 @@ class Database:
         fast=True verifies only the last N events.
         """
 
-        q = "SELECT id, type, payload, prev_hash, hash FROM events ORDER BY created_at ASC, rowid ASC"
+        q = (
+            "SELECT id, type, payload, prev_hash, hash FROM events "
+            "ORDER BY created_at ASC, rowid ASC"
+        )
         rows = self.conn.execute(q).fetchall()
         if fast and len(rows) > last_n:
             rows = rows[-last_n:]

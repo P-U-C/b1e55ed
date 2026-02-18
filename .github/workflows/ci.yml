@@ -20,7 +20,7 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --extra dev
       - name: Run tests
         run: uv run pytest tests/ --cov=engine --cov-report=xml -v
       - name: Upload coverage
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - run: uv sync --dev
+      - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
 
@@ -47,5 +47,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - run: uv sync --dev
+      - run: uv sync --extra dev
       - run: uv run mypy engine/

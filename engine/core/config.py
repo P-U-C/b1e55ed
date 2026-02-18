@@ -43,8 +43,9 @@ class DomainWeights(BaseModel):
     @field_validator("events", mode="after")
     @classmethod
     def weights_must_sum_to_one(cls, v: float, info) -> float:
-        fields = ["curator", "onchain", "tradfi", "social", "technical", "events"]
-        total = sum(float(info.data.get(f, 0.0)) for f in fields)
+        # info.data contains previously validated fields; v is the current field's value
+        prior = ["curator", "onchain", "tradfi", "social", "technical"]
+        total = sum(float(info.data.get(f, 0.0)) for f in prior) + v
         if abs(total - 1.0) > 0.001:
             raise ValueError(f"Domain weights must sum to 1.0, got {total}")
         return v
@@ -138,7 +139,7 @@ class Config(BaseSettings):
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "Config":
+    def from_yaml(cls, path: Path) -> Config:
         if not path.exists():
             raise ConfigError(f"Config file not found: {path}")
 
@@ -160,12 +161,17 @@ class Config(BaseSettings):
         return cls(**raw)
 
     @classmethod
-    def from_repo_defaults(cls, repo_root: Path | None = None) -> "Config":
+    def from_repo_defaults(cls, repo_root: Path | None = None) -> Config:
         root = repo_root or Path.cwd()
         return cls.from_yaml(root / "config" / "default.yaml")
 
     @classmethod
-    def from_preset(cls, preset: Literal["conservative", "balanced", "degen"], *, repo_root: Path | None = None) -> "Config":
+    def from_preset(
+        cls,
+        preset: Literal["conservative", "balanced", "degen"],
+        *,
+        repo_root: Path | None = None,
+    ) -> Config:
         root = repo_root or Path.cwd()
         default_path = root / "config" / "default.yaml"
         raw = yaml.safe_load(default_path.read_text()) or {}
