@@ -1,78 +1,52 @@
-"""engine.producers.curator
+"""engine.producers.whale
 
-Curator Intel Producer.
+Whale Tracking Producer.
 
-Ingests operator/curator intel from a configured endpoint or local file, then
-emits :class:`~engine.core.events.EventType.SIGNAL_CURATOR_V1`.
-
-Configuration (env):
-- ``B1E55ED_CURATOR_URL`` / ``CURATOR_URL``  (HTTP endpoint)
-- ``B1E55ED_CURATOR_FILE`` / ``CURATOR_FILE`` (JSON file)
-
-The endpoint/file is intentionally simple so unit tests can mock the injected
-``context.client`` or write a temp file.
+Tracks large-holder / smart-money metrics via a configured endpoint and emits
+:class:`~engine.core.events.EventType.SIGNAL_WHALE_V1`.
 
 Easter egg:
-- Human priors are a feature, not a bug.
+- Follow the whales if you must; follow the truth even when it's quieter.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
 
-from engine.core.events import CuratorSignalPayload, EventType, payload_hash
+from engine.core.events import EventType, WhaleSignalPayload
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
 
 
-def _dedupe_key(*, producer: str, payload: dict[str, Any]) -> str:
-    return f"{EventType.SIGNAL_CURATOR_V1}:{producer}:{payload_hash(payload)}"
+def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
+    return f"{EventType.SIGNAL_WHALE_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
-@register("curator-intel", domain="curator")
-class CuratorIntelProducer(BaseProducer):
-    schedule = "*/10 * * * *"  # 10m
+@register("whale-tracking", domain="onchain")
+class WhaleTrackingProducer(BaseProducer):
+    schedule = "*/30 * * * *"
 
     def _endpoint(self) -> str | None:
-        return os.getenv("B1E55ED_CURATOR_URL") or os.getenv("CURATOR_URL")
-
-    def _file_path(self) -> str | None:
-        return os.getenv("B1E55ED_CURATOR_FILE") or os.getenv("CURATOR_FILE")
+        return os.getenv("B1E55ED_WHALE_TRACKING_URL") or os.getenv("WHALE_TRACKING_URL")
 
     def collect(self) -> list[dict[str, Any]]:
         url = self._endpoint()
-        fp = self._file_path()
-
-        data: Any = None
-
-        if url:
-            # Endpoint can be mocked in tests via ctx.client
-            resp = asyncio.run(self.ctx.client.request("GET", url))
-            data = resp.json()
-        elif fp:
-            p = Path(fp)
-            if not p.exists():
-                self.ctx.logger.warning("curator_file_missing", extra={"path": fp})
-                return []
-            try:
-                data = json.loads(p.read_text(encoding="utf-8"))
-            except Exception:  # noqa: BLE001
-                self.ctx.logger.warning("curator_file_invalid_json", extra={"path": fp})
-                return []
-        else:
-            self.ctx.logger.warning("curator_source_missing")
+        if not url:
+            self.ctx.logger.warning("whale_tracking_endpoint_missing")
             return []
 
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        resp = asyncio.run(self.ctx.client.request("POST", url, json={"symbols": symbols}))
+
+        data: Any = resp.json()
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
         if not isinstance(data, list):
@@ -88,31 +62,26 @@ class CuratorIntelProducer(BaseProducer):
             if not sym:
                 continue
 
-            payload_obj = CuratorSignalPayload(
+            payload_obj = WhaleSignalPayload(
                 symbol=sym,
-                direction=(row.get("direction") or "neutral"),
-                conviction=float(row.get("conviction") or 0.0),
-                rationale=str(row.get("rationale") or ""),
-                source=str(row.get("source") or "operator"),
+                smart_money_netflow=row.get("smart_money_netflow"),
+                top_holders_change=row.get("top_holders_change"),
             )
             payload = payload_obj.model_dump(mode="json")
-
             out.append(
                 self.draft_event(
-                    event_type=EventType.SIGNAL_CURATOR_V1,
+                    event_type=EventType.SIGNAL_WHALE_V1,
                     payload=payload,
                     ts=ts,
                     observed_at=ts,
                     source=self.name,
-                    dedupe_key=_dedupe_key(producer=self.name, payload=payload),
+                    dedupe_key=_dedupe_key(producer=self.name, symbol=sym, ts=ts),
                 )
             )
 
         return out
 
     def run(self) -> ProducerResult:
-        """Run with producer isolation: never raise."""
-
         start = time.perf_counter()
         errors: list[str] = []
         published = 0
@@ -131,7 +100,7 @@ class CuratorIntelProducer(BaseProducer):
         except Exception as e:  # noqa: BLE001
             health = ProducerHealth.ERROR
             errors.append(f"{type(e).__name__}: {e}")
-            self.ctx.logger.exception("curator_intel_run_failed")
+            self.ctx.logger.exception("whale_tracking_run_failed")
 
         duration_ms = int((time.perf_counter() - start) * 1000)
         return ProducerResult(

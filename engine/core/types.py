@@ -74,3 +74,58 @@ class ProducerResult:
     timestamp: datetime
     staleness_ms: int | None = None
     health: ProducerHealth = ProducerHealth.OK
+
+
+
+# ---------------------------------------------------------------------------
+# Learning loop dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class OutcomeAttribution:
+    position_id: str
+    conviction_id: int
+    realized_pnl: float
+    direction_correct: bool
+    time_held_hours: float
+    max_drawdown_pct: float
+    regime_at_entry: str
+    domain_scores_at_entry: dict[str, float]
+
+
+@dataclass(frozen=True, slots=True)
+class WeightAdjustment:
+    previous_weights: dict[str, float]
+    new_weights: dict[str, float]
+    deltas: dict[str, float]
+    observations: int
+    window_days: int
+    applied: bool
+    reason: str  # "adjusted" | "insufficient_data" | "reverted"
+
+
+@dataclass(frozen=True, slots=True)
+class ProducerScore:
+    name: str
+    accuracy: float
+    total_signals: int
+    correct_signals: int
+    staleness_avg_ms: float
+    error_rate: float
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusFeedback:
+    patterns_scored: int
+    skills_promoted: list[str]
+    skills_archived: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class LearningResult:
+    outcome_attributions: list[OutcomeAttribution]
+    weight_adjustment: WeightAdjustment
+    producer_scores: dict[str, ProducerScore]
+    corpus_feedback: CorpusFeedback
+    cycle_timestamp: datetime

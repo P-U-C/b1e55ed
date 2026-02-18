@@ -1,5 +1,9 @@
 # b1e55ed
 
+<p align="center">
+  <img src="assets/b1e55ed-hero.jpg" alt="b1e55ed" width="900" />
+</p>
+
 `0xb1e55ed` = **"blessed"** — a hex number that spells a word. The name is the first easter egg.
 
 b1e55ed is a sovereign trading intelligence system built around one primitive: **events**.
