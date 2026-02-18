@@ -1,11 +1,12 @@
-"""engine.producers.stablecoin
+"""engine.producers.whale
 
-Stablecoin Supply Producer.
+Whale Tracking Producer.
 
-Pulls stablecoin supply deltas from a configured endpoint and emits
-:class:`~engine.core.events.EventType.SIGNAL_STABLECOIN_V1`.
+Tracks large-holder / smart-money metrics via a configured endpoint and emits
+:class:`~engine.core.events.EventType.SIGNAL_WHALE_V1`.
 
-Endpoint is configured via env and is mocked in unit tests.
+Easter egg:
+- Follow the whales if you must; follow the truth even when it's quieter.
 """
 
 from __future__ import annotations
@@ -18,31 +19,32 @@ from typing import Any
 
 import httpx
 
-from engine.core.events import EventType, StablecoinSignalPayload
+from engine.core.events import EventType, WhaleSignalPayload
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
 
 
-def _dedupe_key(*, producer: str, stablecoin: str, ts: datetime) -> str:
-    return f"{EventType.SIGNAL_STABLECOIN_V1}:{producer}:{stablecoin}:{int(ts.timestamp())}"
+def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
+    return f"{EventType.SIGNAL_WHALE_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
-@register("stablecoin-supply", domain="onchain")
-class StablecoinSupplyProducer(BaseProducer):
-    schedule = "0 */2 * * *"
+@register("whale-tracking", domain="onchain")
+class WhaleTrackingProducer(BaseProducer):
+    schedule = "*/30 * * * *"
 
     def _endpoint(self) -> str | None:
-        return os.getenv("B1E55ED_STABLECOIN_SUPPLY_URL") or os.getenv("STABLECOIN_SUPPLY_URL")
+        return os.getenv("B1E55ED_WHALE_TRACKING_URL") or os.getenv("WHALE_TRACKING_URL")
 
     def collect(self) -> list[dict[str, Any]]:
         url = self._endpoint()
         if not url:
-            self.ctx.logger.warning("stablecoin_supply_endpoint_missing")
+            self.ctx.logger.warning("whale_tracking_endpoint_missing")
             return []
 
-        resp = asyncio.run(self.ctx.client.request("GET", url))
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        resp = asyncio.run(self.ctx.client.request("POST", url, json={"symbols": symbols}))
 
         data: Any = resp.json()
         if isinstance(data, dict) and "data" in data:
@@ -56,25 +58,24 @@ class StablecoinSupplyProducer(BaseProducer):
         out: list[Event] = []
 
         for row in raw:
-            sc = str(row.get("stablecoin") or row.get("symbol") or "").upper().strip()
-            if not sc:
+            sym = str(row.get("symbol") or row.get("asset") or "").upper().strip()
+            if not sym:
                 continue
 
-            payload_obj = StablecoinSignalPayload(
-                stablecoin=sc,
-                supply_change_24h=row.get("supply_change_24h"),
-                supply_change_7d=row.get("supply_change_7d"),
-                mint_burn_events=int(row.get("mint_burn_events") or 0),
+            payload_obj = WhaleSignalPayload(
+                symbol=sym,
+                smart_money_netflow=row.get("smart_money_netflow"),
+                top_holders_change=row.get("top_holders_change"),
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(
                 self.draft_event(
-                    event_type=EventType.SIGNAL_STABLECOIN_V1,
+                    event_type=EventType.SIGNAL_WHALE_V1,
                     payload=payload,
                     ts=ts,
                     observed_at=ts,
                     source=self.name,
-                    dedupe_key=_dedupe_key(producer=self.name, stablecoin=sc, ts=ts),
+                    dedupe_key=_dedupe_key(producer=self.name, symbol=sym, ts=ts),
                 )
             )
 
@@ -99,7 +100,7 @@ class StablecoinSupplyProducer(BaseProducer):
         except Exception as e:  # noqa: BLE001
             health = ProducerHealth.ERROR
             errors.append(f"{type(e).__name__}: {e}")
-            self.ctx.logger.exception("stablecoin_supply_run_failed")
+            self.ctx.logger.exception("whale_tracking_run_failed")
 
         duration_ms = int((time.perf_counter() - start) * 1000)
         return ProducerResult(
