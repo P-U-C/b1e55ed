@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
 
 from engine.core.config import Config
 from engine.core.database import Database

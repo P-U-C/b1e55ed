@@ -15,6 +15,7 @@ Tier 3 (YubiKey/MPC) is explicitly Phase 2.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -85,7 +86,7 @@ class _EnvBackend:
     def list_keys(self) -> list[str]:
         if self.prefix is None:
             return sorted(os.environ.keys())
-        return sorted(k for k in os.environ.keys() if k.startswith(self.prefix))
+        return sorted(k for k in os.environ if k.startswith(self.prefix))
 
     def has(self, name: str) -> bool:
         return os.environ.get(name) is not None
@@ -109,10 +110,8 @@ class _EncryptedFileBackend:
 
     def _ensure_dir(self) -> None:
         self.vault_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.vault_path.parent, 0o700)
-        except OSError:
-            pass
 
     def _get_or_create_salt(self) -> bytes:
         if self.salt_path.exists():
@@ -122,10 +121,8 @@ class _EncryptedFileBackend:
         self._ensure_dir()
         salt = os.urandom(_SALT_SIZE)
         self.salt_path.write_bytes(salt)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.salt_path, 0o600)
-        except OSError:
-            pass
         return salt
 
     def _fernet(self) -> Fernet:
@@ -148,10 +145,8 @@ class _EncryptedFileBackend:
         data = json.dumps(self._secrets, sort_keys=True, indent=2).encode("utf-8")
         encrypted = self._fernet().encrypt(data)
         self.vault_path.write_bytes(encrypted)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.vault_path, 0o600)
-        except OSError:
-            pass
 
     def get(self, name: str) -> str:
         if name not in self._secrets:
@@ -232,7 +227,7 @@ class Keystore:
     """
 
     @classmethod
-    def default(cls) -> "Keystore":
+    def default(cls) -> Keystore:
         """Default keystore constructor used by the CLI."""
 
         return cls(enable_keyring=True)
@@ -272,10 +267,8 @@ class Keystore:
         self._metadata_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._metadata_path.exists():
             self._metadata_path.write_text("{}", encoding="utf-8")
-            try:
+            with contextlib.suppress(OSError):
                 os.chmod(self._metadata_path, 0o600)
-            except OSError:
-                pass
 
     def set(self, name: str, value: str, tier: KeystoreTier = KeystoreTier.ENCRYPTED_FILE) -> None:
         """Compatibility wrapper: store a key."""
@@ -385,15 +378,13 @@ class Keystore:
 
     def _save_metadata(self, data: dict[str, Any]) -> None:
         self._metadata_path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self._metadata_path, 0o600)
-        except OSError:
-            pass
 
     def _register_metadata(self, *, name: str, tier: KeystoreTier) -> None:
         data = self._load_metadata()
         if name not in data:
-            from datetime import datetime, UTC
+            from datetime import UTC, datetime
 
             data[name] = {"tier": int(tier), "created_at": datetime.now(tz=UTC).isoformat()}
         else:

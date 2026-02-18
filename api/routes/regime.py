@@ -10,7 +10,6 @@ from api.auth import AuthDep
 from api.deps import get_db
 from engine.core.database import Database
 
-
 router = APIRouter(prefix="/regime", dependencies=[AuthDep])
 
 

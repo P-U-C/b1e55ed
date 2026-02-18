@@ -71,10 +71,7 @@ class PnLTracker:
         qty = notional / entry if entry > 0 else 0.0
         xp = float(exit_price)
 
-        if direction == "long":
-            realized = (xp - entry) * qty
-        else:
-            realized = (entry - xp) * qty
+        realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
         with self.db.conn:

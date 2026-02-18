@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from api.main import create_app
 from engine.core.database import Database
 from engine.core.events import EventType

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from api.main import create_app
 from engine.core.database import Database
 from tests.unit._api_test_client import make_client

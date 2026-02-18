@@ -9,7 +9,6 @@ from api.deps import get_db
 from api.schemas.positions import PositionResponse
 from engine.core.database import Database
 
-
 router = APIRouter(prefix="/positions", dependencies=[AuthDep])
 
 

@@ -8,12 +8,11 @@ from fastapi import APIRouter, Depends
 from api.auth import AuthDep
 from api.deps import get_config, get_db, get_kill_switch
 from api.schemas.brain import BrainStatus, CycleResult
-from engine.brain.orchestrator import BrainOrchestrator
 from engine.brain.kill_switch import KillSwitch
+from engine.brain.orchestrator import BrainOrchestrator
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.security import generate_node_identity
-
 
 router = APIRouter(prefix="/brain", dependencies=[AuthDep])
 

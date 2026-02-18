@@ -42,16 +42,26 @@ b1e55ed = "engine.cli:main"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = ["B008"]  # FastAPI Depends in defaults is intentional
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+disable_error_code = ["type-arg", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = "keyring.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = "no-redef"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

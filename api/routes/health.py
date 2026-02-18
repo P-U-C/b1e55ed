@@ -10,7 +10,6 @@ from api.deps import get_db
 from engine import __version__
 from engine.core.database import Database
 
-
 router = APIRouter()
 
 

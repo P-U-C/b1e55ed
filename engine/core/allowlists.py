@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 DEFAULT_ALLOWED_VENUES = frozenset({"hyperliquid", "binance", "coinbase"})
 DEFAULT_ALLOWED_CHAINS = frozenset({"ethereum", "solana", "hyperevm", "base", "arbitrum"})
 DEFAULT_ALLOWED_TOKENS = frozenset({"BTC", "ETH", "SOL", "HYPE", "SUI"})

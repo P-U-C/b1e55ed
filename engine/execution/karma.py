@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Callable
 
 from engine.core.config import Config
 from engine.core.database import Database

@@ -10,7 +10,6 @@ from api.auth import AuthDep
 from api.deps import get_config
 from engine.core.config import Config
 
-
 router = APIRouter(prefix="/config", dependencies=[AuthDep])
 
 

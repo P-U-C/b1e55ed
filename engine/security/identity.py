@@ -11,6 +11,7 @@ Easter egg: node_id is prefixed with `b1e55ed-`.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -21,7 +22,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
 
 _ITERATIONS = 480_000
 
@@ -108,13 +108,11 @@ class NodeIdentity:
             blob["warning"] = "identity private key stored unencrypted; set B1E55ED_MASTER_PASSWORD"
 
         path.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(path, 0o600)
-        except OSError:
-            pass
 
     @classmethod
-    def load(cls, path: str | Path) -> "NodeIdentity":
+    def load(cls, path: str | Path) -> NodeIdentity:
         path = Path(path)
         blob = json.loads(path.read_text(encoding="utf-8"))
 

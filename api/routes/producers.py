@@ -9,7 +9,6 @@ from api.auth import AuthDep
 from api.deps import get_db, get_registry
 from engine.core.database import Database
 
-
 router = APIRouter(prefix="/producers", dependencies=[AuthDep])
 
 

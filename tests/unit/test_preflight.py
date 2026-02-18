@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database

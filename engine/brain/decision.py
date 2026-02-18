@@ -15,12 +15,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType
 from engine.core.types import TradeIntent
-
-from engine.brain.kill_switch import KillSwitchLevel
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,12 +18,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from engine.brain.synthesis import SynthesisResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
 from engine.core.types import ConvictionScore
-
-from engine.brain.synthesis import SynthesisResult
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:

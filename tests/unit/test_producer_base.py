@@ -9,7 +9,13 @@ from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType
 from engine.core.metrics import MetricsRegistry
-from engine.producers.base import BaseProducer, Producer, ProducerContext, ProducerHealth, ProducerResult
+from engine.producers.base import (
+    BaseProducer,
+    Producer,
+    ProducerContext,
+    ProducerHealth,
+    ProducerResult,
+)
 
 
 class _GoodProducer:

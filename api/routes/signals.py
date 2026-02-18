@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -10,7 +9,6 @@ from api.deps import get_db
 from api.schemas.common import PaginatedResponse
 from api.schemas.signals import SignalResponse
 from engine.core.database import Database
-
 
 router = APIRouter(prefix="/signals", dependencies=[AuthDep])
 
@@ -29,7 +27,6 @@ def list_signals(
     domain: str | None = Query(None, description="Filter by domain (ta/onchain/tradfi/social/etc)"),
 ) -> PaginatedResponse[SignalResponse]:
     like = "signal.%"
-    params: list[Any] = []
     if domain:
         like = f"signal.{domain}.%"
 

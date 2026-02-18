@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from api.main import create_app
 from engine import __version__
 from engine.core.database import Database

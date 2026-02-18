@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 from pathlib import Path
 
@@ -65,10 +66,8 @@ def get_kill_switch(request: Request) -> KillSwitch:
         import json
 
         payload = json.loads(str(row[0]))
-        try:
+        with contextlib.suppress(Exception):
             ks.reset(level=int(payload.get("level", 0)))
-        except Exception:
-            pass
     return ks
 
 

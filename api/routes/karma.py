@@ -10,7 +10,6 @@ from engine.core.config import Config
 from engine.core.database import Database
 from engine.execution.karma import KarmaEngine
 
-
 router = APIRouter(dependencies=[AuthDep])
 
 

@@ -5,8 +5,9 @@ Hashcash lineage precedes Bitcoin (1997). The code remembers.
 
 from __future__ import annotations
 
+import contextlib
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,14 +38,14 @@ def _api(request: Request) -> ApiClient:
 
 
 def _now_utc() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _age_str(ts: datetime | None) -> tuple[str, int]:
     if ts is None:
         return "never", 10**9
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     delta = _now_utc() - ts
     mins = int(delta.total_seconds() // 60)
     if mins < 1:
@@ -522,10 +523,8 @@ def treasury_page(request: Request) -> HTMLResponse:
     if summary_res.ok and isinstance(summary_res.data, dict):
         pct = summary_res.data.get("percentage")
         if pct is not None:
-            try:
+            with contextlib.suppress(Exception):
                 karma_rate = f"{float(pct) * 100:.2f}% of profit"
-            except Exception:
-                pass
         treasury_addr = str(summary_res.data.get("treasury_address") or "—")
 
     return templates.TemplateResponse(

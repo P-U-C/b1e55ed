@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 
 def make_client(app: FastAPI) -> AsyncClient:

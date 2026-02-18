@@ -19,10 +19,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, Literal
-
-import yaml
 
 from engine.brain.learning import LearningLoop, write_learned_weights_yaml
 from engine.core.config import Config

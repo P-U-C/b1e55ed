@@ -19,7 +19,6 @@ from typing import Any
 
 from engine.producers.base import Producer
 
-
 _REGISTRY: dict[str, type[Producer]] = {}
 _DISCOVERED = False
 
@@ -29,9 +28,9 @@ def register(name: str, *, domain: str) -> Callable[[type[Any]], type[Any]]:
         if name in _REGISTRY and _REGISTRY[name] is not cls:
             raise ValueError(f"producer already registered: {name}")
 
-        setattr(cls, "name", name)
-        setattr(cls, "domain", domain)
-        _REGISTRY[name] = cls  # type: ignore[assignment]
+        cls.name = name
+        cls.domain = domain
+        _REGISTRY[name] = cls
         return cls
 
     return _decorator

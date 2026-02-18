@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
+from engine.brain.kill_switch import KillSwitch
 from engine.core.policy import PolicyViolation, TradingPolicy, TradingPolicyEngine
 
 
