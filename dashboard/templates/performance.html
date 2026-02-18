@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Performance — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Summary -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Summary</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Total trades</span></div>
+      <div class="data-live">{{ total_trades | default(0) }}</div>
+      <div><span class="text-dim">Win rate</span></div>
+      <div class="{{ 'text-bull' if win_rate and win_rate > 50 else '' }}">{{ '%.0f%%' | format(win_rate) if win_rate else '—' }}</div>
+      <div><span class="text-dim">Avg P&L</span></div>
+      <div class="{{ 'text-bull' if avg_pnl and avg_pnl > 0 else ('text-bear' if avg_pnl and avg_pnl < 0 else '') }}">{{ '$%+.0f' | format(avg_pnl) if avg_pnl else '—' }}</div>
+      <div><span class="text-dim">Total P&L</span></div>
+      <div class="data-live {{ 'text-bull' if total_pnl and total_pnl > 0 else ('text-bear' if total_pnl and total_pnl < 0 else '') }}">{{ '$%+.0f' | format(total_pnl) if total_pnl else '$0' }}</div>
+      <div><span class="text-dim">Sharpe</span></div>
+      <div>{{ '%.2f' | format(sharpe) if sharpe else '—' }}</div>
+      <div><span class="text-dim">Max drawdown</span></div>
+      <div class="{{ 'text-bear' if max_dd else '' }}">{{ '%.1f%%' | format(max_dd) if max_dd else '—' }}</div>
+    </div>
+  </div>
+
+  <!-- Brain Accuracy -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Brain Accuracy</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Predictions</span></div>
+      <div>{{ predictions | default(0) }}</div>
+      <div><span class="text-dim">Correct</span></div>
+      <div>{{ correct | default(0) }}</div>
+      <div><span class="text-dim">Accuracy</span></div>
+      <div class="{{ 'text-bull' if accuracy and accuracy > 60 else '' }}">{{ '%.0f%%' | format(accuracy) if accuracy else '—' }}</div>
+    </div>
+    {% if domain_accuracy %}
+    <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border);">
+      <div class="panel-title" style="margin-bottom:0.5rem;">By Domain</div>
+      {% for d in domain_accuracy %}
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem; font-size:0.75rem;">
+        <span class="badge badge-{{ d.domain }}">{{ d.domain }}</span>
+        <div class="conviction-bar" style="flex:1;">
+          <div class="conviction-bar-fill long" style="width:{{ d.accuracy }}%;"></div>
+        </div>
+        <span class="text-dim" style="width:3rem; text-align:right;">{{ d.accuracy }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <div style="margin-top:1rem; font-size:0.75rem; color:var(--text-dim);">No domain accuracy data yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Trade Log -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Trade Log</span>
+  </div>
+  {% if trades %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Asset</th>
+        <th>Dir</th>
+        <th style="text-align:right;">Entry</th>
+        <th style="text-align:right;">Exit</th>
+        <th style="text-align:right;">P&L</th>
+        <th style="text-align:right;">Held</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in trades %}
+      <tr>
+        <td class="text-dim">{{ t.id }}</td>
+        <td class="text-bright" style="font-weight:400;">{{ t.asset }}</td>
+        <td>{{ t.direction }}</td>
+        <td style="text-align:right;">${{ '%.2f' | format(t.entry) }}</td>
+        <td style="text-align:right;">${{ '%.2f' | format(t.exit) }}</td>
+        <td style="text-align:right;" class="{{ 'text-bull' if t.pnl >= 0 else 'text-bear' }}">${{ '%+.0f' | format(t.pnl) }}</td>
+        <td style="text-align:right;" class="text-dim">{{ t.held }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-state">No closed trades. Performance data populates after first exit.</div>
+  {% endif %}
+</div>
+
+<!-- Weight History -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Weight History</span>
+  </div>
+  {% if weight_history %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        {% for w in weight_history[0].weights %}
+        <th style="text-align:right;">{{ w.name }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in weight_history %}
+      <tr>
+        <td class="text-dim">{{ row.date }}</td>
+        {% for w in row.weights %}
+        <td style="text-align:right;">{{ w.pct }}%</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-state">Initial weights active. Adjustments begin after 30 days (cold start).</div>
+  {% endif %}
+</div>
+
+<!-- Exit Discipline -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Exit Discipline</span>
+  </div>
+  {% if exit_data %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Trade</th>
+          <th style="text-align:right;">Target Hit</th>
+          <th style="text-align:right;">Actual Exit</th>
+          <th style="text-align:right;">Missed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in exit_data %}
+        <tr>
+          <td class="text-dim">{{ e.id }}</td>
+          <td style="text-align:right;">${{ '%.2f' | format(e.target_price) }}</td>
+          <td style="text-align:right;">${{ '%.2f' | format(e.actual_exit) }}</td>
+          <td style="text-align:right;" class="{{ 'text-bear' if e.missed > 0 else 'text-bull' }}">${{ '%+.0f' | format(e.missed) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="margin-top:0.75rem; font-size:0.75rem; color:var(--text-dim);">
+      Total "didn't sell" tax: <span class="{{ 'text-bear' if exit_tax > 0 else '' }}">${{ '%+.0f' | format(exit_tax) }}</span>
+    </div>
+  {% else %}
+    <div class="empty-state">"Didn't sell" tax: tracks missed exits vs actual. Populates after first closed trade.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

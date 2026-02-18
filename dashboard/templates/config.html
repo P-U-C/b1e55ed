@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Config — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Configuration</span>
+    <span class="panel-age">preset: {{ preset | default('balanced') }}</span>
+  </div>
+
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
+    <span class="text-dim" style="font-size:0.75rem;">Preset</span>
+    <select class="btn" style="padding:6px 10px;" name="preset" hx-post="/api/config/preset" hx-target="#config-form" hx-swap="outerHTML">
+      {% for p in presets %}
+      <option value="{{ p }}" {% if preset == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn" hx-get="/api/config" hx-target="#config-form" hx-swap="outerHTML">Reload</button>
+    <button class="btn" hx-post="/api/config" hx-confirm="Save configuration?" hx-target="#config-save-result">Save</button>
+    <span id="config-save-result" class="text-dim" style="font-size:0.75rem;"></span>
+  </div>
+
+  <form id="config-form">
+
+    <!-- RISK -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Risk</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max daily loss (USD)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_daily_loss_usd" value="{{ cfg.risk.max_daily_loss_usd | default('1000') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max position size (%)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_position_size_pct" value="{{ cfg.risk.max_position_size_pct | default('15') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max leverage (default)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_leverage_default" value="{{ cfg.risk.max_leverage_default | default('5') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max leverage (crisis)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_leverage_crisis" value="{{ cfg.risk.max_leverage_crisis | default('1') }}">
+        </label>
+      </div>
+    </div>
+
+    <!-- BRAIN -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Brain</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Cycle interval (seconds)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.cycle_interval_s" value="{{ cfg.brain.cycle_interval_s | default('300') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Min conviction to trade (0-100)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.min_conviction" value="{{ cfg.brain.min_conviction | default('65') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">CTS auto-trigger (PCS)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.cts_auto_trigger" value="{{ cfg.brain.cts_auto_trigger | default('75') }}">
+        </label>
+        <div>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Synthesis version</div>
+          <div class="text-dim" style="padding:8px 0;">{{ cfg.brain.synthesis_version | default('v2 (locked)') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXECUTION -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Execution</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Mode</div>
+          <select class="btn" style="width:100%; text-align:left; padding:6px 10px;" name="execution.mode">
+            {% for m in ['paper','live'] %}
+            <option value="{{ m }}" {% if cfg.execution.mode == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Confirmation threshold (USD)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.confirm_threshold_usd" value="{{ cfg.execution.confirm_threshold_usd | default('500') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Circuit breaker min interval (s)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.circuit_min_s" value="{{ cfg.execution.circuit_min_s | default('10') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Circuit breaker max interval (s)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.circuit_max_s" value="{{ cfg.execution.circuit_max_s | default('60') }}">
+        </label>
+      </div>
+    </div>
+
+    <!-- KARMA -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Karma</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Enabled</div>
+          <input type="checkbox" name="karma.enabled" {% if cfg.karma.enabled %}checked{% endif %}>
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Percentage (%)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="karma.pct" value="{{ cfg.karma.pct | default('0.5') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Settlement mode</div>
+          <select class="btn" style="width:100%; text-align:left; padding:6px 10px;" name="karma.mode">
+            {% for m in ['manual','auto'] %}
+            <option value="{{ m }}" {% if cfg.karma.mode == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Treasury</div>
+          <div class="text-dim" style="padding:8px 0;">{{ cfg.karma.treasury | default('0xPUC…') }}</div>
+        </div>
+      </div>
+    </div>
+
+  </form>
+
+  <div style="margin-top:0.75rem; font-size:0.75rem; color:var(--text-dim);">
+    Config surfaces: <span class="text-bright">config/default.yaml</span>, <span class="text-bright">config/presets/*.yaml</span>, env vars (secrets only).
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}System — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Producers -->
+  <div class="panel" hx-get="/partials/producers" hx-trigger="every 60s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Producers</span>
+      <span class="panel-age">{{ producers_healthy }}/{{ producers_total }} healthy</span>
+    </div>
+    {% for p in producers %}
+    <div style="display:flex; align-items:center; gap:0.75rem; padding:5px 0; border-bottom:1px solid var(--border); font-size:0.8125rem;">
+      <span class="dot {{ 'dot-ok' if p.health == 'ok' else ('dot-degraded' if p.health == 'degraded' else 'dot-error') }}"></span>
+      <span style="flex:1; font-weight:400; color:var(--text-bright);">{{ p.name }}</span>
+      <span class="badge badge-{{ p.domain }}">{{ p.domain }}</span>
+      <span class="text-dim" style="font-size:0.7rem; width:5rem; text-align:right;">{{ p.last_run | default('—') }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Kill Switch -->
+  <div class="panel" hx-get="/partials/kill-switch" hx-trigger="every 30s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Kill Switch</span>
+      <span class="panel-age">Level {{ kill_switch_level }}</span>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:1rem; font-weight:400; color:var(--text-bright); margin-bottom:0.75rem;">
+        {{ kill_switch_label | default('NORMAL') }}
+      </div>
+      <!-- 5-level indicator -->
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        {% for i in range(5) %}
+        <div style="flex:1; height:6px; background:{{ 'var(--green)' if i == 0 and kill_switch_level == 0 else ('var(--amber)' if i <= kill_switch_level and kill_switch_level <= 2 else ('var(--red)' if i <= kill_switch_level else 'var(--border)')) }};"></div>
+        {% endfor %}
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-dim); margin-top:0.25rem;">
+        <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1rem; font-size:0.8125rem; margin-bottom:1rem;">
+      <div><span class="text-dim">Auto-escalate</span></div>
+      <div>ON</div>
+      <div><span class="text-dim">Auto-de-escalate</span></div>
+      <div>OFF</div>
+      <div><span class="text-dim">Last change</span></div>
+      <div>{{ kill_switch_last_change | default('never') }}</div>
+    </div>
+
+    <div style="display:flex; gap:0.5rem;">
+      {% for i in range(5) %}
+      <button class="btn {{ 'btn-danger' if i >= 3 else '' }}" style="padding:6px 12px; font-size:0.65rem;{% if i == kill_switch_level %} border-color:var(--text-bright); color:var(--text-bright);{% endif %}"
+              hx-post="/api/kill-switch?level={{ i }}"
+              hx-confirm="Set kill switch to level {{ i }}?">
+        L{{ i }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Event Store -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Event Store</span>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem,1fr)); gap:0.5rem 1.5rem; font-size:0.8125rem; margin-bottom:1rem;">
+    <div><span class="text-dim">Total events</span><br><span class="data-live">{{ events_total | default(0) | int }}</span></div>
+    <div><span class="text-dim">Today</span><br><span class="data-live">{{ events_today | default(0) }}</span></div>
+    <div><span class="text-dim">DB size</span><br>{{ db_size | default('—') }}</div>
+    <div><span class="text-dim">Hash chain</span><br><span class="{{ 'text-bull' if hash_chain_ok else 'text-bear' }}">{{ '✓ intact' if hash_chain_ok else '✗ broken' }}</span></div>
+  </div>
+  {% if event_breakdown %}
+  <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1rem;">
+    By type:
+    {% for e in event_breakdown %}
+    {{ e.type }} ({{ e.count }}){{ ', ' if not loop.last else '' }}
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div style="display:flex; gap:0.5rem;">
+    <button class="btn" hx-post="/api/events/verify-chain" hx-target="#chain-result" hx-indicator="#chain-spinner">Verify Hash Chain</button>
+    <button class="btn" hx-get="/api/events/export" >Export Events</button>
+    <span id="chain-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">verifying...</span>
+  </div>
+  <div id="chain-result" style="margin-top:0.5rem; font-size:0.8125rem;"></div>
+</div>
+
+<!-- Resources -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Resources</span>
+  </div>
+  <div style="font-size:0.8125rem;">
+    {% for r in resources %}
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">
+      <span style="width:6rem; color:var(--text-dim);">{{ r.name }}</span>
+      {% if r.bar %}
+      <div style="flex:1; height:4px; background:var(--border);">
+        <div style="width:{{ r.pct }}%; height:100%; background:{{ 'var(--green)' if r.pct < 70 else ('var(--amber)' if r.pct < 90 else 'var(--red)') }};"></div>
+      </div>
+      <span class="text-dim" style="width:3rem; text-align:right; font-size:0.75rem;">{{ r.pct }}%</span>
+      {% endif %}
+      <span class="{{ 'text-warn' if r.warning else 'text-dim' }}" style="font-size:0.75rem;">{{ r.detail }}</span>
+    </div>
+    {% endfor %}
+    <div style="margin-top:0.75rem;">
+      <span class="text-dim">Uptime:</span> {{ uptime | default('—') }}
+    </div>
+  </div>
+</div>
+
+{% endblock %}
