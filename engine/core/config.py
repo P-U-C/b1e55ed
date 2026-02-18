@@ -139,7 +139,7 @@ class Config(BaseSettings):
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "Config":
+    def from_yaml(cls, path: Path) -> Config:
         if not path.exists():
             raise ConfigError(f"Config file not found: {path}")
 
@@ -161,12 +161,17 @@ class Config(BaseSettings):
         return cls(**raw)
 
     @classmethod
-    def from_repo_defaults(cls, repo_root: Path | None = None) -> "Config":
+    def from_repo_defaults(cls, repo_root: Path | None = None) -> Config:
         root = repo_root or Path.cwd()
         return cls.from_yaml(root / "config" / "default.yaml")
 
     @classmethod
-    def from_preset(cls, preset: Literal["conservative", "balanced", "degen"], *, repo_root: Path | None = None) -> "Config":
+    def from_preset(
+        cls,
+        preset: Literal["conservative", "balanced", "degen"],
+        *,
+        repo_root: Path | None = None,
+    ) -> Config:
         root = repo_root or Path.cwd()
         default_path = root / "config" / "default.yaml"
         raw = yaml.safe_load(default_path.read_text()) or {}

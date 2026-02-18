@@ -12,7 +12,9 @@ from engine.core.exceptions import DedupeConflictError
 def test_append_and_query_round_trip(temp_dir: Path) -> None:
     db = Database(temp_dir / "brain.db")
     try:
-        e = db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC", "rsi_14": 55.0})
+        e = db.append_event(
+            event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC", "rsi_14": 55.0}
+        )
         got = db.get_events(event_type=EventType.SIGNAL_TA_V1, limit=10)
         assert got[0].id == e.id
         assert got[0].payload["symbol"] == "BTC"
@@ -34,12 +36,20 @@ def test_dedup_is_idempotent_and_conflicts_on_payload_change(temp_dir: Path) -> 
     db = Database(temp_dir / "brain.db")
     try:
         k = "signal.ta.v1:BTC:20260217"
-        e1 = db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, dedupe_key=k)
-        e2 = db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, dedupe_key=k)
+        e1 = db.append_event(
+            event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, dedupe_key=k
+        )
+        e2 = db.append_event(
+            event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, dedupe_key=k
+        )
         assert e1.id == e2.id
 
         with pytest.raises(DedupeConflictError):
-            db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC", "rsi_14": 1.0}, dedupe_key=k)
+            db.append_event(
+                event_type=EventType.SIGNAL_TA_V1,
+                payload={"symbol": "BTC", "rsi_14": 1.0},
+                dedupe_key=k,
+            )
     finally:
         db.close()
 

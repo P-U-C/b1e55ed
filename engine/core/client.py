@@ -109,7 +109,7 @@ class DataClient:
                 self._breaker.on_failure()
                 if attempt >= self.config.max_retries:
                     break
-                await asyncio.sleep(min(2 ** attempt, 8))
+                await asyncio.sleep(min(2**attempt, 8))
 
         assert last_exc is not None
         raise last_exc

@@ -29,7 +29,9 @@ def test_payload_models_validate() -> None:
     c = CuratorSignalPayload(symbol="SOL", direction="bullish", conviction=7.5, rationale="setup")
     assert c.source == "operator"
 
-    a = ACISignalPayload(symbol="ETH", consensus_score=1.0, models_queried=3, models_responded=3, dispersion=0.1)
+    a = ACISignalPayload(
+        symbol="ETH", consensus_score=1.0, models_queried=3, models_responded=3, dispersion=0.1
+    )
     assert a.models_responded == 3
 
 
@@ -54,5 +56,7 @@ def test_event_envelope_model_is_frozen() -> None:
         payload={"symbol": "BTC"},
         hash="h",
     )
-    with pytest.raises(Exception):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="frozen"):
         env.hash = "nope"  # type: ignore[misc]

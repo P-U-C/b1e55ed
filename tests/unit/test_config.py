@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -10,11 +9,15 @@ from engine.core.exceptions import ConfigError
 
 
 def test_domain_weights_must_sum_to_one() -> None:
-    w = DomainWeights(curator=0.25, onchain=0.20, tradfi=0.20, social=0.15, technical=0.10, events=0.10)
+    w = DomainWeights(
+        curator=0.25, onchain=0.20, tradfi=0.20, social=0.15, technical=0.10, events=0.10
+    )
     assert w.curator == 0.25
 
 
-def test_config_loads_from_yaml_and_preset_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_loads_from_yaml_and_preset_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Ensure env doesn't interfere
     monkeypatch.chdir(tmp_path)
 
@@ -23,9 +26,16 @@ def test_config_loads_from_yaml_and_preset_chain(tmp_path: Path, monkeypatch: py
     presets.mkdir(parents=True)
 
     (cfg_dir / "default.yaml").write_text("preset: balanced\n")
-    (presets / "balanced.yaml").write_text(
-        "weights:\n  curator: 0.25\n  onchain: 0.20\n  tradfi: 0.20\n  social: 0.15\n  technical: 0.10\n  events: 0.10\n"
-    )
+    preset_yaml = """\
+weights:
+  curator: 0.25
+  onchain: 0.20
+  tradfi: 0.20
+  social: 0.15
+  technical: 0.10
+  events: 0.10
+"""
+    (presets / "balanced.yaml").write_text(preset_yaml)
 
     cfg = Config.from_yaml(cfg_dir / "default.yaml")
     assert cfg.preset == "balanced"
