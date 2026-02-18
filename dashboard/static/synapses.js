@@ -1,141 +1,213 @@
 // synapses.js — Neural mesh background
-// Subtle particle nodes with pulsing connections
+// Central pulse radiates outward, connections fade with distance
 // Inspired by: fred again.. Vancouver light show
 
 (function () {
   const canvas = document.createElement('canvas');
   canvas.id = 'synapses';
   canvas.style.cssText =
-    'position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.7;';
+    'position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.85;';
   document.body.prepend(canvas);
 
   const ctx = canvas.getContext('2d');
-  let W, H, nodes, mouse;
-  const NODE_COUNT = 80;
-  const CONNECT_DIST = 160;
-  const PULSE_CHANCE = 0.003; // chance per frame a node fires
-  const BASE_SPEED = 0.15;
+  let W, H, nodes, mouse, center;
+  const NODE_COUNT = 120;
+  const CONNECT_DIST = 180;
+  const BASE_SPEED = 0.12;
 
-  // Color from PUC green, very dim
-  const NODE_COLOR = [34, 197, 94]; // #22C55E
-  const WARM_COLOR = [176, 172, 164]; // #b0aca4 warm neutral
+  // Colors
+  const GREEN = [34, 197, 94];
+  const WARM = [176, 172, 164];
+
+  // Central pulse state
+  const pulse = {
+    radius: 0,
+    energy: 0,
+    interval: 4000,  // ms between pulses
+    lastFire: 0,
+    speed: 3,        // px per frame expansion
+    maxRadius: 0,    // set on resize
+  };
 
   function resize() {
     W = canvas.width = window.innerWidth;
     H = canvas.height = window.innerHeight;
+    center = { x: W * 0.5, y: H * 0.45 }; // slightly above center
+    pulse.maxRadius = Math.sqrt(W * W + H * H) * 0.6;
   }
 
-  function createNode() {
+  function createNode(clustered) {
+    // More nodes near center, fewer at edges
+    let x, y;
+    if (clustered && Math.random() < 0.6) {
+      // Gaussian-ish cluster around center
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * Math.random() * Math.min(W, H) * 0.45;
+      x = W * 0.5 + Math.cos(angle) * dist;
+      y = H * 0.45 + Math.sin(angle) * dist;
+    } else {
+      x = Math.random() * W;
+      y = Math.random() * H;
+    }
     return {
-      x: Math.random() * W,
-      y: Math.random() * H,
+      x, y,
       vx: (Math.random() - 0.5) * BASE_SPEED,
       vy: (Math.random() - 0.5) * BASE_SPEED,
-      r: Math.random() * 1.5 + 0.5,
-      energy: 0,       // 0 = resting, 1 = firing
-      fireDecay: 0.97, // how fast energy fades
+      baseR: Math.random() * 1.2 + 0.4,
+      energy: 0,
+      fireDecay: 0.965,
     };
   }
 
   function init() {
     resize();
     nodes = [];
-    for (let i = 0; i < NODE_COUNT; i++) nodes.push(createNode());
+    for (let i = 0; i < NODE_COUNT; i++) nodes.push(createNode(true));
     mouse = { x: -9999, y: -9999 };
+    pulse.lastFire = performance.now();
   }
 
   function dist(a, b) {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
+    const dx = a.x - b.x, dy = a.y - b.y;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  function draw() {
+  function distFromCenter(n) {
+    const dx = n.x - center.x, dy = n.y - center.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function draw(now) {
     ctx.clearRect(0, 0, W, H);
 
-    // Random firing — synapses activating
-    for (const n of nodes) {
-      if (n.energy < 0.01 && Math.random() < PULSE_CHANCE) {
-        n.energy = 1;
+    // ── Central pulse wave ──
+    if (now - pulse.lastFire > pulse.interval) {
+      pulse.radius = 0;
+      pulse.energy = 1;
+      pulse.lastFire = now;
+    }
+
+    if (pulse.energy > 0.01) {
+      pulse.radius += pulse.speed;
+      pulse.energy *= 0.992;
+
+      // Draw the pulse ring (very subtle)
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, pulse.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${GREEN[0]},${GREEN[1]},${GREEN[2]},${pulse.energy * 0.08})`;
+      ctx.lineWidth = 30 * pulse.energy;
+      ctx.stroke();
+
+      // Energize nodes the wave passes through
+      for (const n of nodes) {
+        const d = distFromCenter(n);
+        const diff = Math.abs(d - pulse.radius);
+        if (diff < 40) {
+          const hitStrength = (1 - diff / 40) * pulse.energy;
+          n.energy = Math.max(n.energy, hitStrength * 0.8);
+        }
       }
     }
 
-    // Connections
+    // ── Density factor: nodes near center are more visible ──
+    const maxDist = Math.min(W, H) * 0.55;
+
+    // ── Connections ──
     for (let i = 0; i < nodes.length; i++) {
+      const ni = nodes[i];
+      const di = distFromCenter(ni);
+      // Connection distance shrinks further from center
+      const localConnect = CONNECT_DIST * Math.max(0.4, 1 - di / (maxDist * 1.5));
+
       for (let j = i + 1; j < nodes.length; j++) {
-        const d = dist(nodes[i], nodes[j]);
-        if (d < CONNECT_DIST) {
-          const alpha = (1 - d / CONNECT_DIST);
-          const energy = Math.max(nodes[i].energy, nodes[j].energy);
+        const nj = nodes[j];
+        const d = dist(ni, nj);
+        if (d < localConnect) {
+          const alpha = 1 - d / localConnect;
+          const energy = Math.max(ni.energy, nj.energy);
+          const avgDist = (di + distFromCenter(nj)) / 2;
+          // Fade with distance from center
+          const centerFade = Math.max(0.15, 1 - avgDist / maxDist);
 
-          // Propagate energy through connections (like neural impulse)
-          if (nodes[i].energy > 0.3 && d < CONNECT_DIST * 0.6) {
-            nodes[j].energy = Math.max(nodes[j].energy, nodes[i].energy * 0.4);
+          // Propagate energy
+          if (ni.energy > 0.2 && d < localConnect * 0.7) {
+            nj.energy = Math.max(nj.energy, ni.energy * 0.5);
           }
-          if (nodes[j].energy > 0.3 && d < CONNECT_DIST * 0.6) {
-            nodes[i].energy = Math.max(nodes[i].energy, nodes[j].energy * 0.4);
+          if (nj.energy > 0.2 && d < localConnect * 0.7) {
+            ni.energy = Math.max(ni.energy, nj.energy * 0.5);
           }
 
-          // Blend color: warm neutral base → green when energized
-          const r = WARM_COLOR[0] + (NODE_COLOR[0] - WARM_COLOR[0]) * energy;
-          const g = WARM_COLOR[1] + (NODE_COLOR[1] - WARM_COLOR[1]) * energy;
-          const b = WARM_COLOR[2] + (NODE_COLOR[2] - WARM_COLOR[2]) * energy;
+          const r = WARM[0] + (GREEN[0] - WARM[0]) * energy;
+          const g = WARM[1] + (GREEN[1] - WARM[1]) * energy;
+          const b = WARM[2] + (GREEN[2] - WARM[2]) * energy;
 
-          const lineAlpha = alpha * 0.2 + energy * alpha * 0.35;
+          // Thicker + brighter near center, thinner at edges
+          const lineAlpha = (alpha * 0.25 + energy * alpha * 0.4) * centerFade;
+          const lineWidth = (0.4 + energy * 0.8) * centerFade + 0.1;
 
           ctx.beginPath();
-          ctx.moveTo(nodes[i].x, nodes[i].y);
-          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.moveTo(ni.x, ni.y);
+          ctx.lineTo(nj.x, nj.y);
           ctx.strokeStyle = `rgba(${r|0},${g|0},${b|0},${lineAlpha})`;
-          ctx.lineWidth = 0.5 + energy * 0.5;
+          ctx.lineWidth = lineWidth;
           ctx.stroke();
         }
       }
     }
 
-    // Nodes
+    // ── Nodes ──
     for (const n of nodes) {
-      // Move
       n.x += n.vx;
       n.y += n.vy;
 
-      // Bounce softly
-      if (n.x < 0 || n.x > W) n.vx *= -1;
-      if (n.y < 0 || n.y > H) n.vy *= -1;
+      // Soft boundary — drift back toward play area
+      if (n.x < -20) n.vx += 0.02;
+      if (n.x > W + 20) n.vx -= 0.02;
+      if (n.y < -20) n.vy += 0.02;
+      if (n.y > H + 20) n.vy -= 0.02;
 
-      // Slight drift toward mouse (subtle attraction)
-      const md = dist(n, mouse);
-      if (md < 250 && md > 1) {
-        n.vx += (mouse.x - n.x) / md * 0.003;
-        n.vy += (mouse.y - n.y) / md * 0.003;
-        // Mouse proximity energizes nearby nodes
-        if (md < 120) n.energy = Math.max(n.energy, 0.3 * (1 - md / 120));
+      // Very gentle gravity toward center (keeps density)
+      const dc = distFromCenter(n);
+      if (dc > maxDist * 0.8) {
+        n.vx += (center.x - n.x) * 0.00003;
+        n.vy += (center.y - n.y) * 0.00003;
       }
 
-      // Dampen velocity
-      n.vx *= 0.999;
-      n.vy *= 0.999;
+      // Mouse interaction
+      const md = dist(n, mouse);
+      if (md < 200 && md > 1) {
+        n.vx += (mouse.x - n.x) / md * 0.005;
+        n.vy += (mouse.y - n.y) / md * 0.005;
+        if (md < 100) n.energy = Math.max(n.energy, 0.5 * (1 - md / 100));
+      }
+
+      // Dampen
+      n.vx *= 0.998;
+      n.vy *= 0.998;
 
       // Decay energy
       n.energy *= n.fireDecay;
       if (n.energy < 0.005) n.energy = 0;
 
-      // Draw node
-      const nr = WARM_COLOR[0] + (NODE_COLOR[0] - WARM_COLOR[0]) * n.energy;
-      const ng = WARM_COLOR[1] + (NODE_COLOR[1] - WARM_COLOR[1]) * n.energy;
-      const nb = WARM_COLOR[2] + (NODE_COLOR[2] - WARM_COLOR[2]) * n.energy;
-      const nodeAlpha = 0.25 + n.energy * 0.6;
+      // Distance-based fade
+      const centerFade = Math.max(0.1, 1 - dc / maxDist);
+
+      const nr = WARM[0] + (GREEN[0] - WARM[0]) * n.energy;
+      const ng = WARM[1] + (GREEN[1] - WARM[1]) * n.energy;
+      const nb = WARM[2] + (GREEN[2] - WARM[2]) * n.energy;
+      const nodeAlpha = (0.3 + n.energy * 0.6) * centerFade;
+      const nodeR = (n.baseR + n.energy * 2.5) * (0.6 + centerFade * 0.4);
 
       ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r + n.energy * 2, 0, Math.PI * 2);
+      ctx.arc(n.x, n.y, nodeR, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${nr|0},${ng|0},${nb|0},${nodeAlpha})`;
       ctx.fill();
 
-      // Glow on energized nodes
-      if (n.energy > 0.3) {
+      // Glow
+      if (n.energy > 0.25) {
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + n.energy * 6, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${NODE_COLOR[0]},${NODE_COLOR[1]},${NODE_COLOR[2]},${n.energy * 0.15})`;
+        ctx.arc(n.x, n.y, nodeR + n.energy * 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${GREEN[0]},${GREEN[1]},${GREEN[2]},${n.energy * 0.12 * centerFade})`;
         ctx.fill();
       }
     }
@@ -154,5 +226,5 @@
   });
 
   init();
-  draw();
+  requestAnimationFrame(draw);
 })();
