@@ -930,7 +930,168 @@ dashboard/
 
 ---
 
-## 12. Easter Eggs
+## 12. Composability
+
+The system is designed around a producer registry. New signal sources, data producers, and alert types will be added continuously. The dashboard must handle this without code changes.
+
+### Principle: Schema-Driven, Not Hardcoded
+
+No page should contain a hardcoded list of producers, signal types, or domains. Everything renders from what the system reports at runtime.
+
+### Producer Auto-Discovery
+
+The System page's producer health panel queries `/api/producers/status` which returns whatever producers are currently registered. Adding a new producer to the engine automatically surfaces it in the dashboard — no template changes.
+
+```python
+# The API returns whatever the registry contains
+@router.get("/api/producers/status")
+async def producer_status(registry: ProducerRegistry = Depends(get_registry)):
+    return [
+        {
+            "name": p.name,
+            "domain": p.domain,
+            "health": p.last_health,
+            "last_run": p.last_run_ts,
+            "signals_24h": p.signal_count_24h,
+            "error_rate": p.error_rate,
+        }
+        for p in registry.all()
+    ]
+```
+
+The template iterates — it never names specific producers:
+
+```html
+<!-- partials/producer_row.html -->
+{% for p in producers %}
+<div class="producer-row">
+  <span class="dot dot-{{ p.health }}"></span>
+  <span class="producer-name">{{ p.name }}</span>
+  <span class="producer-domain badge-{{ p.domain }}">{{ p.domain }}</span>
+  <span class="producer-age">{{ p.last_run | timeago }}</span>
+</div>
+{% endfor %}
+```
+
+### Signal Domain Auto-Grouping
+
+The Signals page groups by domain. Domains come from the `EventType` enum prefix (`signal.ta.v1` → domain `ta`). New event types with new domain prefixes automatically create new groups.
+
+```python
+# Signals service extracts domains from event types
+def get_active_domains(events: list[EventEnvelope]) -> list[str]:
+    return sorted({e.type.split(".")[1] for e in events if e.type.startswith("signal.")})
+```
+
+The domain filter tabs render dynamically:
+
+```html
+<!-- signals.html -->
+<div class="domain-tabs">
+  <button class="tab active" hx-get="/partials/signal-history?domain=all">all</button>
+  {% for domain in domains %}
+  <button class="tab" hx-get="/partials/signal-history?domain={{ domain }}">{{ domain }}</button>
+  {% endfor %}
+</div>
+```
+
+### Social Source Auto-Registration
+
+The Social page's source health panel queries the social pipeline's collector registry. Adding a new collector (e.g., Bluesky, Discord, Lens) registers it automatically. The template renders whatever sources exist:
+
+```html
+<!-- partials/source_health.html -->
+{% for source in sources %}
+<tr>
+  <td>{{ source.name }}</td>
+  <td><span class="dot dot-{{ source.status }}"></span> {{ source.status }}</td>
+  <td>{{ source.last_hit | timeago }}</td>
+  <td>{{ source.signals_24h }}</td>
+  <td>{{ source.quality | quality_bar }}</td>
+</tr>
+{% endfor %}
+```
+
+### Conviction Panel Scales With Universe
+
+The Brain Overview conviction panel renders whatever symbols are in the active universe. Add SUI, remove DOGE — the panel adjusts. No template changes.
+
+```html
+<!-- partials/conviction_panel.html -->
+{% for score in conviction_scores %}
+<div class="conviction-row">
+  <span class="symbol">{{ score.symbol }}</span>
+  <div class="bar" style="width: {{ score.magnitude * 10 }}%"
+       class="bar-{{ score.direction }}"></div>
+  <span class="score">{{ score.magnitude | round(1) }}</span>
+  <span class="direction">{{ score.direction | upper }}</span>
+</div>
+{% endfor %}
+```
+
+### Alert Type Extensibility
+
+Social alerts (echo chamber, velocity spike, divergence) are typed but rendered through a single template pattern. New alert types register themselves with a `type`, `severity`, `icon`, and `description_template`. The dashboard renders any alert type it receives:
+
+```html
+<!-- partials/social_alert.html -->
+{% for alert in alerts %}
+<div class="alert alert-{{ alert.severity }}">
+  <span class="alert-icon">{{ alert.icon }}</span>
+  <span class="alert-type">{{ alert.type | upper }}</span>
+  <span class="alert-asset">{{ alert.symbol }}</span>
+  <p class="alert-body">{{ alert.description }}</p>
+</div>
+{% endfor %}
+```
+
+### Narrative Tracker Is Data-Driven
+
+Narratives come from the social pipeline's narrative detection. The tracker doesn't know what narratives exist — it renders whatever the service returns, sorted by velocity. New narratives appear automatically as they're detected.
+
+### Config Sections Auto-Generate
+
+The Config page sections map to the Pydantic `Config` model's top-level fields. Adding a new config section (e.g., `backtest`, `notifications`) to the Pydantic model automatically generates a new section in the config UI:
+
+```python
+# config_service.py
+def get_config_sections(config: Config) -> list[ConfigSection]:
+    """Generate UI sections from Pydantic model fields."""
+    sections = []
+    for field_name, field_info in config.model_fields.items():
+        if isinstance(getattr(config, field_name), BaseModel):
+            sections.append(ConfigSection(
+                name=field_name,
+                title=field_name.replace("_", " ").title(),
+                fields=extract_editable_fields(getattr(config, field_name)),
+            ))
+    return sections
+```
+
+### Dashboard Extension Contract
+
+For any new component to appear in the dashboard, it needs exactly ONE thing: **data available via the existing patterns.** Specifically:
+
+| Want to add... | Register it in... | Dashboard picks it up via... |
+|----------------|-------------------|------------------------------|
+| New producer | `ProducerRegistry` | `/api/producers/status` |
+| New signal type | `EventType` enum | Signal feed + domain grouping |
+| New social source | Social pipeline collector registry | `/api/social/sources` |
+| New alert type | Social pipeline alert registry | `/api/social/alerts` |
+| New config section | Pydantic `Config` model | Config page auto-generation |
+| New universe symbol | `config/default.yaml` universe | Conviction panel + all per-asset views |
+| New narrative | Social pipeline detection | Narrative tracker |
+
+**Zero dashboard code changes for any of the above.**
+
+The only things that require dashboard code changes:
+- New **pages** (e.g., a Backtest page)
+- New **interaction patterns** (e.g., drag-and-drop position management)
+- New **visualization types** (e.g., the neural brain visualization in v2)
+
+---
+
+## 13. Easter Eggs
 
 Per EASTER_EGG_REFERENCE.md, the dashboard includes subtle references:
 
@@ -945,7 +1106,7 @@ All pass the brand filter: timeless, conviction over consensus, builders over to
 
 ---
 
-## 13. Implementation Order
+## 14. Implementation Order
 
 Build in this sequence to get something visible fast, then layer quality:
 
