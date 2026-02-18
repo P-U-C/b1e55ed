@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+
+# Build
+dist/
+build/
+*.egg-info
+.eggs/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+
+# Config (will be mounted)
+config/user.yaml
+config/production.yaml
+
+# Docs (not needed in runtime)
+docs/
+tests/
+.github/
+
+# Misc
+*.log
+.env
+.env.*
