@@ -49,3 +49,38 @@ jobs:
       - run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - run: uv sync --extra dev
       - run: uv run mypy engine/
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - run: uv sync --extra dev
+      - name: Run smoke tests
+        run: uv run python tests/smoke.py
+        env:
+          B1E55ED_MASTER_PASSWORD: test
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - run: uv sync --extra dev
+      - name: Security scan (bandit)
+        run: uv run bandit -r engine/ api/ dashboard/ -ll || true
+      - name: Dependency vulnerabilities (safety)
+        run: uv run safety scan --output json || true
+      - name: Check for secrets
+        run: |
+          if grep -r "sk-" --include="*.py" --exclude-dir=".venv" . ; then
+            echo "❌ Possible API key found in code"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets found"
