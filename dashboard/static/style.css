@@ -1,5 +1,6 @@
-/* b1e55ed Dashboard — PUC Aesthetic
-   Matching: b1e55ed.permanentupperclass.com + permanentupperclass.com */
+/* b1e55ed Dashboard — PUC Shell × CRT Data
+   PUC brand chrome (warm neutrals, grain, JetBrains 300)
+   Terminal energy in data zones (green live numbers, density, scanlines) */
 
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
 
@@ -451,6 +452,69 @@ a:hover { color: var(--green); }
   color: var(--text-dim);
   font-size: 0.7rem;
   font-weight: 300;
+}
+
+/* ── CRT Data Zone ───────────────────────────── */
+
+/* Scanline overlay — panels only, not the whole page */
+.panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  z-index: 1;
+}
+
+/* Live data numbers get terminal green */
+.data-live {
+  color: var(--green);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Blinking cursor for "live" indicators */
+.cursor-blink::after {
+  content: '█';
+  font-size: 0.6em;
+  color: var(--green);
+  animation: blink 1s step-end infinite;
+  margin-left: 4px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Tighter data density for terminal feel */
+.data-dense .signal-row { padding: 4px 0; }
+.data-dense .data-table td { padding: 5px 12px; font-size: 0.7rem; }
+.data-dense .data-table th { padding: 5px 12px; font-size: 0.55rem; }
+
+/* Green glow on actively-updating elements (subtle) */
+.data-pulse {
+  text-shadow: 0 0 8px rgba(34,197,94,0.15);
+}
+
+/* Price tick flash */
+.tick-up { animation: tick-green 0.6s ease-out; }
+.tick-down { animation: tick-red 0.6s ease-out; }
+
+@keyframes tick-green {
+  0% { background: rgba(34,197,94,0.15); }
+  100% { background: transparent; }
+}
+
+@keyframes tick-red {
+  0% { background: rgba(220,38,38,0.15); }
+  100% { background: transparent; }
 }
 
 /* ── Animations ──────────────────────────────── */
