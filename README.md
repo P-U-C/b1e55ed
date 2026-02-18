@@ -6,9 +6,10 @@
 
 `0xb1e55ed` = **"blessed"** — a hex number that spells a word. The name is the first easter egg.
 
-b1e55ed is a sovereign trading intelligence system built around one primitive: **events**.
-Producers emit events. The brain reads events and emits events. Execution reads events and emits events.
-An append-only hash chain makes the system auditable by construction.
+b1e55ed is a sovereign trading intelligence system. Not a mechanism — an organism.
+It learns from every trade, every signal, every mistake. Its conviction weights shift. Its producer scores evolve. Its corpus grows. The system you deploy today is not the system running six months from now.
+
+Built around one primitive: **events**. Producers emit events. The brain reads events and emits events. Execution reads events and emits events. An append-only hash chain makes the whole thing auditable by construction.
 
 ## Status
 
