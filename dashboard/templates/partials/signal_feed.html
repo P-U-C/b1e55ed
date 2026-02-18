@@ -1,0 +1,18 @@
+{% if signals %}
+  {% for s in signals %}
+  <div class="signal-row">
+    <span class="signal-ts">{{ s.ts }}</span>
+    <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
+    <span class="signal-asset">{{ s.asset }}</span>
+    <span class="signal-desc">{{ s.desc }}</span>
+    <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
+      {{ s.direction }}{{ '%.0f' | format(s.score) }}
+    </span>
+  </div>
+  {% endfor %}
+  <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+    showing {{ signals | length }} of {{ total_signals | default('?') }} signals today
+  </div>
+{% else %}
+  <div class="empty-state">No signals yet. Waiting for first producer cycle.</div>
+{% endif %}
