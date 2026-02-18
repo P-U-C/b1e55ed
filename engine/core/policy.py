@@ -21,8 +21,6 @@ class PolicyViolation(Exception):
 
 @dataclass(frozen=True, slots=True)
 class TradingPolicy:
-    """Deterministic trading guards (Phase 0C)."""
-
     max_daily_loss_usd: float = 0.0
     max_position_size_pct: float = 0.15
     kill_switch_enabled: bool = True

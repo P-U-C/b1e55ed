@@ -1,7 +1,7 @@
 .PHONY: install test test-cov lint format typecheck run dev dashboard setup clean
 
 install:
-	uv sync --extra dev
+	uv sync
 
 test:
 	uv run pytest tests/ -v

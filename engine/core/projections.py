@@ -100,7 +100,6 @@ class PositionStateProjector(Projector):
 
     def handle(self, event: Event) -> None:
         if event.type not in {EventType.POSITION_OPENED_V1, EventType.POSITION_UPDATED_V1, EventType.POSITION_CLOSED_V1}:
-            # allow generic position events if they carry an id
             if "position_id" not in event.payload:
                 return
 
@@ -223,8 +222,6 @@ class ProjectionManager:
                 p.handle(event)
 
     def rebuild(self, events: Iterable[Event]) -> None:
-        """Rebuild all projections from chronological events."""
-
         with self._lock:
             self.__init__()
             for ev in events:

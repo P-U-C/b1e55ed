@@ -2,136 +2,154 @@
 
 Ed25519 node identity.
 
-Decision (DECISIONS_V3 #11): generate identity key silently during onboarding,
-and only prompt on first network use.
+DECISIONS_V3 #11: generate silently during setup; prompt for backup on first
+network use (or after 7 days). The prompting is handled by higher layers.
 
-Implementation notes:
-- Key material is stored in the operator config dir: ~/.b1e55ed/
-- File format is a minimal JSON envelope to make future migrations easier.
+Easter egg: node_id is prefixed with `b1e55ed-`.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cryptography.hazmat.primitives import serialization
+from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-
-DEFAULT_DIR = Path.home() / ".b1e55ed"
-DEFAULT_IDENTITY_PATH = DEFAULT_DIR / "identity.key"
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
+_ITERATIONS = 480_000
 
 
-def _new_node_id() -> str:
-    # 8 hex chars is enough for a local, human-readable identity.
-    import secrets
+def _derive_fernet_key(password: str, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_ITERATIONS,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
-    return f"b1e55ed-{secrets.token_hex(4)}"
+
+def _password() -> str:
+    pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
+    if pw:
+        return pw
+    raise ValueError(
+        "Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) "
+        "or B1E55ED_IDENTITY_PASSWORD."
+    )
 
 
-@dataclass(frozen=True)
+@dataclass
 class NodeIdentity:
     node_id: str
-    private_key: Ed25519PrivateKey
-    public_key: Ed25519PublicKey
-    created_at: datetime
+    public_key: str  # hex
+    private_key: str  # hex (in-memory). At rest: encrypted.
+    created_at: str
+
+    @property
+    def public_key_hex(self) -> str:
+        return self.public_key
+
+    def _private_obj(self) -> Ed25519PrivateKey:
+        raw = bytes.fromhex(self.private_key)
+        return Ed25519PrivateKey.from_private_bytes(raw)
+
+    def _public_obj(self) -> Ed25519PublicKey:
+        raw = bytes.fromhex(self.public_key)
+        return Ed25519PublicKey.from_public_bytes(raw)
 
     def sign(self, data: bytes) -> bytes:
-        return self.private_key.sign(data)
+        return self._private_obj().sign(data)
 
     def verify(self, sig: bytes, data: bytes) -> bool:
         try:
-            self.public_key.verify(sig, data)
+            self._public_obj().verify(sig, data)
             return True
         except Exception:
             return False
 
-    def public_key_hex(self) -> str:
-        raw = self.public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
+    def save(self, path: str | Path) -> None:
+        """Save identity to JSON, with encrypted private key."""
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        salt = os.urandom(16)
+        f = Fernet(_derive_fernet_key(_password(), salt))
+
+        encrypted_priv = f.encrypt(bytes.fromhex(self.private_key))
+        blob = {
+            "node_id": self.node_id,
+            "created_at": self.created_at,
+            "public_key": self.public_key,
+            "private_key_enc": base64.b64encode(encrypted_priv).decode("ascii"),
+            "kdf": {
+                "name": "pbkdf2_hmac_sha256",
+                "iterations": _ITERATIONS,
+                "salt_b64": base64.b64encode(salt).decode("ascii"),
+            },
+            "alg": "ed25519",
+        }
+
+        path.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
+    @classmethod
+    def load(cls, path: str | Path) -> "NodeIdentity":
+        path = Path(path)
+        blob = json.loads(path.read_text(encoding="utf-8"))
+
+        if blob.get("alg") != "ed25519":
+            raise ValueError("Unsupported identity alg")
+
+        salt = base64.b64decode(blob["kdf"]["salt_b64"])
+        f = Fernet(_derive_fernet_key(_password(), salt))
+
+        try:
+            priv_raw = f.decrypt(base64.b64decode(blob["private_key_enc"]))
+        except InvalidToken as e:
+            raise ValueError("Invalid password or corrupted identity file") from e
+
+        return cls(
+            node_id=str(blob["node_id"]),
+            public_key=str(blob["public_key"]),
+            private_key=priv_raw.hex(),
+            created_at=str(blob["created_at"]),
         )
-        return raw.hex()
-
-    def private_key_hex(self) -> str:
-        raw = self.private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        return raw.hex()
 
 
-@dataclass(frozen=True)
-class IdentityHandle:
-    path: Path
-    identity: NodeIdentity
+def generate_node_identity() -> NodeIdentity:
+    """Generate a new Ed25519 identity."""
 
-
-def generate_node_identity(*, node_id: str | None = None) -> NodeIdentity:
     priv = Ed25519PrivateKey.generate()
     pub = priv.public_key()
-    return NodeIdentity(
-        node_id=node_id or _new_node_id(),
-        private_key=priv,
-        public_key=pub,
-        created_at=_utc_now(),
+
+    pub_raw = pub.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    priv_raw = priv.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
     )
 
+    node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
+    created_at = datetime.now(tz=UTC).isoformat()
 
-def save_identity(identity: NodeIdentity, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "node_id": identity.node_id,
-        "created_at": identity.created_at.isoformat(),
-        "public_key": identity.public_key_hex(),
-        "private_key": identity.private_key_hex(),
-        "type": "ed25519",
-        "version": 1,
-    }
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    os.replace(tmp, path)
-    with suppress(Exception):
-        path.chmod(0o600)
-
-
-def load_identity(path: Path) -> NodeIdentity:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    priv = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(raw["private_key"]))
-    pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(raw["public_key"]))
-    created_at = datetime.fromisoformat(raw["created_at"])
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=UTC)
     return NodeIdentity(
-        node_id=str(raw["node_id"]),
-        private_key=priv,
-        public_key=pub,
-        created_at=created_at.astimezone(UTC),
+        node_id=node_id,
+        public_key=pub_raw.hex(),
+        private_key=priv_raw.hex(),
+        created_at=created_at,
     )
-
-
-def ensure_identity(path: Path = DEFAULT_IDENTITY_PATH) -> IdentityHandle:
-    if path.exists():
-        return IdentityHandle(path=path, identity=load_identity(path))
-    ident = generate_node_identity()
-    save_identity(ident, path)
-    return IdentityHandle(path=path, identity=ident)
-
-
-def identity_status(path: Path = DEFAULT_IDENTITY_PATH) -> str:
-    if not path.exists():
-        return f"missing ({path})"
-    try:
-        ident = load_identity(path)
-        return f"{ident.node_id} ({path})"
-    except Exception as e:
-        return f"corrupt ({path}): {e}"
