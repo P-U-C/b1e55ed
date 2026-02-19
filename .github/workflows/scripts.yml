@@ -1,0 +1,38 @@
+name: Scripts
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      
+      - name: Run shellcheck on install.sh
+        run: shellcheck scripts/install.sh
+      
+      - name: Check execute permissions
+        run: |
+          if [ ! -x scripts/install.sh ]; then
+            echo "❌ install.sh not executable"
+            exit 1
+          fi
+          echo "✅ install.sh is executable"
+      
+      - name: Bash syntax check
+        run: bash -n scripts/install.sh
+      
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -E "(sk-[a-zA-Z0-9]{20,}|xai-[a-zA-Z0-9]{20,})" scripts/install.sh; then
+            echo "❌ Possible hardcoded secret found"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets"
