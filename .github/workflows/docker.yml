@@ -1,0 +1,65 @@
+name: Docker
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: docker build -t b1e55ed:test .
+      
+      - name: Test image can run
+        run: |
+          docker run --rm b1e55ed:test b1e55ed --help
+          echo "✅ CLI works"
+      
+      - name: Test imports
+        run: |
+          docker run --rm b1e55ed:test python -c "import engine; import api; import dashboard; print('✅ Imports work')"
+      
+      - name: Check image size
+        run: |
+          SIZE=$(docker images b1e55ed:test --format "{{.Size}}")
+          echo "Image size: $SIZE"
+  
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate docker-compose.yml
+        run: docker-compose config -q
+      
+      - name: Test docker-compose build
+        run: docker-compose build
+      
+      - name: Test docker-compose up
+        run: |
+          # Create minimal .env
+          echo "B1E55ED_MASTER_PASSWORD=test-ci-password" > .env
+          echo "B1E55ED_EXECUTION__MODE=paper" >> .env
+          
+          # Start services
+          docker-compose up -d
+          
+          # Wait for API to be ready
+          sleep 15
+          
+          # Check API health
+          curl -f http://localhost:5050/health || {
+            echo "API health check failed, showing logs:"
+            docker-compose logs api
+            exit 1
+          }
+          
+          echo "✅ docker-compose up successful"
+          
+          # Cleanup
+          docker-compose down -v
