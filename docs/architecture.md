@@ -363,7 +363,7 @@ See `docs/api-reference.md` for full spec.
 **Aesthetic:**
 - PUC shell: Warm neutrals, film grain, JetBrains Mono 300
 - CRT data zones: Green live numbers, scanlines, terminal density
-- No CT slang ("wagmi", "ser", "gm") - direct, action-first language
+- No crypto-twitter casual jargon - direct, action-first language
 
 ---
 
