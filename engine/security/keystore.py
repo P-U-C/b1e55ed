@@ -161,6 +161,13 @@ class _EncryptedFileBackend:
     def has(self, name: str) -> bool:
         return name in self._secrets
 
+    def delete(self, name: str) -> bool:
+        if name not in self._secrets:
+            return False
+        del self._secrets[name]
+        self._save()
+        return True
+
 
 class _KeyringBackend:
     def __init__(self, *, service_name: str = _SERVICE_NAME):
@@ -212,6 +219,20 @@ class _KeyringBackend:
 
     def has(self, name: str) -> bool:
         return self.keyring.get_password(self.service_name, name) is not None
+
+    def delete(self, name: str) -> bool:
+        if not self.has(name):
+            return False
+
+        try:
+            self.keyring.delete_password(self.service_name, name)
+        except Exception:
+            # Some backends don't implement delete; overwrite as a last resort.
+            self.keyring.set_password(self.service_name, name, "")
+
+        keys = [k for k in self._load_registry() if k != name]
+        self._save_registry(keys)
+        return True
 
 
 class Keystore:
@@ -324,6 +345,27 @@ class Keystore:
         if self._tier2 is not None:
             keys.update(self._tier2.list_keys())
         return sorted(keys)
+
+    def remove_key(self, name: str) -> bool:
+        """Remove a key from Tier 1/2 stores and metadata.
+
+        Tier 0 environment variables are read-only and cannot be removed.
+
+        Returns True if a persisted secret was removed from Tier 1 or Tier 2.
+        """
+
+        removed = False
+        if self._tier1 is not None:
+            removed = self._tier1.delete(name) or removed
+        if self._tier2 is not None:
+            removed = self._tier2.delete(name) or removed
+
+        meta = self._load_metadata()
+        if name in meta:
+            del meta[name]
+            self._save_metadata(meta)
+
+        return removed
 
     def key_health(self) -> dict[str, Any]:
         """Return a lightweight health view.
