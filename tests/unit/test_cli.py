@@ -114,9 +114,7 @@ def test_cli_signal_add_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert payload["events"][0]["payload"]["rationale"].startswith("ETH")
 
 
-def test_cli_signal_flags_override_symbols_and_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_signal_flags_override_symbols_and_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     repo_root = _scaffold_repo(tmp_path)
     monkeypatch.chdir(repo_root)
 
@@ -145,9 +143,7 @@ def test_cli_signal_flags_override_symbols_and_metadata(
     assert str(payload["events"][0]["payload"]["source"]).startswith("operator:")
 
 
-def test_cli_signal_add_accepts_flags_after_subcommand(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_signal_add_accepts_flags_after_subcommand(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     repo_root = _scaffold_repo(tmp_path)
     monkeypatch.chdir(repo_root)
 
@@ -255,9 +251,7 @@ def test_cli_alerts_since_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert json.loads(capsys.readouterr().out) == []
 
 
-def test_cli_alerts_position_near_stop_is_warning_or_critical(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_alerts_position_near_stop_is_warning_or_critical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     repo_root = _scaffold_repo(tmp_path)
     monkeypatch.chdir(repo_root)
 

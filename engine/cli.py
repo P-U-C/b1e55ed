@@ -830,10 +830,10 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
             breached = (direction == "long" and float(mp) <= float(stop)) or (direction == "short" and float(mp) >= float(stop))
             if breached or dist_frac <= 0.0025:
                 sev = "CRITICAL"
-                msg = f"{sym} near stop ({dist_frac*100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
+                msg = f"{sym} near stop ({dist_frac * 100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
             elif dist_frac < 0.01:
                 sev = "WARNING"
-                msg = f"{sym} approaching stop ({dist_frac*100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
+                msg = f"{sym} approaching stop ({dist_frac * 100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
 
         alerts.append(
             _mk(
