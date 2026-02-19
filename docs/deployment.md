@@ -369,7 +369,7 @@ sudo systemctl restart b1e55ed-api
 **Identity lost:**
 ```bash
 # CRITICAL: Regenerate identity loses event chain integrity
-# Only do this if absolutely necessary
+# Only use as last resort
 export B1E55ED_MASTER_PASSWORD="your-password"
 uv run b1e55ed setup --force
 ```

@@ -1,0 +1,95 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  brand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check brand vocabulary
+        run: |
+          chmod +x scripts/check_brand.sh
+          ./scripts/check_brand.sh docs
+      
+      - name: Check README brand
+        run: |
+          ./scripts/check_brand.sh .
+  
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Markdown linting
+        uses: nosborn/github-action-markdown-cli@v3.3.0
+        with:
+          files: .
+          config_file: .markdownlint.json
+          ignore_files: node_modules/
+  
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check internal links
+        run: |
+          # Check for broken internal doc links
+          for file in docs/*.md README.md; do
+            [ -f "$file" ] || continue
+            
+            # Extract markdown links [text](path)
+            grep -o '\[.*\](docs/[^)]*\.md)' "$file" | while read -r link; do
+              path=$(echo "$link" | sed 's/.*(\(.*\))/\1/')
+              if [ ! -f "$path" ]; then
+                echo "❌ Broken link in $file: $path"
+                exit 1
+              fi
+            done
+          done
+          echo "✅ No broken internal links"
+  
+  completeness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check documentation completeness
+        run: |
+          REQUIRED_DOCS=(
+            "docs/getting-started.md"
+            "docs/configuration.md"
+            "docs/deployment.md"
+            "docs/api-reference.md"
+            "docs/learning-loop.md"
+            "README.md"
+            "DOCKER.md"
+          )
+          
+          MISSING=0
+          for doc in "${REQUIRED_DOCS[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "❌ Missing required doc: $doc"
+              MISSING=$((MISSING + 1))
+            else
+              # Check if doc is substantial (>500 chars)
+              size=$(wc -c < "$doc")
+              if [ "$size" -lt 500 ]; then
+                echo "❌ Doc too short: $doc ($size bytes)"
+                MISSING=$((MISSING + 1))
+              fi
+            fi
+          done
+          
+          if [ $MISSING -gt 0 ]; then
+            echo "❌ $MISSING documentation issues"
+            exit 1
+          fi
+          
+          echo "✅ All required docs present and substantial"
