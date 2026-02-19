@@ -58,20 +58,62 @@ Same engine, same events, same outputs. The CLI wraps the same code the API call
 | `b1e55ed brain --full` | Run full cycle including slow producers | Brain result |
 | `b1e55ed brain --json` | Machine-readable brain output | JSON |
 | `b1e55ed health` | System health check (for cron/heartbeat) | JSON health object |
+| `b1e55ed keys list` | Show configured keys (redacted) | Table of key name + status |
+| `b1e55ed keys set <name> <value>` | Add or update an API key | Confirmation |
+| `b1e55ed keys remove <name>` | Remove an API key | Confirmation |
+| `b1e55ed keys test` | Verify all keys against live APIs | Per-key status (✅/❌/⚠️) |
+| `b1e55ed keys test --json` | Machine-readable key health | JSON array |
+| `b1e55ed dashboard` | Start dashboard (already exists) | Web UI on localhost:5051 |
+| `b1e55ed dashboard --expose` | Start with 0.0.0.0 binding (remote access) | Requires auth token |
 
 **All commands support `--json` for machine consumption.** Default is human-readable.
+
+### Key Management
+
+`b1e55ed keys` is the post-setup key management interface. Design:
+
+- `keys list` shows every known key slot with status: ✅ configured, ❌ not set, ⚠️ set but failing
+- `keys set` stores via Keystore (encrypted at rest, OS keychain when available)
+- `keys test` pings each API with the stored key and reports which producers will actually work
+- `keys test --json` returns machine-readable status so agents can programmatically know their signal coverage
+
+```
+$ b1e55ed keys test
+  ✅ hyperliquid    connected (paper mode)
+  ✅ allium         150+ chains available
+  ❌ nansen         not configured
+  ✅ reddit         authenticated
+  ⚠️ apify          configured but rate limited
+  ❌ twitter        not configured
+
+  Signal coverage: 4/6 domains active
+  Missing: nansen (on-chain enrichment), twitter (social)
+  System will use fallback producers for missing domains.
+```
+
+This is the killer feature for onboarding. No more silent failures from bad keys or expired tokens. Run `keys test` after setup and you know exactly what works.
+
+### Dashboard Access
+
+`b1e55ed dashboard` already exists. Sprint O1 adds:
+
+- `--expose` flag: binds to 0.0.0.0 instead of 127.0.0.1 (requires auth token set)
+- Setup wizard offers to start dashboard after initial config
+- SKILL.md documents dashboard as the passive monitoring layer (CLI for control, dashboard for observation)
 
 ### SKILL.md
 
 The operator manual. Teaches any agent how to run b1e55ed. Sections:
 
 1. **What this is** — one paragraph
-2. **Quick start** — `b1e55ed setup && b1e55ed brain`
+2. **Quick start** — `b1e55ed setup && b1e55ed keys test && b1e55ed brain`
 3. **Commands** — full CLI reference
-4. **Heartbeat protocol** — what to check on each poll
-5. **Signal detection** — when/how to ingest operator intel
-6. **Alert routing** — how to deliver alerts to operator
-7. **Cron schedule** — recommended automation
+4. **Keys & configuration** — how to add/test API keys, what's optional vs required
+5. **Dashboard** — passive monitoring via web UI
+6. **Heartbeat protocol** — what to check on each poll
+7. **Signal detection** — when/how to ingest operator intel
+8. **Alert routing** — how to deliver alerts to operator
+9. **Cron schedule** — recommended automation
 
 ### setup.sh
 
@@ -102,17 +144,27 @@ Importable cron job definitions for OpenClaw:
 - [ ] `b1e55ed health` returns valid JSON in all states (fresh install, running, degraded)
 - [ ] `b1e55ed signal` creates events in the DB
 - [ ] `b1e55ed alerts --json` + `b1e55ed positions --json` parseable by agents
+- [ ] `b1e55ed keys list` shows all key slots with correct status
+- [ ] `b1e55ed keys set` + `keys remove` round-trips correctly
+- [ ] `b1e55ed keys test` reports accurate status per provider (mock API calls in tests)
+- [ ] `b1e55ed keys test --json` returns parseable array with coverage summary
+- [ ] `b1e55ed dashboard --expose` refuses without auth token configured
 - [ ] SKILL.md passes brand vocabulary check
-- [ ] E2E: fresh `b1e55ed setup` → `b1e55ed brain` → `b1e55ed alerts` works
+- [ ] E2E: fresh `b1e55ed setup` → `keys test` → `brain` → `alerts` works
 
 ### Acceptance
 
 An OpenClaw agent that has never seen b1e55ed before can:
 1. Read SKILL.md
 2. Run `b1e55ed setup --preset balanced --non-interactive`
-3. Run `b1e55ed brain` and get a result
-4. Run `b1e55ed alerts` and understand the output
-5. Run `b1e55ed signal "BTC looking strong, ETF inflows 3 days running"` and see it ingested
+3. Run `b1e55ed keys set allium.api_key "sk-..."` to configure a data source
+4. Run `b1e55ed keys test` and see which producers are live vs missing
+5. Run `b1e55ed brain` and get a result
+6. Run `b1e55ed alerts` and understand the output
+7. Run `b1e55ed signal "BTC looking strong, ETF inflows 3 days running"` and see it ingested
+8. Run `b1e55ed dashboard` and see the web UI
+
+A human following the README can do the same thing in terminal.
 
 ---
 
