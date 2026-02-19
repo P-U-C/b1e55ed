@@ -34,8 +34,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Validate docker-compose.yml syntax
+      - name: Validate docker-compose.yml
         run: |
-          # Use docker compose v2 syntax (built into docker CLI)
-          docker compose config > /dev/null 2>&1
-          echo "✅ docker-compose.yml syntax valid"
+          docker compose config > /dev/null
+          echo "✅ Syntax valid"
+      
+      - name: Build all services
+        run: |
+          docker compose build
+          echo "✅ All services build successfully"
+      
+      - name: Verify images exist
+        run: |
+          # Check that images were created
+          if ! docker images | grep -q "b1e55ed"; then
+            echo "❌ Images not created"
+            exit 1
+          fi
+          echo "✅ Images created"
