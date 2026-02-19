@@ -10,6 +10,8 @@ from engine.core.config import Config
 
 # Allow API tests to create apps without a real auth token
 os.environ.setdefault("B1E55ED_INSECURE_OK", "1")
+# Allow identity operations without encryption in tests
+os.environ.setdefault("B1E55ED_DEV_MODE", "1")
 
 
 @pytest.fixture()
