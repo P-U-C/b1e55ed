@@ -17,6 +17,7 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 EPILOG = "The code remembers. The hex is blessed: 0xb1e55ed."
@@ -108,10 +109,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p_signal = sub.add_parser("signal", help="Ingest operator intel as a curator signal")
+    # NOTE: "rest" is remainder to allow flexible ordering of flags and subcommand-like forms.
+    # We re-parse inside _cmd_signal() to support `signal add --file ...` with flags placed after `add`.
     p_signal.add_argument(
         "rest",
         nargs=argparse.REMAINDER,
         help='Signal text or subcommand, e.g. b1e55ed signal "BTC looking strong" OR b1e55ed signal add --file note.txt',
+    )
+    p_signal.add_argument(
+        "--symbols",
+        default=None,
+        help='Comma-separated symbols override, e.g. --symbols "BTC,ETH"',
+    )
+    p_signal.add_argument(
+        "--source",
+        default=None,
+        help='Signal source tag, e.g. --source "operator"',
+    )
+    p_signal.add_argument(
+        "--direction",
+        choices=["bullish", "bearish", "neutral"],
+        default=None,
+        help="Signal direction.",
+    )
+    p_signal.add_argument(
+        "--conviction",
+        type=float,
+        default=None,
+        help="Conviction score (0-10).",
     )
     p_signal.add_argument(
         "--json",
@@ -125,6 +150,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit machine-readable JSON.",
     )
+    p_alerts.add_argument(
+        "--since",
+        type=int,
+        default=None,
+        help="Only include alerts newer than this many minutes.",
+    )
 
     p_positions = sub.add_parser("positions", help="List open positions with P&L")
     p_positions.add_argument(
@@ -132,6 +163,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit machine-readable JSON.",
     )
+
+    p_webhooks = sub.add_parser("webhooks", help="Manage outbound webhook subscriptions")
+    wh_sub = p_webhooks.add_subparsers(dest="webhooks_cmd")
+
+    p_wh_add = wh_sub.add_parser("add", help="Add a webhook subscription")
+    p_wh_add.add_argument("url", help="Webhook URL")
+    p_wh_add.add_argument(
+        "--events",
+        required=True,
+        help='Comma-separated event globs, e.g. "alert.*,system.kill_switch.*"',
+    )
+
+    p_wh_list = wh_sub.add_parser("list", help="List webhook subscriptions")
+    p_wh_list.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_wh_remove = wh_sub.add_parser("remove", help="Remove a webhook subscription")
+    p_wh_remove.add_argument("id", type=int, help="Subscription id")
 
     p_ks = sub.add_parser("kill-switch", help="Show or set kill switch level")
     p_ks.add_argument(
@@ -397,44 +445,87 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
 
+    # We accept flags both before and after the free-form text / `add` subcommand.
+    # The top-level argparse only knows about `args.*` values. Any flags placed after
+    # `add` end up in `args.rest`, so we re-parse them here.
     rest = list(getattr(args, "rest", []) or [])
 
+    sigp = argparse.ArgumentParser(prog="b1e55ed signal", add_help=False)
+    sigp.add_argument("--symbols", default=None)
+    sigp.add_argument("--source", default=None)
+    sigp.add_argument("--direction", choices=["bullish", "bearish", "neutral"], default=None)
+    sigp.add_argument("--conviction", type=float, default=None)
+    sigp.add_argument("--json", action="store_true")
+
+    ns_flags, remaining = sigp.parse_known_args(rest)
+
+    # Merge: explicit flags in `rest` should override top-level parsed flags.
+    symbols_raw = ns_flags.symbols if ns_flags.symbols is not None else getattr(args, "symbols", None)
+    source_raw = ns_flags.source if ns_flags.source is not None else getattr(args, "source", None)
+    direction = ns_flags.direction if ns_flags.direction is not None else getattr(args, "direction", None)
+    conviction = ns_flags.conviction if ns_flags.conviction is not None else getattr(args, "conviction", None)
+    as_json = bool(getattr(args, "json", False) or bool(ns_flags.json))
+
+    if direction is None:
+        direction = "neutral"
+    if conviction is None:
+        conviction = 0.0
+
+    if conviction < 0 or conviction > 10:
+        print("error: conviction must be 0-10", file=sys.stderr)
+        return 2
+
+    # Load text from file subcommand or from remainder.
     text: str | None = None
-    if rest and rest[0] == "add":
-        subp = argparse.ArgumentParser(prog="b1e55ed signal add", add_help=False)
-        subp.add_argument("--file", required=True)
+    if remaining and remaining[0] == "add":
+        addp = argparse.ArgumentParser(prog="b1e55ed signal add", add_help=False)
+        addp.add_argument("--file", required=True)
         try:
-            ns = subp.parse_args(rest[1:])
+            add_ns = addp.parse_args(remaining[1:])
         except SystemExit:
             print("error: usage: b1e55ed signal add --file <path>", file=sys.stderr)
             return 2
 
-        fp = Path(str(ns.file))
+        fp = Path(str(add_ns.file))
         if not fp.exists():
             print(f"error: file not found: {fp}", file=sys.stderr)
             return 2
         text = fp.read_text(encoding="utf-8")
     else:
-        # remainder is treated as a free-form text (shell quoting is handled by the OS)
-        text = " ".join(rest).strip() if rest else None
+        # remaining is treated as free-form text (shell quoting is handled by the OS)
+        text = " ".join(remaining).strip() if remaining else None
 
     if not text or not str(text).strip():
         print("error: signal text required", file=sys.stderr)
         return 2
 
     raw = str(text).strip()
-    syms = _extract_symbols(raw, universe=config.universe.symbols)
+    content_len = len(raw)
+
+    # Symbols: explicit override wins, otherwise extract from content.
+    syms: list[str]
+    if symbols_raw:
+        syms = [s.strip().upper() for s in str(symbols_raw).split(",") if s.strip()]
+    else:
+        syms = _extract_symbols(raw, universe=config.universe.symbols)
+
     if not syms:
         syms = ["GLOBAL"]
+
+    base_source = str(source_raw or "operator")
+    if ":" in base_source:
+        source = base_source
+    else:
+        source = f"{base_source}:{identity.identity.node_id}"
 
     events: list[dict[str, object]] = []
     for sym in syms:
         payload_obj = CuratorSignalPayload(
             symbol=sym,
-            direction="neutral",
-            conviction=0.0,
+            direction=str(direction),
+            conviction=float(conviction),
             rationale=raw,
-            source=f"operator:{identity.identity.node_id}",
+            source=source,
         )
         payload = payload_obj.model_dump(mode="json")
         ev = db.append_event(
@@ -445,8 +536,17 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
         )
         events.append({"id": ev.id, "type": str(ev.type), "ts": ev.ts.isoformat(), "payload": ev.payload})
 
-    out = {"status": "ok", "events": events}
-    if bool(getattr(args, "json", False)):
+    out = {
+        "status": "ok",
+        # Stable schema for operator tooling:
+        "event_id": str(events[0]["id"]),
+        "symbols": syms,
+        "content_len": content_len,
+        # Extended details (best-effort):
+        "events": events,
+    }
+
+    if as_json:
         print(_json_dumps(out))
     else:
         print(f"signal ingested: {len(events)} event(s)")
@@ -537,6 +637,47 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    cmd = str(getattr(args, "webhooks_cmd", "") or "")
+    if cmd == "add":
+        url = str(args.url)
+        events = str(args.events)
+        sub_id = add_webhook_subscription(db, url=url, event_globs=events, enabled=True)
+        out = {"status": "ok", "id": sub_id, "url": url, "event_globs": events, "enabled": True}
+        print(_json_dumps(out))
+        return 0
+
+    if cmd == "list":
+        subs = list_webhook_subscriptions(db)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([s.__dict__ for s in subs]))
+            return 0
+
+        rows: list[list[str]] = []
+        for s in subs:
+            rows.append([str(s.id), "yes" if s.enabled else "no", s.event_globs, s.url])
+        if rows:
+            _print_table(["id", "enabled", "events", "url"], rows)
+        return 0
+
+    if cmd == "remove":
+        ok = remove_webhook_subscription(db, sub_id=int(args.id))
+        if not ok:
+            print(f"error: subscription not found: {args.id}", file=sys.stderr)
+            return 2
+        print(_json_dumps({"status": "ok", "id": int(args.id)}))
+        return 0
+
+    print("error: missing webhooks subcommand (add|list|remove)", file=sys.stderr)
+    return 2
+
+
 def _kill_switch_state(db) -> dict[str, object]:
     from engine.brain.kill_switch import LEVEL_MESSAGES, KillSwitchLevel
     from engine.core.events import EventType
@@ -589,22 +730,52 @@ def _cmd_kill_switch(ctx: CliContext, args: argparse.Namespace) -> int:
 
 def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
+    from engine.core.time import parse_dt, utc_now
 
     repo_root = ctx.repo_root
     db = Database(repo_root / "data" / "brain.db")
+
+    def _mk(
+        *,
+        alert_id: str,
+        alert_type: str,
+        severity: str,
+        message: str,
+        ts: str | None,
+        meta: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return {
+            "id": str(alert_id),
+            "type": str(alert_type),
+            "severity": str(severity),
+            "message": str(message),
+            "meta": dict(meta or {}),
+            "ts": str(ts or ""),
+        }
+
+    cutoff = None
+    if getattr(args, "since", None) is not None:
+        mins = int(args.since)
+        if mins < 0:
+            print("error: --since must be >= 0", file=sys.stderr)
+            return 2
+        cutoff = utc_now() if mins == 0 else utc_now() - timedelta(minutes=mins)
 
     alerts: list[dict[str, object]] = []
 
     # Kill switch alert
     ks = _kill_switch_state(db)
-    if _safe_int(ks.get("level")) > 0:
+    ks_level = _safe_int(ks.get("level"))
+    if ks_level > 0:
         alerts.append(
-            {
-                "type": "kill_switch",
-                "severity": _safe_int(ks.get("level")),
-                "detail": ks.get("reason"),
-                "ts": ks.get("ts"),
-            }
+            _mk(
+                alert_id="kill_switch",
+                alert_type="kill_switch",
+                severity="CRITICAL",
+                message=str(ks.get("reason") or "kill switch enabled"),
+                ts=str(ks.get("ts") or ""),
+                meta={"level": ks_level, "reason": ks.get("reason"), "previous_level": ks.get("previous_level")},
+            )
         )
 
     # Producer health
@@ -612,30 +783,90 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
         "SELECT name, domain, consecutive_failures, last_error, last_run_at FROM producer_health WHERE consecutive_failures > 0 OR last_error IS NOT NULL"
     ).fetchall()
     for r in rows:
+        name = str(r[0])
+        domain = str(r[1] or "")
+        failures = int(r[2] or 0)
+        err = str(r[3] or "")
+        ts = str(r[4] or "")
         alerts.append(
-            {
-                "type": "producer",
-                "severity": int(r[2] or 1),
-                "detail": f"{r[0]} ({r[1]}): {r[3]}",
-                "ts": str(r[4] or ""),
-            }
+            _mk(
+                alert_id=f"producer:{name}",
+                alert_type="producer",
+                severity="WARNING",
+                message=f"{name} ({domain}): {err}".strip(),
+                ts=ts,
+                meta={"name": name, "domain": domain, "consecutive_failures": failures, "last_error": err},
+            )
         )
 
-    # Position stops/targets
+    # Position stops/targets (with stop proximity)
+    mark = _latest_mark_prices(db)
     pos = db.conn.execute(
-        "SELECT asset, stop_loss, take_profit, opened_at, id FROM positions WHERE status = 'open' AND (stop_loss IS NOT NULL OR take_profit IS NOT NULL)"
+        "SELECT asset, direction, stop_loss, take_profit, opened_at, id "
+        "FROM positions "
+        "WHERE status = 'open' AND (stop_loss IS NOT NULL OR take_profit IS NOT NULL)"
     ).fetchall()
     for r in pos:
-        detail = f"{str(r[0]).upper()} stop={r[1] if r[1] is not None else '-'} tp={r[2] if r[2] is not None else '-'}"
+        sym = str(r[0]).upper()
+        direction = str(r[1])
+        stop = float(r[2]) if r[2] is not None else None
+        tp = float(r[3]) if r[3] is not None else None
+        ts = str(r[4])
+        pid = str(r[5])
+
+        mp = mark.get(sym)
+
+        sev = "INFO"
+        meta: dict[str, object] = {"position_id": pid, "asset": sym, "direction": direction, "stop_loss": stop, "take_profit": tp}
+        msg = f"{sym} stop={stop if stop is not None else '-'} tp={tp if tp is not None else '-'}"
+
+        if stop is not None and mp is not None:
+            # distance to stop as a fraction of stop
+            dist_frac = abs(float(mp) - float(stop)) / float(stop) if float(stop) != 0 else 0.0
+            meta["mark_price"] = float(mp)
+            meta["stop_distance_pct"] = float(dist_frac * 100.0)
+
+            # if already breached, always CRITICAL
+            breached = (direction == "long" and float(mp) <= float(stop)) or (direction == "short" and float(mp) >= float(stop))
+            if breached or dist_frac <= 0.0025:
+                sev = "CRITICAL"
+                msg = f"{sym} near stop ({dist_frac * 100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
+            elif dist_frac < 0.01:
+                sev = "WARNING"
+                msg = f"{sym} approaching stop ({dist_frac * 100:.2f}%): mark={float(mp):.4f} stop={float(stop):.4f}"
+
         alerts.append(
-            {
-                "type": "position",
-                "severity": 1,
-                "detail": detail,
-                "ts": str(r[3]),
-                "position_id": str(r[4]),
-            }
+            _mk(
+                alert_id=f"position:{pid}",
+                alert_type="position",
+                severity=sev,
+                message=msg,
+                ts=ts,
+                meta=meta,
+            )
         )
+
+    # Filter + sort
+    if cutoff is not None:
+        filtered: list[dict[str, object]] = []
+        for a in alerts:
+            ts_s = str(a.get("ts") or "").strip()
+            if not ts_s:
+                continue
+            try:
+                if parse_dt(ts_s) >= cutoff:
+                    filtered.append(a)
+            except Exception:  # noqa: BLE001
+                # If we can't parse, keep it (better than silently dropping).
+                filtered.append(a)
+        alerts = filtered
+
+    sev_rank = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
+
+    def _sort_key(a: dict[str, object]) -> tuple[int, str]:
+        return (sev_rank.get(str(a.get("severity") or "INFO"), 99), str(a.get("ts") or ""))
+
+    alerts.sort(key=_sort_key)
 
     if bool(getattr(args, "json", False)):
         print(_json_dumps(alerts))
@@ -646,8 +877,8 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
         print("(none)")
         return 0
 
-    table_rows = [[str(a.get("type")), str(a.get("severity")), str(a.get("detail")), str(a.get("ts") or "")] for a in alerts]
-    _print_table(["type", "sev", "detail", "ts"], table_rows)
+    table_rows = [[str(a.get("type")), str(a.get("severity")), str(a.get("message")), str(a.get("ts") or "")] for a in alerts]
+    _print_table(["type", "severity", "message", "ts"], table_rows)
     return 0
 
 
@@ -848,6 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
         "signal": _cmd_signal,
         "alerts": _cmd_alerts,
         "positions": _cmd_positions,
+        "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "keys": _cmd_keys,
