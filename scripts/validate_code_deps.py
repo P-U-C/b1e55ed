@@ -8,11 +8,8 @@ Checks:
 """
 
 import ast
-import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
-
 
 # Layer definitions (from dependencies-code.md)
 LAYERS = {
@@ -61,7 +58,7 @@ def get_module_layer(module_path: str) -> int | None:
     return None
 
 
-def extract_imports(file_path: Path) -> List[str]:
+def extract_imports(file_path: Path) -> list[str]:
     """Extract all imports from a Python file."""
     try:
         tree = ast.parse(file_path.read_text(encoding="utf-8"))
@@ -80,11 +77,11 @@ def extract_imports(file_path: Path) -> List[str]:
     return imports
 
 
-def check_circular_deps(imports: Dict[str, Set[str]]) -> List[str]:
+def check_circular_deps(imports: dict[str, set[str]]) -> list[str]:
     """Detect circular dependencies using DFS."""
     errors = []
 
-    def visit(module: str, path: List[str]) -> None:
+    def visit(module: str, path: list[str]) -> None:
         if module in path:
             cycle = " → ".join(path + [module])
             errors.append(f"CIRCULAR DEPENDENCY: {cycle}")
@@ -102,9 +99,7 @@ def check_circular_deps(imports: Dict[str, Set[str]]) -> List[str]:
     return errors
 
 
-def check_layer_violations(
-    file_path: Path, imports: List[str], repo_root: Path
-) -> List[str]:
+def check_layer_violations(file_path: Path, imports: list[str], repo_root: Path) -> list[str]:
     """Check if imports violate layer rules (lower → higher forbidden)."""
     errors = []
 
@@ -129,10 +124,7 @@ def check_layer_violations(
 
         # Check: can only import from same or lower layer
         if import_layer > module_layer:
-            errors.append(
-                f"LAYER VIOLATION: {rel_path} (layer {module_layer}) "
-                f"imports {imp} (layer {import_layer})"
-            )
+            errors.append(f"LAYER VIOLATION: {rel_path} (layer {module_layer}) imports {imp} (layer {import_layer})")
 
     return errors
 
@@ -149,7 +141,7 @@ def main() -> int:
     python_files += list(repo_root.glob("dashboard/**/*.py"))
 
     # Build import graph
-    all_imports: Dict[str, Set[str]] = {}
+    all_imports: dict[str, set[str]] = {}
 
     for file in python_files:
         if "__pycache__" in str(file) or ".venv" in str(file):

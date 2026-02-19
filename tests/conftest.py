@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
 from engine.core.config import Config
+
+# Allow API tests to create apps without a real auth token
+os.environ.setdefault("B1E55ED_INSECURE_OK", "1")
 
 
 @pytest.fixture()

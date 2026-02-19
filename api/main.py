@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 from contextlib import asynccontextmanager
 
@@ -28,14 +27,16 @@ def create_app() -> FastAPI:
     insecure_ok = os.environ.get("B1E55ED_INSECURE_OK", "").lower() in ("1", "true", "yes")
 
     if not auth_token and not insecure_ok:
-        print("❌ SECURITY ERROR: API auth_token is empty", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("Set B1E55ED_API__AUTH_TOKEN environment variable or add to config:", file=sys.stderr)
-        print("  api:", file=sys.stderr)
-        print("    auth_token: your-secret-token", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("To run without auth (dev/test only), set B1E55ED_INSECURE_OK=1", file=sys.stderr)
-        sys.exit(1)
+        msg = (
+            "❌ SECURITY ERROR: API auth_token is empty\n"
+            "\n"
+            "Set B1E55ED_API__AUTH_TOKEN environment variable or add to config:\n"
+            "  api:\n"
+            "    auth_token: your-secret-token\n"
+            "\n"
+            "To run without auth (dev/test only), set B1E55ED_INSECURE_OK=1"
+        )
+        raise RuntimeError(msg)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -66,4 +67,9 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+# Module-level app for uvicorn (e.g. `uvicorn api.main:app`).
+# Guarded so test imports don't crash when auth_token isn't configured.
+try:
+    app = create_app()
+except RuntimeError:
+    app = None  # type: ignore[assignment]

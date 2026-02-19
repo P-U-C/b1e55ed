@@ -105,8 +105,7 @@ class NodeIdentity:
             dev_mode = os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes")
             if not dev_mode:
                 raise ValueError(
-                    "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. "
-                    "Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
+                    "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
                 )
 
             blob["private_key"] = self.private_key

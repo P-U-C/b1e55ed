@@ -81,3 +81,28 @@ jobs:
           fi
           
           echo "✅ All required docs present and substantial"
+  
+  code-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Validate code dependency graph
+        run: |
+          chmod +x scripts/validate_code_deps.py
+          python scripts/validate_code_deps.py
+  
+  doc-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate documentation dependency graph
+        run: |
+          chmod +x scripts/validate_doc_deps.sh
+          bash scripts/validate_doc_deps.sh
