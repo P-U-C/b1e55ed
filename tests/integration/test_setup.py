@@ -26,6 +26,7 @@ def test_setup_non_interactive_creates_config_identity_and_db(tmp_path: Path, mo
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("B1E55ED_NONINTERACTIVE", "1")
     monkeypatch.setenv("B1E55ED_PRESET", "balanced")
+    monkeypatch.setenv("B1E55ED_DEV_MODE", "1")  # Allow plaintext identity in test
 
     rc = main(["setup", "--non-interactive"])
     assert rc == 0

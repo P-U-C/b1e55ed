@@ -147,13 +147,25 @@ class BaseProducer(ABC):
         if ts_.tzinfo is None:
             ts_ = ts_.replace(tzinfo=UTC)
 
-        h = compute_event_hash(prev_hash=None, event_type=event_type, payload=payload)
+        eid = str(uuid.uuid4())
+        src = source or self.name
+        h = compute_event_hash(
+            prev_hash=None,
+            event_type=event_type,
+            payload=payload,
+            ts=ts_,
+            source=src,
+            trace_id=trace_id,
+            schema_version="v1",
+            dedupe_key=dedupe_key,
+            event_id=eid,
+        )
         return Event(
-            id=str(uuid.uuid4()),
+            id=eid,
             type=event_type,
             ts=ts_,
             observed_at=observed_at,
-            source=source or self.name,
+            source=src,
             trace_id=trace_id,
             schema_version="v1",
             dedupe_key=dedupe_key,

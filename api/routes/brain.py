@@ -12,7 +12,7 @@ from engine.brain.kill_switch import KillSwitch
 from engine.brain.orchestrator import BrainOrchestrator
 from engine.core.config import Config
 from engine.core.database import Database
-from engine.security import generate_node_identity
+from engine.security import ensure_identity
 
 router = APIRouter(prefix="/brain", dependencies=[AuthDep])
 
@@ -85,9 +85,9 @@ def run_cycle(
     config: Config = Depends(get_config),
     db: Database = Depends(get_db),
 ) -> CycleResult:
-    # Create orchestrator with ephemeral identity (API tests override if needed)
-    identity = generate_node_identity()
-    orch = BrainOrchestrator(config=config, db=db, identity=identity)
+    # Create orchestrator with persisted identity (same as CLI for consistent audit trail)
+    identity_handle = ensure_identity()
+    orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)
     res = orch.run_cycle(symbols=list(config.universe.symbols))
 
     kill_level = None

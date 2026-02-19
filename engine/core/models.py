@@ -34,11 +34,41 @@ class Event(BaseModel):
     model_config = {"frozen": True}
 
 
-def compute_event_hash(*, prev_hash: str | None, event_type: EventType, payload: dict[str, Any]) -> str:
+def compute_event_hash(
+    *,
+    prev_hash: str | None,
+    event_type: EventType,
+    payload: dict[str, Any],
+    ts: datetime,
+    source: str | None = None,
+    trace_id: str | None = None,
+    schema_version: str = "v1",
+    dedupe_key: str | None = None,
+    event_id: str,
+) -> str:
     """Compute the canonical SHA-256 event hash.
 
-    Hash = sha256((prev_hash or '') + '|' + type + '|' + canonical_payload_json)
+    Commits to the full event header, not just payload.
+
+    Hash = sha256(
+        prev_hash | ts | event_id | type | schema_version |
+        source | trace_id | dedupe_key | canonical_payload_json
+    )
+
+    All fields are deterministic and tamper-evident.
     """
 
-    data = (prev_hash or "") + "|" + str(event_type) + "|" + canonical_json(payload)
+    # Canonical header fields (deterministic order)
+    header_parts = [
+        prev_hash or "",
+        ts.isoformat(),
+        event_id,
+        str(event_type),
+        schema_version,
+        source or "",
+        trace_id or "",
+        dedupe_key or "",
+    ]
+
+    data = "|".join(header_parts) + "|" + canonical_json(payload)
     return hashlib.sha256(data.encode("utf-8")).hexdigest()

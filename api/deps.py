@@ -11,7 +11,7 @@ from engine.core.config import Config
 from engine.core.database import Database
 from engine.execution.karma import KarmaEngine
 from engine.producers import registry as producer_registry
-from engine.security import generate_node_identity
+from engine.security import ensure_identity
 
 
 @lru_cache
@@ -76,7 +76,6 @@ def get_karma(request: Request) -> KarmaEngine:
     if k is not None:
         return k
 
-    # API-layer usage needs signing; generate an ephemeral identity by default.
-    # (The CLI/setup flow persists identities; API tests override this dependency.)
-    identity = generate_node_identity()
-    return KarmaEngine(config=get_config(request), db=get_db(request), identity=identity)
+    # API uses persisted identity (same as CLI) for consistent audit trail
+    identity_handle = ensure_identity()
+    return KarmaEngine(config=get_config(request), db=get_db(request), identity=identity_handle.identity)

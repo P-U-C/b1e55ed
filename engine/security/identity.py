@@ -101,8 +101,16 @@ class NodeIdentity:
                 "salt_b64": base64.b64encode(salt).decode("ascii"),
             }
         else:
+            # Plaintext-at-rest: only allowed in dev mode
+            dev_mode = os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes")
+            if not dev_mode:
+                raise ValueError(
+                    "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. "
+                    "Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
+                )
+
             blob["private_key"] = self.private_key
-            blob["warning"] = "identity private key stored unencrypted; set B1E55ED_MASTER_PASSWORD"
+            blob["warning"] = "DEVELOPMENT MODE: identity private key stored unencrypted; set B1E55ED_MASTER_PASSWORD in production"
 
         path.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
         with contextlib.suppress(OSError):
