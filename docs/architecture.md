@@ -365,6 +365,8 @@ See `docs/api-reference.md` for full spec.
 - CRT data zones: Green live numbers, scanlines, terminal density
 - No crypto-twitter casual jargon - direct, action-first language
 
+**Full design specification:** See [DASHBOARD_DESIGN_SPEC.md](DASHBOARD_DESIGN_SPEC.md) for complete UI/UX guidelines, component patterns, and implementation details.
+
 ---
 
 ## Data Flow Example
