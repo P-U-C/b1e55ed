@@ -104,7 +104,7 @@ class LearningLoop:
                     (str(cycle_id), str(symbol)),
                 )
                 for r in cur.fetchall():
-                    domain_scores[str(r["domain"])] = float(r["domain_score"]) 
+                    domain_scores[str(r["domain"])] = float(r["domain_score"])
 
         return OutcomeAttribution(
             position_id=str(position_id),
@@ -156,15 +156,13 @@ class LearningLoop:
 
         out: list[dict[str, Any]] = []
         for r in rows:
-            out.append({k: r[k] for k in r.keys()})
+            out.append({k: r[k] for k in r.keys()})  # noqa: SIM118
         return out
 
     def _cold_start_state(self, as_of: datetime) -> tuple[bool, str, float]:
         """Returns (blocked, reason, max_delta_for_this_cycle)."""
 
-        first = self.db.conn.execute(
-            "SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL"
-        ).fetchone()
+        first = self.db.conn.execute("SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL").fetchone()
         if first is None or first["first_closed"] is None:
             return True, "cold_start_no_history", 0.0
 
@@ -211,7 +209,7 @@ class LearningLoop:
         # and an outcome sign (+1 win, -1 loss).
         samples: dict[str, list[tuple[float, float]]] = {k: [] for k in previous}
         for p in positions:
-            conviction_id = int(p["conviction_id"])  # type: ignore[index]
+            conviction_id = int(p["conviction_id"])
             score = self.db.conn.execute(
                 "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
                 (conviction_id,),
@@ -251,7 +249,7 @@ class LearningLoop:
 
         # Translate correlations into deltas.
         deltas: dict[str, float] = {}
-        for domain, w in previous.items():
+        for domain, _w in previous.items():
             corr = float(correlations.get(domain, 0.0))
             raw = corr * float(max_delta)
             deltas[domain] = float(_clamp(raw, -float(max_delta), float(max_delta)))

@@ -11,13 +11,14 @@ The chain remembers.
 """
 
 from engine.security.audit import AuditLogger
-from engine.security.identity import NodeIdentity, generate_node_identity
+from engine.security.identity import NodeIdentity, ensure_identity, generate_node_identity
 from engine.security.keystore import Keystore, KeystoreTier
 from engine.security.redaction import redact_secrets, sanitize_for_log
 
 __all__ = [
     "AuditLogger",
     "NodeIdentity",
+    "ensure_identity",
     "generate_node_identity",
     "Keystore",
     "KeystoreTier",

@@ -86,13 +86,7 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
 
     repo_root = ctx.repo_root
 
-    banner = (
-        "\n"
-        "0xb1e55ed\n"
-        "b1e55ed setup\n"
-        "\n"
-        "A system without memory repeats mistakes.\n"
-    )
+    banner = "\n0xb1e55ed\nb1e55ed setup\n\nA system without memory repeats mistakes.\n"
     print(banner)
 
     config_dir = repo_root / "config"
@@ -190,10 +184,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
     repo_root = ctx.repo_root
     cfg_path = repo_root / "config" / "user.yaml"
-    if cfg_path.exists():
-        config = Config.from_yaml(cfg_path)
-    else:
-        config = Config.from_repo_defaults(repo_root)
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
@@ -202,7 +193,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         from engine.brain.orchestrator import BrainOrchestrator
 
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
-        result = orchestrator.run_cycle()
+        result = orchestrator.run_cycle(symbols=config.universe.symbols)
         print(result)
         return 0
     except Exception as e:
@@ -215,17 +206,15 @@ def _cmd_api(ctx: CliContext, args: argparse.Namespace) -> int:
 
     repo_root = ctx.repo_root
     cfg_path = repo_root / "config" / "user.yaml"
-    if cfg_path.exists():
-        config = Config.from_yaml(cfg_path)
-    else:
-        config = Config.from_repo_defaults(repo_root)
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
     host = args.host or config.api.host
     port = args.port or config.api.port
 
     import uvicorn
 
-    return uvicorn.run("api.main:app", host=host, port=port, reload=False)  # type: ignore[return-value]
+    uvicorn.run("api.main:app", host=host, port=port, reload=False)
+    return 0
 
 
 def _cmd_dashboard(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -233,19 +222,15 @@ def _cmd_dashboard(ctx: CliContext, args: argparse.Namespace) -> int:
 
     repo_root = ctx.repo_root
     cfg_path = repo_root / "config" / "user.yaml"
-    if cfg_path.exists():
-        config = Config.from_yaml(cfg_path)
-    else:
-        config = Config.from_repo_defaults(repo_root)
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
     host = args.host or config.dashboard.host
     port = args.port or config.dashboard.port
 
     import uvicorn
 
-    return uvicorn.run(
-        "dashboard.app:app", host=host, port=port, reload=False
-    )  # type: ignore[return-value]
+    uvicorn.run("dashboard.app:app", host=host, port=port, reload=False)
+    return 0
 
 
 def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:

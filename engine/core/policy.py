@@ -8,7 +8,7 @@ The rules exist to protect you from yourself.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, date
+from datetime import UTC, date, datetime
 from typing import Any
 
 
@@ -85,7 +85,7 @@ class TradingPolicyEngine:
         if float(position_notional_usd) > max_allowed:
             raise PolicyViolation(
                 "position_size_limit",
-                f"position ${float(position_notional_usd):.2f} exceeds {self.policy.max_position_size_pct*100:.1f}% of equity (${max_allowed:.2f})",
+                f"position ${float(position_notional_usd):.2f} exceeds {self.policy.max_position_size_pct * 100:.1f}% of equity (${max_allowed:.2f})",
             )
 
     def check_leverage_limit(self, *, leverage: float, regime: str | None = None) -> None:
@@ -105,8 +105,8 @@ class TradingPolicyEngine:
         self.check_kill_switch(level=kill_switch_level)
         self.check_daily_loss_limit(now=now)
 
-        size_pct = float(getattr(intent, "size_pct"))
-        leverage = float(getattr(intent, "leverage"))
+        size_pct = float(intent.size_pct)
+        leverage = float(intent.leverage)
         regime = getattr(intent, "regime", None)
 
         position_notional = float(equity_usd) * size_pct

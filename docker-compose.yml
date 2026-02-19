@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # API server
+  api:
+    build: .
+    image: b1e55ed:latest
+    container_name: b1e55ed-api
+    command: b1e55ed api --host 0.0.0.0 --port 5050
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./data:/data
+      - ./config:/app/config:ro
+      - ./logs:/logs
+    environment:
+      - B1E55ED_MASTER_PASSWORD=${B1E55ED_MASTER_PASSWORD}
+      - B1E55ED_EXECUTION__MODE=${B1E55ED_EXECUTION__MODE:-paper}
+      - B1E55ED_ALLIUM_API_KEY=${B1E55ED_ALLIUM_API_KEY:-}
+      - B1E55ED_NANSEN_API_KEY=${B1E55ED_NANSEN_API_KEY:-}
+      - B1E55ED_HYPERLIQUID_API_KEY=${B1E55ED_HYPERLIQUID_API_KEY:-}
+      - B1E55ED_HYPERLIQUID_SECRET=${B1E55ED_HYPERLIQUID_SECRET:-}
+      - B1E55ED_API__AUTH_TOKEN=${B1E55ED_API__AUTH_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Dashboard
+  dashboard:
+    image: b1e55ed:latest
+    container_name: b1e55ed-dashboard
+    command: b1e55ed dashboard --host 0.0.0.0 --port 5051
+    ports:
+      - "5051:5051"
+    volumes:
+      - ./data:/data:ro
+      - ./config:/app/config:ro
+    environment:
+      - B1E55ED_MASTER_PASSWORD=${B1E55ED_MASTER_PASSWORD}
+      - B1E55ED_API_BASE_URL=http://api:5050
+      - B1E55ED_DASHBOARD__AUTH_TOKEN=${B1E55ED_DASHBOARD__AUTH_TOKEN:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Brain cycle (cron-like)
+  brain:
+    image: b1e55ed:latest
+    container_name: b1e55ed-brain
+    command: >
+      sh -c 'while true; do
+        b1e55ed brain >> /logs/brain.log 2>&1;
+        sleep 300;
+      done'
+    volumes:
+      - ./data:/data
+      - ./config:/app/config:ro
+      - ./logs:/logs
+    environment:
+      - B1E55ED_MASTER_PASSWORD=${B1E55ED_MASTER_PASSWORD}
+      - B1E55ED_EXECUTION__MODE=${B1E55ED_EXECUTION__MODE:-paper}
+      - B1E55ED_ALLIUM_API_KEY=${B1E55ED_ALLIUM_API_KEY:-}
+      - B1E55ED_NANSEN_API_KEY=${B1E55ED_NANSEN_API_KEY:-}
+      - B1E55ED_HYPERLIQUID_API_KEY=${B1E55ED_HYPERLIQUID_API_KEY:-}
+      - B1E55ED_HYPERLIQUID_SECRET=${B1E55ED_HYPERLIQUID_SECRET:-}
+    restart: unless-stopped
+
+volumes:
+  data:
+  logs:

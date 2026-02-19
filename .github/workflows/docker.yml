@@ -1,0 +1,48 @@
+name: Docker
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: docker build -t b1e55ed:test .
+      
+      - name: Test image can run
+        run: |
+          docker run --rm b1e55ed:test b1e55ed --help
+          echo "✅ CLI works"
+      
+      - name: Test imports
+        run: |
+          docker run --rm b1e55ed:test python -c "import engine; import api; import dashboard; print('✅ Imports work')"
+      
+      - name: Check image size
+        run: |
+          SIZE=$(docker images b1e55ed:test --format "{{.Size}}")
+          echo "Image size: $SIZE"
+  
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate and build with docker-compose
+        run: |
+          # Validate syntax
+          docker compose config > /dev/null
+          echo "✅ Config valid"
+          
+          # Build all services (exit code 0 = success)
+          docker compose build
+          echo "✅ Build successful"
+          
+          # List created images
+          docker images --filter "reference=b1e55ed*"

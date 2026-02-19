@@ -15,7 +15,17 @@ from engine.core.projections import (
 
 
 def _mk_event(*, eid: str, et: EventType, ts: datetime, payload: dict, prev_hash: str | None = None) -> Event:
-    h = compute_event_hash(prev_hash=prev_hash, event_type=et, payload=payload)
+    h = compute_event_hash(
+        prev_hash=prev_hash,
+        event_type=et,
+        payload=payload,
+        ts=ts,
+        source="test",
+        trace_id=None,
+        schema_version="v1",
+        dedupe_key=None,
+        event_id=eid,
+    )
     return Event(id=eid, type=et, ts=ts, payload=payload, prev_hash=prev_hash, hash=h)
 
 

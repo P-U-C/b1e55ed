@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Positions — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem;">
+  <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Positions</h1>
+  <div style="display:flex; gap:0.5rem;">
+    <button class="btn {% if view == 'open' %}active{% endif %}" onclick="location.href='/positions?view=open'" style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open</button>
+    <button class="btn {% if view == 'closed' %}active{% endif %}" onclick="location.href='/positions?view=closed'" style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed</button>
+  </div>
+</div>
+
+{% if positions %}
+  {% for p in positions %}
+  <div class="panel" style="margin-bottom:1rem;" hx-get="/partials/position/{{ p.id }}" hx-trigger="every 30s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">{{ p.id }} · {{ p.symbol }} · {{ p.direction | upper }}</span>
+      <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-size:0.85rem; font-weight:400;">
+        {{ '%+.1f' | format(p.pnl_pct) }}%
+      </span>
+    </div>
+
+    <!-- Price grid -->
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1rem; font-size:0.8125rem;">
+      <div>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Current</span><br>
+        <span class="data-live">${{ '%.2f' | format(p.current) }}</span>
+      </div>
+      <div>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Entry</span><br>
+        ${{ '%.2f' | format(p.entry) }}
+      </div>
+      <div>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Stop</span><br>
+        <span class="{{ 'text-warn' if p.near_stop else '' }}">${{ '%.2f' | format(p.stop) }}</span>
+      </div>
+      <div>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Target</span><br>
+        ${{ '%.2f' | format(p.target) }}
+      </div>
+      <div>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">P&L</span><br>
+        <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }} data-live">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+      </div>
+    </div>
+
+    <!-- Price ladder -->
+    <div style="margin-bottom:1rem; padding:0.75rem 0;">
+      {% set range = p.target - p.stop %}
+      {% set pos_pct = ((p.current - p.stop) / range * 100) | int if range > 0 else 50 %}
+      <div style="position:relative; height:4px; background:var(--border);">
+        <!-- Stop marker -->
+        <div style="position:absolute; left:0; top:-2px; width:8px; height:8px; background:var(--red); border-radius:1px;" title="Stop ${{ '%.2f' | format(p.stop) }}"></div>
+        <!-- Current price -->
+        <div style="position:absolute; left:{{ pos_pct }}%; top:-4px; width:3px; height:12px; background:var(--green); transform:translateX(-50%);" title="Current ${{ '%.2f' | format(p.current) }}"></div>
+        <!-- Target marker -->
+        <div style="position:absolute; right:0; top:-2px; width:8px; height:8px; background:var(--green); border-radius:1px;" title="Target ${{ '%.2f' | format(p.target) }}"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:0.375rem; font-size:0.65rem; color:var(--text-dim);">
+        <span>${{ '%.2f' | format(p.stop) }} stop</span>
+        <span class="data-live">${{ '%.2f' | format(p.current) }} now</span>
+        <span>${{ '%.2f' | format(p.target) }} target</span>
+      </div>
+    </div>
+
+    <!-- Metadata -->
+    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:0.5rem; font-size:0.75rem; color:var(--text-dim); margin-bottom:1rem;">
+      <div>Leverage: <span class="{{ 'text-warn' if p.leverage_warning else 'text-bright' }}">{{ p.leverage }}x</span>{% if p.leverage_warning %} <span class="text-warn">(exceeds max)</span>{% endif %}</div>
+      <div>Opened: {{ p.opened | default('—') }}</div>
+      <div>Conviction at entry: {{ p.conviction_entry | default('—') }}</div>
+      <div>Current conviction: {{ p.conviction_current | default('—') }}</div>
+      <div>Regime at entry: {{ p.regime_entry | default('—') }}</div>
+      <div>Held: {{ p.held | default('—') }}</div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-stop" hx-confirm="Adjust stop loss?">Adjust Stop</button>
+      <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-target" hx-confirm="Adjust target?">Adjust Target</button>
+      <button class="btn btn-danger" hx-post="/api/positions/{{ p.id }}/close" hx-confirm="Close position {{ p.id }}?">Close Position</button>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="panel">
+    <div class="empty-state">
+      {% if view == 'closed' %}
+        No closed trades. Performance data populates after first exit.
+      {% else %}
+        No open positions. Brain decisions will appear here.
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

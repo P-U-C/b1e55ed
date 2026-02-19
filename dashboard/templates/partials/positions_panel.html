@@ -1,0 +1,32 @@
+<div class="panel-header">
+  <span class="panel-title">Positions</span>
+  <span class="panel-age">{{ positions_age | default('—') }}</span>
+</div>
+
+{% if positions %}
+  {% for p in positions %}
+  <div style="margin-bottom: 0.75rem;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline;">
+      <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
+      <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-weight:400;">
+        {{ '%+.1f' | format(p.pnl_pct) }}%
+      </span>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.5rem; margin-top:0.375rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Current</span><br><span class="data-live">${{ '%.2f' | format(p.current) }}</span></div>
+      <div><span class="text-dim">Entry</span><br>${{ '%.2f' | format(p.entry) }}</div>
+      <div><span class="text-dim">Stop</span><br><span class="{{ 'text-warn' if p.near_stop else '' }}">${{ '%.2f' | format(p.stop) }}</span></div>
+      <div><span class="text-dim">Target</span><br>${{ '%.2f' | format(p.target) }}</div>
+    </div>
+    <div style="margin-top:0.25rem; font-size:0.75rem; color:var(--text-dim);">
+      P&L: <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+      {% if p.leverage_warning %}
+        · <span class="text-warn">{{ p.leverage }}x leverage (exceeds max)</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  <div style="font-size:0.75rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</div>
+{% else %}
+  <div class="empty-state">No open positions. Brain decisions will appear here.</div>
+{% endif %}

@@ -1,0 +1,15 @@
+{% if curator_signals %}
+  {% for c in curator_signals %}
+  <div class="signal-row">
+    <span class="signal-ts">{{ c.ts }}</span>
+    <span style="width:2.5rem; font-size:0.65rem; color:{{ 'var(--green)' if c.source == 'zoz' else 'var(--text-dim)' }};">{{ c.source }}</span>
+    <span class="signal-asset">{{ c.asset }}</span>
+    <span class="signal-desc">{{ c.desc }}</span>
+    <span class="signal-score data-live {{ 'text-bull' if c.score >= 7 else ('text-warn' if c.score >= 4 else 'text-dim') }}">
+      ▲{{ '%.0f' | format(c.score) }}
+    </span>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">No curator signals yet. Use /signal to submit intel.</div>
+{% endif %}

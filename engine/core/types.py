@@ -76,7 +76,6 @@ class ProducerResult:
     health: ProducerHealth = ProducerHealth.OK
 
 
-
 # ---------------------------------------------------------------------------
 # Learning loop dataclasses
 # ---------------------------------------------------------------------------

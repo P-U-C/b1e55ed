@@ -14,7 +14,7 @@ from __future__ import annotations
 from engine.execution.circuit_breaker import CircuitBreaker, CircuitBreakerError, TokenBucket
 from engine.execution.oms import OMS, OMSResult
 from engine.execution.paper import PaperBroker, PaperFill
-from engine.execution.pnl import PnLTracker, PnLSnapshot
+from engine.execution.pnl import PnLSnapshot, PnLTracker
 from engine.execution.position_sizer import CorrelationAwareSizer, KellyParams, PositionSizer
 from engine.execution.preflight import Preflight, PreflightError, PreflightResult
 

@@ -377,9 +377,7 @@ class Database:
             self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _get_last_hash(self) -> str | None:
-        row = self.conn.execute(
-            "SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1"
-        ).fetchone()
+        row = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
         return None if row is None else str(row[0])
 
     @staticmethod
@@ -424,9 +422,7 @@ class Database:
                 ).fetchone()
                 if row is not None:
                     if str(row[1]) != p_hash:
-                        raise DedupeConflictError(
-                            f"dedupe_key conflict for {dedupe_key}: payload changed"
-                        )
+                        raise DedupeConflictError(f"dedupe_key conflict for {dedupe_key}: payload changed")
                     existing = self.conn.execute(
                         "SELECT * FROM events WHERE id = ?",
                         (str(row[0]),),
@@ -437,7 +433,17 @@ class Database:
 
             eid = event_id or str(uuid.uuid4())
             prev = self._last_hash
-            h = compute_event_hash(prev_hash=prev, event_type=event_type, payload=payload_canon)
+            h = compute_event_hash(
+                prev_hash=prev,
+                event_type=event_type,
+                payload=payload_canon,
+                ts=now,
+                source=source,
+                trace_id=trace_id,
+                schema_version=schema_version,
+                dedupe_key=dedupe_key,
+                event_id=eid,
+            )
 
             try:
                 with self.conn:
@@ -502,11 +508,7 @@ class Database:
         out: list[Event] = []
         with self._lock:
             for et, payload, dedupe_key in events:
-                out.append(
-                    self.append_event(
-                        event_type=et, payload=payload, dedupe_key=dedupe_key, source=source
-                    )
-                )
+                out.append(self.append_event(event_type=et, payload=payload, dedupe_key=dedupe_key, source=source))
         return out
 
     def get_events(
@@ -544,10 +546,10 @@ class Database:
         fast=True verifies only the last N events.
         """
 
-        q = (
-            "SELECT id, type, payload, prev_hash, hash FROM events "
-            "ORDER BY created_at ASC, rowid ASC"
-        )
+        q = """
+            SELECT id, type, payload, prev_hash, hash, ts, source, trace_id, schema_version, dedupe_key
+            FROM events ORDER BY created_at ASC, rowid ASC
+        """
         rows = self.conn.execute(q).fetchall()
         if fast and len(rows) > last_n:
             rows = rows[-last_n:]
@@ -559,7 +561,18 @@ class Database:
         for row in rows:
             et = EventType(str(row[1]))
             payload = json.loads(str(row[2]))
-            expected = compute_event_hash(prev_hash=prev, event_type=et, payload=payload)
+            ts = _iso_to_dt(str(row[5])) or datetime.now(tz=UTC)
+            expected = compute_event_hash(
+                prev_hash=prev,
+                event_type=et,
+                payload=payload,
+                ts=ts,
+                source=row[6],
+                trace_id=row[7],
+                schema_version=str(row[8]),
+                dedupe_key=row[9],
+                event_id=str(row[0]),
+            )
             if expected != str(row[4]):
                 return False
             prev = expected

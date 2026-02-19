@@ -21,7 +21,6 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 from engine.core.config import Config
 from engine.core.database import Database

@@ -11,7 +11,6 @@ import copy
 import re
 from typing import Any
 
-
 _REDACTION_PATTERNS: list[tuple[str, str]] = [
     # Generic key/value
     (r"(?i)(api[_-]?key|secret|password)\s*[:=]\s*[^\s\"']+", "[REDACTED]"),

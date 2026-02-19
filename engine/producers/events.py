@@ -23,7 +23,7 @@ from typing import Any
 
 import httpx
 
-from engine.core.events import EventType, EventsSignalPayload, payload_hash
+from engine.core.events import EventsSignalPayload, EventType, payload_hash
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer

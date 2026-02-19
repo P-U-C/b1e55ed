@@ -28,7 +28,7 @@ from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
 from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
-from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel
+from engine.brain.kill_switch import KillSwitch, KillSwitchDecision
 from engine.brain.regime import RegimeDetector, RegimeResult
 from engine.brain.synthesis import SynthesisResult, VectorSynthesis
 from engine.core.config import Config

@@ -14,7 +14,6 @@ This is intentionally best-effort: if learning fails, execution must not.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 

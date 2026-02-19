@@ -31,7 +31,6 @@ from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
 
-
 _INT_RE = re.compile(r"[-+]?\d+")
 
 

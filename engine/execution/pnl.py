@@ -71,10 +71,7 @@ class PnLTracker:
         qty = notional / entry if entry > 0 else 0.0
         xp = float(exit_price)
 
-        if direction == "long":
-            realized = (xp - entry) * qty
-        else:
-            realized = (entry - xp) * qty
+        realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
         with self.db.conn:
@@ -93,9 +90,7 @@ class PnLTracker:
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0
-        for row in self.db.conn.execute(
-            "SELECT id, asset FROM positions WHERE status = 'open'"
-        ).fetchall():
+        for row in self.db.conn.execute("SELECT id, asset FROM positions WHERE status = 'open'").fetchall():
             pid = str(row[0])
             sym = str(row[1]).upper()
             px = current_prices.get(sym)
@@ -104,9 +99,7 @@ class PnLTracker:
             unreal += self.unrealized_usd(position_id=pid, mark_price=float(px))
 
         realized = 0.0
-        for row in self.db.conn.execute(
-            "SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL"
-        ).fetchall():
+        for row in self.db.conn.execute("SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL").fetchall():
             realized += float(row[0])
 
         return PnLSnapshot(realized_usd=float(realized), unrealized_usd=float(unreal), total_usd=float(realized + unreal))

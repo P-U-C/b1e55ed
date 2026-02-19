@@ -10,8 +10,9 @@ This module is intentionally small and dependency-free.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 

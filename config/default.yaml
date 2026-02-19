@@ -35,3 +35,5 @@ dashboard:
 api:
   host: "127.0.0.1"
   port: 5050
+  auth_token: ""  # REQUIRED in production - set via B1E55ED_API__AUTH_TOKEN
+  cors_origins: []  # Explicit CORS allow list - empty = CORS disabled

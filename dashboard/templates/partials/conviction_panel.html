@@ -1,0 +1,34 @@
+<div class="panel-header">
+  <span class="panel-title">Conviction</span>
+  <span class="panel-age">{{ conviction_age | default('—') }}</span>
+</div>
+
+{% if convictions %}
+  {% for c in convictions %}
+  <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+    <span style="width:3rem; font-weight:400;">{{ c.symbol }}</span>
+    <div class="conviction-bar" style="flex:1;">
+      <div class="conviction-bar-fill {{ c.direction }}" style="width:{{ (c.magnitude / 10 * 100) | int }}%;"></div>
+    </div>
+    <span style="width:2rem; text-align:right; font-weight:400;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
+    <span style="width:4.5rem; font-size:0.75rem;" class="text-dim">{{ c.direction | upper }}</span>
+  </div>
+  {% endfor %}
+
+  {% if domain_weights %}
+  <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border-dim);">
+    <div class="panel-title" style="margin-bottom:0.5rem;">Domain Weights</div>
+    {% for w in domain_weights %}
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem; font-size:0.75rem;">
+      <span style="width:5rem; color:var(--text-dim);">{{ w.name }}</span>
+      <div style="flex:1; height:4px; background:var(--border-dim); border-radius:1px;">
+        <div style="width:{{ w.pct }}%; height:100%; background:var(--text-dim); border-radius:1px;"></div>
+      </div>
+      <span style="width:2.5rem; text-align:right; color:var(--text-dim);">{{ w.pct }}%</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% else %}
+  <div class="empty-state">No conviction scores yet. Waiting for first brain cycle.</div>
+{% endif %}

@@ -15,6 +15,7 @@ Tier 3 (YubiKey/MPC) is explicitly Phase 2.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -56,9 +57,7 @@ def _require_password(env_var: str = "B1E55ED_MASTER_PASSWORD") -> str:
     pw = os.environ.get(env_var)
     if pw:
         return pw
-    raise ValueError(
-        f"Missing master password. Set {env_var} or pass password explicitly when constructing Keystore."
-    )
+    raise ValueError(f"Missing master password. Set {env_var} or pass password explicitly when constructing Keystore.")
 
 
 @dataclass(frozen=True)
@@ -85,7 +84,7 @@ class _EnvBackend:
     def list_keys(self) -> list[str]:
         if self.prefix is None:
             return sorted(os.environ.keys())
-        return sorted(k for k in os.environ.keys() if k.startswith(self.prefix))
+        return sorted(k for k in os.environ if k.startswith(self.prefix))
 
     def has(self, name: str) -> bool:
         return os.environ.get(name) is not None
@@ -109,10 +108,8 @@ class _EncryptedFileBackend:
 
     def _ensure_dir(self) -> None:
         self.vault_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.vault_path.parent, 0o700)
-        except OSError:
-            pass
 
     def _get_or_create_salt(self) -> bytes:
         if self.salt_path.exists():
@@ -122,10 +119,8 @@ class _EncryptedFileBackend:
         self._ensure_dir()
         salt = os.urandom(_SALT_SIZE)
         self.salt_path.write_bytes(salt)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.salt_path, 0o600)
-        except OSError:
-            pass
         return salt
 
     def _fernet(self) -> Fernet:
@@ -148,10 +143,8 @@ class _EncryptedFileBackend:
         data = json.dumps(self._secrets, sort_keys=True, indent=2).encode("utf-8")
         encrypted = self._fernet().encrypt(data)
         self.vault_path.write_bytes(encrypted)
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self.vault_path, 0o600)
-        except OSError:
-            pass
 
     def get(self, name: str) -> str:
         if name not in self._secrets:
@@ -227,7 +220,15 @@ class Keystore:
     Lookup order is Tier 0 → Tier 1 → Tier 2 by default (env overrides are convenient).
 
     Note: Tier 0 is read-only by design.
+
+    Compatibility: CLI uses `Keystore.default()`, `set()`, and `describe()`.
     """
+
+    @classmethod
+    def default(cls) -> Keystore:
+        """Default keystore constructor used by the CLI."""
+
+        return cls(enable_keyring=True)
 
     def __init__(
         self,
@@ -264,10 +265,27 @@ class Keystore:
         self._metadata_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._metadata_path.exists():
             self._metadata_path.write_text("{}", encoding="utf-8")
-            try:
+            with contextlib.suppress(OSError):
                 os.chmod(self._metadata_path, 0o600)
-            except OSError:
-                pass
+
+    def set(self, name: str, value: str, tier: KeystoreTier = KeystoreTier.ENCRYPTED_FILE) -> None:
+        """Compatibility wrapper: store a key."""
+
+        self.store_key(name, value, tier)
+
+    def get(self, name: str) -> str:
+        """Compatibility wrapper: fetch a key."""
+
+        return self.get_key(name)
+
+    def describe(self) -> str:
+        """Human-readable keystore status for CLI output."""
+
+        h = self.key_health()
+        parts = [f"overall={h.get('overall')}"]
+        parts.append(f"tier1={'on' if h.get('tier1_configured') else 'off'}")
+        parts.append(f"tier2={'on' if h.get('tier2_available') else 'off'}")
+        return "Keystore(" + ", ".join(parts) + ")"
 
     def store_key(self, name: str, value: str, tier: KeystoreTier) -> None:
         if tier == KeystoreTier.ENV:
@@ -325,11 +343,7 @@ class Keystore:
                 present = self._env.has(name)
             elif tier == KeystoreTier.ENCRYPTED_FILE:
                 # For health, "present" means it exists at rest (not just in-memory).
-                present = (
-                    self._tier1 is not None
-                    and self._vault_path.exists()
-                    and self._tier1.has(name)
-                )
+                present = self._tier1 is not None and self._vault_path.exists() and self._tier1.has(name)
             elif tier == KeystoreTier.KEYRING:
                 present = self._tier2 is not None and self._tier2.has(name)
 
@@ -358,15 +372,13 @@ class Keystore:
 
     def _save_metadata(self, data: dict[str, Any]) -> None:
         self._metadata_path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(self._metadata_path, 0o600)
-        except OSError:
-            pass
 
     def _register_metadata(self, *, name: str, tier: KeystoreTier) -> None:
         data = self._load_metadata()
         if name not in data:
-            from datetime import datetime, UTC
+            from datetime import UTC, datetime
 
             data[name] = {"tier": int(tier), "created_at": datetime.now(tz=UTC).isoformat()}
         else:

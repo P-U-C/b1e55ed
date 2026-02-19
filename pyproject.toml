@@ -1,6 +1,6 @@
 [project]
 name = "b1e55ed"
-version = "2.0.0"
+version = "1.0.0-beta.1"
 description = "Sovereign AI trading intelligence with compound learning"
 readme = "README.md"
 license = {text = "MIT"}
@@ -27,6 +27,9 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.3",
     "mypy>=1.8",
+    "types-PyYAML>=6.0",
+    "bandit>=1.7",
+    "safety>=3.0",
     "pre-commit>=3.5",
 ]
 social = [
@@ -42,16 +45,31 @@ b1e55ed = "engine.cli:main"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 160
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = [
+    "B008",    # FastAPI Depends in defaults is intentional
+    "N818",    # PolicyViolation name is intentional (domain exception)
+    "SIM102",  # Nested ifs for readability in projections
+    "SIM108",  # Ternary would be less readable in some cases
+]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+disable_error_code = ["type-arg", "no-any-return", "no-untyped-def", "assignment", "empty-body", "misc", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = "keyring.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = "no-redef"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

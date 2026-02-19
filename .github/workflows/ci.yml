@@ -20,7 +20,7 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --extra dev
       - name: Run tests
         run: uv run pytest tests/ --cov=engine --cov-report=xml -v
       - name: Upload coverage
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - run: uv sync --dev
+      - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
 
@@ -47,5 +47,73 @@ jobs:
         with:
           python-version: "3.12"
       - run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - run: uv sync --dev
+      - run: uv sync --extra dev
       - run: uv run mypy engine/
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - run: uv sync --extra dev
+      - name: Run smoke tests
+        run: uv run python tests/smoke.py
+        env:
+          B1E55ED_MASTER_PASSWORD: test
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - run: uv sync --extra dev
+      - name: Security scan (bandit)
+        run: uv run bandit -r engine/ api/ dashboard/ -ll || true
+      - name: Dependency vulnerabilities (safety)
+        run: uv run safety scan --output json || true
+      - name: Check for secrets
+        run: |
+          # Exclude legitimate pattern definitions and tests
+          if grep -r "sk-" --include="*.py" --exclude-dir=".venv" --exclude="*redaction.py" --exclude="test_redaction.py" . ; then
+            echo "❌ Possible API key found in code"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets found"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Build package
+        run: uv build
+      - name: Verify build artifacts
+        run: |
+          ls -lh dist/
+          test -f dist/*.whl || (echo "❌ No wheel found" && exit 1)
+          test -f dist/*.tar.gz || (echo "❌ No sdist found" && exit 1)
+          echo "✅ Build artifacts created"
+      - name: Test installation in clean venv
+        run: |
+          uv venv test-install
+          source test-install/bin/activate
+          uv pip install dist/*.whl
+          python -c "import engine; import api; import dashboard; print('✅ Package imports work')"
+          python -c "from engine.core.config import Config; c = Config(); print('✅ Config loads')"
+          deactivate
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 7

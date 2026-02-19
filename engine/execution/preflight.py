@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
+from engine.brain.kill_switch import KillSwitch
 from engine.core.policy import PolicyViolation, TradingPolicy, TradingPolicyEngine
 
 
@@ -64,11 +64,7 @@ class Preflight:
         details: dict[str, Any] = {"mode": m}
 
         # Kill switch gate (canonical source of truth)
-        level = (
-            int(kill_switch_level)
-            if kill_switch_level is not None
-            else int(self.kill_switch.level)
-        )
+        level = int(kill_switch_level) if kill_switch_level is not None else int(self.kill_switch.level)
         details["kill_switch_level"] = level
         try:
             self.policy.check_kill_switch(level=level)

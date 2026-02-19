@@ -28,9 +28,7 @@ class HLOrder:
 
 
 class HyperliquidApi(Protocol):
-    def place_order(
-        self, *, symbol: str, side: str, size: float, price: float | None = None
-    ) -> HLOrder: ...
+    def place_order(self, *, symbol: str, side: str, size: float, price: float | None = None) -> HLOrder: ...
 
     def cancel_order(self, *, order_id: str) -> bool: ...
 
@@ -43,9 +41,7 @@ class HyperliquidAdapter:
     def __init__(self, *, api: HyperliquidApi) -> None:
         self._api = api
 
-    def place(
-        self, *, symbol: str, side: str, size: float, price: float | None = None
-    ) -> HLOrder:
+    def place(self, *, symbol: str, side: str, size: float, price: float | None = None) -> HLOrder:
         sym = str(symbol).upper().strip()
         if side not in {"buy", "sell"}:
             raise ValueError("side must be 'buy' or 'sell'")
@@ -66,9 +62,7 @@ class InMemoryHyperliquidApi:
     def __init__(self) -> None:
         self._orders: dict[str, HLOrder] = {}
 
-    def place_order(
-        self, *, symbol: str, side: str, size: float, price: float | None = None
-    ) -> HLOrder:
+    def place_order(self, *, symbol: str, side: str, size: float, price: float | None = None) -> HLOrder:
         oid = str(uuid.uuid4())
         o = HLOrder(id=oid, symbol=symbol, side=side, size=float(size), price=price, status="open")
         self._orders[oid] = o

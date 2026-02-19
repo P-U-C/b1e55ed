@@ -7,12 +7,11 @@ from pathlib import Path
 from engine.brain.kill_switch import KillSwitch
 from engine.core.config import Config
 from engine.core.database import Database
+from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
 from engine.execution.karma import KarmaEngine
 from engine.execution.oms import OMS, default_sizer_from_config
 from engine.execution.paper import PaperBroker
-from engine.execution.position_sizer import CorrelationAwareSizer
-from engine.core.policy import TradingPolicyEngine
 from engine.execution.preflight import Preflight
 from engine.security.identity import generate_node_identity
 
@@ -32,6 +31,7 @@ def test_execution_pipeline_intent_to_karma(tmp_path: Path) -> None:
     ident = generate_node_identity()
     ks = KillSwitch(config=cfg, db=db)
     from engine.core.policy import TradingPolicy
+
     policy_engine = TradingPolicyEngine(policy=TradingPolicy())
 
     paper = PaperBroker(db=db)

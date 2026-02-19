@@ -1,0 +1,22 @@
+<div class="panel-header">
+  <span class="panel-title">Sentiment Map</span>
+  <span class="panel-age">{{ sentiment_age | default('—') }}</span>
+</div>
+{% if sentiments %}
+  {% for s in sentiments %}
+  <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+    <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.symbol }}</span>
+    <div class="conviction-bar" style="flex:1;">
+      <div class="conviction-bar-fill {{ 'long' if s.score > 0 else ('short' if s.score < 0 else 'neutral') }}"
+           style="width:{{ (s.score | abs * 50 + 50) | int }}%; margin-left:{{ (50 - s.score | abs * 50) | int if s.score < 0 else 50 }}%;"></div>
+    </div>
+    <span class="data-live" style="width:3rem; text-align:right; font-weight:400;">{{ '%+.1f' | format(s.score) }}</span>
+    <span style="width:5.5rem; font-size:0.7rem; color:var(--text-dim);">{{ s.label }}</span>
+  </div>
+  {% endfor %}
+  <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.75rem;">
+    Method: LLM scored · Sources: {{ sources_active }} active · Updated: {{ sentiment_age | default('—') }}
+  </div>
+{% else %}
+  <div class="empty-state">No sentiment data yet. Waiting for pipeline run.</div>
+{% endif %}

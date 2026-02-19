@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from engine.brain.orchestrator import BrainOrchestrator
 from engine.core.database import Database
 from engine.core.events import EventType

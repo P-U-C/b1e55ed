@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-
 import pytest
 
 from engine.execution.circuit_breaker import CircuitBreaker, CircuitBreakerError, TokenBucket
