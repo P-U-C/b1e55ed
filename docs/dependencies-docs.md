@@ -51,11 +51,12 @@ README.md
 **References:**
 ```
 README.md
-  ├→ docs/getting-started.md  (Installation → Getting Started)
-  ├→ docs/architecture.md     (Architecture → System Design)
-  ├→ docs/api-reference.md    (API → Full API Docs)
-  ├→ DOCKER.md                (Docker deployment)
-  └→ ROADMAP.md               (Roadmap)
+  ├→ docs/getting-started.md       (Installation → Getting Started)
+  ├→ docs/architecture.md          (Architecture → System Design)
+  ├→ docs/api-reference.md         (API → Full API Docs)
+  ├→ docs/openclaw-integration.md  (Operator Layer → Integration)
+  ├→ DOCKER.md                     (Docker deployment)
+  └→ ROADMAP.md                    (Roadmap)
 ```
 
 **Referenced by:**
@@ -464,6 +465,8 @@ done
 - ✅ `samples/socials/README.md`
 - ✅ `samples/tradfi/README.md`
 - ✅ `samples/onchain/README.md`
+
+- ✅ `docs/openclaw-integration.md`
 
 **Missing docs (future):**
 - ⬜ `docs/troubleshooting.md` (common issues + fixes)

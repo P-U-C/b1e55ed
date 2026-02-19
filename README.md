@@ -185,6 +185,30 @@ b1e55ed dashboard
 
 See **[Getting Started Guide](docs/getting-started.md)** for detailed setup.
 
+## Operator Layer
+
+b1e55ed is the engine. It doesn't handle conversation, curation, or chat — that's the operator layer.
+
+Designed to run under [OpenClaw](https://openclaw.ai) as a sovereign trading agent, but any system that speaks HTTP and emits JSON events can operate it. The integration surface is intentionally simple: REST API in, events out.
+
+**For humans:** Drop alpha in chat, get alerts on Telegram, control the system through natural language.
+
+**For agents:** POST structured signals to the curator API, subscribe to events, implement custom producers. Same auth, same schema, same event contract. Agents are first-class operators.
+
+```
+Operator (Human or Agent)
+    │
+    ├── Curate: POST /signals/curator    (intel in)
+    ├── Control: POST /brain/run         (trigger cycles)
+    ├── Monitor: GET /brain/status       (read state)
+    └── Override: POST /brain/kill-switch (emergency)
+    │
+    ▼
+b1e55ed Engine → Events → Alerts → Operator
+```
+
+The OpenClaw skill package (next phase) will make this a one-command install. See **[OpenClaw Integration](docs/openclaw-integration.md)** for the full architecture.
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) - Setup, concepts, troubleshooting
@@ -192,6 +216,7 @@ See **[Getting Started Guide](docs/getting-started.md)** for detailed setup.
 - [API Reference](docs/api-reference.md) - REST endpoints, examples
 - [Deployment](docs/deployment.md) - Production hosting, security
 - [Learning Loop](docs/learning-loop.md) - How weights auto-adjust
+- [OpenClaw Integration](docs/openclaw-integration.md) - Operator layer, agent-first design
 
 ## Architecture
 
