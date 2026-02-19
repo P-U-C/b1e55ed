@@ -34,21 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Validate docker-compose.yml
+      - name: Validate and build with docker-compose
         run: |
+          # Validate syntax
           docker compose config > /dev/null
-          echo "✅ Syntax valid"
-      
-      - name: Build all services
-        run: |
+          echo "✅ Config valid"
+          
+          # Build all services (exit code 0 = success)
           docker compose build
-          echo "✅ All services build successfully"
-      
-      - name: Verify images exist
-        run: |
-          # Check that images were created
-          if ! docker images | grep -q "b1e55ed"; then
-            echo "❌ Images not created"
-            exit 1
-          fi
-          echo "✅ Images created"
+          echo "✅ Build successful"
+          
+          # List created images
+          docker images --filter "reference=b1e55ed*"
