@@ -31,7 +31,6 @@ services:
 
   # Dashboard
   dashboard:
-    build: .
     image: b1e55ed:latest
     container_name: b1e55ed-dashboard
     command: b1e55ed dashboard --host 0.0.0.0 --port 5051
@@ -51,7 +50,6 @@ services:
 
   # Brain cycle (cron-like)
   brain:
-    build: .
     image: b1e55ed:latest
     container_name: b1e55ed-brain
     command: >
