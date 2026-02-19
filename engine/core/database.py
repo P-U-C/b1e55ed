@@ -328,6 +328,19 @@ CREATE TABLE IF NOT EXISTS pattern_matches (
     outcome_ts TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- ============================================================
+-- Webhook Subscriptions (outbound notifications)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    event_globs TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_enabled ON webhook_subscriptions(enabled);
 """
 
 
@@ -480,7 +493,7 @@ class Database:
                 raise EventStoreError(str(e)) from e
 
             self._last_hash = h
-            return Event(
+            ev = Event(
                 id=eid,
                 type=event_type,
                 ts=now,
@@ -493,6 +506,17 @@ class Database:
                 prev_hash=prev,
                 hash=h,
             )
+
+        # Side effects (best-effort): outbound webhooks.
+        try:
+            from engine.core.webhooks import dispatch_event_webhooks
+
+            dispatch_event_webhooks(self, ev)
+        except Exception:
+            # Never break event persistence on webhook failure.
+            pass
+
+        return ev
 
     def append_events_batch(
         self,

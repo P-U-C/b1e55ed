@@ -36,6 +36,7 @@ def test_cli_help_includes_subcommands(capsys: pytest.CaptureFixture[str]) -> No
     assert "signal" in out
     assert "alerts" in out
     assert "positions" in out
+    assert "webhooks" in out
     assert "kill-switch" in out
     assert "health" in out
     assert "api" in out
@@ -69,6 +70,7 @@ def test_cli_unknown_command_errors(capsys: pytest.CaptureFixture[str]) -> None:
         "signal",
         "alerts",
         "positions",
+        "webhooks",
         "kill-switch",
         "health",
         "api",
@@ -292,3 +294,24 @@ def test_cli_health_returns_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "ok" in payload
     assert "config" in payload
     assert "db" in payload
+
+
+def test_cli_webhooks_crud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    repo_root = _scaffold_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+
+    rc = main(["webhooks", "add", "http://example/hook", "--events", "signal.*"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "ok"
+    sub_id = int(out["id"])
+
+    rc = main(["webhooks", "list", "--json"])
+    assert rc == 0
+    subs = json.loads(capsys.readouterr().out)
+    assert any(int(s["id"]) == sub_id for s in subs)
+
+    rc = main(["webhooks", "remove", str(sub_id)])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "ok"
