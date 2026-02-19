@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 
 from api.deps import get_db
 from engine import __version__
@@ -13,8 +14,14 @@ from engine.core.database import Database
 router = APIRouter()
 
 
-@router.get("/health")
-def health(request: Request, db: Database = Depends(get_db)) -> dict:
+class HealthResponse(BaseModel):
+    version: str
+    uptime_seconds: float
+    db_size_bytes: int
+
+
+@router.get("/health", response_model=HealthResponse)
+def health(request: Request, db: Database = Depends(get_db)) -> HealthResponse:
     started_at = float(getattr(request.app.state, "started_at", time.monotonic()))
     uptime = time.monotonic() - started_at
 
@@ -26,8 +33,8 @@ def health(request: Request, db: Database = Depends(get_db)) -> dict:
         except OSError:
             db_size = 0
 
-    return {
-        "version": __version__,
-        "uptime_seconds": uptime,
-        "db_size_bytes": db_size,
-    }
+    return HealthResponse(
+        version=__version__,
+        uptime_seconds=uptime,
+        db_size_bytes=db_size,
+    )

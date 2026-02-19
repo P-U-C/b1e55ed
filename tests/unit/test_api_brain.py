@@ -19,18 +19,18 @@ async def test_brain_status_and_run(temp_dir, test_config, monkeypatch):
     headers = {"Authorization": "Bearer secret"}
 
     async with make_client(app) as ac:
-        r = await ac.get("/brain/status", headers=headers)
+        r = await ac.get("/api/v1/brain/status", headers=headers)
         assert r.status_code == 200
         js = r.json()
         assert "kill_switch_level" in js
 
-        r2 = await ac.post("/brain/run", headers=headers)
+        r2 = await ac.post("/api/v1/brain/run", headers=headers)
         assert r2.status_code == 200
         js2 = r2.json()
         assert js2["cycle_id"]
 
         # After run, status should have last_cycle_id
-        r3 = await ac.get("/brain/status", headers=headers)
+        r3 = await ac.get("/api/v1/brain/status", headers=headers)
         assert r3.status_code == 200
         js3 = r3.json()
         assert js3["last_cycle_id"] == js2["cycle_id"]

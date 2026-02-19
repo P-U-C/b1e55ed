@@ -19,7 +19,7 @@ async def test_producers_status(temp_dir, test_config):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/producers/status", headers=headers)
+        r = await ac.get("/api/v1/producers/status", headers=headers)
         assert r.status_code == 200
         js = r.json()
         assert "producers" in js

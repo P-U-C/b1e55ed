@@ -24,17 +24,17 @@ async def test_config_read_validate_save(temp_dir, test_config, monkeypatch):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/config", headers=headers)
+        r = await ac.get("/api/v1/config", headers=headers)
         assert r.status_code == 200
         js = r.json()
         assert js["preset"] == test_config.preset
 
-        r2 = await ac.post("/config/validate", headers=headers, json=js)
+        r2 = await ac.post("/api/v1/config/validate", headers=headers, json=js)
         assert r2.status_code == 200
         assert r2.json()["ok"] is True
 
         js["brain"]["cycle_interval_seconds"] = 123
-        r3 = await ac.post("/config", headers=headers, json=js)
+        r3 = await ac.post("/api/v1/config", headers=headers, json=js)
         assert r3.status_code == 200
         path = Path(r3.json()["path"])
         assert path.exists()

@@ -15,7 +15,7 @@ async def test_health_returns_version(temp_dir, test_config):
     app.state.db = Database(temp_dir / "brain.db")
 
     async with make_client(app) as ac:
-        r = await ac.get("/health")
+        r = await ac.get("/api/v1/health")
         assert r.status_code == 200
         data = r.json()
         assert data["version"] == __version__
