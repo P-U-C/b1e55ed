@@ -55,6 +55,7 @@ README.md
   ├→ docs/architecture.md          (Architecture → System Design)
   ├→ docs/api-reference.md         (API → Full API Docs)
   ├→ docs/openclaw-integration.md  (Operator Layer → Integration)
+  ├→ docs/OPERATOR_SPRINT_PLAN.md  (beta.2 → Operator Layer Plan)
   ├→ DOCKER.md                     (Docker deployment)
   └→ ROADMAP.md                    (Roadmap)
 ```

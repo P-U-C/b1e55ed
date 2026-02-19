@@ -217,6 +217,7 @@ The OpenClaw skill package (next phase) will make this a one-command install. Se
 - [Deployment](docs/deployment.md) - Production hosting, security
 - [Learning Loop](docs/learning-loop.md) - How weights auto-adjust
 - [OpenClaw Integration](docs/openclaw-integration.md) - Operator layer, agent-first design
+- [Operator Sprint Plan](docs/OPERATOR_SPRINT_PLAN.md) - beta.2 operator layer build plan (O1-O4)
 
 ## Architecture
 
