@@ -118,6 +118,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    p_webhooks = sub.add_parser("webhooks", help="Manage outbound webhook subscriptions")
+    wh_sub = p_webhooks.add_subparsers(dest="webhooks_cmd")
+
+    p_wh_add = wh_sub.add_parser("add", help="Add a webhook subscription")
+    p_wh_add.add_argument("url", help="Webhook URL")
+    p_wh_add.add_argument(
+        "--events",
+        required=True,
+        help='Comma-separated event globs, e.g. "alert.*,system.kill_switch.*"',
+    )
+
+    p_wh_list = wh_sub.add_parser("list", help="List webhook subscriptions")
+    p_wh_list.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_wh_remove = wh_sub.add_parser("remove", help="Remove a webhook subscription")
+    p_wh_remove.add_argument("id", type=int, help="Subscription id")
+
     p_ks = sub.add_parser("kill-switch", help="Show or set kill switch level")
     p_ks.add_argument(
         "--json",
@@ -500,6 +517,47 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    cmd = str(getattr(args, "webhooks_cmd", "") or "")
+    if cmd == "add":
+        url = str(args.url)
+        events = str(args.events)
+        sub_id = add_webhook_subscription(db, url=url, event_globs=events, enabled=True)
+        out = {"status": "ok", "id": sub_id, "url": url, "event_globs": events, "enabled": True}
+        print(_json_dumps(out))
+        return 0
+
+    if cmd == "list":
+        subs = list_webhook_subscriptions(db)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([s.__dict__ for s in subs]))
+            return 0
+
+        rows: list[list[str]] = []
+        for s in subs:
+            rows.append([str(s.id), "yes" if s.enabled else "no", s.event_globs, s.url])
+        if rows:
+            _print_table(["id", "enabled", "events", "url"], rows)
+        return 0
+
+    if cmd == "remove":
+        ok = remove_webhook_subscription(db, sub_id=int(args.id))
+        if not ok:
+            print(f"error: subscription not found: {args.id}", file=sys.stderr)
+            return 2
+        print(_json_dumps({"status": "ok", "id": int(args.id)}))
+        return 0
+
+    print("error: missing webhooks subcommand (add|list|remove)", file=sys.stderr)
+    return 2
+
+
 def _kill_switch_state(db) -> dict[str, object]:
     from engine.brain.kill_switch import LEVEL_MESSAGES, KillSwitchLevel
     from engine.core.events import EventType
@@ -811,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         "signal": _cmd_signal,
         "alerts": _cmd_alerts,
         "positions": _cmd_positions,
+        "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "keys": _cmd_keys,
