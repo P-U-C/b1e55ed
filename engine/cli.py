@@ -26,6 +26,21 @@ def _json_dumps(obj: object) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
 
+def _safe_int(v: object) -> int:
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    if isinstance(v, str):
+        try:
+            return int(v)
+        except ValueError:
+            return 0
+    return 0
+
+
 def _print_table(headers: list[str], rows: list[list[str]]) -> None:
     if not rows:
         return
@@ -295,7 +310,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
         from engine.core.client import DataClient
         from engine.core.metrics import REGISTRY
-        from engine.producers.base import ProducerContext
+        from engine.producers.base import BaseProducer, ProducerContext
         from engine.producers.registry import discover, get_producer, list_producers
 
         discover()
@@ -312,11 +327,25 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         logger = logging.getLogger("b1e55ed.producers")
         client = DataClient()
         pctx = ProducerContext(config=config, db=db, client=client, metrics=REGISTRY, logger=logger)
-        producer_results = []
+        producer_results: list[dict[str, object]] = []
         for n in names:
+            from typing import cast
+
             cls = get_producer(n)
-            res = cls(pctx).run()
-            producer_results.append({"name": n, **res.model_dump(mode="json")})
+            producer_cls = cast(type[BaseProducer], cls)
+            producer = producer_cls(pctx)
+            res = producer.run()
+            producer_results.append(
+                {
+                    "name": n,
+                    "events_published": res.events_published,
+                    "errors": list(res.errors),
+                    "duration_ms": res.duration_ms,
+                    "timestamp": res.timestamp.isoformat(),
+                    "staleness_ms": res.staleness_ms,
+                    "health": str(res.health),
+                }
+            )
 
         from engine.brain.orchestrator import BrainOrchestrator
 
@@ -398,7 +427,7 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
     if not syms:
         syms = ["GLOBAL"]
 
-    events = []
+    events: list[dict[str, object]] = []
     for sym in syms:
         payload_obj = CuratorSignalPayload(
             symbol=sym,
@@ -421,8 +450,16 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
         print(_json_dumps(out))
     else:
         print(f"signal ingested: {len(events)} event(s)")
+        from typing import cast
+
         for ev in events:
-            print(f"- {ev['id']} {ev['payload'].get('symbol')}")
+            d = cast(dict[str, object], ev)
+            ev_id = str(d.get("id", ""))
+            payload = d.get("payload")
+            sym = ""
+            if isinstance(payload, dict):
+                sym = str(payload.get("symbol", ""))
+            print(f"- {ev_id} {sym}")
     return 0
 
 
@@ -486,13 +523,13 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
         pnl = p["unrealized_pnl_usd"]
         table_rows.append(
             [
-                p["asset"],
-                p["direction"],
-                f"{p['entry_price']:.2f}",
-                f"{p['mark_price']:.2f}" if p["mark_price"] is not None else "-",
-                f"{p['size_notional']:.2f}",
+                str(p["asset"]),
+                str(p["direction"]),
+                f"{float(p['entry_price']):.2f}",
+                f"{float(p['mark_price']):.2f}" if p["mark_price"] is not None else "-",
+                f"{float(p['size_notional']):.2f}",
                 f"{pnl:+.2f}" if pnl is not None else "-",
-                p["id"][:8],
+                str(p["id"])[:8],
             ]
         )
 
@@ -509,7 +546,7 @@ def _kill_switch_state(db) -> dict[str, object]:
         return {"level": 0, "reason": LEVEL_MESSAGES.get(KillSwitchLevel.SAFE, "Normal operation."), "ts": None}
 
     ev = evs[0]
-    lvl = int(ev.payload.get("level") or 0)
+    lvl = _safe_int(ev.payload.get("level"))
     reason = str(ev.payload.get("reason") or "")
     return {"level": lvl, "reason": reason, "ts": ev.ts.isoformat()}
 
@@ -529,7 +566,7 @@ def _cmd_kill_switch(ctx: CliContext, args: argparse.Namespace) -> int:
         prev = _kill_switch_state(db)
         payload = {
             "level": lvl,
-            "previous_level": int(prev.get("level") or 0),
+            "previous_level": _safe_int(prev.get("level")),
             "reason": f"manual:{lvl}",
             "auto": False,
             "actor": "operator",
@@ -560,11 +597,11 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
 
     # Kill switch alert
     ks = _kill_switch_state(db)
-    if int(ks.get("level") or 0) > 0:
+    if _safe_int(ks.get("level")) > 0:
         alerts.append(
             {
                 "type": "kill_switch",
-                "severity": int(ks["level"]),
+                "severity": _safe_int(ks.get("level")),
                 "detail": ks.get("reason"),
                 "ts": ks.get("ts"),
             }
