@@ -31,6 +31,7 @@ info "Installing b1e55ed v${VERSION}..."
 
 # Detect OS
 if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
     . /etc/os-release
     OS=$ID
 else
@@ -101,9 +102,9 @@ sudo -u "$SERVICE_USER" bash -c "source /root/.cargo/env && uv sync"
 info "=== Configuration Setup ==="
 
 # Master password
-read -sp "Enter master password for identity encryption: " MASTER_PASSWORD
+read -rsp "Enter master password for identity encryption: " MASTER_PASSWORD
 echo
-read -sp "Confirm master password: " MASTER_PASSWORD_CONFIRM
+read -rsp "Confirm master password: " MASTER_PASSWORD_CONFIRM
 echo
 
 if [ "$MASTER_PASSWORD" != "$MASTER_PASSWORD_CONFIRM" ]; then
@@ -112,7 +113,7 @@ fi
 
 # Execution mode
 echo
-read -p "Execution mode (paper/live) [paper]: " EXEC_MODE
+read -rp "Execution mode (paper/live) [paper]: " EXEC_MODE
 EXEC_MODE=${EXEC_MODE:-paper}
 
 # Create .env file
@@ -127,10 +128,10 @@ chown "$SERVICE_USER:$SERVICE_USER" /etc/b1e55ed/.env
 
 # Optional API keys
 echo
-read -p "Do you have API keys to configure? (y/n) [n]: " CONFIGURE_KEYS
+read -rp "Do you have API keys to configure? (y/n) [n]: " CONFIGURE_KEYS
 if [[ "$CONFIGURE_KEYS" =~ ^[Yy]$ ]]; then
-    read -p "Allium API key (optional): " ALLIUM_KEY
-    read -p "Nansen API key (optional): " NANSEN_KEY
+    read -rp "Allium API key (optional): " ALLIUM_KEY
+    read -rp "Nansen API key (optional): " NANSEN_KEY
     
     if [ -n "$ALLIUM_KEY" ]; then
         echo "B1E55ED_ALLIUM_API_KEY=$ALLIUM_KEY" >> /etc/b1e55ed/.env
