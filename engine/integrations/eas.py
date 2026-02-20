@@ -25,7 +25,7 @@ ZERO_BYTES32 = "0x" + "00" * 32
 
 def _require_eth_account() -> None:
     try:
-        import eth_account  # type: ignore[import-not-found]  # noqa: F401
+        import eth_account  # noqa: F401
     except Exception as e:  # pragma: no cover
         raise RuntimeError("EAS support requires eth-account (install with: pip install b1e55ed[eas])") from e
 
@@ -50,7 +50,7 @@ def _norm_addr(v: str) -> str:
 
 def _keccak_bytes(data: bytes) -> bytes:
     try:
-        from eth_utils import keccak  # type: ignore[import-not-found]
+        from eth_utils.crypto import keccak
     except Exception as e:  # pragma: no cover
         raise RuntimeError("EAS support requires eth-utils") from e
     return keccak(data)
@@ -158,7 +158,7 @@ class EASClient:
             raise ValueError("attester private_key is required to create off-chain attestations")
 
         from eth_account import Account
-        from eth_account.messages import encode_typed_data  # type: ignore[import-not-found]
+        from eth_account.messages import encode_typed_data
 
         acct = Account.from_key(self._private_key)
         attester = str(acct.address).lower()

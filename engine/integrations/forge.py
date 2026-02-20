@@ -16,14 +16,14 @@ def _keccak256(data: bytes) -> bytes:
 
     # Note: Python's hashlib.sha3_256 is NOT keccak256.
     try:
-        from eth_account._utils.signing import keccak  # type: ignore[import-not-found]
+        from eth_utils.crypto import keccak
 
         return keccak(data)
     except Exception:
         pass
 
     try:
-        from Crypto.Hash import keccak as crypto_keccak  # type: ignore[import-not-found]
+        from Crypto.Hash import keccak as crypto_keccak
 
         k = crypto_keccak.new(digest_bits=256)
         k.update(data)
@@ -48,7 +48,7 @@ def grind(prefix: str = "b1e55ed", *, report_interval: float = 1.0) -> Generator
     """
 
     try:
-        from eth_account import Account  # type: ignore[import-not-found]
+        from eth_account import Account
     except Exception as e:
         raise ImportError("eth-account required for Python grinder. Install with: uv sync --extra eas") from e
 

@@ -49,7 +49,7 @@ def compute_schema_hash(schema: str) -> str:
     """
 
     try:
-        from eth_utils import keccak  # type: ignore[import-not-found]
+        from eth_utils.crypto import keccak
     except Exception as e:  # pragma: no cover
         raise RuntimeError("eth-utils is required for EAS schema hashing") from e
 

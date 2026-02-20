@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
@@ -1702,7 +1702,7 @@ def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
         pm = ProjectionManager()
         pm.rebuild(events)
         elapsed = time.monotonic() - t0
-        state = pm.get_state()
+        state: dict[str, Any] = pm.get_state()
 
         result = {
             "status": "ok",
@@ -1715,7 +1715,8 @@ def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
             print(_json_dumps(result))
         else:
             print(f"Replayed {len(events)} events in {elapsed:.3f}s")
-            for name, val in result["projections"].items():
+            projections = cast(dict[str, object], result["projections"])
+            for name, val in projections.items():
                 print(f"  {name}: {val} entries")
             print("Projections rebuilt successfully.")
     finally:
