@@ -32,7 +32,7 @@ def _keccak256(data: bytes) -> bytes:
         pass
 
     try:
-        import sha3  # type: ignore[import-not-found]
+        import sha3
 
         return sha3.keccak_256(data).digest()
     except Exception as e:
