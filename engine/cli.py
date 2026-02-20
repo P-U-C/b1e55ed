@@ -183,6 +183,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    # -- backtest --
+    p_backtest = sub.add_parser("backtest", help="Run backtests (walk-forward + stats)")
+    bt_sub = p_backtest.add_subparsers(dest="backtest_cmd")
+
+    p_bt_wf = bt_sub.add_parser("walkforward", help="Walk-forward backtest")
+    p_bt_wf.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_wf.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_wf.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_wf.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_wf.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_wf.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_wf.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_wf.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_wf.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_wf.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_wf.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_producers = sub.add_parser("producers", help="Register and manage producers")
     prod_sub = p_producers.add_subparsers(dest="producers_cmd")
 
@@ -1920,6 +1950,90 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
         db.close()
 
 
+def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.stats import benjamini_hochberg  # noqa: I001
+    from engine.backtest.stats import bootstrap_p_value_mean_gt_zero  # noqa: I001
+    from engine.backtest.strategies import BreakoutStrategy  # noqa: I001
+    from engine.backtest.strategies import CombinedStrategy  # noqa: I001
+    from engine.backtest.strategies import MACrossoverStrategy  # noqa: I001
+    from engine.backtest.strategies import MeanReversionStrategy  # noqa: I001
+    from engine.backtest.strategies import MomentumStrategy  # noqa: I001
+    from engine.backtest.strategies import RSIReversionStrategy  # noqa: I001
+    from engine.backtest.strategies import TrendFollowingStrategy  # noqa: I001
+    from engine.backtest.strategies import VolatilityFilterStrategy  # noqa: I001
+    from engine.backtest.walkforward import run_walkforward  # noqa: I001
+
+    cmd = str(getattr(args, "backtest_cmd", "") or "")
+    if cmd != "walkforward":
+        print("error: missing/unknown backtest subcommand (walkforward)", file=sys.stderr)
+        return 2
+
+    series = load_prices_csv(str(args.prices))
+
+    strat_name = str(args.strategy)
+    strat = {
+        "momentum": MomentumStrategy(),
+        "ma_crossover": MACrossoverStrategy(),
+        "rsi_reversion": RSIReversionStrategy(),
+        "breakout": BreakoutStrategy(),
+        "mean_reversion": MeanReversionStrategy(),
+        "trend_following": TrendFollowingStrategy(),
+        "volatility": VolatilityFilterStrategy(),
+        "combined": CombinedStrategy(),
+    }[strat_name]
+
+    wf = run_walkforward(
+        strategy=strat,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        train_size=int(args.train),
+        test_size=int(args.test),
+        step_size=int(args.step),
+        embargo=int(args.embargo),
+        cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+    )
+
+    tr = bootstrap_p_value_mean_gt_zero(wf.combined_oos_returns, n_boot=int(args.bootstrap), seed=int(args.seed))
+    fdr_mask = benjamini_hochberg([tr.p_value], q=float(args.q))
+    passed = bool(fdr_mask[0]) if fdr_mask else False
+
+    out = {
+        "strategy": strat_name,
+        "walkforward": {
+            "windows": [
+                {
+                    "train_start": int(w.train_start),
+                    "train_end": int(w.train_end),
+                    "test_start": int(w.test_start),
+                    "test_end": int(w.test_end),
+                }
+                for w in wf.windows
+            ],
+            "window_metrics": wf.window_metrics,
+            "oos": {
+                "total_return": float(wf.combined_oos_equity[-1] - 1.0) if wf.combined_oos_equity.size else 0.0,
+            },
+        },
+        "stats": {
+            "mean_return": float(tr.statistic),
+            "p_value": float(tr.p_value),
+            "bh_fdr_pass": passed,
+            "q": float(args.q),
+        },
+    }
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(_json_dumps(out))
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1983,6 +2097,7 @@ def main(argv: list[str] | None = None) -> int:
         "status": _cmd_status,
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,
+        "backtest": _cmd_backtest,
     }
 
     fn = dispatch.get(str(args.command))
