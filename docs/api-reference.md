@@ -1,548 +1,473 @@
 # API Reference
 
-REST API for b1e55ed trading intelligence system.
+REST API for b1e55ed.
 
 ## Base URL
 
-```
-http://localhost:5050
+```text
+http://localhost:5050/api/v1/
 ```
 
 ## Authentication
 
-Optional bearer token authentication:
+All endpoints except `GET /health` require a bearer token.
 
-```bash
-# Set in config
+b1e55ed refuses to start if `api.auth_token` is empty unless `B1E55ED_INSECURE_OK=1` is set.
+
+### Configure the token
+
+```yaml
+# config/user.yaml
 api:
   auth_token: "your-secret-token"
-
-# Or environment variable
-export B1E55ED_API__AUTH_TOKEN="your-secret-token"
-
-# Use in requests
-curl -H "Authorization: Bearer your-secret-token" http://localhost:5050/api/endpoint
 ```
 
-## Endpoints
+Or via environment variable:
 
-### Health
-
-#### GET `/health`
-
-System health check.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "uptime_seconds": 123.45,
-  "database": "connected",
-  "version": "1.0.0-beta.1"
-}
-```
-
-**Status Codes:**
-- `200` - System healthy
-- `503` - System degraded
-
----
-
-### Brain
-
-#### GET `/brain/status`
-
-Current brain state and last cycle results.
-
-**Response:**
-```json
-{
-  "last_cycle_at": "2026-02-18T23:00:00Z",
-  "regime": "EARLY_BULL",
-  "regime_changed_at": "2026-02-15T10:30:00Z",
-  "kill_switch_level": 0,
-  "kill_switch_changed_at": null,
-  "positions_open": 2,
-  "positions_closed_24h": 1
-}
-```
-
-#### POST `/brain/run`
-
-Trigger brain cycle manually (out-of-band from cron).
-
-**Response:**
-```json
-{
-  "cycle_id": "550e8400-e29b-41d4-a716-446655440000",
-  "started_at": "2026-02-18T23:00:00Z",
-  "completed_at": "2026-02-18T23:00:23Z",
-  "duration_ms": 23456,
-  "symbols_analyzed": ["BTC", "ETH", "SOL"],
-  "convictions_generated": 2,
-  "intents_created": 1
-}
-```
-
----
-
-### Signals
-
-#### GET `/signals`
-
-List recent signals from producers.
-
-**Query Parameters:**
-- `domain` (optional) - Filter by domain (technical, onchain, tradfi, social, events, curator)
-- `limit` (default: 100, max: 500) - Number of results
-- `offset` (default: 0) - Pagination offset
-
-**Response:**
-```json
-{
-  "total": 450,
-  "limit": 100,
-  "offset": 0,
-  "items": [
-    {
-      "id": "sig_123",
-      "type": "signal.ta.v1",
-      "symbol": "BTC",
-      "domain": "technical",
-      "score": 0.75,
-      "metadata": {
-        "rsi_14": 55.0,
-        "trend_strength": 0.8
-      },
-      "created_at": "2026-02-18T22:55:00Z",
-      "producer": "ta"
-    }
-  ]
-}
-```
-
-**Examples:**
 ```bash
-# All signals
-curl http://localhost:5050/signals
-
-# Only on-chain signals
-curl http://localhost:5050/signals?domain=onchain
-
-# Paginate
-curl http://localhost:5050/signals?limit=50&offset=100
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
 ```
 
----
+### Use the token
 
-### Positions
-
-#### GET `/positions`
-
-List open and recent closed positions.
-
-**Response:**
-```json
-{
-  "items": [
-    {
-      "id": "pos_abc123",
-      "platform": "hyperliquid",
-      "asset": "BTC",
-      "direction": "long",
-      "entry_price": 95000.0,
-      "current_price": 96500.0,
-      "size_notional": 1500.0,
-      "leverage": 2.0,
-      "pnl_usd": 23.68,
-      "pnl_pct": 0.0158,
-      "stop_loss": 93000.0,
-      "take_profit": 98000.0,
-      "opened_at": "2026-02-18T20:00:00Z",
-      "status": "open"
-    }
-  ]
-}
+```bash
+curl \
+  -H "Authorization: Bearer your-secret-token" \
+  http://localhost:5050/api/v1/brain/status
 ```
 
-#### GET `/positions/{position_id}`
+## Error format
 
-Get specific position details.
+When b1e55ed raises a structured API error, responses follow:
 
-**Response:**
 ```json
 {
-  "id": "pos_abc123",
-  "platform": "hyperliquid",
-  "asset": "BTC",
-  "direction": "long",
-  "entry_price": 95000.0,
-  "size_notional": 1500.0,
-  "leverage": 2.0,
-  "margin_type": "isolated",
-  "stop_loss": 93000.0,
-  "take_profit": 98000.0,
-  "opened_at": "2026-02-18T20:00:00Z",
-  "status": "open",
-  "conviction_score": 0.82,
-  "regime_at_entry": "EARLY_BULL"
-}
-```
-
----
-
-### Regime
-
-#### GET `/regime`
-
-Current market regime and recent changes.
-
-**Response:**
-```json
-{
-  "regime": "EARLY_BULL",
-  "regime_class": "bullish",
-  "changed_at": "2026-02-15T10:30:00Z",
-  "duration_hours": 80,
-  "confidence": 0.85,
-  "features": {
-    "btc_trend": 0.75,
-    "funding_rate": 0.012,
-    "fear_greed": 65,
-    "volatility": 0.35
+  "error": {
+    "code": "...",
+    "message": "..."
   }
 }
 ```
 
-**Regime Types:**
-- `EARLY_BULL` - Emerging uptrend
-- `BULL` - Confirmed bull market
-- `CHOP` - Sideways/ranging
-- `BEAR` - Downtrend
-- `CRISIS` - Extreme volatility/crash
+Notes:
+- Some endpoints may also return FastAPI `HTTPException` errors using `{"detail": "..."}`.
+- `code` values are stable identifiers intended for automation.
 
 ---
 
-### Producers
+## Health
 
-#### GET `/producers/status`
+### GET `/health`
 
-Health status of all signal producers.
+Liveness endpoint. Does not require authentication.
 
-**Response:**
+**Response** (`200`):
+```json
+{
+  "version": "1.0.0-beta.2",
+  "uptime_seconds": 12.34,
+  "db_size_bytes": 123456
+}
+```
+
+---
+
+## Brain
+
+### GET `/brain/status`
+
+Returns current brain state derived from events.
+
+**Response** (`200`):
+```json
+{
+  "regime": "EARLY_BULL",
+  "regime_changed_at": "2026-02-20T00:00:00+00:00",
+  "kill_switch_level": 0,
+  "kill_switch_reason": null,
+  "kill_switch_changed_at": null,
+  "last_cycle_id": "0b6dd0d9-2a21-4d3c-9fd0-7d7f7f6a7d50",
+  "last_cycle_at": "2026-02-20T00:30:00+00:00"
+}
+```
+
+**Errors**:
+- `401` `auth.missing_token|auth.invalid_header|auth.invalid_token`
+
+### POST `/brain/run`
+
+Runs one brain cycle synchronously.
+
+Kill switch gating:
+- If kill switch level is `> 0`, this endpoint is blocked.
+
+**Response** (`200`):
+```json
+{
+  "cycle_id": "0b6dd0d9-2a21-4d3c-9fd0-7d7f7f6a7d50",
+  "ts": "2026-02-20T00:30:00+00:00",
+  "intents": [],
+  "regime": "EARLY_BULL",
+  "kill_switch_level": 0
+}
+```
+
+**Errors**:
+- `401` `auth.*`
+- `423` `kill_switch.active` (includes `level`)
+
+---
+
+## Signals
+
+### GET `/signals`
+
+Lists recent signal events.
+
+**Query params**:
+- `domain` (optional): filters by `signal.<domain>.*`.
+- `limit` (default 100, max 500)
+- `offset` (default 0)
+
+**Response** (`200`):
+```json
+{
+  "items": [
+    {
+      "id": "1",
+      "type": "signal.ta.rsi.v1",
+      "ts": "2026-02-20T00:29:58+00:00",
+      "source": "producer.ta",
+      "payload": {
+        "symbol": "BTC",
+        "rsi_14": 52.1
+      }
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "total": 1
+}
+```
+
+**Errors**:
+- `401` `auth.*`
+
+### POST `/signals/submit`
+
+Submit a signal event with contributor attribution.
+
+This endpoint:
+- requires `event_type` to be `signal.*`
+- resolves the contributor by `node_id`
+- stores attribution in `contributor_signals`
+
+**Request**:
+```json
+{
+  "event_type": "signal.curator.v1",
+  "ts": "2026-02-20T00:29:58Z",
+  "node_id": "b1e55ed-deadbeef",
+  "source": "operator:telegram",
+  "payload": {
+    "symbol": "BTC",
+    "direction": "bullish",
+    "conviction": 7.0,
+    "rationale": "context"
+  }
+}
+```
+
+**Response** (`200`):
+```json
+{
+  "event_id": "123",
+  "contributor_id": "contrib_abc123"
+}
+```
+
+**Errors**:
+- `400` `signal.invalid_type`
+- `404` `contributor.not_found`
+- `401` `auth.*`
+
+---
+
+## Positions
+
+### GET `/positions`
+
+Lists positions.
+
+**Response** (`200`):
+```json
+[
+  {
+    "id": "pos_123",
+    "platform": "paper",
+    "asset": "BTC",
+    "direction": "long",
+    "entry_price": 95000.0,
+    "size_notional": 1000.0,
+    "leverage": 2.0,
+    "margin_type": "isolated",
+    "stop_loss": 93000.0,
+    "take_profit": 98000.0,
+    "opened_at": "2026-02-20T00:00:00+00:00",
+    "closed_at": null,
+    "status": "open",
+    "realized_pnl": null,
+    "conviction_id": 42,
+    "regime_at_entry": "EARLY_BULL",
+    "pcs_at_entry": 0.72,
+    "cts_at_entry": 0.12
+  }
+]
+```
+
+### GET `/positions/{position_id}`
+
+Returns a single position.
+
+**Errors**:
+- `404` `{"detail":"Position not found"}`
+- `401` `auth.*`
+
+---
+
+## Producers
+
+### GET `/producers/status`
+
+Returns health and last run metadata for known producers.
+
+**Response** (`200`):
 ```json
 {
   "producers": {
     "ta": {
       "name": "ta",
       "domain": "technical",
-      "schedule": "*/5 * * * *",
-      "last_run_at": "2026-02-18T22:55:00Z",
-      "last_success_at": "2026-02-18T22:55:00Z",
+      "schedule": "*/15 * * * *",
+      "endpoint": "http://...",
+      "healthy": true,
+      "last_run_at": "2026-02-20T00:00:00+00:00",
+      "last_success_at": "2026-02-20T00:00:00+00:00",
       "last_error": null,
       "consecutive_failures": 0,
-      "events_produced": 12450,
-      "avg_duration_ms": 250,
-      "expected_interval_ms": 300000,
-      "health": "healthy"
+      "events_produced": 0,
+      "avg_duration_ms": null,
+      "expected_interval_ms": null,
+      "updated_at": "2026-02-20T00:00:00+00:00"
     }
-  },
-  "summary": {
-    "total": 13,
-    "healthy": 12,
-    "degraded": 1,
-    "failing": 0
   }
 }
 ```
 
-**Health States:**
-- `healthy` - Normal operation
-- `degraded` - Some failures, still producing
-- `failing` - Multiple consecutive failures
+### GET `/producers/`
 
----
+Lists registered producers (database-backed registrations).
 
-### Config
-
-#### GET `/config`
-
-Current system configuration (secrets redacted).
-
-**Response:**
+**Response** (`200`):
 ```json
 {
-  "preset": "balanced",
-  "weights": {
-    "curator": 0.25,
-    "onchain": 0.25,
-    "tradfi": 0.20,
-    "social": 0.15,
-    "technical": 0.10,
-    "events": 0.05
-  },
-  "risk": {
-    "max_drawdown_pct": 0.30,
-    "max_daily_loss_usd": 240.0,
-    "max_position_size_pct": 0.15
-  },
-  "execution": {
-    "mode": "paper"
-  }
-}
-```
-
-#### POST `/config/validate`
-
-Validate config changes before applying.
-
-**Request:**
-```json
-{
-  "weights": {
-    "curator": 0.30,
-    "onchain": 0.25,
-    "tradfi": 0.20,
-    "social": 0.10,
-    "technical": 0.10,
-    "events": 0.05
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "valid": true,
-  "warnings": [],
-  "errors": []
-}
-```
-
-**Error Example:**
-```json
-{
-  "valid": false,
-  "errors": [
-    "Domain weights must sum to 1.0 (got 0.95)"
-  ]
-}
-```
-
----
-
-### Karma
-
-#### GET `/karma/treasury`
-
-Karma treasury status and pending intents.
-
-**Response:**
-```json
-{
-  "treasury_address": "0xb1e55ed...",
-  "percentage": 0.005,
-  "pending_intents": 3,
-  "pending_amount_usd": 12.50,
-  "lifetime_receipts": 8,
-  "lifetime_total_usd": 456.78
-}
-```
-
-#### GET `/karma/intents`
-
-List pending karma intents (profit-sharing obligations).
-
-**Response:**
-```json
-{
-  "items": [
+  "producers": [
     {
-      "id": "intent_123",
-      "position_id": "pos_abc",
-      "profit_usd": 500.0,
-      "karma_usd": 2.50,
-      "created_at": "2026-02-18T20:00:00Z",
-      "settled": false
+      "name": "example",
+      "domain": "onchain",
+      "endpoint": "https://...",
+      "schedule": "*/15 * * * *",
+      "registered_at": "2026-02-20T00:00:00+00:00"
     }
   ]
 }
 ```
 
-#### POST `/karma/settle`
+### POST `/producers/register`
 
-Settle pending intents (create on-chain transaction).
+Registers a producer record.
 
-**Request:**
+**Request**:
 ```json
 {
-  "intent_ids": ["intent_123", "intent_456"],
-  "tx_hash": "0xabc..." 
+  "name": "example",
+  "domain": "onchain",
+  "endpoint": "https://example.internal/poll",
+  "schedule": "*/15 * * * *"
 }
 ```
 
-**Response:**
+**Response** (`200`):
 ```json
 {
-  "receipt_id": "receipt_789",
-  "total_usd": 5.00,
-  "intents_settled": 2,
+  "name": "example",
+  "domain": "onchain",
+  "endpoint": "https://example.internal/poll",
+  "schedule": "*/15 * * * *",
+  "registered_at": "2026-02-20T00:00:00+00:00"
+}
+```
+
+**Errors**:
+- `409` `producer.duplicate`
+
+### DELETE `/producers/{name}`
+
+Deregisters a producer.
+
+**Response** (`200`):
+```json
+{"removed": "example"}
+```
+
+**Errors**:
+- `404` `producer.not_found`
+
+---
+
+## Contributors
+
+See also: [contributors.md](contributors.md).
+
+### GET `/contributors/`
+
+Lists contributors.
+
+### POST `/contributors/register`
+
+Registers a contributor.
+
+**Request**:
+```json
+{
+  "node_id": "b1e55ed-deadbeef",
+  "name": "local-operator",
+  "role": "operator",
+  "metadata": {
+    "public_key": "...",
+    "eas": {"uid": "0x..."}
+  }
+}
+```
+
+**Errors**:
+- `409` `contributor.duplicate`
+
+### GET `/contributors/{id}`
+
+Returns a contributor.
+
+**Errors**:
+- `404` `contributor.not_found`
+
+### DELETE `/contributors/{id}`
+
+Removes a contributor.
+
+**Errors**:
+- `404` `contributor.not_found`
+
+### GET `/contributors/{id}/score`
+
+Computes contributor score from attribution tables.
+
+**Errors**:
+- `404` `contributor.not_found`
+
+### GET `/contributors/leaderboard`
+
+Returns the top contributors.
+
+**Query params**:
+- `limit` (default 20)
+
+### GET `/contributors/attestations`
+
+Lists contributors with an EAS UID in metadata.
+
+### GET `/contributors/{id}/attestation`
+
+Returns the stored off-chain EAS attestation for a contributor.
+
+**Errors**:
+- `404` `contributor.attestation_not_found|contributor.not_found`
+
+---
+
+## Karma / Treasury
+
+### GET `/treasury`
+
+Returns karma state derived from config and DB.
+
+**Response** (`200`):
+```json
+{
+  "enabled": true,
+  "percentage": 0.005,
+  "treasury_address": "0x...",
+  "pending_intents": 0,
+  "receipts": 0
+}
+```
+
+### GET `/karma/intents`
+
+Lists pending karma intents.
+
+### POST `/karma/settle`
+
+Records settlement for a set of intents.
+
+**Request**:
+```json
+{
+  "intent_ids": ["1", "2"],
   "tx_hash": "0xabc..."
 }
 ```
 
+### GET `/karma/receipts`
+
+Lists settlement receipts.
+
 ---
 
-### Social
+## Regime
 
-#### GET `/social/sentiment`
+### GET `/regime`
 
-Current social sentiment signals.
+Returns current regime and last change timestamp.
 
-**Response:**
+**Response** (`200`):
 ```json
 {
-  "items": [
-    {
-      "symbol": "BTC",
-      "sentiment_score": 0.65,
-      "velocity": 0.82,
-      "sources": ["tiktok", "reddit"],
-      "updated_at": "2026-02-18T22:50:00Z"
-    }
-  ]
-}
-```
-
-#### GET `/social/alerts`
-
-Recent social alerts (viral content, contrarian signals).
-
-**Response:**
-```json
-{
-  "items": [
-    {
-      "type": "contrarian_signal",
-      "symbol": "SOL",
-      "message": "Extreme bearish sentiment (95% negative) → potential reversal",
-      "severity": "medium",
-      "created_at": "2026-02-18T22:45:00Z"
-    }
-  ]
+  "regime": "EARLY_BULL",
+  "changed_at": "2026-02-20T00:00:00+00:00",
+  "conditions": {}
 }
 ```
 
 ---
 
-## Error Responses
+## Config
 
-### 400 Bad Request
-```json
-{
-  "detail": "Invalid query parameter: domain must be one of [technical, onchain, tradfi, social, events, curator]"
-}
-```
+### GET `/config`
 
-### 401 Unauthorized
-```json
-{
-  "detail": "Invalid authorization header"
-}
-```
+Returns the current in-memory configuration.
 
-### 404 Not Found
-```json
-{
-  "detail": "Position pos_xyz not found"
-}
-```
+### POST `/config/validate`
 
-### 500 Internal Server Error
-```json
-{
-  "detail": "Database error: ..."
-}
-```
+Validates a config payload (does not persist).
 
-## Rate Limits
+### POST `/config`
 
-No rate limits on localhost. For production deployments, consider:
+Validates and writes `config/user.yaml`, and updates the in-process config.
 
-- 100 requests/min per IP (general)
-- 10 requests/min for `/brain/run` (expensive)
+---
 
-Implement via nginx:
+## Webhooks
 
-```nginx
-limit_req_zone $binary_remote_addr zone=api:10m rate=100r/m;
+Webhook subscriptions are implemented in the engine (`engine.core.webhooks`) and managed via the CLI.
 
-location /brain/run {
-    limit_req zone=api burst=5;
-}
-```
-
-## Webhook Support
-
-Coming in v1.1.0:
-- Register webhooks for events (position opened/closed, kill switch triggered)
-- Deliver via HTTP POST to configured endpoints
-
-## Client Libraries
-
-### Python
-
-```python
-import httpx
-
-class B1e55edClient:
-    def __init__(self, base_url="http://localhost:5050", token=None):
-        self.base_url = base_url
-        self.headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
-    def get_signals(self, domain=None, limit=100):
-        params = {"limit": limit}
-        if domain:
-            params["domain"] = domain
-        resp = httpx.get(f"{self.base_url}/signals", params=params, headers=self.headers)
-        return resp.json()
-    
-    def trigger_brain_cycle(self):
-        resp = httpx.post(f"{self.base_url}/brain/run", headers=self.headers)
-        return resp.json()
-
-# Usage
-client = B1e55edClient(token="your-token")
-signals = client.get_signals(domain="onchain")
-```
-
-### JavaScript
-
-```javascript
-class B1e55edClient {
-  constructor(baseUrl = 'http://localhost:5050', token = null) {
-    this.baseUrl = baseUrl;
-    this.headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-  }
-
-  async getSignals(domain = null, limit = 100) {
-    const params = new URLSearchParams({ limit });
-    if (domain) params.append('domain', domain);
-    
-    const resp = await fetch(`${this.baseUrl}/signals?${params}`, {
-      headers: this.headers
-    });
-    return resp.json();
-  }
-}
-
-// Usage
-const client = new B1e55edClient('http://localhost:5050', 'your-token');
-const signals = await client.getSignals('onchain');
-```
-
-## Next Steps
-
-- [Getting Started](getting-started.md) - Setup and run
-- [Configuration](configuration.md) - Configure API auth
-- [Deployment](deployment.md) - Production API hosting
+There are no REST endpoints for webhook subscription management in this version.
