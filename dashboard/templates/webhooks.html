@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Webhooks — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Active Webhooks -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">Active Webhooks</span>
+      <span class="panel-age">{{ webhooks | length if webhooks else 0 }}</span>
+    </div>
+
+    {% if webhooks %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name / URL</th>
+          <th>Events</th>
+          <th>Created</th>
+          <th>Last Delivery</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in webhooks %}
+        <tr>
+          <td>
+            <div class="text-bright" style="font-weight:400;">{{ w.name }}</div>
+            <div class="text-dim mono" style="font-size:0.75rem;">{{ w.url }}</div>
+          </td>
+          <td class="text-dim mono">{{ w.events }}</td>
+          <td class="text-dim">{{ w.created }}</td>
+          <td class="text-dim">{{ w.last_delivery }}</td>
+          <td class="text-dim">{{ w.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state">No webhooks registered. Use <span class="mono">b1e55ed webhooks add</span> to create one.</div>
+    {% endif %}
+  </div>
+
+  <!-- Recent Deliveries -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">Recent Deliveries</span>
+      <span class="panel-age">last {{ deliveries | length if deliveries else 0 }}</span>
+    </div>
+
+    {% if deliveries %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Webhook</th>
+          <th style="text-align:right;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in deliveries %}
+        <tr>
+          <td class="text-dim">{{ d.time }}</td>
+          <td class="text-dim mono">{{ d.webhook }}</td>
+          <td style="text-align:right;" class="text-dim">{{ d.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state">Delivery journaling not enabled.</div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+{% endblock %}

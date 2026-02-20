@@ -862,6 +862,21 @@ def signal_history_partial(request: Request, domain: str | None = None) -> HTMLR
     )
 
 
+# ---- Optional pages backed by local DB --------------------------------
+
+# These pages intentionally read from the local SQLite journal. They do not
+# require the API layer to be reachable.
+from dashboard.contributors import register as _register_contributors  # noqa: E402
+from dashboard.identity import register as _register_identity  # noqa: E402
+from dashboard.producers import register as _register_producers  # noqa: E402
+from dashboard.webhooks import register as _register_webhooks  # noqa: E402
+
+_register_contributors(app, templates)
+_register_identity(app, templates)
+_register_webhooks(app, templates)
+_register_producers(app, templates)
+
+
 if __name__ == "__main__":
     import uvicorn
 
