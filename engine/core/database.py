@@ -432,15 +432,127 @@ class Database:
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
+    # Well-known genesis prev_hash — prevents chain-splice attacks where
+    # any event could claim to be genesis by setting prev_hash=None.
+    GENESIS_PREV_HASH = "0" * 64
+
     def _get_last_hash(self) -> str | None:
         row = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
-        return None if row is None else str(row[0])
+        if row is None:
+            return self.GENESIS_PREV_HASH
+        return str(row[0])
 
     @staticmethod
     def _payload_hash(payload: dict[str, Any]) -> str:
         import hashlib
 
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+    def _append_event_inner(
+        self,
+        *,
+        event_type: EventType,
+        payload: dict[str, Any],
+        event_id: str | None = None,
+        observed_at: datetime | None = None,
+        source: str | None = None,
+        contributor_id: str | None = None,
+        trace_id: str | None = None,
+        schema_version: str = "v1",
+        dedupe_key: str | None = None,
+        ts: datetime | None = None,
+    ) -> Event:
+        """Core append logic. Caller must hold self._lock.
+
+        Does NOT open its own transaction — caller controls transaction boundary.
+        This enables atomic batch appends.
+        """
+
+        now = ts or datetime.now(tz=UTC)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+
+        payload_canon = json.loads(canonical_json(payload))
+        p_hash = self._payload_hash(payload_canon)
+
+        if dedupe_key is not None:
+            row = self.conn.execute(
+                "SELECT event_id, payload_hash FROM event_dedup WHERE dedupe_key = ?",
+                (dedupe_key,),
+            ).fetchone()
+            if row is not None:
+                if str(row[1]) != p_hash:
+                    raise DedupeConflictError(f"dedupe_key conflict for {dedupe_key}: payload changed")
+                existing = self.conn.execute(
+                    "SELECT * FROM events WHERE id = ?",
+                    (str(row[0]),),
+                ).fetchone()
+                if existing is None:
+                    raise EventStoreError("dedup index points to missing event")
+                return self._row_to_event(existing)
+
+        eid = event_id or str(uuid.uuid4())
+        prev = self._last_hash
+        h = compute_event_hash(
+            prev_hash=prev,
+            event_type=event_type,
+            payload=payload_canon,
+            ts=now,
+            source=source,
+            trace_id=trace_id,
+            schema_version=schema_version,
+            dedupe_key=dedupe_key,
+            event_id=eid,
+        )
+
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO events (
+                    id, type, ts, observed_at, source, contributor_id, trace_id, schema_version, dedupe_key,
+                    payload, prev_hash, hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    eid,
+                    str(event_type),
+                    _dt_to_iso(now),
+                    _dt_to_iso(observed_at),
+                    source,
+                    contributor_id,
+                    trace_id,
+                    schema_version,
+                    dedupe_key,
+                    canonical_json(payload_canon),
+                    prev,
+                    h,
+                ),
+            )
+            if dedupe_key is not None:
+                self.conn.execute(
+                    """
+                    INSERT INTO event_dedup (dedupe_key, event_id, payload_hash, created_at)
+                    VALUES (?, ?, ?, datetime('now'))
+                    """,
+                    (dedupe_key, eid, p_hash),
+                )
+        except sqlite3.IntegrityError as e:
+            raise EventStoreError(str(e)) from e
+
+        self._last_hash = h
+        return Event(
+            id=eid,
+            type=event_type,
+            ts=now,
+            observed_at=observed_at,
+            source=source,
+            trace_id=trace_id,
+            schema_version=schema_version,
+            dedupe_key=dedupe_key,
+            payload=payload_canon,
+            prev_hash=prev,
+            hash=h,
+        )
 
     def append_event(
         self,
@@ -465,92 +577,19 @@ class Database:
         """
 
         with self._lock:
-            now = ts or datetime.now(tz=UTC)
-            if now.tzinfo is None:
-                now = now.replace(tzinfo=UTC)
-
-            payload_canon = json.loads(canonical_json(payload))
-            p_hash = self._payload_hash(payload_canon)
-
-            if dedupe_key is not None:
-                row = self.conn.execute(
-                    "SELECT event_id, payload_hash FROM event_dedup WHERE dedupe_key = ?",
-                    (dedupe_key,),
-                ).fetchone()
-                if row is not None:
-                    if str(row[1]) != p_hash:
-                        raise DedupeConflictError(f"dedupe_key conflict for {dedupe_key}: payload changed")
-                    existing = self.conn.execute(
-                        "SELECT * FROM events WHERE id = ?",
-                        (str(row[0]),),
-                    ).fetchone()
-                    if existing is None:
-                        raise EventStoreError("dedup index points to missing event")
-                    return self._row_to_event(existing)
-
-            eid = event_id or str(uuid.uuid4())
-            prev = self._last_hash
-            h = compute_event_hash(
-                prev_hash=prev,
-                event_type=event_type,
-                payload=payload_canon,
-                ts=now,
-                source=source,
-                trace_id=trace_id,
-                schema_version=schema_version,
-                dedupe_key=dedupe_key,
-                event_id=eid,
-            )
-
-            try:
-                with self.conn:
-                    self.conn.execute(
-                        """
-                        INSERT INTO events (
-                            id, type, ts, observed_at, source, contributor_id, trace_id, schema_version, dedupe_key,
-                            payload, prev_hash, hash
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            eid,
-                            str(event_type),
-                            _dt_to_iso(now),
-                            _dt_to_iso(observed_at),
-                            source,
-                            contributor_id,
-                            trace_id,
-                            schema_version,
-                            dedupe_key,
-                            canonical_json(payload_canon),
-                            prev,
-                            h,
-                        ),
-                    )
-                    if dedupe_key is not None:
-                        self.conn.execute(
-                            """
-                            INSERT INTO event_dedup (dedupe_key, event_id, payload_hash, created_at)
-                            VALUES (?, ?, ?, datetime('now'))
-                            """,
-                            (dedupe_key, eid, p_hash),
-                        )
-            except sqlite3.IntegrityError as e:
-                raise EventStoreError(str(e)) from e
-
-            self._last_hash = h
-            ev = Event(
-                id=eid,
-                type=event_type,
-                ts=now,
-                observed_at=observed_at,
-                source=source,
-                trace_id=trace_id,
-                schema_version=schema_version,
-                dedupe_key=dedupe_key,
-                payload=payload_canon,
-                prev_hash=prev,
-                hash=h,
-            )
+            with self.conn:
+                ev = self._append_event_inner(
+                    event_type=event_type,
+                    payload=payload,
+                    event_id=event_id,
+                    observed_at=observed_at,
+                    source=source,
+                    contributor_id=contributor_id,
+                    trace_id=trace_id,
+                    schema_version=schema_version,
+                    dedupe_key=dedupe_key,
+                    ts=ts,
+                )
 
         # Side effects (best-effort): outbound webhooks.
         try:
@@ -571,13 +610,31 @@ class Database:
     ) -> list[Event]:
         """Append a batch of events atomically.
 
+        All events are inserted in a single transaction. If the process crashes
+        mid-batch, no partial chain is written — it's all or nothing.
+
         Input tuples: (event_type, payload, dedupe_key)
         """
 
+        event_list = list(events)
+        if not event_list:
+            return []
+
         out: list[Event] = []
         with self._lock:
-            for et, payload, dedupe_key in events:
-                out.append(self.append_event(event_type=et, payload=payload, dedupe_key=dedupe_key, source=source))
+            # Save state for rollback on failure.
+            saved_hash = self._last_hash
+            try:
+                with self.conn:
+                    for et, payload, dedupe_key in event_list:
+                        ev = self._append_event_inner(
+                            event_type=et, payload=payload, dedupe_key=dedupe_key, source=source,
+                        )
+                        out.append(ev)
+            except Exception:
+                # Restore cached hash on failure — the transaction rolled back.
+                self._last_hash = saved_hash
+                raise
         return out
 
     def get_events(
@@ -625,7 +682,7 @@ class Database:
             # For partial verification we trust the first row's prev_hash.
             prev = str(rows[0][3]) if rows[0][3] is not None else None
         else:
-            prev = None
+            prev = self.GENESIS_PREV_HASH
 
         for row in rows:
             et = EventType(str(row[1]))

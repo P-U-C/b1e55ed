@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hmac
+
 from fastapi import Depends, Header
 
 from api.deps import get_config
@@ -36,7 +38,7 @@ def require_bearer_token(
         )
 
     token = parts[1].strip()
-    if token != expected:
+    if not hmac.compare_digest(token, expected):
         raise B1e55edError(
             code="auth.invalid_token",
             message="Invalid bearer token",

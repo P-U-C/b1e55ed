@@ -85,7 +85,7 @@ class KillSwitchConfig(BaseModel):
 
 
 class KarmaConfig(BaseModel):
-    enabled: bool = True
+    enabled: bool = False
     percentage: float = 0.005
     settlement_mode: Literal["manual", "daily", "weekly", "threshold"] = "manual"
     threshold_usd: float = 50.0

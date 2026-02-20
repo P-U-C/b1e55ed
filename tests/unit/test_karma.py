@@ -20,7 +20,8 @@ def _cfg(tmp_path: Path) -> Config:
             "treasury_address": "0xPUC_TREASURY_PLACEHOLDER",
         }
     )
-    return c.model_copy(update={"data_dir": tmp_path / "data", "karma": karma})
+    execution = c.execution.model_copy(update={"mode": "live"})
+    return c.model_copy(update={"data_dir": tmp_path / "data", "karma": karma, "execution": execution})
 
 
 def test_intent_on_profit(tmp_path: Path) -> None:
