@@ -114,6 +114,16 @@ class DashboardConfig(BaseModel):
     auth_token: str = ""
 
 
+class EASConfig(BaseModel):
+    enabled: bool = False
+    rpc_url: str = "https://eth.llamarpc.com"  # Free public RPC
+    eas_contract: str = "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
+    schema_registry: str = "0xA7b39296258348C78294F95B872b282326A97BDF"
+    schema_uid: str = ""  # Set after schema registration
+    attester_private_key: str = ""  # Private key for signing attestations
+    mode: Literal["onchain", "offchain"] = "offchain"
+
+
 class Config(BaseSettings):
     """Root configuration. Single source of truth."""
 
@@ -135,6 +145,7 @@ class Config(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
+    eas: EASConfig = Field(default_factory=EASConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 

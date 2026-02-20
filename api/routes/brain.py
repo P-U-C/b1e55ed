@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 
 from api.auth import AuthDep
 from api.deps import get_config, get_db, get_kill_switch
+from api.errors import B1e55edError
 from api.schemas.brain import BrainStatus, CycleResult
 from engine.brain.kill_switch import KillSwitch
 from engine.brain.orchestrator import BrainOrchestrator
@@ -84,7 +85,16 @@ def status(
 def run_cycle(
     config: Config = Depends(get_config),
     db: Database = Depends(get_db),
+    ks: KillSwitch = Depends(get_kill_switch),
 ) -> CycleResult:
+    if int(ks.level) > 0:
+        raise B1e55edError(
+            code="kill_switch.active",
+            message="Kill switch is active",
+            status=423,
+            level=int(ks.level),
+        )
+
     # Create orchestrator with persisted identity (same as CLI for consistent audit trail)
     identity_handle = ensure_identity()
     orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)

@@ -33,19 +33,19 @@ async def test_treasury_and_karma_flows(temp_dir, test_config):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/treasury", headers=headers)
+        r = await ac.get("/api/v1/treasury", headers=headers)
         assert r.status_code == 200
         assert r.json()["pending_intents"] == 1
 
-        r2 = await ac.get("/karma/intents", headers=headers)
+        r2 = await ac.get("/api/v1/karma/intents", headers=headers)
         assert r2.status_code == 200
         assert len(r2.json()["items"]) == 1
 
         # Settle
-        r3 = await ac.post("/karma/settle", headers=headers, json={"intent_ids": [i1.id]})
+        r3 = await ac.post("/api/v1/karma/settle", headers=headers, json={"intent_ids": [i1.id]})
         assert r3.status_code == 200
 
-        r4 = await ac.get("/karma/receipts", headers=headers)
+        r4 = await ac.get("/api/v1/karma/receipts", headers=headers)
         assert r4.status_code == 200
         assert len(r4.json()["items"]) == 1
 

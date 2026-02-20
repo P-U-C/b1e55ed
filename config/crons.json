@@ -1,0 +1,7 @@
+[
+  { "name": "Brain Cycle", "schedule": "*/30 * * * *", "command": "b1e55ed brain" },
+  { "name": "Full Sweep", "schedule": "0 */6 * * *", "command": "b1e55ed brain --full" },
+  { "name": "Health Check", "schedule": "*/5 * * * *", "command": "b1e55ed health" },
+  { "name": "Morning Summary", "schedule": "0 13 * * *", "command": "b1e55ed status --json" },
+  { "name": "Evening Wrap", "schedule": "0 2 * * *", "command": "b1e55ed status --json" }
+]

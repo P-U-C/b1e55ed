@@ -21,7 +21,7 @@ async def test_regime_returns_current(temp_dir, test_config):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/regime", headers=headers)
+        r = await ac.get("/api/v1/regime", headers=headers)
         assert r.status_code == 200
         assert r.json()["regime"] == "RISK_ON"
 

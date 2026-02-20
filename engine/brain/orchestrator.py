@@ -108,6 +108,14 @@ class BrainOrchestrator:
                     ),
                 )
 
+                # Contributor attribution: mark signals that made it into synthesis as accepted.
+                if snap.source_event_ids:
+                    placeholders = ",".join(["?"] * len(snap.source_event_ids))
+                    self.db.conn.execute(
+                        f"UPDATE contributor_signals SET accepted = 1 WHERE event_id IN ({placeholders})",
+                        tuple(snap.source_event_ids),
+                    )
+
         # Regime from BTC when available, else transition.
         btc = synth_results.get("BTC")
         regime_res = self.regime.detect(as_of=now, btc_snapshot=(btc.snapshot if btc else None))

@@ -1,0 +1,31 @@
+{
+  "crons": [
+    {
+      "name": "b1e55ed Brain Cycle",
+      "schedule": {"kind": "every", "everyMs": 300000},
+      "payload": {
+        "kind": "systemEvent",
+        "text": "Run b1e55ed brain cycle: `cd /path/to/b1e55ed && uv run b1e55ed brain --json`"
+      },
+      "sessionTarget": "main"
+    },
+    {
+      "name": "b1e55ed Health Check",
+      "schedule": {"kind": "every", "everyMs": 3600000},
+      "payload": {
+        "kind": "systemEvent",
+        "text": "Check b1e55ed health: `cd /path/to/b1e55ed && uv run b1e55ed health --json`"
+      },
+      "sessionTarget": "main"
+    },
+    {
+      "name": "b1e55ed Position Monitor",
+      "schedule": {"kind": "every", "everyMs": 300000},
+      "payload": {
+        "kind": "systemEvent",
+        "text": "Check positions: `cd /path/to/b1e55ed && uv run b1e55ed positions --json`"
+      },
+      "sessionTarget": "main"
+    }
+  ]
+}
