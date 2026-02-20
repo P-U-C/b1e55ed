@@ -22,3 +22,15 @@ git diff --name-only | xargs -r git add
 # Final check — fail if unfixable issues remain
 $RUFF check . --quiet
 $RUFF format --check . --quiet
+
+# Typecheck (best-effort): fail commit if mypy fails.
+if [ -f ".venv/bin/mypy" ]; then
+    MYPY=".venv/bin/mypy"
+elif command -v mypy &>/dev/null; then
+    MYPY="mypy"
+else
+    echo "⚠️  mypy not found — skipping typecheck"
+    exit 0
+fi
+
+$MYPY engine/ --hide-error-context
