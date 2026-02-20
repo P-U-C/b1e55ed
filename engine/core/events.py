@@ -64,6 +64,7 @@ class EventType(StrEnum):
     KARMA_INTENT_V1 = "karma.intent.v1"
     KARMA_SETTLEMENT_V1 = "karma.settlement.v1"
     KARMA_RECEIPT_V1 = "karma.receipt.v1"
+    KARMA_WALLET_MIGRATION_V1 = "karma.wallet_migration.v1"
 
     # Learning
     LEARNING_OUTCOME_V1 = "learning.outcome.v1"
