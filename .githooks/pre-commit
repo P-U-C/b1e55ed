@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Auto-format and lint before commit. Fail if unfixable issues remain.
+set -e
+
+# Find the venv
+if [ -f ".venv/bin/ruff" ]; then
+    RUFF=".venv/bin/ruff"
+elif command -v ruff &>/dev/null; then
+    RUFF="ruff"
+else
+    echo "⚠️  ruff not found — skipping pre-commit lint"
+    exit 0
+fi
+
+# Auto-fix what we can
+$RUFF format . --quiet
+$RUFF check . --fix --quiet 2>/dev/null || true
+
+# Stage any auto-fixed files
+git diff --name-only | xargs -r git add
+
+# Final check — fail if unfixable issues remain
+$RUFF check . --quiet
+$RUFF format --check . --quiet
