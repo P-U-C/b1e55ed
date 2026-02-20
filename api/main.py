@@ -6,10 +6,41 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
+
+
+class IdentityGateMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Dev/test bypass
+        if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            return await call_next(request)
+
+        # Allow health/docs without identity (monitoring + introspection)
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+            return await call_next(request)
+
+        from pathlib import Path
+
+        from engine.core.identity_gate import load_identity
+
+        identity = load_identity(Path.cwd())
+        if identity is None:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "IDENTITY_REQUIRED",
+                        "message": "Forged identity required. Run `b1e55ed identity forge` to create one.",
+                    }
+                },
+            )
+
+        return await call_next(request)
 
 
 def create_app() -> FastAPI:
@@ -105,6 +136,9 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
+
+    # Identity gate: require forged identity for all endpoints (except health/docs)
+    app.add_middleware(IdentityGateMiddleware)
 
     # CORS: only enable if origins explicitly configured
     cors_origins = getattr(config.api, "cors_origins", [])

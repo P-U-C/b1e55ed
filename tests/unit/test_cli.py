@@ -24,6 +24,21 @@ def _scaffold_repo(tmp_path: Path) -> Path:
     (repo_root / "data").mkdir(parents=True, exist_ok=True)
     _ = Database(repo_root / "data" / "brain.db")
 
+    # Create fake forged identity so the identity gate doesn't block CLI tests.
+    identity_dir = repo_root / ".b1e55ed"
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    (identity_dir / "identity.json").write_text(
+        json.dumps(
+            {
+                "address": "0xb1e55ed0000000000000000000000000deadbeef",
+                "node_id": "eth:0xb1e55ed0000000000000000000000000deadbeef",
+                "forged_at": 1700000000,
+                "candidates_evaluated": 1,
+                "elapsed_ms": 1,
+            }
+        )
+    )
+
     return repo_root
 
 
