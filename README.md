@@ -218,6 +218,9 @@ The OpenClaw skill package (next phase) will make this a one-command install. Se
 - [Learning Loop](docs/learning-loop.md) - How weights auto-adjust
 - [OpenClaw Integration](docs/openclaw-integration.md) - Operator layer, agent-first design
 - [Operator Sprint Plan](docs/OPERATOR_SPRINT_PLAN.md) - beta.2 operator layer build plan (O1-O4)
+- [EAS Integration](docs/eas-integration.md) - Ethereum Attestation Service for contributor registry
+- [The Forge Spec](docs/FORGE_SPEC.md) - Identity derivation ritual specification
+- [Agent Producer Tutorial](docs/tutorial-agent-producer.md) - Build a signal producer for b1e55ed
 
 ## Architecture
 

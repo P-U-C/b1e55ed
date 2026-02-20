@@ -516,6 +516,13 @@ scripts/validate_doc_deps.sh
 
 ---
 
-*Auto-generated dependency graph: Run `scripts/generate_doc_dep_graph.sh` (when implemented)*
+### Additional Documentation
 
-*Last updated: 2026-02-19*
+| Document | Purpose |
+|----------|---------|
+| [eas-integration.md](eas-integration.md) | Ethereum Attestation Service setup and usage |
+| [FORGE_SPEC.md](FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
+| [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
+| [OPERATOR_SPRINT_PLAN.md](OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+
+*Last updated: 2026-02-20*
