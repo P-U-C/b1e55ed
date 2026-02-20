@@ -530,4 +530,6 @@ execution:
 
 ---
 
-*Last updated: 2026-02-19 (after security hardening commit da9f429)*
+*Last updated: 2026-02-20 (C1: crypto primitive unification)*
+
+> **Crypto primitives reference**: See [crypto-primitives.md](crypto-primitives.md) for the single source of truth on all cryptographic choices, migration plan, and threat model.
