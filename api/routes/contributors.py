@@ -61,7 +61,10 @@ class ContributorScoreResponse(BaseModel):
     signals_submitted: int
     signals_accepted: int
     signals_profitable: int
+    signals_resolved: int = 0
     hit_rate: float
+    acceptance_rate: float = 0.0
+    brier_score: float = 0.25
     avg_conviction: float
     total_karma_usd: float
     score: float
