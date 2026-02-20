@@ -170,7 +170,7 @@ class NodeIdentity:
         if blob.get("alg") != "ed25519":
             raise ValueError("Unsupported identity alg")
 
-        version = blob.get("version", 1)
+        _version = blob.get("version", 1)  # noqa: F841 — reserved for future migration
         eth_address = blob.get("eth_address", "")
         eth_private_key = ""
 
