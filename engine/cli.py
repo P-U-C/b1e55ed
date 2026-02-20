@@ -481,8 +481,50 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                     return None
             return None
 
+        from datetime import UTC, datetime, timedelta
+
+        def _parse_iso(ts: str | None) -> datetime | None:
+            if not ts:
+                return None
+            s = str(ts)
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            try:
+                return datetime.fromisoformat(s)
+            except Exception:
+                return None
+
+        def _is_quarantined(name: str) -> tuple[bool, str | None]:
+            row = db.conn.execute(
+                "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = ?",
+                (name,),
+            ).fetchone()
+            if row is None:
+                return False, None
+            until = str(row[0]) if row[0] is not None else None
+            reason = str(row[1]) if row[1] is not None else None
+            dt = _parse_iso(until)
+            if dt is None:
+                return False, None
+            return dt > datetime.now(tz=UTC), reason
+
         for n in names:
             from typing import cast
+
+            quarantined, q_reason = _is_quarantined(n)
+            if quarantined:
+                producer_results.append(
+                    {
+                        "name": n,
+                        "events_published": 0,
+                        "errors": [f"quarantined:{q_reason or 'unknown'}"],
+                        "duration_ms": 0,
+                        "timestamp": datetime.now(tz=UTC).isoformat(),
+                        "staleness_ms": None,
+                        "health": "quarantined",
+                    }
+                )
+                continue
 
             cls = get_producer(n)
             producer_cls = cast(type[BaseProducer], cls)
@@ -502,8 +544,9 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                     """
                     INSERT INTO producer_health (
                         name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
-                        consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                        consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms,
+                        quarantined_until, quarantined_reason, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, datetime('now'))
                     ON CONFLICT(name) DO UPDATE SET
                         domain=excluded.domain,
                         schedule=excluded.schedule,
@@ -535,6 +578,27 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                         1 if success else 0,
                     ),
                 )
+
+                # Auto-quarantine after repeated failures (PH1b)
+                row = db.conn.execute(
+                    "SELECT consecutive_failures FROM producer_health WHERE name = ?",
+                    (n,),
+                ).fetchone()
+                failures = int(row[0] or 0) if row else 0
+                if not success and failures >= 5:
+                    until = datetime.now(tz=UTC) + timedelta(hours=1)
+                    db.conn.execute(
+                        "UPDATE producer_health SET quarantined_until = ?, quarantined_reason = ? WHERE name = ?",
+                        (until.isoformat(), "consecutive_failures", n),
+                    )
+                    db.conn.execute(
+                        "INSERT INTO audit_log (action, actor, details, ts) VALUES (?, ?, ?, datetime('now'))",
+                        (
+                            "producer.quarantined",
+                            "system",
+                            f"{n} quarantined for consecutive_failures",
+                        ),
+                    )
 
             producer_results.append(
                 {
@@ -797,10 +861,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
 
     def ensure_endpoint_column(db: Database) -> None:
         cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
-        if "endpoint" in cols:
-            return
         with db.conn:
-            db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+            if "endpoint" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+            if "quarantined_until" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+            if "quarantined_reason" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
     repo_root = ctx.repo_root
     db = Database(repo_root / "data" / "brain.db")

@@ -251,6 +251,8 @@ CREATE TABLE IF NOT EXISTS producer_health (
     events_produced INTEGER DEFAULT 0,
     avg_duration_ms REAL,
     expected_interval_ms INTEGER,
+    quarantined_until TEXT,
+    quarantined_reason TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
