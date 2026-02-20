@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Producers — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Registered Producers -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">Registered Producers</span>
+      <span class="panel-age">{{ producers | length if producers else 0 }}</span>
+    </div>
+
+    {% if producers %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Domain</th>
+          <th>Endpoint</th>
+          <th>Schedule</th>
+          <th>Last Run</th>
+          <th>Status</th>
+          <th style="text-align:right;">Events Produced</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in producers %}
+        <tr class="{% if p.last_run == '—' %}text-dim{% endif %}">
+          <td class="text-bright" style="font-weight:400;">{{ p.name }}</td>
+          <td class="text-dim">{{ p.domain }}</td>
+          <td class="text-dim mono" style="font-size:0.75rem;">{{ p.endpoint }}</td>
+          <td class="text-dim mono">{{ p.schedule }}</td>
+          <td class="text-dim">{{ p.last_run }}</td>
+          <td>
+            {% if p.healthy is none %}
+              <span class="text-dim">unknown</span>
+            {% elif p.healthy %}
+              <span class="text-bull">healthy</span>
+            {% else %}
+              <span class="text-bear">unhealthy</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;" class="data-live">{{ p.events_produced }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state">No producers registered.</div>
+    {% endif %}
+  </div>
+
+  <!-- Registration -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">Registration</span>
+    </div>
+
+    <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+        <label class="text-dim" for="name">Name</label>
+        <input class="input" id="name" name="name" placeholder="producer-name" required>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+        <label class="text-dim" for="domain">Domain</label>
+        <select class="input" id="domain" name="domain" required>
+          {% for d in domains %}
+            <option value="{{ d }}">{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+        <label class="text-dim" for="endpoint">Endpoint URL</label>
+        <input class="input" id="endpoint" name="endpoint" placeholder="http://127.0.0.1:8000/signals" required>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+        <label class="text-dim" for="schedule">Schedule</label>
+        <input class="input" id="schedule" name="schedule" value="*/15 * * * *" required>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:0.75rem;">
+        <button class="btn" type="submit">Register</button>
+        {% if form_result %}
+          <span class="{% if form_result.ok %}text-bull{% else %}text-warn{% endif %}" style="font-size:0.75rem;">{{ form_result.message }}</span>
+        {% endif %}
+      </div>
+    </form>
+
+  </div>
+
+</div>
+
+{% endblock %}
