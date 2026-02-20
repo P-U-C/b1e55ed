@@ -31,6 +31,65 @@ class RateLimitResult:
     retry_after_seconds: int = 0
 
 
+class ApiRateLimiter:
+    """DB-backed API rate limiter (SEC1).
+
+    Keyed by a string (e.g. token hash, IP). Uses a fixed window.
+    """
+
+    def __init__(
+        self,
+        db: Database,
+        *,
+        window_seconds: int = 60,
+        max_requests: int = 120,
+    ):
+        self._db = db
+        self.window_seconds = int(window_seconds)
+        self.max_requests = int(max_requests)
+
+    def allow(self, *, key: str) -> tuple[bool, int]:
+        """Return (allowed, retry_after_seconds)."""
+        from time import time as _time
+
+        now = int(_time())
+        window_start = now - (now % self.window_seconds)
+
+        with self._db.conn:
+            row = self._db.conn.execute(
+                """
+                SELECT count FROM api_rate_limits
+                WHERE key = ? AND window_start = ? AND window_seconds = ?
+                """,
+                (key, window_start, self.window_seconds),
+            ).fetchone()
+
+            if row is None:
+                self._db.conn.execute(
+                    """
+                    INSERT INTO api_rate_limits (key, window_start, window_seconds, count, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                    """,
+                    (key, window_start, self.window_seconds, 1),
+                )
+                return True, 0
+
+            count = int(row[0] or 0)
+            if count >= self.max_requests:
+                retry_after = max(1, (window_start + self.window_seconds) - now)
+                return False, retry_after
+
+            self._db.conn.execute(
+                """
+                UPDATE api_rate_limits
+                SET count = count + 1, updated_at = datetime('now')
+                WHERE key = ? AND window_start = ? AND window_seconds = ?
+                """,
+                (key, window_start, self.window_seconds),
+            )
+            return True, 0
+
+
 class SignalRateLimiter:
     """Rate limiting and anti-spam for signal submissions."""
 

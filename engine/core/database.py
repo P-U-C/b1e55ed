@@ -293,6 +293,20 @@ CREATE TABLE IF NOT EXISTS producer_scores (
 CREATE INDEX IF NOT EXISTS idx_producer_scores_producer ON producer_scores(producer);
 
 -- ============================================================
+-- API Rate Limiting (SEC1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS api_rate_limits (
+    key TEXT NOT NULL,
+    window_start INTEGER NOT NULL,
+    window_seconds INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (key, window_start, window_seconds)
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_rate_limits_key ON api_rate_limits(key);
+
+-- ============================================================
 -- Risk Triggers (audit)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS risk_triggers (

@@ -12,6 +12,45 @@ from starlette.responses import JSONResponse
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
+from engine.core.rate_limiter import ApiRateLimiter
+
+
+class ApiRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Allow health/docs without rate limiting
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+            return await call_next(request)
+
+        # Key by bearer token if present, else by client IP.
+        auth = request.headers.get("authorization") or ""
+        key = "ip:" + (request.client.host if request.client else "unknown")
+        if auth.lower().startswith("bearer "):
+            # Avoid storing raw token; use a stable hash.
+            import hashlib
+
+            tok = auth.split(" ", 1)[1].strip().encode("utf-8")
+            key = "token:" + hashlib.sha256(tok).hexdigest()
+
+        db = getattr(request.app.state, "db", None)
+        if db is None:
+            return await call_next(request)
+
+        limiter = ApiRateLimiter(db, window_seconds=60, max_requests=240)
+        allowed, retry_after = limiter.allow(key=key)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "rate_limited",
+                        "message": "Rate limit exceeded",
+                        "retry_after": retry_after,
+                    }
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        return await call_next(request)
 
 
 class IdentityGateMiddleware(BaseHTTPMiddleware):
@@ -136,6 +175,9 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
+
+    # API rate limiting (SEC1)
+    app.add_middleware(ApiRateLimitMiddleware)
 
     # Identity gate: require forged identity for all endpoints (except health/docs)
     app.add_middleware(IdentityGateMiddleware)
