@@ -10,6 +10,7 @@ from api.auth import AuthDep
 from api.deps import get_db, get_registry
 from api.errors import B1e55edError
 from engine.core.database import Database
+from engine.security.ssrf import check_url
 
 router = APIRouter(prefix="/producers", dependencies=[AuthDep])
 
@@ -131,6 +132,16 @@ def producer_status(
 @router.post("/register", response_model=ProducerResponse)
 def register_producer(reg: ProducerRegistration, db: Database = Depends(get_db)) -> ProducerResponse:
     _ensure_endpoint_column(db)
+
+    # SSRF protection (PH1)
+    url_check = check_url(reg.endpoint)
+    if not url_check.allowed:
+        raise B1e55edError(
+            code="producer.endpoint_blocked",
+            message=f"Endpoint blocked: {url_check.reason}",
+            status=400,
+            endpoint=reg.endpoint,
+        )
 
     now = datetime.now(tz=UTC).isoformat()
 

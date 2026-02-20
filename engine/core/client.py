@@ -17,6 +17,8 @@ from typing import Any
 
 import httpx
 
+from engine.security.ssrf import check_url
+
 
 @dataclass(frozen=True, slots=True)
 class ClientConfig:
@@ -92,6 +94,10 @@ class DataClient:
         await self._client.aclose()
 
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        check = check_url(url)
+        if not check.allowed:
+            raise httpx.UnsupportedProtocol(f"blocked_url ({check.reason})")
+
         if not self._breaker.allow():
             raise httpx.TransportError("circuit breaker open")
 
