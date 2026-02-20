@@ -19,6 +19,7 @@ README.md
   → docs/api-reference.md
   → docs/contributors.md
   → docs/architecture.md
+  → docs/authority-model.md
   → docs/eas-integration.md
   → docs/security.md
   → docs/deployment.md
@@ -80,6 +81,7 @@ configuration.md
 ```text
 architecture.md
   → api-reference.md
+  → authority-model.md
   → contributors.md
   → eas-integration.md
   → dependencies-code.md
@@ -97,6 +99,7 @@ eas-integration.md
 ```text
 security.md
   → configuration.md
+  → crypto-primitives.md
   → deployment.md
 ```
 
@@ -115,7 +118,6 @@ dependencies-code.md
   → architecture.md
 ```
 
-<<<<<<< HEAD
 **Referenced by:**
 - architecture.md
 - developers.md
