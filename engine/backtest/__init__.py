@@ -1,6 +1,7 @@
-"""b1e55ed package boundary.
+"""engine.backtest
 
-0xb1e55ed = "blessed". The name is the first easter egg.
+Backtest engine (B1).
 
-A grimoire is not a textbook. It is a book of names, invocations, and hard-won procedures.
+B1a implements a minimal simulator + metrics. B1b will implement the full
+strategy library + walk-forward validation + FDR correction.
 """
