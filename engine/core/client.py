@@ -90,6 +90,21 @@ class DataClient:
         )
         self._client = httpx.AsyncClient(timeout=self.config.timeout_s)
 
+    @staticmethod
+    def _enforce_max_bytes(resp: httpx.Response, *, max_bytes: int) -> None:
+        # httpx responses may not have content read yet; caller should ensure it's loaded.
+        try:
+            size = len(resp.content)
+        except Exception:
+            return
+        if size > int(max_bytes):
+            raise httpx.TransportError(f"response_too_large:{size}")
+
+    @staticmethod
+    def _enforce_max_items(data: Any, *, max_items: int) -> None:
+        if isinstance(data, list) and len(data) > int(max_items):
+            raise httpx.TransportError(f"response_too_many_items:{len(data)}")
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -108,9 +123,11 @@ class DataClient:
             try:
                 resp = await self._client.request(method, url, **kwargs)
                 resp.raise_for_status()
+                # ensure content is read (bounded by httpx in-memory, but we enforce our own cap)
+                await resp.aread()
                 self._breaker.on_success()
                 return resp
-            except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError) as e:
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError, httpx.TransportError) as e:
                 last_exc = e
                 self._breaker.on_failure()
                 if attempt >= self.config.max_retries:
@@ -119,3 +136,27 @@ class DataClient:
 
         assert last_exc is not None
         raise last_exc
+
+    async def request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        expected: type | tuple[type, ...] | None = None,
+        max_bytes: int = 512 * 1024,
+        max_items: int = 5000,
+        **kwargs: Any,
+    ) -> Any:
+        """Request and parse JSON with basic safety caps.
+
+        - max_bytes: hard cap on response body
+        - max_items: hard cap on list length
+        """
+
+        resp = await self.request(method, url, **kwargs)
+        self._enforce_max_bytes(resp, max_bytes=max_bytes)
+        data: Any = resp.json()
+        if expected is not None and not isinstance(data, expected):
+            raise httpx.TransportError("response_schema_mismatch")
+        self._enforce_max_items(data, max_items=max_items)
+        return data

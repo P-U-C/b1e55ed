@@ -42,9 +42,7 @@ class StablecoinSupplyProducer(BaseProducer):
             self.ctx.logger.warning("stablecoin_supply_endpoint_missing")
             return []
 
-        resp = asyncio.run(self.ctx.client.request("GET", url))
-
-        data: Any = resp.json()
+        data: Any = asyncio.run(self.ctx.client.request_json("GET", url, expected=(list, dict)))
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
         if not isinstance(data, list):
