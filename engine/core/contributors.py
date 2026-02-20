@@ -21,8 +21,9 @@ class Contributor:
 
 
 class ContributorRegistry:
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, *, eas_client: object | None = None):
         self._db = db
+        self._eas = eas_client
 
     @staticmethod
     def _row_to_contributor(row: sqlite3.Row) -> Contributor:
@@ -41,10 +42,52 @@ class ContributorRegistry:
             metadata=meta,
         )
 
-    def register(self, *, node_id: str, name: str, role: str, metadata: dict | None = None) -> Contributor:
+    def register(
+        self,
+        *,
+        node_id: str,
+        name: str,
+        role: str,
+        metadata: dict | None = None,
+        attest: bool = False,
+    ) -> Contributor:
         contributor_id = str(uuid.uuid4())
         now = datetime.now(tz=UTC).isoformat()
-        meta = metadata or {}
+        meta: dict[str, Any] = dict(metadata or {})
+
+        # Optional EAS off-chain attestation (best-effort, fail-open).
+        if attest and self._eas is not None:
+            try:
+                import time
+
+                from engine.integrations.eas import AttestationData
+
+                schema_uid = ""
+                # Prefer caller-supplied override (useful for tests / migrations).
+                eas_meta = meta.get("eas")
+                if isinstance(eas_meta, dict):
+                    schema_uid = str(eas_meta.get("schema_uid") or "")
+
+                att_obj = self._eas.create_offchain_attestation(  # type: ignore[attr-defined]
+                    AttestationData(
+                        schema_uid=schema_uid or "0x" + "00" * 32,
+                        recipient="0x0000000000000000000000000000000000000000",
+                        data={
+                            "nodeId": node_id,
+                            "name": name,
+                            "role": role,
+                            "version": "1.0.0-beta.2",
+                            "registeredAt": int(time.time()),
+                        },
+                    )
+                )
+
+                meta.setdefault("eas", {})
+                if isinstance(meta["eas"], dict):
+                    meta["eas"]["uid"] = str(att_obj.get("uid") or "")
+                    meta["eas"]["attestation"] = att_obj
+            except Exception:
+                pass
 
         try:
             with self._db.conn:

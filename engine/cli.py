@@ -19,6 +19,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from engine.core.config import Config
+    from engine.core.contributors import ContributorRegistry
+    from engine.core.database import Database
+
 
 EPILOG = "The code remembers. The hex is blessed: 0xb1e55ed."
 
@@ -189,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_contrib_reg.add_argument("--name", required=True)
     p_contrib_reg.add_argument("--role", required=True, choices=["operator", "agent", "tester", "curator"])
     p_contrib_reg.add_argument("--node-id", default=None)
+    p_contrib_reg.add_argument(
+        "--attest",
+        action="store_true",
+        help="Create an off-chain EAS attestation (requires eas.enabled + eas.attester_private_key).",
+    )
 
     p_contrib_rm = contrib_sub.add_parser("remove", help="Remove a contributor")
     p_contrib_rm.add_argument("--id", required=True)
@@ -265,6 +277,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash = sub.add_parser("dashboard", help="Start dashboard server")
     p_dash.add_argument("--host", default=None)
     p_dash.add_argument("--port", type=int, default=None)
+
+    p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
+    eas_sub = p_eas.add_subparsers(dest="eas_cmd")
+
+    p_eas_status = eas_sub.add_parser("status", help="Show EAS config and schema status")
+    p_eas_status.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_eas_verify = eas_sub.add_parser("verify", help="Verify an off-chain attestation by UID")
+    p_eas_verify.add_argument("--uid", required=True, help="Attestation UID")
+    p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     sub.add_parser("status", help="Print system status")
 
@@ -766,7 +788,7 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
-    from engine.core.contributors import ContributorRegistry
+    from engine.core.config import Config
     from engine.core.database import Database
     from engine.core.scoring import ContributorScoring
     from engine.security.identity import ensure_identity
@@ -774,9 +796,12 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
     repo_root = ctx.repo_root
     db = Database(repo_root / "data" / "brain.db")
 
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
     cmd = str(getattr(args, "contributors_cmd", "") or "")
 
-    reg = ContributorRegistry(db)
+    reg = _build_contributor_registry_with_eas(db=db, config=config)
     scoring = ContributorScoring(db)
 
     if cmd == "list":
@@ -799,7 +824,18 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
             node_id = ident.node_id
 
         try:
-            c = reg.register(node_id=node_id, name=str(args.name), role=str(args.role), metadata={})
+            meta: dict[str, object] = {}
+            # Pass schema_uid into metadata so ContributorRegistry can include it in the signed payload.
+            if bool(getattr(args, "attest", False)) and bool(config.eas.schema_uid):
+                meta["eas"] = {"schema_uid": str(config.eas.schema_uid)}
+
+            c = reg.register(
+                node_id=node_id,
+                name=str(args.name),
+                role=str(args.role),
+                metadata=meta,
+                attest=bool(getattr(args, "attest", False)),
+            )
         except ValueError:
             print(f"error: contributor already exists for node_id: {node_id}", file=sys.stderr)
             return 2
@@ -852,6 +888,115 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
 
     print("error: missing contributors subcommand (list|register|remove|score|leaderboard)", file=sys.stderr)
     return 2
+
+
+def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.config import Config
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
+    cmd = str(getattr(args, "eas_cmd", "") or "")
+    if not cmd:
+        print("error: missing eas subcommand (status|verify)", file=sys.stderr)
+        return 2
+
+    if cmd == "status":
+        from engine.integrations.eas_schema import CONTRIBUTOR_SCHEMA, EXPECTED_SCHEMA_HASH
+
+        pk_present = bool(str(config.eas.attester_private_key or "").strip())
+        out = {
+            "enabled": bool(config.eas.enabled),
+            "mode": str(config.eas.mode),
+            "rpc_url": str(config.eas.rpc_url),
+            "eas_contract": str(config.eas.eas_contract),
+            "schema_registry": str(config.eas.schema_registry),
+            "schema_uid": str(config.eas.schema_uid),
+            "attester_private_key_present": pk_present,
+            "schema": {"string": CONTRIBUTOR_SCHEMA, "expected_hash": EXPECTED_SCHEMA_HASH},
+        }
+
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(out))
+        else:
+            print(_json_dumps(out))
+        return 0
+
+    if cmd == "verify":
+        uid = str(getattr(args, "uid", "") or "")
+        if not uid:
+            print("error: --uid required", file=sys.stderr)
+            return 2
+
+        # We only verify locally stored off-chain attestations (in contributor metadata).
+        db = Database(repo_root / "data" / "brain.db")
+        reg = _build_contributor_registry_with_eas(db=db, config=config)
+
+        found: dict[str, object] | None = None
+        for c in reg.list_all():
+            eas_meta = c.metadata.get("eas") if isinstance(c.metadata, dict) else None
+            if not isinstance(eas_meta, dict):
+                continue
+            if str(eas_meta.get("uid") or "").lower() == uid.lower():
+                att = eas_meta.get("attestation")
+                if isinstance(att, dict):
+                    found = att
+                break
+
+        if found is None:
+            out = {"ok": False, "error": "attestation.not_found", "uid": uid}
+            print(_json_dumps(out))
+            return 1
+
+        ok = False
+        try:
+            from engine.integrations.eas import EASClient
+
+            client = EASClient(
+                rpc_url=str(config.eas.rpc_url),
+                eas_address=str(config.eas.eas_contract),
+                schema_registry_address=str(config.eas.schema_registry),
+                private_key="",  # not required for verify
+            )
+            ok = bool(client.verify_offchain_attestation(found))
+        except Exception as e:
+            out = {"ok": False, "uid": uid, "error": str(e)}
+            print(_json_dumps(out))
+            return 1
+
+        out = {"ok": ok, "uid": uid}
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(out))
+        else:
+            print(_json_dumps(out))
+        return 0 if ok else 1
+
+    print(f"error: unknown eas subcommand: {cmd}", file=sys.stderr)
+    return 2
+
+
+def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> ContributorRegistry:
+    """Construct a ContributorRegistry, optionally wired with an EAS client."""
+
+    from engine.core.contributors import ContributorRegistry
+
+    try:
+        from engine.integrations.eas import EASClient
+    except Exception:
+        return ContributorRegistry(db)
+
+    if not bool(config.eas.enabled):
+        return ContributorRegistry(db)
+
+    client = EASClient(
+        rpc_url=str(config.eas.rpc_url),
+        eas_address=str(config.eas.eas_contract),
+        schema_registry_address=str(config.eas.schema_registry),
+        private_key=str(config.eas.attester_private_key),
+    )
+    return ContributorRegistry(db, eas_client=client)
 
 
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -1298,6 +1443,7 @@ def main(argv: list[str] | None = None) -> int:
         "positions": _cmd_positions,
         "producers": _cmd_producers,
         "contributors": _cmd_contributors,
+        "eas": _cmd_eas,
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,

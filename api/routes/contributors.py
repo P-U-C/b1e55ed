@@ -13,6 +13,19 @@ from engine.core.contributors import Contributor, ContributorRegistry
 from engine.core.database import Database
 from engine.core.scoring import ContributorScoring
 
+
+class ContributorAttestationResponse(BaseModel):
+    contributor_id: str
+    uid: str
+    attestation: dict[str, Any]
+
+
+class ContributorAttestationSummaryResponse(BaseModel):
+    contributor_id: str
+    node_id: str
+    uid: str
+
+
 router = APIRouter(prefix="/contributors", dependencies=[AuthDep])
 
 
@@ -60,6 +73,38 @@ class ContributorScoreResponse(BaseModel):
 def list_contributors(db: Database = Depends(get_db)) -> list[ContributorResponse]:
     reg = ContributorRegistry(db)
     return [ContributorResponse.from_contributor(c) for c in reg.list_all()]
+
+
+@router.get("/attestations", response_model=list[ContributorAttestationSummaryResponse])
+def list_attestations(db: Database = Depends(get_db)) -> list[ContributorAttestationSummaryResponse]:
+    reg = ContributorRegistry(db)
+    out: list[ContributorAttestationSummaryResponse] = []
+    for c in reg.list_all():
+        eas_meta = c.metadata.get("eas") if isinstance(c.metadata, dict) else None
+        if not isinstance(eas_meta, dict):
+            continue
+        uid = str(eas_meta.get("uid") or "")
+        if uid:
+            out.append(ContributorAttestationSummaryResponse(contributor_id=c.id, node_id=c.node_id, uid=uid))
+    return out
+
+
+@router.get("/{contributor_id}/attestation", response_model=ContributorAttestationResponse)
+def get_contributor_attestation(contributor_id: str, db: Database = Depends(get_db)) -> ContributorAttestationResponse:
+    reg = ContributorRegistry(db)
+    c = reg.get(contributor_id)
+    if c is None:
+        raise B1e55edError(code="contributor.not_found", message="Contributor not found", status=404, id=contributor_id)
+
+    eas_meta = c.metadata.get("eas") if isinstance(c.metadata, dict) else None
+    if not isinstance(eas_meta, dict) or not eas_meta.get("attestation"):
+        raise B1e55edError(code="contributor.attestation_not_found", message="Attestation not found", status=404, id=contributor_id)
+
+    att = eas_meta.get("attestation")
+    if not isinstance(att, dict):
+        raise B1e55edError(code="contributor.attestation_invalid", message="Attestation invalid", status=500, id=contributor_id)
+
+    return ContributorAttestationResponse(contributor_id=contributor_id, uid=str(eas_meta.get("uid") or ""), attestation=att)
 
 
 @router.post("/register", response_model=ContributorResponse)
