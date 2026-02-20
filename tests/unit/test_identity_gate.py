@@ -47,6 +47,7 @@ def test_require_identity_raises(tmp_path: Path) -> None:
 def test_cli_gate_blocks_commands_without_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys) -> None:
     from engine.cli import main
 
+    monkeypatch.delenv("B1E55ED_DEV_MODE", raising=False)
     monkeypatch.chdir(tmp_path)
 
     rc = main(["status"])
@@ -59,6 +60,7 @@ def test_cli_gate_blocks_commands_without_identity(monkeypatch: pytest.MonkeyPat
 def test_cli_gate_json_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys) -> None:
     from engine.cli import main
 
+    monkeypatch.delenv("B1E55ED_DEV_MODE", raising=False)
     monkeypatch.chdir(tmp_path)
 
     rc = main(["alerts", "--json"])

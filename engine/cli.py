@@ -1691,10 +1691,9 @@ def main(argv: list[str] | None = None) -> int:
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
-        from engine.core.identity_gate import load_identity
+        from engine.core.identity_gate import is_dev_mode, load_identity
 
-        identity = load_identity(ctx.repo_root)
-        if identity is None:
+        if not is_dev_mode() and load_identity(ctx.repo_root) is None:
             if getattr(args, "json", False):
                 print(
                     json.dumps(
