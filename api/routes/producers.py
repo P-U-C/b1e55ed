@@ -28,10 +28,13 @@ def _parse_dt(ts: str | None) -> datetime | None:
 
 def _ensure_endpoint_column(db: Database) -> None:
     cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
-    if "endpoint" in cols:
-        return
     with db.conn:
-        db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+        if "endpoint" not in cols:
+            db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+        if "quarantined_until" not in cols:
+            db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+        if "quarantined_reason" not in cols:
+            db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
 
 class ProducerRegistration(BaseModel):
@@ -58,6 +61,8 @@ class ProducerHealth(BaseModel):
     schedule: str | None = None
     endpoint: str | None = None
     healthy: bool | None = None
+    quarantined_until: datetime | None = None
+    quarantined_reason: str | None = None
     last_run_at: datetime | None = None
     last_success_at: datetime | None = None
     last_error: str | None = None
@@ -85,7 +90,7 @@ def producer_status(
     for name in names:
         row = db.conn.execute(
             """
-            SELECT name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
+            SELECT name, domain, schedule, endpoint, quarantined_until, quarantined_reason, last_run_at, last_success_at, last_error,
                    consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms, updated_at
             FROM producer_health
             WHERE name = ?
@@ -106,9 +111,16 @@ def producer_status(
             )
             continue
 
-        consecutive_failures = int(row[7]) if row[7] is not None else 0
-        last_error = str(row[6]) if row[6] is not None else None
-        healthy = consecutive_failures == 0 and last_error is None
+        quarantined_until = _parse_dt(str(row[4])) if row[4] is not None else None
+        quarantined_reason = str(row[5]) if row[5] is not None else None
+        last_run_at = _parse_dt(str(row[6])) if row[6] is not None else None
+        last_success_at = _parse_dt(str(row[7])) if row[7] is not None else None
+        last_error = str(row[8]) if row[8] is not None else None
+        consecutive_failures = int(row[9]) if row[9] is not None else 0
+
+        now = datetime.now(tz=UTC)
+        quarantined = quarantined_until is not None and quarantined_until > now
+        healthy = (consecutive_failures == 0 and last_error is None) and not quarantined
 
         out[name] = ProducerHealth(
             name=str(row[0]),
@@ -116,14 +128,16 @@ def producer_status(
             schedule=str(row[2]) if row[2] is not None else None,
             endpoint=str(row[3]) if row[3] is not None else None,
             healthy=healthy,
-            last_run_at=_parse_dt(str(row[4])) if row[4] is not None else None,
-            last_success_at=_parse_dt(str(row[5])) if row[5] is not None else None,
+            quarantined_until=quarantined_until,
+            quarantined_reason=quarantined_reason,
+            last_run_at=last_run_at,
+            last_success_at=last_success_at,
             last_error=last_error,
             consecutive_failures=consecutive_failures,
-            events_produced=int(row[8]) if row[8] is not None else 0,
-            avg_duration_ms=float(row[9]) if row[9] is not None else None,
-            expected_interval_ms=int(row[10]) if row[10] is not None else None,
-            updated_at=_parse_dt(str(row[11])) if row[11] is not None else None,
+            events_produced=int(row[10]) if row[10] is not None else 0,
+            avg_duration_ms=float(row[11]) if row[11] is not None else None,
+            expected_interval_ms=int(row[12]) if row[12] is not None else None,
+            updated_at=_parse_dt(str(row[13])) if row[13] is not None else None,
         )
 
     return ProducerStatusResponse(producers=out)
