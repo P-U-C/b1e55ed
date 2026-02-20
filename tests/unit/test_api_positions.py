@@ -28,13 +28,13 @@ async def test_positions_list_and_get(temp_dir, test_config):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/positions", headers=headers)
+        r = await ac.get("/api/v1/positions", headers=headers)
         assert r.status_code == 200
         items = r.json()
         assert len(items) == 1
         assert items[0]["id"] == "pos-1"
 
-        r2 = await ac.get("/positions/pos-1", headers=headers)
+        r2 = await ac.get("/api/v1/positions/pos-1", headers=headers)
         assert r2.status_code == 200
         assert r2.json()["asset"] == "BTC"
 

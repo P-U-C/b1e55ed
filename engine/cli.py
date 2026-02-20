@@ -164,6 +164,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    p_producers = sub.add_parser("producers", help="Register and manage producers")
+    prod_sub = p_producers.add_subparsers(dest="producers_cmd")
+
+    p_prod_reg = prod_sub.add_parser("register", help="Register a producer")
+    p_prod_reg.add_argument("--name", required=True)
+    p_prod_reg.add_argument("--domain", required=True)
+    p_prod_reg.add_argument("--endpoint", required=True)
+    p_prod_reg.add_argument("--schedule", default="*/15 * * * *")
+
+    p_prod_list = prod_sub.add_parser("list", help="List registered producers")
+    p_prod_list.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_prod_rm = prod_sub.add_parser("remove", help="Remove a producer")
+    p_prod_rm.add_argument("--name", required=True)
+
     p_webhooks = sub.add_parser("webhooks", help="Manage outbound webhook subscriptions")
     wh_sub = p_webhooks.add_subparsers(dest="webhooks_cmd")
 
@@ -637,6 +652,97 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    from engine.core.database import Database
+
+    def ensure_endpoint_column(db: Database) -> None:
+        cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
+        if "endpoint" in cols:
+            return
+        with db.conn:
+            db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+    ensure_endpoint_column(db)
+
+    cmd = str(getattr(args, "producers_cmd", "") or "")
+    if not cmd:
+        print("error: missing producers subcommand (register|list|remove)", file=sys.stderr)
+        return 2
+
+    if cmd == "register":
+        name = str(args.name)
+        domain = str(args.domain)
+        endpoint = str(args.endpoint)
+        schedule = str(args.schedule)
+
+        now = datetime.now(tz=UTC).isoformat()
+        existing = db.conn.execute("SELECT name FROM producer_health WHERE name = ?", (name,)).fetchone()
+        if existing is not None:
+            print(f"error: producer already registered: {name}", file=sys.stderr)
+            return 1
+
+        with db.conn:
+            db.conn.execute(
+                "INSERT INTO producer_health (name, domain, schedule, endpoint, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (name, domain, schedule, endpoint, now),
+            )
+
+        out_obj = {
+            "status": "ok",
+            "producer": {
+                "name": name,
+                "domain": domain,
+                "endpoint": endpoint,
+                "schedule": schedule,
+                "registered_at": now,
+            },
+        }
+        print(_json_dumps(out_obj))
+        return 0
+
+    if cmd == "list":
+        rows = db.conn.execute("SELECT name, domain, schedule, endpoint, updated_at FROM producer_health ORDER BY name ASC").fetchall()
+        out: list[dict[str, str]] = [
+            {
+                "name": str(r[0]),
+                "domain": str(r[1] or ""),
+                "schedule": str(r[2] or ""),
+                "endpoint": str(r[3] or ""),
+                "registered_at": str(r[4] or ""),
+            }
+            for r in rows
+        ]
+
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(out))
+            return 0
+
+        if not out:
+            print("(no registered producers)")
+            return 0
+
+        table_rows: list[list[str]] = [[p["name"], p["domain"], p["schedule"], p["endpoint"]] for p in out]
+        _print_table(["name", "domain", "schedule", "endpoint"], table_rows)
+        return 0
+
+    if cmd == "remove":
+        name = str(args.name)
+        with db.conn:
+            cur = db.conn.execute("DELETE FROM producer_health WHERE name = ?", (name,))
+        if cur.rowcount == 0:
+            print(f"error: producer not found: {name}", file=sys.stderr)
+            return 1
+        print(_json_dumps({"status": "ok", "removed": name}))
+        return 0
+
+    print(f"error: unknown producers subcommand: {cmd}", file=sys.stderr)
+    return 2
+
+
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
     from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
@@ -1079,6 +1185,7 @@ def main(argv: list[str] | None = None) -> int:
         "signal": _cmd_signal,
         "alerts": _cmd_alerts,
         "positions": _cmd_positions,
+        "producers": _cmd_producers,
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,

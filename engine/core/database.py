@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS producer_health (
     name TEXT PRIMARY KEY,
     domain TEXT,
     schedule TEXT,
+    endpoint TEXT,
     last_run_at TEXT,
     last_success_at TEXT,
     last_error TEXT,

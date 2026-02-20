@@ -22,13 +22,13 @@ async def test_signals_paginated(temp_dir, test_config):
 
     headers = {"Authorization": "Bearer secret"}
     async with make_client(app) as ac:
-        r = await ac.get("/signals?limit=1&offset=0", headers=headers)
+        r = await ac.get("/api/v1/signals?limit=1&offset=0", headers=headers)
         assert r.status_code == 200
         js = r.json()
         assert js["total"] >= 2
         assert len(js["items"]) == 1
 
-        r2 = await ac.get("/signals?domain=ta", headers=headers)
+        r2 = await ac.get("/api/v1/signals?domain=ta", headers=headers)
         assert r2.status_code == 200
         js2 = r2.json()
         assert all(item["type"].startswith("signal.ta") for item in js2["items"])

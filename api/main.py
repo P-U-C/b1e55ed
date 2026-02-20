@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
 
@@ -50,7 +51,26 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
-    app = FastAPI(title="b1e55ed API", version="2.0.0", lifespan=lifespan)
+    openapi_tags = [
+        {"name": "health", "description": "Liveness and version metadata."},
+        {"name": "brain", "description": "Cycle orchestration and system-level state."},
+        {"name": "signals", "description": "Read-only access to emitted signals."},
+        {"name": "positions", "description": "Read-only access to positions projected from events."},
+        {"name": "regime", "description": "Market regime projections and state."},
+        {"name": "producers", "description": "Producer registration and health."},
+        {"name": "config", "description": "Runtime configuration inspection."},
+        {"name": "karma", "description": "Karma accounting and settlement state."},
+    ]
+
+    app = FastAPI(
+        title="b1e55ed API",
+        description="b1e55ed signal engine — programmatic alpha hunting",
+        version="2.0.0",
+        openapi_tags=openapi_tags,
+        lifespan=lifespan,
+    )
+
+    app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
 
     # CORS: only enable if origins explicitly configured
     cors_origins = getattr(config.api, "cors_origins", [])
@@ -63,7 +83,7 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    app.include_router(get_api_router())
+    app.include_router(get_api_router(), prefix="/api/v1")
     return app
 
 
@@ -72,4 +92,4 @@ def create_app() -> FastAPI:
 try:
     app = create_app()
 except RuntimeError:
-    app = None  # type: ignore[assignment]
+    app = None

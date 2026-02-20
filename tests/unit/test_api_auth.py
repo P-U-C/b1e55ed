@@ -15,10 +15,13 @@ async def test_protected_routes_require_auth(temp_dir, test_config):
     app.state.db = Database(temp_dir / "brain.db")
 
     async with make_client(app) as ac:
-        r = await ac.get("/signals")
+        r = await ac.get("/api/v1/signals")
         assert r.status_code == 401
+        body = r.json()
+        assert body["error"]["code"].startswith("auth.")
+        assert "message" in body["error"]
 
-        r2 = await ac.get("/health")
+        r2 = await ac.get("/api/v1/health")
         assert r2.status_code == 200
 
     app.state.db.close()
