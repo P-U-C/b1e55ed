@@ -1686,6 +1686,37 @@ def main(argv: list[str] | None = None) -> int:
 
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
+    # Commands that don't require forged identity
+    ungated_commands = {"identity", "setup"}
+
+    cmd = getattr(args, "command", None)
+    if cmd not in ungated_commands:
+        from engine.core.identity_gate import load_identity
+
+        identity = load_identity(ctx.repo_root)
+        if identity is None:
+            if getattr(args, "json", False):
+                print(
+                    json.dumps(
+                        {
+                            "error": {
+                                "code": "IDENTITY_REQUIRED",
+                                "message": "Identity required. Run `b1e55ed identity forge` first.",
+                            }
+                        }
+                    )
+                )
+            else:
+                print()
+                print("  Identity required.")
+                print()
+                print("  Every participant in the b1e55ed network must forge an identity.")
+                print("  This is a one-time process that derives your unique 0xb1e55ed address.")
+                print()
+                print("  Run:  b1e55ed identity forge")
+                print()
+            return 1
+
     dispatch: dict[str, Callable[[CliContext, argparse.Namespace], int]] = {
         "setup": _cmd_setup,
         "brain": _cmd_brain,

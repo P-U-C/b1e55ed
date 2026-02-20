@@ -26,6 +26,38 @@ app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 templates = Jinja2Templates(directory=_HERE / "templates")
 
 
+def _repo_root() -> Path:
+    return _HERE.parent
+
+
+@app.middleware("http")
+async def _identity_gate(request: Request, call_next):
+    # Always allow static assets
+    if request.url.path.startswith("/static"):
+        return await call_next(request)
+
+    # Dev/test bypass
+    if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+        return await call_next(request)
+
+    from engine.core.identity_gate import load_identity
+
+    identity = load_identity(_repo_root())
+    if identity is None:
+        return templates.TemplateResponse(
+            "forge_required.html",
+            {
+                "request": request,
+                "active_page": "identity",
+                "kill_switch_level": 0,
+                "regime": "transition",
+            },
+            status_code=403,
+        )
+
+    return await call_next(request)
+
+
 @app.on_event("startup")
 def _startup() -> None:
     base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050")
