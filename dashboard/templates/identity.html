@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Identity — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Your Identity -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Your Identity</span>
+    </div>
+
+    {% if identity %}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Address</span></div>
+      <div class="text-dim mono">{{ identity.address }}</div>
+
+      <div><span class="text-dim">Node ID</span></div>
+      <div class="text-dim mono">{{ identity.node_id }}</div>
+
+      <div><span class="text-dim">Forged at</span></div>
+      <div class="text-dim">{{ identity.forged_at }}</div>
+
+      <div><span class="text-dim">Candidates evaluated</span></div>
+      <div class="text-dim">{{ identity.candidates_evaluated if identity.candidates_evaluated is not none else '—' }}</div>
+    </div>
+    {% else %}
+      <div class="empty-state">Identity not yet forged. Run <span class="mono">b1e55ed identity forge</span> to begin.</div>
+    {% endif %}
+  </div>
+
+  <!-- EAS Attestation -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">EAS Attestation</span>
+    </div>
+
+    {% if eas.enabled %}
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+        <div><span class="text-dim">Schema</span></div>
+        <div class="text-dim mono">{{ eas.schema | default('—') }}</div>
+
+        <div><span class="text-dim">UID</span></div>
+        <div class="text-dim mono">{{ eas.uid | default('—') }}</div>
+
+        <div><span class="text-dim">Attester</span></div>
+        <div class="text-dim mono">{{ eas.attester | default('—') }}</div>
+
+        <div><span class="text-dim">Verified</span></div>
+        <div class="text-dim">{% if eas.verified is not none %}{{ 'yes' if eas.verified else 'no' }}{% else %}—{% endif %}</div>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        EAS not configured. Set <span class="mono">eas.enabled</span> and <span class="mono">eas.schema_uid</span> in <span class="mono">config/default.yaml</span>.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Network -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Network</span>
+    </div>
+
+    <div class="empty-state">Network discovery coming in a future release.</div>
+  </div>
+
+</div>
+
+{% endblock %}
