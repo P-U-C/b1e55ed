@@ -450,6 +450,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
         from engine.core.client import DataClient
         from engine.core.metrics import REGISTRY
+        from engine.core.types import ProducerHealth
         from engine.producers.base import BaseProducer, ProducerContext
         from engine.producers.registry import discover, get_producer, list_producers
 
@@ -468,6 +469,18 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         client = DataClient()
         pctx = ProducerContext(config=config, db=db, client=client, metrics=REGISTRY, logger=logger)
         producer_results: list[dict[str, object]] = []
+
+        def _schedule_interval_ms(schedule: str) -> int | None:
+            # Handles "*/N * * * *" only (good enough for health estimation)
+            s = str(schedule).strip()
+            if s.startswith("*/"):
+                try:
+                    n = int(s.split()[0][2:])
+                    return int(n * 60_000)
+                except Exception:
+                    return None
+            return None
+
         for n in names:
             from typing import cast
 
@@ -475,6 +488,54 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             producer_cls = cast(type[BaseProducer], cls)
             producer = producer_cls(pctx)
             res = producer.run()
+
+            # Persist producer health (PH1)
+            domain = str(getattr(producer_cls, "domain", "") or "")
+            schedule = str(getattr(producer_cls, "schedule", "") or "")
+            expected_interval_ms = _schedule_interval_ms(schedule)
+            last_error = "; ".join(list(res.errors)) if res.errors else None
+            success = str(res.health) == str(ProducerHealth.OK)
+
+            # Update row (create if missing)
+            with db.conn:
+                db.conn.execute(
+                    """
+                    INSERT INTO producer_health (
+                        name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
+                        consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                    ON CONFLICT(name) DO UPDATE SET
+                        domain=excluded.domain,
+                        schedule=excluded.schedule,
+                        last_run_at=excluded.last_run_at,
+                        last_success_at=CASE WHEN ? THEN excluded.last_success_at ELSE producer_health.last_success_at END,
+                        last_error=excluded.last_error,
+                        consecutive_failures=CASE WHEN ? THEN 0 ELSE producer_health.consecutive_failures + 1 END,
+                        events_produced=producer_health.events_produced + excluded.events_produced,
+                        avg_duration_ms=CASE
+                            WHEN producer_health.avg_duration_ms IS NULL THEN excluded.avg_duration_ms
+                            ELSE (producer_health.avg_duration_ms * 0.8 + excluded.avg_duration_ms * 0.2)
+                        END,
+                        expected_interval_ms=excluded.expected_interval_ms,
+                        updated_at=datetime('now')
+                    """,
+                    (
+                        n,
+                        domain,
+                        schedule,
+                        None,
+                        res.timestamp.isoformat(),
+                        res.timestamp.isoformat(),
+                        last_error,
+                        0 if success else 1,
+                        int(res.events_published),
+                        float(res.duration_ms),
+                        expected_interval_ms,
+                        1 if success else 0,
+                        1 if success else 0,
+                    ),
+                )
+
             producer_results.append(
                 {
                     "name": n,
@@ -754,6 +815,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         name = str(args.name)
         domain = str(args.domain)
         endpoint = str(args.endpoint)
+
+        from engine.security.ssrf import check_url
+
+        url_check = check_url(endpoint)
+        if not url_check.allowed:
+            print(f"error: endpoint blocked ({url_check.reason})", file=sys.stderr)
+            return 1
         schedule = str(args.schedule)
 
         now = datetime.now(tz=UTC).isoformat()
