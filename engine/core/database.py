@@ -492,7 +492,11 @@ class Database:
                 return self._row_to_event(existing)
 
         eid = event_id or str(uuid.uuid4())
-        prev = self._last_hash
+        # Read prev_hash from DB inside the transaction to prevent stale cache
+        # from forking the chain if another writer somehow got through.
+        db_last = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
+        prev = str(db_last[0]) if db_last else self.GENESIS_PREV_HASH
+        self._last_hash = prev  # sync cache
         h = compute_event_hash(
             prev_hash=prev,
             event_type=event_type,
@@ -667,6 +671,46 @@ class Database:
 
         rows = self.conn.execute(q, tuple(params)).fetchall()
         return [self._row_to_event(r) for r in rows]
+
+    def iter_events_ascending(
+        self,
+        *,
+        from_id: str | None = None,
+        to_id: str | None = None,
+        event_type: EventType | None = None,
+    ) -> list[Event]:
+        """Return all events in chain order (ascending).
+
+        Optional filters:
+        - from_id / to_id: inclusive event ID range
+        - event_type: filter by type
+        """
+        q = "SELECT * FROM events WHERE 1=1"
+        params: list[Any] = []
+        if from_id is not None:
+            q += " AND rowid >= (SELECT rowid FROM events WHERE id = ?)"
+            params.append(from_id)
+        if to_id is not None:
+            q += " AND rowid <= (SELECT rowid FROM events WHERE id = ?)"
+            params.append(to_id)
+        if event_type is not None:
+            q += " AND type = ?"
+            params.append(str(event_type))
+        q += " ORDER BY created_at ASC, rowid ASC"
+        rows = self.conn.execute(q, tuple(params)).fetchall()
+        return [self._row_to_event(r) for r in rows]
+
+    def detect_concurrent_writers(self) -> bool:
+        """Check if another process holds a write lock on the database.
+
+        Returns True if a concurrent writer is detected (dangerous for hash chain).
+        """
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            self.conn.execute("ROLLBACK")
+            return False
+        except sqlite3.OperationalError:
+            return True
 
     def verify_hash_chain(self, *, fast: bool = False, last_n: int = 2000) -> bool:
         """Verify the event hash chain.
