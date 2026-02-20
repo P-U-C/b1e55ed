@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Contributors — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="grid" style="margin-bottom:1rem;">
+
+  <!-- Leaderboard -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">Leaderboard</span>
+      <span class="panel-age">top {{ leaderboard | length if leaderboard else 0 }}</span>
+    </div>
+
+    {% if leaderboard %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:48px;">Rank</th>
+          <th>Name</th>
+          <th>Role</th>
+          <th style="text-align:right;">Score</th>
+          <th style="text-align:right;">Signals</th>
+          <th style="text-align:right;">Hit Rate</th>
+          <th style="text-align:right;">Streak</th>
+          <th>Last Active</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in leaderboard %}
+        <tr>
+          <td class="text-dim">{{ c.rank }}</td>
+          <td class="{% if c.rank == 1 %}text-bull{% elif c.rank in [2,3] %}text-bright{% endif %}" style="font-weight:400;">
+            {{ c.name }}
+          </td>
+          <td class="text-dim">{{ c.role }}</td>
+          <td style="text-align:right;" class="data-live">{{ '%.2f' | format(c.score) }}</td>
+          <td style="text-align:right;">{{ c.signals }}</td>
+          <td style="text-align:right;" class="text-dim">
+            {% if c.hit_rate is not none %}{{ '%.0f%%' | format(c.hit_rate * 100) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;" class="text-dim">{{ c.streak }}</td>
+          <td class="text-dim">{{ c.last_active }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state">No contributors registered.</div>
+    {% endif %}
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Recent Activity</span>
+      <span class="panel-age">last {{ recent_activity | length if recent_activity else 0 }}</span>
+    </div>
+
+    {% if recent_activity %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Contributor</th>
+          <th>Asset</th>
+          <th>Direction</th>
+          <th style="text-align:right;">Score</th>
+          <th>Accepted</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in recent_activity %}
+        <tr>
+          <td class="text-dim">{{ a.time }}</td>
+          <td class="text-bright" style="font-weight:400;">{{ a.contributor }}</td>
+          <td class="text-dim">{{ a.asset }}</td>
+          <td class="text-dim">{{ a.direction }}</td>
+          <td style="text-align:right;" class="data-live">{{ '%.2f' | format(a.score) }}</td>
+          <td class="text-dim">{% if a.accepted %}yes{% else %}no{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state">No contributor signals recorded.</div>
+    {% endif %}
+  </div>
+
+  <!-- Stats -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Stats</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem 1.5rem; font-size:0.8125rem;">
+      <div><span class="text-dim">Total contributors</span></div>
+      <div class="data-live">{{ stats.total_contributors | default(0) }}</div>
+
+      <div><span class="text-dim">Total signals</span></div>
+      <div class="data-live">{{ stats.total_signals | default(0) }}</div>
+
+      <div><span class="text-dim">Avg hit rate</span></div>
+      <div class="text-dim">
+        {% if stats.avg_hit_rate is not none %}{{ '%.0f%%' | format(stats.avg_hit_rate * 100) }}{% else %}—{% endif %}
+      </div>
+
+      <div><span class="text-dim">Active today</span></div>
+      <div class="data-live">{{ stats.active_today | default(0) }}</div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

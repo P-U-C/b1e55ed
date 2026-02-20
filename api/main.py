@@ -6,10 +6,41 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
+
+
+class IdentityGateMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Dev/test bypass
+        if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            return await call_next(request)
+
+        # Allow health/docs without identity (monitoring + introspection)
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+            return await call_next(request)
+
+        from pathlib import Path
+
+        from engine.core.identity_gate import load_identity
+
+        identity = load_identity(Path.cwd())
+        if identity is None:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "IDENTITY_REQUIRED",
+                        "message": "Forged identity required. Run `b1e55ed identity forge` to create one.",
+                    }
+                },
+            )
+
+        return await call_next(request)
 
 
 def create_app() -> FastAPI:
@@ -42,11 +73,44 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.started_at = start
+
+        # Expose config/db in app state for dependency injection + tests.
+        app.state.config = getattr(app.state, "config", None) or config
+
+        from engine.core.database import Database
+
+        created_db = False
+        if getattr(app.state, "db", None) is None:
+            from pathlib import Path
+
+            root = Path.cwd()
+            app.state.db = Database(root / "data" / "brain.db")
+            created_db = True
+
+        # Auto-register local node as an operator contributor.
+        try:
+            from engine.core.contributors import ContributorRegistry
+            from engine.security import ensure_identity
+
+            ident = ensure_identity().identity
+            reg = ContributorRegistry(app.state.db)
+            if reg.get_by_node(ident.node_id) is None:
+                reg.register(
+                    node_id=ident.node_id,
+                    name="local-operator",
+                    role="operator",
+                    metadata={"public_key": ident.public_key_hex},
+                )
+        except Exception:
+            # Never block startup on contributor registration.
+            pass
+
         yield
-        # Best-effort close DB if it was placed in state
+
+        # Best-effort close DB if we created it in this lifespan.
         db = getattr(app.state, "db", None)
         try:
-            if db is not None:
+            if created_db and db is not None:
                 db.close()
         except Exception:
             pass
@@ -58,6 +122,7 @@ def create_app() -> FastAPI:
         {"name": "positions", "description": "Read-only access to positions projected from events."},
         {"name": "regime", "description": "Market regime projections and state."},
         {"name": "producers", "description": "Producer registration and health."},
+        {"name": "contributors", "description": "Contributor registry, scoring, and leaderboard."},
         {"name": "config", "description": "Runtime configuration inspection."},
         {"name": "karma", "description": "Karma accounting and settlement state."},
     ]
@@ -71,6 +136,9 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
+
+    # Identity gate: require forged identity for all endpoints (except health/docs)
+    app.add_middleware(IdentityGateMiddleware)
 
     # CORS: only enable if origins explicitly configured
     cors_origins = getattr(config.api, "cors_origins", [])

@@ -1,20 +1,19 @@
 # Getting Started
 
-b1e55ed is an autonomous trading intelligence system that synthesizes multi-domain signals into conviction-weighted trading decisions.
+b1e55ed is a CLI-first trading intelligence engine built around append-only events.
+
+This guide covers a local first run.
 
 ## Prerequisites
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) package manager
-- A master password for identity encryption
+- [uv](https://github.com/astral-sh/uv)
+- SQLite (bundled on most systems)
 
-## Installation
+Recommended:
+- A dedicated `B1E55ED_MASTER_PASSWORD` for encrypted-at-rest identity and keystore material.
 
-### From wheel (recommended)
-
-```bash
-pip install b1e55ed-1.0.0-beta.1-py3-none-any.whl
-```
+## Install
 
 ### From source
 
@@ -24,148 +23,96 @@ cd b1e55ed
 uv sync
 ```
 
-## Quick Start
+## Quick start (local)
 
-### 1. Initialize Identity
+Sequence: install → forge identity → setup → register contributor → run brain.
+
+### 1) Forge an identity (The Forge)
+
+The Forge derives an Ethereum identity with a `0xb1e55ed` prefix.
 
 ```bash
-# Set master password
-export B1E55ED_MASTER_PASSWORD="your-secure-password"
+uv run b1e55ed identity forge
+uv run b1e55ed identity show
+```
 
-# Generate node identity (one-time)
+Outputs:
+- `.b1e55ed/identity.json` (public identity)
+- `.b1e55ed/forge_key.enc` (private key material; protect it)
+
+If you are not using EAS attestations, forging is optional.
+
+### 2) Run setup
+
+Setup writes `config/user.yaml`, initializes `data/brain.db`, and stores secrets in the keystore when available.
+
+```bash
+export B1E55ED_MASTER_PASSWORD="your-secure-password"
 uv run b1e55ed setup
 ```
 
-This creates `~/.b1e55ed/identity.key` with your cryptographic identity.
+### 3) (Optional) Configure EAS
 
-### 2. Configure System
+EAS is used to create and verify off-chain attestations for contributors.
 
-Edit `config/user.yaml` (or use defaults):
+Edit `config/user.yaml`:
 
 ```yaml
-preset: balanced  # conservative | balanced | degen | custom
-
-# Symbol universe
-universe:
-  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
-
-# Domain weights (must sum to 1.0)
-weights:
-  curator: 0.25    # Human operator signals
-  onchain: 0.25    # Blockchain data
-  tradfi: 0.20     # CME, ETF flows
-  social: 0.15     # Social intelligence
-  technical: 0.10  # TA indicators
-  events: 0.05     # Calendar events
-
-# Risk limits
-risk:
-  max_drawdown_pct: 0.30        # 30% max portfolio drawdown
-  max_daily_loss_usd: 240.0     # Daily loss limit
-  max_position_size_pct: 0.15   # 15% max single position
-  max_portfolio_heat_pct: 0.06  # 6% total capital at risk
+eas:
+  enabled: false
+  mode: offchain
+  rpc_url: "https://eth.llamarpc.com"
+  eas_contract: "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
+  schema_registry: "0xA7b39296258348C78294F95B872b282326A97BDF"
+  schema_uid: ""               # set after schema registration
+  attester_private_key: ""     # required for creating attestations
 ```
 
-See [configuration.md](configuration.md) for full options.
+See: [eas-integration.md](eas-integration.md).
 
-### 3. Run Your First Brain Cycle
+### 4) Register a contributor
+
+Contributors are the attribution unit for signals.
+
+Register via CLI:
 
 ```bash
-# Paper trading mode (safe)
+uv run b1e55ed contributors register --name "local-operator" --role operator
+```
+
+If EAS is enabled and `eas.attester_private_key` is configured:
+
+```bash
+uv run b1e55ed contributors register --name "local-operator" --role operator --attest
+```
+
+See: [contributors.md](contributors.md).
+
+### 5) Run the brain
+
+```bash
 uv run b1e55ed brain
-
-# This will:
-# 1. Collect signals from all producers
-# 2. Synthesize weighted conviction scores
-# 3. Detect market regime
-# 4. Generate trade intents
-# 5. Run preflight checks
-# 6. Execute via paper broker (no real money)
 ```
 
-### 4. Start the Dashboard
+### 6) Start API + dashboard
+
+API requires `api.auth_token` unless `B1E55ED_INSECURE_OK=1` is set.
 
 ```bash
-# Terminal 1: API server
+# Terminal 1
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
 uv run b1e55ed api
 
-# Terminal 2: Dashboard
+# Terminal 2
 uv run b1e55ed dashboard
 
-# Open http://localhost:5051
+# Dashboard: http://localhost:5051
+# API:       http://localhost:5050/api/v1/health
 ```
 
-## Key Concepts
+## Next steps
 
-### Brain Cycle (6 phases)
-
-1. **Collection** - Producers generate signals
-2. **Quality** - Data quality monitoring
-3. **Synthesis** - Multi-domain weighted scoring
-4. **Regime** - Market state detection (EARLY_BULL | BULL | CHOP | BEAR | CRISIS)
-5. **Conviction** - PCS + counter-thesis scoring
-6. **Decision** - Trade intent generation
-
-### Producers (13 signal sources)
-
-| Domain | Producers | Data Sources |
-|--------|-----------|--------------|
-| **Technical** | TA, Orderbook, Price Alerts | Exchange APIs |
-| **On-chain** | On-chain, Stablecoin, Whale | Allium API |
-| **TradFi** | TradFi, ETF | Binance, public data |
-| **Social** | Social, Sentiment, ACI | TikTok, Fear & Greed |
-| **Events** | Events | Economic calendar |
-| **Curator** | Curator, Contract | Human operator |
-
-### Execution Modes
-
-- **Paper** - Simulated fills, no real money (default)
-- **Live** - Real execution via Hyperliquid (requires funded account)
-
-### Kill Switch (5 levels)
-
-System auto-escalates risk protection based on conditions:
-
-- **L0 NOMINAL** - Normal operation
-- **L1 CAUTION** - Daily loss limit hit
-- **L2 DEFENSIVE** - Portfolio heat exceeded
-- **L3 LOCKDOWN** - Crisis regime detected
-- **L4 EMERGENCY** - Max drawdown breached
-
-## Next Steps
-
-- [Configuration Guide](configuration.md) - Customize your setup
-- [API Reference](api-reference.md) - REST API endpoints
-- [Deployment](deployment.md) - Production hosting
-- [Learning Loop](learning-loop.md) - How the system improves
-
-## Troubleshooting
-
-### Database locked
-```bash
-# Kill any running processes
-pkill -f b1e55ed
-
-# Or specify full database path
-uv run b1e55ed brain --db /path/to/brain.db
-```
-
-### Identity errors
-```bash
-# Regenerate identity (WARNING: loses history)
-rm ~/.b1e55ed/identity.key
-uv run b1e55ed setup
-```
-
-### Import errors
-```bash
-# Fresh venv
-rm -rf .venv
-uv sync
-```
-
-## Support
-
-- Issues: https://github.com/P-U-C/b1e55ed/issues
-- Docs: [docs/](.)
-- Tests: `uv run pytest tests/`
+- [Configuration](configuration.md)
+- [CLI reference](cli-reference.md)
+- [API reference](api-reference.md)
+- [Architecture](architecture.md)

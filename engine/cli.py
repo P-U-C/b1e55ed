@@ -19,6 +19,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from engine.core.config import Config
+    from engine.core.contributors import ContributorRegistry
+    from engine.core.database import Database
+
 
 EPILOG = "The code remembers. The hex is blessed: 0xb1e55ed."
 
@@ -67,6 +74,18 @@ class CliContext:
 
 def _repo_root_from_cwd() -> Path:
     return Path.cwd()
+
+
+def _load_config(ctx: CliContext) -> Config | None:
+    try:
+        from engine.core.config import Config
+
+        user_path = ctx.repo_root / "config" / "user.yaml"
+        if user_path.exists():
+            return Config.from_yaml(user_path)
+        return Config.from_repo_defaults(ctx.repo_root)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -179,6 +198,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_prod_rm = prod_sub.add_parser("remove", help="Remove a producer")
     p_prod_rm.add_argument("--name", required=True)
 
+    p_contrib = sub.add_parser("contributors", help="Manage contributors and reputation")
+    contrib_sub = p_contrib.add_subparsers(dest="contributors_cmd")
+
+    p_contrib_list = contrib_sub.add_parser("list", help="List contributors")
+    p_contrib_list.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_contrib_reg = contrib_sub.add_parser("register", help="Register a contributor")
+    p_contrib_reg.add_argument("--name", required=True)
+    p_contrib_reg.add_argument("--role", required=True, choices=["operator", "agent", "tester", "curator"])
+    p_contrib_reg.add_argument("--node-id", default=None)
+    p_contrib_reg.add_argument(
+        "--attest",
+        action="store_true",
+        help="Create an off-chain EAS attestation (requires eas.enabled + eas.attester_private_key).",
+    )
+
+    p_contrib_rm = contrib_sub.add_parser("remove", help="Remove a contributor")
+    p_contrib_rm.add_argument("--id", required=True)
+
+    p_contrib_score = contrib_sub.add_parser("score", help="Compute contributor score")
+    p_contrib_score.add_argument("--id", required=True)
+    p_contrib_score.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_contrib_lb = contrib_sub.add_parser("leaderboard", help="Show contributor leaderboard")
+    p_contrib_lb.add_argument("--limit", type=int, default=20)
+    p_contrib_lb.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_webhooks = sub.add_parser("webhooks", help="Manage outbound webhook subscriptions")
     wh_sub = p_webhooks.add_subparsers(dest="webhooks_cmd")
 
@@ -236,6 +282,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_keys_test = keys_sub.add_parser("test", help="Verify configured keys against live APIs")
     p_keys_test.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    identity_parser = sub.add_parser("identity", help="Identity management")
+    identity_sub = identity_parser.add_subparsers(dest="identity_action")
+
+    forge_parser = identity_sub.add_parser("forge", help="Forge a new 0xb1e55ed identity")
+    forge_parser.add_argument("--threads", type=int, default=None)
+    forge_parser.add_argument("--json", action="store_true")
+
+    show_parser = identity_sub.add_parser("show", help="Show current identity")
+    show_parser.add_argument("--json", action="store_true")
+
     p_api = sub.add_parser("api", help="Start FastAPI server")
     p_api.add_argument("--host", default=None)
     p_api.add_argument("--port", type=int, default=None)
@@ -243,6 +299,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash = sub.add_parser("dashboard", help="Start dashboard server")
     p_dash.add_argument("--host", default=None)
     p_dash.add_argument("--port", type=int, default=None)
+
+    p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
+    eas_sub = p_eas.add_subparsers(dest="eas_cmd")
+
+    p_eas_status = eas_sub.add_parser("status", help="Show EAS config and schema status")
+    p_eas_status.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_eas_verify = eas_sub.add_parser("verify", help="Verify an off-chain attestation by UID")
+    p_eas_verify.add_argument("--uid", required=True, help="Attestation UID")
+    p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     sub.add_parser("status", help="Print system status")
 
@@ -743,6 +809,218 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.config import Config
+    from engine.core.database import Database
+    from engine.core.scoring import ContributorScoring
+    from engine.security.identity import ensure_identity
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
+    cmd = str(getattr(args, "contributors_cmd", "") or "")
+
+    reg = _build_contributor_registry_with_eas(db=db, config=config)
+    scoring = ContributorScoring(db)
+
+    if cmd == "list":
+        items = reg.list_all()
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([c.__dict__ for c in items]))
+            return 0
+
+        rows: list[list[str]] = []
+        for c in items:
+            rows.append([c.id, c.node_id, c.role, c.name, c.registered_at])
+        if rows:
+            _print_table(["id", "node_id", "role", "name", "registered_at"], rows)
+        return 0
+
+    if cmd == "register":
+        node_id = str(getattr(args, "node_id", "") or "")
+        if not node_id:
+            ident = ensure_identity().identity
+            node_id = ident.node_id
+
+        try:
+            meta: dict[str, object] = {}
+            # Pass schema_uid into metadata so ContributorRegistry can include it in the signed payload.
+            if bool(getattr(args, "attest", False)) and bool(config.eas.schema_uid):
+                meta["eas"] = {"schema_uid": str(config.eas.schema_uid)}
+
+            c = reg.register(
+                node_id=node_id,
+                name=str(args.name),
+                role=str(args.role),
+                metadata=meta,
+                attest=bool(getattr(args, "attest", False)),
+            )
+        except ValueError:
+            print(f"error: contributor already exists for node_id: {node_id}", file=sys.stderr)
+            return 2
+
+        print(_json_dumps({"status": "ok", "contributor": c.__dict__}))
+        return 0
+
+    if cmd == "remove":
+        cid = str(args.id)
+        ok = reg.deregister(cid)
+        if not ok:
+            print(f"error: contributor not found: {cid}", file=sys.stderr)
+            return 2
+        print(_json_dumps({"status": "ok", "removed": cid}))
+        return 0
+
+    if cmd == "score":
+        cid = str(args.id)
+        s = scoring.compute_score(cid)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(s.__dict__))
+        else:
+            print(f"score: {s.score:.2f} (hit_rate={s.hit_rate:.2%}, submitted={s.signals_submitted}, accepted={s.signals_accepted}, streak={s.streak})")
+        return 0
+
+    if cmd == "leaderboard":
+        limit = int(getattr(args, "limit", 20) or 20)
+        items = scoring.leaderboard(limit=limit)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([s.__dict__ for s in items]))
+            return 0
+
+        rows = []
+        for s in items:
+            c = reg.get(s.contributor_id)
+            rows.append(
+                [
+                    s.contributor_id,
+                    c.name if c else "",
+                    f"{s.score:.2f}",
+                    f"{s.hit_rate:.2%}",
+                    str(s.signals_submitted),
+                    str(s.signals_accepted),
+                    str(s.streak),
+                ]
+            )
+        if rows:
+            _print_table(["id", "name", "score", "hit_rate", "submitted", "accepted", "streak"], rows)
+        return 0
+
+    print("error: missing contributors subcommand (list|register|remove|score|leaderboard)", file=sys.stderr)
+    return 2
+
+
+def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.config import Config
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
+    cmd = str(getattr(args, "eas_cmd", "") or "")
+    if not cmd:
+        print("error: missing eas subcommand (status|verify)", file=sys.stderr)
+        return 2
+
+    if cmd == "status":
+        from engine.integrations.eas_schema import CONTRIBUTOR_SCHEMA, EXPECTED_SCHEMA_HASH
+
+        pk_present = bool(str(config.eas.attester_private_key or "").strip())
+        out = {
+            "enabled": bool(config.eas.enabled),
+            "mode": str(config.eas.mode),
+            "rpc_url": str(config.eas.rpc_url),
+            "eas_contract": str(config.eas.eas_contract),
+            "schema_registry": str(config.eas.schema_registry),
+            "schema_uid": str(config.eas.schema_uid),
+            "attester_private_key_present": pk_present,
+            "schema": {"string": CONTRIBUTOR_SCHEMA, "expected_hash": EXPECTED_SCHEMA_HASH},
+        }
+
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(out))
+        else:
+            print(_json_dumps(out))
+        return 0
+
+    if cmd == "verify":
+        uid = str(getattr(args, "uid", "") or "")
+        if not uid:
+            print("error: --uid required", file=sys.stderr)
+            return 2
+
+        # We only verify locally stored off-chain attestations (in contributor metadata).
+        db = Database(repo_root / "data" / "brain.db")
+        reg = _build_contributor_registry_with_eas(db=db, config=config)
+
+        found: dict[str, object] | None = None
+        for c in reg.list_all():
+            eas_meta = c.metadata.get("eas") if isinstance(c.metadata, dict) else None
+            if not isinstance(eas_meta, dict):
+                continue
+            if str(eas_meta.get("uid") or "").lower() == uid.lower():
+                att = eas_meta.get("attestation")
+                if isinstance(att, dict):
+                    found = att
+                break
+
+        if found is None:
+            out = {"ok": False, "error": "attestation.not_found", "uid": uid}
+            print(_json_dumps(out))
+            return 1
+
+        ok = False
+        try:
+            from engine.integrations.eas import EASClient
+
+            client = EASClient(
+                rpc_url=str(config.eas.rpc_url),
+                eas_address=str(config.eas.eas_contract),
+                schema_registry_address=str(config.eas.schema_registry),
+                private_key="",  # not required for verify
+            )
+            ok = bool(client.verify_offchain_attestation(found))
+        except Exception as e:
+            out = {"ok": False, "uid": uid, "error": str(e)}
+            print(_json_dumps(out))
+            return 1
+
+        out = {"ok": ok, "uid": uid}
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(out))
+        else:
+            print(_json_dumps(out))
+        return 0 if ok else 1
+
+    print(f"error: unknown eas subcommand: {cmd}", file=sys.stderr)
+    return 2
+
+
+def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> ContributorRegistry:
+    """Construct a ContributorRegistry, optionally wired with an EAS client."""
+
+    from engine.core.contributors import ContributorRegistry
+
+    try:
+        from engine.integrations.eas import EASClient
+    except Exception:
+        return ContributorRegistry(db)
+
+    if not bool(config.eas.enabled):
+        return ContributorRegistry(db)
+
+    client = EASClient(
+        rpc_url=str(config.eas.rpc_url),
+        eas_address=str(config.eas.eas_contract),
+        schema_registry_address=str(config.eas.schema_registry),
+        private_key=str(config.eas.attester_private_key),
+    )
+    return ContributorRegistry(db, eas_client=client)
+
+
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
     from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
@@ -1065,6 +1343,235 @@ def _cmd_keys(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_identity(ctx: CliContext, args: argparse.Namespace) -> int:
+    action = getattr(args, "identity_action", None)
+    if action == "forge":
+        return _identity_forge(ctx, args)
+    if action == "show":
+        return _identity_show(ctx, args)
+
+    print("error: missing identity subcommand (forge/show)", file=sys.stderr)
+    return 2
+
+
+def _format_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    m, s = divmod(s, 60)
+    if m <= 0:
+        return f"{s}s"
+    return f"{m}m {s}s"
+
+
+def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
+    use_json = bool(getattr(args, "json", False))
+
+    identity_path = ctx.repo_root / ".b1e55ed" / "identity.json"
+    if not identity_path.exists():
+        if use_json:
+            print(_json_dumps({"ok": False, "error": "identity_not_found"}))
+        else:
+            print("No forged identity found. Run: b1e55ed identity forge")
+        return 1
+
+    try:
+        data = json.loads(identity_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        if use_json:
+            print(_json_dumps({"ok": False, "error": "identity_unreadable"}))
+        else:
+            print(f"Identity file unreadable: {identity_path}")
+        return 1
+
+    if use_json:
+        out = {"ok": True, "identity": data}
+        print(_json_dumps(out))
+        return 0
+
+    print("forged identity")
+    print(f"- address: {data.get('address', '')}")
+    print(f"- node_id: {data.get('node_id', '')}")
+    print(f"- forged_at: {data.get('forged_at', '')}")
+    print(f"- candidates_evaluated: {data.get('candidates_evaluated', '')}")
+    return 0
+
+
+def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
+    """The Forge — identity derivation ritual."""
+
+    import shutil
+    import subprocess
+    import time
+
+    use_json = bool(getattr(args, "json", False))
+    threads = int(getattr(args, "threads", None) or (os.cpu_count() or 4))
+    prefix = "b1e55ed"
+
+    # Expected candidates for 7 hex chars
+    expected = 16 ** len(prefix)
+
+    if not use_json:
+        print()
+        print("  ╔══════════════════════════════════════╗")
+        print("  ║         THE FORGE                    ║")
+        print("  ║         b1e55ed identity protocol    ║")
+        print("  ╚══════════════════════════════════════╝")
+        print()
+        print(f"  Every address in this network begins with 0x{prefix}.")
+        print("  Yours is being derived now.")
+        print()
+        print("  This takes a few minutes.")
+        print("  The work is the point.")
+        print()
+        print("  Searching...")
+        print()
+
+    rust_binary = shutil.which("b1e55ed-forge")
+    if rust_binary is None:
+        repo_binary = ctx.repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
+        if repo_binary.exists():
+            rust_binary = str(repo_binary)
+
+    result: dict[str, object] | None = None
+
+    def _render_progress(msg: dict[str, object]) -> None:
+        candidates = _safe_int(msg.get("candidates"))
+        elapsed_ms = _safe_int(msg.get("elapsed_ms"))
+        pct = min((candidates / expected) * 100.0 if expected else 0.0, 99.9)
+        bar_width = 24
+        filled = int(bar_width * pct / 100.0)
+        bar = "▓" * filled + "░" * (bar_width - filled)
+        elapsed = _format_elapsed(elapsed_ms / 1000.0)
+        print(
+            f"\r  {bar}  {pct:5.1f}%\n  {candidates:,} candidates evaluated\n  Elapsed: {elapsed}",
+            end="\033[F\033[F",
+            flush=True,
+        )
+
+    if rust_binary:
+        proc = subprocess.Popen(
+            [rust_binary, "--prefix", prefix, "--threads", str(threads), "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if msg.get("type") == "progress" and use_json:
+                print(_json_dumps(msg))
+            elif msg.get("type") == "progress" and not use_json:
+                _render_progress(msg)
+            elif msg.get("type") == "found":
+                result = msg
+                break
+        proc.wait()
+    else:
+        if not use_json:
+            print("  (Rust grinder not found — using Python fallback. This will be slower.)")
+            print()
+
+        from engine.integrations.forge import grind
+
+        for msg in grind(prefix):
+            if msg.get("type") == "progress" and use_json:
+                print(_json_dumps(msg))
+            elif msg.get("type") == "progress" and not use_json:
+                _render_progress(msg)
+            elif msg.get("type") == "found":
+                result = msg
+                break
+
+    if result is None:
+        print("\n  Forge failed. No address found.")
+        return 1
+
+    address = str(result.get("address") or "")
+    private_key = str(result.get("private_key") or "")
+    candidates = _safe_int(result.get("candidates"))
+    elapsed_ms = _safe_int(result.get("elapsed_ms"))
+
+    identity_dir = ctx.repo_root / ".b1e55ed"
+    identity_dir.mkdir(exist_ok=True)
+
+    identity_data = {
+        "address": address,
+        "node_id": f"eth:{address.lower()}",
+        "forged_at": int(time.time()),
+        "candidates_evaluated": candidates,
+        "elapsed_ms": elapsed_ms,
+    }
+
+    identity_path = identity_dir / "identity.json"
+    identity_path.write_text(json.dumps(identity_data, indent=2), encoding="utf-8")
+
+    key_path = identity_dir / "forge_key.enc"
+    key_path.write_text(private_key, encoding="utf-8")
+    key_path.chmod(0o600)
+
+    attestation_uid = None
+    try:
+        config = _load_config(ctx)
+        if config and bool(config.eas.enabled):
+            from engine.integrations.eas import AttestationData, EASClient
+
+            eas = EASClient(
+                rpc_url=config.eas.rpc_url,
+                eas_address=config.eas.eas_contract,
+                schema_registry_address=config.eas.schema_registry,
+                private_key=config.eas.attester_private_key,
+            )
+            att = eas.create_offchain_attestation(
+                AttestationData(
+                    schema_uid=config.eas.schema_uid,
+                    recipient=address,
+                    data={
+                        "nodeId": identity_data["node_id"],
+                        "name": "",
+                        "role": "operator",
+                        "version": "1.0.0-beta.2",
+                        "registeredAt": identity_data["forged_at"],
+                    },
+                )
+            )
+            if att:
+                attestation_uid = str(att.get("uid") or "pending")
+    except Exception:  # noqa: BLE001
+        attestation_uid = None
+
+    if use_json:
+        out = {**identity_data, "attestation_uid": attestation_uid}
+        print(_json_dumps(out))
+        return 0
+
+    print("\n\n")
+    print("  ──────────────────────────────────────")
+    print()
+    print("  Forged.")
+    print()
+    print(f"  Address:   {address}")
+    print(f"  Node:      {identity_data['node_id']}")
+    if attestation_uid:
+        print(f"  Attested:  EAS #{attestation_uid[:10]}... (Ethereum)")
+    print()
+    print(f"  {candidates:,} candidates evaluated in {elapsed_ms / 1000:.1f}s")
+    print()
+    print(f"  Your key is stored at {key_path}")
+    print("  There is no recovery. Guard it accordingly.")
+    print()
+    print("  Welcome to the upper class.")
+    print()
+    print("  ──────────────────────────────────────")
+    print()
+    return 0
+
+
 def _cmd_api(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.config import Config
 
@@ -1179,6 +1686,36 @@ def main(argv: list[str] | None = None) -> int:
 
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
+    # Commands that don't require forged identity
+    ungated_commands = {"identity", "setup"}
+
+    cmd = getattr(args, "command", None)
+    if cmd not in ungated_commands:
+        from engine.core.identity_gate import is_dev_mode, load_identity
+
+        if not is_dev_mode() and load_identity(ctx.repo_root) is None:
+            if getattr(args, "json", False):
+                print(
+                    json.dumps(
+                        {
+                            "error": {
+                                "code": "IDENTITY_REQUIRED",
+                                "message": "Identity required. Run `b1e55ed identity forge` first.",
+                            }
+                        }
+                    )
+                )
+            else:
+                print()
+                print("  Identity required.")
+                print()
+                print("  Every participant in the b1e55ed network must forge an identity.")
+                print("  This is a one-time process that derives your unique 0xb1e55ed address.")
+                print()
+                print("  Run:  b1e55ed identity forge")
+                print()
+            return 1
+
     dispatch: dict[str, Callable[[CliContext, argparse.Namespace], int]] = {
         "setup": _cmd_setup,
         "brain": _cmd_brain,
@@ -1186,10 +1723,13 @@ def main(argv: list[str] | None = None) -> int:
         "alerts": _cmd_alerts,
         "positions": _cmd_positions,
         "producers": _cmd_producers,
+        "contributors": _cmd_contributors,
+        "eas": _cmd_eas,
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "keys": _cmd_keys,
+        "identity": _cmd_identity,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,

@@ -2,206 +2,120 @@
 
 Cross-references between documentation files.
 
----
+Notation:
 
-## Notation
-
-```
-A → B     "A references B"
-A ⇒ B     "A heavily references B (multiple sections)"
+```text
+A → B     A references B
+A ⇒ B     A heavily references B
 ```
 
----
+## Entry point
 
-## Entry Points
-
-### For New Users
-
-```
+```text
 README.md
-  ├→ docs/getting-started.md  (setup, quick start)
-  ├→ DOCKER.md                (Docker deployment)
-  └→ docs/deployment.md       (production setup)
+  → docs/getting-started.md
+  → docs/configuration.md
+  → docs/cli-reference.md
+  → docs/api-reference.md
+  → docs/contributors.md
+  → docs/architecture.md
+  → docs/eas-integration.md
+  → docs/security.md
+  → docs/deployment.md
+  → docs/openclaw-integration.md
+  → docs/learning-loop.md
+  → ROADMAP.md
 ```
 
-### For Developers
-
-```
-README.md
-  ├→ docs/architecture.md     (system design)
-  ├→ docs/developers.md       (extending b1e55ed)
-  └→ samples/README.md        (templates)
-```
-
-### For Operators
-
-```
-README.md
-  ├→ docs/configuration.md    (config reference)
-  ├→ docs/deployment.md       (production setup)
-  └→ docs/security.md         (security model)
-```
-
----
-
-## Core Documentation
-
-### `README.md`
-
-**References:**
-```
-README.md
-  ├→ docs/getting-started.md       (Installation → Getting Started)
-  ├→ docs/architecture.md          (Architecture → System Design)
-  ├→ docs/api-reference.md         (API → Full API Docs)
-  ├→ docs/openclaw-integration.md  (Operator Layer → Integration)
-  ├→ docs/OPERATOR_SPRINT_PLAN.md  (beta.2 → Operator Layer Plan)
-  ├→ DOCKER.md                     (Docker deployment)
-  └→ ROADMAP.md                    (Roadmap)
-```
-
-**Referenced by:**
-- None (entry point)
-
----
+## Core docs
 
 ### `docs/getting-started.md`
 
-**References:**
-```
+```text
 getting-started.md
-  ├→ configuration.md         (Configuration section)
-  ├→ deployment.md            (Production deployment)
-  ├→ api-reference.md         (API usage)
-  └→ security.md              (Master password setup)
+  → configuration.md
+  → cli-reference.md
+  → api-reference.md
+  → contributors.md
+  → eas-integration.md
+  → architecture.md
 ```
 
-**Referenced by:**
-- README.md
-- DOCKER.md
+### `docs/cli-reference.md`
 
----
-
-### `docs/configuration.md`
-
-**References:**
+```text
+cli-reference.md
+  → contributors.md
+  → eas-integration.md
 ```
-configuration.md
-  ├→ deployment.md            (Deployment-specific configs)
-  ├→ security.md              (Secret management)
-  └→ developers.md            (Custom producer configs)
-```
-
-**Referenced by:**
-- getting-started.md
-- deployment.md
-- api-reference.md
-
----
-
-### `docs/deployment.md`
-
-**References:**
-```
-deployment.md
-  ├⇒ security.md              (TLS, secrets, hardening)
-  ├→ configuration.md         (Config examples)
-  ├→ getting-started.md       (Basic setup)
-  └→ DOCKER.md                (Docker alternative)
-```
-
-**Referenced by:**
-- README.md
-- getting-started.md
-- DOCKER.md
-
----
 
 ### `docs/api-reference.md`
 
-**References:**
-```
+```text
 api-reference.md
-  ├→ security.md              (Authentication)
-  ├→ configuration.md         (API config section)
-  └→ architecture.md          (API layer diagram)
+  → configuration.md
+  → contributors.md
+  → eas-integration.md
+  → architecture.md
 ```
 
-**Referenced by:**
-- README.md
-- getting-started.md
-- developers.md
+### `docs/contributors.md`
 
----
+```text
+contributors.md
+  → eas-integration.md
+  → api-reference.md
+  → cli-reference.md
+```
+
+### `docs/configuration.md`
+
+```text
+configuration.md
+  → eas-integration.md
+```
 
 ### `docs/architecture.md`
 
-**References:**
-```
+```text
 architecture.md
-  ├→ developers.md            (Extension points)
-  ├→ security.md              (Security architecture)
-  ├→ dependencies-code.md     (Module dependencies)
-  └→ api-reference.md         (API endpoints)
+  → api-reference.md
+  → contributors.md
+  → eas-integration.md
+  → dependencies-code.md
 ```
 
-**Referenced by:**
-- README.md
-- developers.md
-- ROADMAP.md
+### `docs/eas-integration.md`
 
----
-
-### `docs/developers.md`
-
-**References:**
+```text
+eas-integration.md
+  → contributors.md
 ```
-developers.md
-  ├⇒ architecture.md          (System design context)
-  ├⇒ samples/README.md        (Templates)
-  ├→ samples/socials/README.md (Social producer examples)
-  ├→ samples/tradfi/README.md  (TradFi producer examples)
-  ├→ samples/onchain/README.md (On-chain producer examples)
-  ├→ configuration.md         (Config for custom modules)
-  └→ dependencies-code.md     (Dependency rules)
-```
-
-**Referenced by:**
-- README.md
-- architecture.md
-- samples/README.md
-
----
 
 ### `docs/security.md`
 
-**References:**
-```
+```text
 security.md
-  ├→ architecture.md          (Event sourcing design)
-  ├→ configuration.md         (Security-related configs)
-  ├→ deployment.md            (Production hardening)
-  └→ dependencies-code.md     (Security layer deps)
+  → configuration.md
+  → deployment.md
 ```
 
-**Referenced by:**
-- getting-started.md
-- configuration.md
-- deployment.md
-- api-reference.md
-- architecture.md
+### `docs/deployment.md`
 
----
+```text
+deployment.md
+  → configuration.md
+  → security.md
+```
 
 ### `docs/dependencies-code.md`
 
-**References:**
-```
+```text
 dependencies-code.md
-  ├→ architecture.md          (Layer definitions)
-  └→ developers.md            (Adding new modules)
+  → architecture.md
 ```
 
+<<<<<<< HEAD
 **Referenced by:**
 - architecture.md
 - developers.md
@@ -516,6 +430,13 @@ scripts/validate_doc_deps.sh
 
 ---
 
-*Auto-generated dependency graph: Run `scripts/generate_doc_dep_graph.sh` (when implemented)*
+### Additional Documentation
 
-*Last updated: 2026-02-19*
+| Document | Purpose |
+|----------|---------|
+| [eas-integration.md](eas-integration.md) | Ethereum Attestation Service setup and usage |
+| [FORGE_SPEC.md](FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
+| [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
+| [OPERATOR_SPRINT_PLAN.md](OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+
+*Last updated: 2026-02-20*

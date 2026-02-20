@@ -26,6 +26,38 @@ app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 templates = Jinja2Templates(directory=_HERE / "templates")
 
 
+def _repo_root() -> Path:
+    return _HERE.parent
+
+
+@app.middleware("http")
+async def _identity_gate(request: Request, call_next):
+    # Always allow static assets
+    if request.url.path.startswith("/static"):
+        return await call_next(request)
+
+    # Dev/test bypass
+    if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+        return await call_next(request)
+
+    from engine.core.identity_gate import load_identity
+
+    identity = load_identity(_repo_root())
+    if identity is None:
+        return templates.TemplateResponse(
+            "forge_required.html",
+            {
+                "request": request,
+                "active_page": "identity",
+                "kill_switch_level": 0,
+                "regime": "transition",
+            },
+            status_code=403,
+        )
+
+    return await call_next(request)
+
+
 @app.on_event("startup")
 def _startup() -> None:
     base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050")
@@ -860,6 +892,21 @@ def signal_history_partial(request: Request, domain: str | None = None) -> HTMLR
         "partials/signal_history.html",
         {"request": request, "signals": signals, "total_signals": total, "active_domain": domain},
     )
+
+
+# ---- Optional pages backed by local DB --------------------------------
+
+# These pages intentionally read from the local SQLite journal. They do not
+# require the API layer to be reachable.
+from dashboard.contributors import register as _register_contributors  # noqa: E402
+from dashboard.identity import register as _register_identity  # noqa: E402
+from dashboard.producers import register as _register_producers  # noqa: E402
+from dashboard.webhooks import register as _register_webhooks  # noqa: E402
+
+_register_contributors(app, templates)
+_register_identity(app, templates)
+_register_webhooks(app, templates)
+_register_producers(app, templates)
 
 
 if __name__ == "__main__":

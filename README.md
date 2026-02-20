@@ -4,210 +4,84 @@
   <img src="assets/b1e55ed-hero.jpg" alt="b1e55ed" width="900" />
 </p>
 
-**b1e55ed** (0xb1e55ed = "blessed") — A sovereign trading intelligence system with compound learning.
+**b1e55ed** (0xb1e55ed = "blessed") — a sovereign trading intelligence system with compound learning.
 
-Not a mechanism — an organism. It learns from every trade, every signal, every mistake. Its conviction weights shift. Its producer scores evolve. Its corpus grows. The system you deploy today is not the system running six months from now.
-
-Built around one primitive: **events**. Producers emit events. The brain reads events and emits events. Execution reads events and emits events. An append-only hash chain makes the whole thing auditable by construction.
+Built around one primitive: **events**. Producers emit events. The brain reads events and emits events. Execution reads events and emits events. An append-only hash chain makes the system auditable by construction.
 
 [![Tests](https://github.com/P-U-C/b1e55ed/workflows/CI/badge.svg)](https://github.com/P-U-C/b1e55ed/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- **13 Signal Producers** - Technical, on-chain, TradFi, social intelligence
-- **6-Phase Brain** - Collection → Quality → Synthesis → Regime → Conviction → Decision
-- **Kill Switch** - 5 escalation levels, auto-triggered risk protection
-- **Learning Loop** - Domain weights auto-adjust based on performance
-- **Paper + Live Trading** - Hyperliquid execution with preflight checks
-- **Karma Engine** - Optional 0.5% profit-sharing on realized gains
-- **REST API** - 12 routes for monitoring and control
-- **Web Dashboard** - Real-time intelligence UI (HTMX + Jinja2)
+- Event-sourced core (append-only DB + hash chain)
+- Kill switch gating (operator override)
+- CLI control plane (tables or JSON)
+- REST API mounted under `/api/v1/`
+- Dashboard (read-oriented)
+- Dynamic producer registration
+- Contributors (registry, scoring, leaderboard)
+- Signal attribution (`/api/v1/signals/submit`)
+- The Forge (Ethereum-prefixed identity derivation)
+- EAS integration (optional off-chain attestations)
+- Webhook dispatch (CLI-managed subscriptions)
+- Karma / treasury accounting
 
 ## Installation
 
-### Option 1: Docker (Recommended)
-
-**Quickest way to evaluate:**
+### From source
 
 ```bash
-# 1. Clone repository
 git clone https://github.com/P-U-C/b1e55ed.git
 cd b1e55ed
-
-# 2. Configure environment
-cp .env.template .env
-vim .env  # Set B1E55ED_MASTER_PASSWORD at minimum
-
-# 3. Start all services
-docker-compose up -d
-
-# 4. Access
-# API:       http://localhost:5050/health
-# Dashboard: http://localhost:5051
-```
-
-**Includes:**
-- API server (port 5050)
-- Dashboard (port 5051)
-- Brain cycle (every 5 min)
-- Persistent volumes for data/logs
-
-**Stop:**
-```bash
-docker-compose down
-```
-
-### Option 2: Automated Install Script
-
-**One-command deployment on Ubuntu/Debian:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/install.sh | sudo bash
-```
-
-This will:
-- Install dependencies (Python 3.12, uv, SQLite)
-- Create service user
-- Setup systemd services
-- Generate identity
-- Configure log rotation
-- Start API + Dashboard + Brain
-
-**Post-install:**
-```bash
-# Check status
-sudo systemctl status b1e55ed-api
-sudo systemctl status b1e55ed-dashboard
-
-# View logs
-sudo journalctl -u b1e55ed-api -f
-tail -f /var/log/b1e55ed/brain.log
-
-# Access
-curl http://localhost:5050/health
-```
-
-### Option 3: Manual Installation
-
-**From wheel (Python 3.11+):**
-
-```bash
-# 1. Download release
-wget https://github.com/P-U-C/b1e55ed/releases/download/v1.0.0-beta.1/b1e55ed-1.0.0b1-py3-none-any.whl
-
-# 2. Install
-pip install b1e55ed-1.0.0b1-py3-none-any.whl
-
-# 3. Generate identity
-export B1E55ED_MASTER_PASSWORD="your-secure-password"
-b1e55ed setup
-
-# 4. Run
-b1e55ed brain  # Single cycle
-b1e55ed api    # Start API
-b1e55ed dashboard  # Start dashboard
-```
-
-**From source:**
-
-```bash
-# 1. Clone
-git clone https://github.com/P-U-C/b1e55ed.git
-cd b1e55ed
-
-# 2. Install uv
-curl -fsSL https://astral.sh/uv/install.sh | sh
-
-# 3. Install dependencies
 uv sync
+```
 
-# 4. Run tests
-uv run pytest tests/ -v
+## Quick start
 
-# 5. Generate identity
-export B1E55ED_MASTER_PASSWORD="your-password"
+Sequence: forge identity → setup → register contributor → run brain.
+
+```bash
+export B1E55ED_MASTER_PASSWORD="your-secure-password"
+uv run b1e55ed identity forge
 uv run b1e55ed setup
-
-# 6. Run
+uv run b1e55ed contributors register --name "local-operator" --role operator
 uv run b1e55ed brain
 ```
 
-## Quick Start
-
-### 1. Configure
-
-Edit `config/user.yaml` or use environment variables:
-
-```yaml
-preset: balanced  # conservative | balanced | degen
-
-universe:
-  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
-
-weights:
-  curator: 0.25   # Human operator signals
-  onchain: 0.25   # Blockchain data
-  tradfi: 0.20    # CME, ETF flows
-  social: 0.15    # Social intelligence
-  technical: 0.10 # TA indicators
-  events: 0.05    # Calendar events
-
-execution:
-  mode: paper  # paper | live
-```
-
-### 2. Run Brain Cycle
+Start API + dashboard:
 
 ```bash
-# Paper trading (safe)
-b1e55ed brain
-
-# This will:
-# 1. Collect signals from all producers
-# 2. Synthesize weighted conviction scores
-# 3. Detect market regime
-# 4. Generate trade intents
-# 5. Execute via paper broker
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
+uv run b1e55ed api
+uv run b1e55ed dashboard
 ```
 
-### 3. Access Dashboard
+- API: `http://localhost:5050/api/v1/health`
+- Dashboard: `http://localhost:5051`
 
-```bash
-# Terminal 1: API
-b1e55ed api
+## Contributors
 
-# Terminal 2: Dashboard
-b1e55ed dashboard
+Contributors are the attribution unit for signals. They are used for:
 
-# Open http://localhost:5051
-```
+- signal provenance (`contributor_id`)
+- contributor scoring and leaderboard
+- optional EAS attestations
 
-See **[Getting Started Guide](docs/getting-started.md)** for detailed setup.
+Docs: [docs/contributors.md](docs/contributors.md)
 
-## Operator Layer
+## The Forge
 
-b1e55ed is the engine. It doesn't handle conversation, curation, or chat — that's the operator layer.
+The Forge derives an Ethereum identity with a `0xb1e55ed` prefix.
 
-Designed to run under [OpenClaw](https://openclaw.ai) as a sovereign trading agent, but any system that speaks HTTP and emits JSON events can operate it. The integration surface is intentionally simple: REST API in, events out.
+Docs:
+- [docs/FORGE_SPEC.md](docs/FORGE_SPEC.md)
+- [docs/getting-started.md](docs/getting-started.md)
 
-**For humans:** Drop alpha in chat, get alerts on Telegram, control the system through natural language.
+## EAS integration
 
-**For agents:** POST structured signals to the curator API, subscribe to events, implement custom producers. Same auth, same schema, same event contract. Agents are first-class operators.
+EAS integration is optional and supports off-chain attestations.
 
-```
-Operator (Human or Agent)
-    │
-    ├── Curate: POST /signals/curator    (intel in)
-    ├── Control: POST /brain/run         (trigger cycles)
-    ├── Monitor: GET /brain/status       (read state)
-    └── Override: POST /brain/kill-switch (emergency)
-    │
-    ▼
-b1e55ed Engine → Events → Alerts → Operator
-```
-
-The OpenClaw skill package (next phase) will make this a one-command install. See **[OpenClaw Integration](docs/openclaw-integration.md)** for the full architecture.
+Docs: [docs/eas-integration.md](docs/eas-integration.md)
 
 ### Distribution
 
@@ -219,6 +93,7 @@ The operator distribution artifacts are checked into this repository:
 
 ## Documentation
 
+<<<<<<< HEAD
 - [Getting Started](docs/getting-started.md) - Setup, concepts, troubleshooting
 - [Configuration](docs/configuration.md) - Presets, weights, risk settings
 - [API Reference](docs/api-reference.md) - REST endpoints, examples
@@ -226,6 +101,9 @@ The operator distribution artifacts are checked into this repository:
 - [Learning Loop](docs/learning-loop.md) - How weights auto-adjust
 - [OpenClaw Integration](docs/openclaw-integration.md) - Operator layer, agent-first design
 - [Operator Sprint Plan](docs/OPERATOR_SPRINT_PLAN.md) - beta.2 operator layer build plan (O1-O4)
+- [EAS Integration](docs/eas-integration.md) - Ethereum Attestation Service for contributor registry
+- [The Forge Spec](docs/FORGE_SPEC.md) - Identity derivation ritual specification
+- [Agent Producer Tutorial](docs/tutorial-agent-producer.md) - Build a signal producer for b1e55ed
 
 ## Architecture
 
@@ -288,92 +166,17 @@ if domain_score_high and trade_profitable:
 ### Tests
 
 ```bash
-# All tests (150+)
-uv run pytest tests/ -v
-
-# Coverage
-uv run pytest tests/ --cov=engine --cov-report=html
-
-# Specific
-uv run pytest tests/unit/test_conviction.py -v
+# 196+ tests
+uv run pytest -q
 ```
 
-### Lint & Type Check
+### Lint and format
 
 ```bash
-# Lint
-uv run ruff check .
-uv run ruff format .
-
-# Type check
-uv run mypy engine/
+uv run ruff check engine/ api/ tests/
+uv run ruff format engine/ api/ tests/
 ```
-
-### CI/CD
-
-6 jobs on every push/PR:
-- **test** - 150 unit/integration tests
-- **lint** - ruff check + format
-- **typecheck** - mypy strict
-- **smoke** - CLI, imports, DB, config
-- **security** - bandit + safety + secrets
-- **build** - wheel + sdist + install verification
-
-## Design Principles
-
-1. **Event contract is the primitive** - Everything flows through events
-2. **Three config surfaces max** - `default.yaml`, `presets/*.yaml`, env vars (secrets only)
-3. **One kill switch, five levels** - Auto-escalate only, never de-escalate
-4. **Paper before live** - Test everything in paper mode first
-5. **Bounded adaptation** - Learning loop has floors, ceilings, max deltas
-
-## Project Structure
-
-```
-b1e55ed/
-├── engine/           # Core system
-│   ├── brain/        # Orchestrator, conviction, regime
-│   ├── core/         # Events, database, config, policy
-│   ├── execution/    # OMS, paper broker, Hyperliquid
-│   ├── producers/    # 13 signal producers
-│   ├── security/     # Identity, keystore, audit
-│   └── integration/  # Learning loop, hooks
-├── api/              # REST API (FastAPI)
-├── dashboard/        # Web UI (HTMX + Jinja2)
-├── config/           # Defaults + presets
-├── tests/            # 150+ tests
-├── docs/             # Documentation
-└── scripts/          # Install script, utilities
-```
-
-## Karma
-
-> "We make a living by what we get. We make a life by what we give." — Winston Churchill
-
-Optional profit-sharing mechanism (default: disabled).
-
-When enabled (via `karma.enabled = true`), the system:
-1. Tracks realized profit on each trade
-2. Creates a signed intent for 0.5% of profit
-3. Batches and settles to configured treasury address
-
-**Configurable:**
-```yaml
-karma:
-  enabled: false           # Opt-in
-  percentage: 0.005        # 0.5% of profit
-  treasury_address: "0x..."
-  settlement_mode: manual  # manual | daily | threshold
-```
-
-No impact on losses. Only applied to realized gains.
 
 ## License
 
 MIT
-
----
-
-**Status:** v1.0.0-beta.1 (Feature-complete, paper trading validated, not yet battle-tested with real capital)
-
-**Support:** [Issues](https://github.com/P-U-C/b1e55ed/issues) | [Discussions](https://github.com/P-U-C/b1e55ed/discussions)
