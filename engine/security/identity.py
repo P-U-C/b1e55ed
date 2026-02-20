@@ -35,6 +35,7 @@ _HKDF_INFO = b"b1e55ed-ed25519-signing-key-v1"
 # Encryption helpers
 # ---------------------------------------------------------------------------
 
+
 def _derive_fernet_key(password: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -56,6 +57,7 @@ def _password() -> str:
 # Ed25519 derivation from Ethereum key
 # ---------------------------------------------------------------------------
 
+
 def derive_ed25519_from_eth(eth_private_key_hex: str) -> tuple[Ed25519PrivateKey, Ed25519PublicKey]:
     """Deterministically derive Ed25519 keypair from Ethereum private key via HKDF."""
     eth_bytes = bytes.fromhex(eth_private_key_hex.removeprefix("0x"))
@@ -73,6 +75,7 @@ def derive_ed25519_from_eth(eth_private_key_hex: str) -> tuple[Ed25519PrivateKey
 # Unified Identity
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class NodeIdentity:
     """Unified identity combining Forge Ethereum address and derived Ed25519 signing key.
@@ -80,12 +83,13 @@ class NodeIdentity:
     For backwards compatibility, the class name remains NodeIdentity.
     All signing operations use the derived Ed25519 key.
     """
+
     node_id: str
-    public_key: str     # Ed25519 public key hex
-    private_key: str    # Ed25519 private key hex (in-memory; encrypted at rest)
+    public_key: str  # Ed25519 public key hex
+    private_key: str  # Ed25519 private key hex (in-memory; encrypted at rest)
     created_at: str
-    eth_address: str = ""       # Forge vanity address (0xb1e55ed...)
-    eth_private_key: str = ""   # Ethereum private key hex (in-memory; encrypted at rest)
+    eth_address: str = ""  # Forge vanity address (0xb1e55ed...)
+    eth_private_key: str = ""  # Ethereum private key hex (in-memory; encrypted at rest)
 
     @property
     def public_key_hex(self) -> str:
@@ -150,8 +154,7 @@ class NodeIdentity:
             dev_mode = os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes")
             if not dev_mode:
                 raise ValueError(
-                    "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. "
-                    "Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
+                    "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
                 )
             blob["private_key"] = self.private_key
             if self.eth_private_key:

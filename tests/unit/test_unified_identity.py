@@ -118,6 +118,7 @@ def test_load_v1_identity_backwards_compat(tmp_path: Path, monkeypatch: pytest.M
 
     # Write a v1-style identity file
     import json
+
     v1_blob = {
         "alg": "ed25519",
         "created_at": "2026-01-01T00:00:00+00:00",
