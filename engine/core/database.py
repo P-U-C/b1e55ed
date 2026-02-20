@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS events (
     ts TEXT NOT NULL,
     observed_at TEXT,
     source TEXT,
+    contributor_id TEXT,
     trace_id TEXT,
     schema_version TEXT DEFAULT 'v1',
     dedupe_key TEXT,
@@ -53,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+CREATE INDEX IF NOT EXISTS idx_events_contributor ON events(contributor_id);
 
 -- ============================================================
 -- Event Deduplication
@@ -342,6 +344,36 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_enabled ON webhook_subscriptions(enabled);
+
+-- ============================================================
+-- Contributors + Attribution
+-- ============================================================
+CREATE TABLE IF NOT EXISTS contributors (
+    id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'tester',
+    metadata TEXT DEFAULT '{}',
+    registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(node_id)
+);
+
+CREATE TABLE IF NOT EXISTS contributor_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contributor_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    signal_direction TEXT,
+    signal_score REAL,
+    signal_asset TEXT,
+    accepted INTEGER DEFAULT 0,
+    profitable INTEGER DEFAULT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (contributor_id) REFERENCES contributors(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contrib_signals_contributor ON contributor_signals(contributor_id);
+CREATE INDEX IF NOT EXISTS idx_contrib_signals_asset ON contributor_signals(signal_asset);
 """
 
 
@@ -390,6 +422,16 @@ class Database:
             self.conn.execute("PRAGMA synchronous=NORMAL")
             self.conn.execute("PRAGMA foreign_keys=ON")
 
+        # Lightweight migrations for additive columns (SQLite-friendly).
+        self._ensure_column("events", "contributor_id", "TEXT")
+
+    def _ensure_column(self, table: str, column: str, column_type: str) -> None:
+        cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if column in cols:
+            return
+        with self.conn:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
     def _get_last_hash(self) -> str | None:
         row = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
         return None if row is None else str(row[0])
@@ -408,6 +450,7 @@ class Database:
         event_id: str | None = None,
         observed_at: datetime | None = None,
         source: str | None = None,
+        contributor_id: str | None = None,
         trace_id: str | None = None,
         schema_version: str = "v1",
         dedupe_key: str | None = None,
@@ -464,9 +507,9 @@ class Database:
                     self.conn.execute(
                         """
                         INSERT INTO events (
-                            id, type, ts, observed_at, source, trace_id, schema_version, dedupe_key,
+                            id, type, ts, observed_at, source, contributor_id, trace_id, schema_version, dedupe_key,
                             payload, prev_hash, hash
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             eid,
@@ -474,6 +517,7 @@ class Database:
                             _dt_to_iso(now),
                             _dt_to_iso(observed_at),
                             source,
+                            contributor_id,
                             trace_id,
                             schema_version,
                             dedupe_key,

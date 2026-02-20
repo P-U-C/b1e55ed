@@ -179,6 +179,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_prod_rm = prod_sub.add_parser("remove", help="Remove a producer")
     p_prod_rm.add_argument("--name", required=True)
 
+    p_contrib = sub.add_parser("contributors", help="Manage contributors and reputation")
+    contrib_sub = p_contrib.add_subparsers(dest="contributors_cmd")
+
+    p_contrib_list = contrib_sub.add_parser("list", help="List contributors")
+    p_contrib_list.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_contrib_reg = contrib_sub.add_parser("register", help="Register a contributor")
+    p_contrib_reg.add_argument("--name", required=True)
+    p_contrib_reg.add_argument("--role", required=True, choices=["operator", "agent", "tester", "curator"])
+    p_contrib_reg.add_argument("--node-id", default=None)
+
+    p_contrib_rm = contrib_sub.add_parser("remove", help="Remove a contributor")
+    p_contrib_rm.add_argument("--id", required=True)
+
+    p_contrib_score = contrib_sub.add_parser("score", help="Compute contributor score")
+    p_contrib_score.add_argument("--id", required=True)
+    p_contrib_score.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    p_contrib_lb = contrib_sub.add_parser("leaderboard", help="Show contributor leaderboard")
+    p_contrib_lb.add_argument("--limit", type=int, default=20)
+    p_contrib_lb.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_webhooks = sub.add_parser("webhooks", help="Manage outbound webhook subscriptions")
     wh_sub = p_webhooks.add_subparsers(dest="webhooks_cmd")
 
@@ -743,6 +765,95 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.contributors import ContributorRegistry
+    from engine.core.database import Database
+    from engine.core.scoring import ContributorScoring
+    from engine.security.identity import ensure_identity
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    cmd = str(getattr(args, "contributors_cmd", "") or "")
+
+    reg = ContributorRegistry(db)
+    scoring = ContributorScoring(db)
+
+    if cmd == "list":
+        items = reg.list_all()
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([c.__dict__ for c in items]))
+            return 0
+
+        rows: list[list[str]] = []
+        for c in items:
+            rows.append([c.id, c.node_id, c.role, c.name, c.registered_at])
+        if rows:
+            _print_table(["id", "node_id", "role", "name", "registered_at"], rows)
+        return 0
+
+    if cmd == "register":
+        node_id = str(getattr(args, "node_id", "") or "")
+        if not node_id:
+            ident = ensure_identity().identity
+            node_id = ident.node_id
+
+        try:
+            c = reg.register(node_id=node_id, name=str(args.name), role=str(args.role), metadata={})
+        except ValueError:
+            print(f"error: contributor already exists for node_id: {node_id}", file=sys.stderr)
+            return 2
+
+        print(_json_dumps({"status": "ok", "contributor": c.__dict__}))
+        return 0
+
+    if cmd == "remove":
+        cid = str(args.id)
+        ok = reg.deregister(cid)
+        if not ok:
+            print(f"error: contributor not found: {cid}", file=sys.stderr)
+            return 2
+        print(_json_dumps({"status": "ok", "removed": cid}))
+        return 0
+
+    if cmd == "score":
+        cid = str(args.id)
+        s = scoring.compute_score(cid)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps(s.__dict__))
+        else:
+            print(f"score: {s.score:.2f} (hit_rate={s.hit_rate:.2%}, submitted={s.signals_submitted}, accepted={s.signals_accepted}, streak={s.streak})")
+        return 0
+
+    if cmd == "leaderboard":
+        limit = int(getattr(args, "limit", 20) or 20)
+        items = scoring.leaderboard(limit=limit)
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps([s.__dict__ for s in items]))
+            return 0
+
+        rows = []
+        for s in items:
+            c = reg.get(s.contributor_id)
+            rows.append(
+                [
+                    s.contributor_id,
+                    c.name if c else "",
+                    f"{s.score:.2f}",
+                    f"{s.hit_rate:.2%}",
+                    str(s.signals_submitted),
+                    str(s.signals_accepted),
+                    str(s.streak),
+                ]
+            )
+        if rows:
+            _print_table(["id", "name", "score", "hit_rate", "submitted", "accepted", "streak"], rows)
+        return 0
+
+    print("error: missing contributors subcommand (list|register|remove|score|leaderboard)", file=sys.stderr)
+    return 2
+
+
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
     from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
@@ -1186,6 +1297,7 @@ def main(argv: list[str] | None = None) -> int:
         "alerts": _cmd_alerts,
         "positions": _cmd_positions,
         "producers": _cmd_producers,
+        "contributors": _cmd_contributors,
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
