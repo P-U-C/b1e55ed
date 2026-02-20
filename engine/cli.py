@@ -76,6 +76,18 @@ def _repo_root_from_cwd() -> Path:
     return Path.cwd()
 
 
+def _load_config(ctx: CliContext) -> Config | None:
+    try:
+        from engine.core.config import Config
+
+        user_path = ctx.repo_root / "config" / "user.yaml"
+        if user_path.exists():
+            return Config.from_yaml(user_path)
+        return Config.from_repo_defaults(ctx.repo_root)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="b1e55ed",
@@ -269,6 +281,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_keys_test = keys_sub.add_parser("test", help="Verify configured keys against live APIs")
     p_keys_test.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    identity_parser = sub.add_parser("identity", help="Identity management")
+    identity_sub = identity_parser.add_subparsers(dest="identity_action")
+
+    forge_parser = identity_sub.add_parser("forge", help="Forge a new 0xb1e55ed identity")
+    forge_parser.add_argument("--threads", type=int, default=None)
+    forge_parser.add_argument("--json", action="store_true")
+
+    show_parser = identity_sub.add_parser("show", help="Show current identity")
+    show_parser.add_argument("--json", action="store_true")
 
     p_api = sub.add_parser("api", help="Start FastAPI server")
     p_api.add_argument("--host", default=None)
@@ -1321,6 +1343,235 @@ def _cmd_keys(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_identity(ctx: CliContext, args: argparse.Namespace) -> int:
+    action = getattr(args, "identity_action", None)
+    if action == "forge":
+        return _identity_forge(ctx, args)
+    if action == "show":
+        return _identity_show(ctx, args)
+
+    print("error: missing identity subcommand (forge/show)", file=sys.stderr)
+    return 2
+
+
+def _format_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    m, s = divmod(s, 60)
+    if m <= 0:
+        return f"{s}s"
+    return f"{m}m {s}s"
+
+
+def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
+    use_json = bool(getattr(args, "json", False))
+
+    identity_path = ctx.repo_root / ".b1e55ed" / "identity.json"
+    if not identity_path.exists():
+        if use_json:
+            print(_json_dumps({"ok": False, "error": "identity_not_found"}))
+        else:
+            print("No forged identity found. Run: b1e55ed identity forge")
+        return 1
+
+    try:
+        data = json.loads(identity_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        if use_json:
+            print(_json_dumps({"ok": False, "error": "identity_unreadable"}))
+        else:
+            print(f"Identity file unreadable: {identity_path}")
+        return 1
+
+    if use_json:
+        out = {"ok": True, "identity": data}
+        print(_json_dumps(out))
+        return 0
+
+    print("forged identity")
+    print(f"- address: {data.get('address', '')}")
+    print(f"- node_id: {data.get('node_id', '')}")
+    print(f"- forged_at: {data.get('forged_at', '')}")
+    print(f"- candidates_evaluated: {data.get('candidates_evaluated', '')}")
+    return 0
+
+
+def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
+    """The Forge — identity derivation ritual."""
+
+    import shutil
+    import subprocess
+    import time
+
+    use_json = bool(getattr(args, "json", False))
+    threads = int(getattr(args, "threads", None) or (os.cpu_count() or 4))
+    prefix = "b1e55ed"
+
+    # Expected candidates for 7 hex chars
+    expected = 16 ** len(prefix)
+
+    if not use_json:
+        print()
+        print("  ╔══════════════════════════════════════╗")
+        print("  ║         THE FORGE                    ║")
+        print("  ║         b1e55ed identity protocol    ║")
+        print("  ╚══════════════════════════════════════╝")
+        print()
+        print(f"  Every address in this network begins with 0x{prefix}.")
+        print("  Yours is being derived now.")
+        print()
+        print("  This takes a few minutes.")
+        print("  The work is the point.")
+        print()
+        print("  Searching...")
+        print()
+
+    rust_binary = shutil.which("b1e55ed-forge")
+    if rust_binary is None:
+        repo_binary = ctx.repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
+        if repo_binary.exists():
+            rust_binary = str(repo_binary)
+
+    result: dict[str, object] | None = None
+
+    def _render_progress(msg: dict[str, object]) -> None:
+        candidates = _safe_int(msg.get("candidates"))
+        elapsed_ms = _safe_int(msg.get("elapsed_ms"))
+        pct = min((candidates / expected) * 100.0 if expected else 0.0, 99.9)
+        bar_width = 24
+        filled = int(bar_width * pct / 100.0)
+        bar = "▓" * filled + "░" * (bar_width - filled)
+        elapsed = _format_elapsed(elapsed_ms / 1000.0)
+        print(
+            f"\r  {bar}  {pct:5.1f}%\n  {candidates:,} candidates evaluated\n  Elapsed: {elapsed}",
+            end="\033[F\033[F",
+            flush=True,
+        )
+
+    if rust_binary:
+        proc = subprocess.Popen(
+            [rust_binary, "--prefix", prefix, "--threads", str(threads), "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if msg.get("type") == "progress" and use_json:
+                print(_json_dumps(msg))
+            elif msg.get("type") == "progress" and not use_json:
+                _render_progress(msg)
+            elif msg.get("type") == "found":
+                result = msg
+                break
+        proc.wait()
+    else:
+        if not use_json:
+            print("  (Rust grinder not found — using Python fallback. This will be slower.)")
+            print()
+
+        from engine.integrations.forge import grind
+
+        for msg in grind(prefix):
+            if msg.get("type") == "progress" and use_json:
+                print(_json_dumps(msg))
+            elif msg.get("type") == "progress" and not use_json:
+                _render_progress(msg)
+            elif msg.get("type") == "found":
+                result = msg
+                break
+
+    if result is None:
+        print("\n  Forge failed. No address found.")
+        return 1
+
+    address = str(result.get("address") or "")
+    private_key = str(result.get("private_key") or "")
+    candidates = _safe_int(result.get("candidates"))
+    elapsed_ms = _safe_int(result.get("elapsed_ms"))
+
+    identity_dir = ctx.repo_root / ".b1e55ed"
+    identity_dir.mkdir(exist_ok=True)
+
+    identity_data = {
+        "address": address,
+        "node_id": f"eth:{address.lower()}",
+        "forged_at": int(time.time()),
+        "candidates_evaluated": candidates,
+        "elapsed_ms": elapsed_ms,
+    }
+
+    identity_path = identity_dir / "identity.json"
+    identity_path.write_text(json.dumps(identity_data, indent=2), encoding="utf-8")
+
+    key_path = identity_dir / "forge_key.enc"
+    key_path.write_text(private_key, encoding="utf-8")
+    key_path.chmod(0o600)
+
+    attestation_uid = None
+    try:
+        config = _load_config(ctx)
+        if config and bool(config.eas.enabled):
+            from engine.integrations.eas import AttestationData, EASClient
+
+            eas = EASClient(
+                rpc_url=config.eas.rpc_url,
+                eas_address=config.eas.eas_contract,
+                schema_registry_address=config.eas.schema_registry,
+                private_key=config.eas.attester_private_key,
+            )
+            att = eas.create_offchain_attestation(
+                AttestationData(
+                    schema_uid=config.eas.schema_uid,
+                    recipient=address,
+                    data={
+                        "nodeId": identity_data["node_id"],
+                        "name": "",
+                        "role": "operator",
+                        "version": "1.0.0-beta.2",
+                        "registeredAt": identity_data["forged_at"],
+                    },
+                )
+            )
+            if att:
+                attestation_uid = str(att.get("uid") or "pending")
+    except Exception:  # noqa: BLE001
+        attestation_uid = None
+
+    if use_json:
+        out = {**identity_data, "attestation_uid": attestation_uid}
+        print(_json_dumps(out))
+        return 0
+
+    print("\n\n")
+    print("  ──────────────────────────────────────")
+    print()
+    print("  Forged.")
+    print()
+    print(f"  Address:   {address}")
+    print(f"  Node:      {identity_data['node_id']}")
+    if attestation_uid:
+        print(f"  Attested:  EAS #{attestation_uid[:10]}... (Ethereum)")
+    print()
+    print(f"  {candidates:,} candidates evaluated in {elapsed_ms / 1000:.1f}s")
+    print()
+    print(f"  Your key is stored at {key_path}")
+    print("  There is no recovery. Guard it accordingly.")
+    print()
+    print("  Welcome to the upper class.")
+    print()
+    print("  ──────────────────────────────────────")
+    print()
+    return 0
+
+
 def _cmd_api(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.config import Config
 
@@ -1448,6 +1699,7 @@ def main(argv: list[str] | None = None) -> int:
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "keys": _cmd_keys,
+        "identity": _cmd_identity,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,

@@ -23,6 +23,9 @@ htmlcov/
 coverage.xml
 .coverage
 
+tools/forge/target/
+.b1e55ed/
+
 # IDE
 .vscode/
 .idea/
