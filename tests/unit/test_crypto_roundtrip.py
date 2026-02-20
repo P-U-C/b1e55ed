@@ -49,11 +49,11 @@ def test_keystore_encrypt_decrypt_roundtrip(tmp_path: Path, monkeypatch: pytest.
     salt = tmp_path / "salt"
     meta = tmp_path / "meta.json"
     ks = Keystore(vault_path=vault, salt_path=salt, password="keystore-test-pw", enable_keyring=False, metadata_path=meta)
-    ks.set("api_key", "sk-secret-12345")
+    ks.set("api_key", "test-api-key-12345")
     ks.set("other_key", "value-67890")
 
     ks2 = Keystore(vault_path=vault, salt_path=salt, password="keystore-test-pw", enable_keyring=False, metadata_path=meta)
-    assert ks2.get("api_key") == "sk-secret-12345"
+    assert ks2.get("api_key") == "test-api-key-12345"
     assert ks2.get("other_key") == "value-67890"
 
 
