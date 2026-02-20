@@ -124,6 +124,7 @@ class _EncryptedFileBackend:
         return salt
 
     def _fernet(self) -> Fernet:
+        """v1 decryption (PBKDF2 + Fernet). Used for reading legacy vaults."""
         salt = self._get_or_create_salt()
         return Fernet(_derive_fernet_key(self._password, salt))
 
@@ -132,6 +133,20 @@ class _EncryptedFileBackend:
             self._secrets = {}
             return
         encrypted = self.vault_path.read_bytes()
+
+        # Try v2 first (JSON envelope with cipher field)
+        try:
+            envelope = json.loads(encrypted.decode("utf-8"))
+            if envelope.get("cipher") == "aes-256-gcm":
+                from engine.security.identity import _decrypt_v2
+
+                plaintext = _decrypt_v2(envelope, self._password)
+                self._secrets = json.loads(plaintext.decode("utf-8"))
+                return
+        except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
+            pass  # Not v2 JSON — try v1 Fernet (raw bytes)
+
+        # v1 fallback: Fernet
         try:
             data = self._fernet().decrypt(encrypted)
         except InvalidToken as e:
@@ -139,10 +154,14 @@ class _EncryptedFileBackend:
         self._secrets = json.loads(data.decode("utf-8"))
 
     def _save(self) -> None:
+        """Save vault using v2 crypto (Argon2id + AES-256-GCM)."""
         self._ensure_dir()
         data = json.dumps(self._secrets, sort_keys=True, indent=2).encode("utf-8")
-        encrypted = self._fernet().encrypt(data)
-        self.vault_path.write_bytes(encrypted)
+
+        from engine.security.identity import _encrypt_v2
+
+        envelope = _encrypt_v2(data, self._password)
+        self.vault_path.write_text(json.dumps(envelope, sort_keys=True, indent=2), encoding="utf-8")
         with contextlib.suppress(OSError):
             os.chmod(self.vault_path, 0o600)
 

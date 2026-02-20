@@ -7,8 +7,13 @@ Key hierarchy:
   Forge (secp256k1) → HKDF → Ed25519 signing key
   node_id = b1e55ed-{eth_address[2:10]}
 
-The Forge's vanity address IS the identity. Ed25519 is for fast signing
-of events, karma intents, and attestations.
+Crypto primitives (v2):
+- KDF: Argon2id (memory-hard, GPU-resistant)
+- Encryption: AES-256-GCM (authenticated encryption)
+- Signing: Ed25519
+
+Read path supports v1 (PBKDF2 + Fernet) for backwards compatibility.
+Write path always uses v2.
 """
 
 from __future__ import annotations
@@ -24,15 +29,80 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-_ITERATIONS = 480_000
+# v1 constants (legacy, read-only support)
+_PBKDF2_ITERATIONS = 480_000
+
+# v2 constants (current default)
+_ARGON2_TIME_COST = 2
+_ARGON2_MEMORY_COST = 19456  # 19 MiB
+_ARGON2_PARALLELISM = 1
+_ARGON2_HASH_LEN = 32  # 256 bits for AES-256
+_GCM_NONCE_LEN = 12
+
 _HKDF_INFO = b"b1e55ed-ed25519-signing-key-v1"
 
 
 # ---------------------------------------------------------------------------
-# Encryption helpers
+# v2 crypto: Argon2id + AES-256-GCM
+# ---------------------------------------------------------------------------
+
+
+def _derive_key_v2(password: str, salt: bytes) -> bytes:
+    """Derive a 256-bit key using Argon2id."""
+    from argon2.low_level import Type, hash_secret_raw
+
+    return hash_secret_raw(
+        secret=password.encode("utf-8"),
+        salt=salt,
+        time_cost=_ARGON2_TIME_COST,
+        memory_cost=_ARGON2_MEMORY_COST,
+        parallelism=_ARGON2_PARALLELISM,
+        hash_len=_ARGON2_HASH_LEN,
+        type=Type.ID,
+    )
+
+
+def _encrypt_v2(plaintext: bytes, password: str) -> dict:
+    """Encrypt with AES-256-GCM + Argon2id. Returns blob dict."""
+    salt = os.urandom(16)
+    key = _derive_key_v2(password, salt)
+    nonce = os.urandom(_GCM_NONCE_LEN)
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return {
+        "kdf": {
+            "name": "argon2id",
+            "time_cost": _ARGON2_TIME_COST,
+            "memory_cost": _ARGON2_MEMORY_COST,
+            "parallelism": _ARGON2_PARALLELISM,
+            "salt_b64": base64.b64encode(salt).decode("ascii"),
+        },
+        "cipher": "aes-256-gcm",
+        "nonce_b64": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext_b64": base64.b64encode(ciphertext).decode("ascii"),
+    }
+
+
+def _decrypt_v2(blob: dict, password: str) -> bytes:
+    """Decrypt AES-256-GCM + Argon2id blob."""
+    kdf_info = blob["kdf"]
+    salt = base64.b64decode(kdf_info["salt_b64"])
+    key = _derive_key_v2(password, salt)
+    nonce = base64.b64decode(blob["nonce_b64"])
+    ciphertext = base64.b64decode(blob["ciphertext_b64"])
+    aesgcm = AESGCM(key)
+    try:
+        return aesgcm.decrypt(nonce, ciphertext, None)
+    except Exception as e:
+        raise ValueError("Invalid password or corrupted identity file") from e
+
+
+# ---------------------------------------------------------------------------
+# v1 crypto: PBKDF2 + Fernet (legacy read support)
 # ---------------------------------------------------------------------------
 
 
@@ -41,7 +111,7 @@ def _derive_fernet_key(password: str, salt: bytes) -> bytes:
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=_ITERATIONS,
+        iterations=_PBKDF2_ITERATIONS,
     )
     return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
@@ -119,7 +189,7 @@ class NodeIdentity:
             return False
 
     def save(self, path: str | Path) -> None:
-        """Save identity to JSON, with encrypted private keys."""
+        """Save identity to JSON. Uses v2 crypto (Argon2id + AES-256-GCM) by default."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -137,19 +207,13 @@ class NodeIdentity:
             blob["eth_address"] = self.eth_address
 
         if pw:
-            salt = os.urandom(16)
-            f = Fernet(_derive_fernet_key(pw, salt))
-            encrypted_priv = f.encrypt(bytes.fromhex(self.private_key))
-            blob["private_key_enc"] = base64.b64encode(encrypted_priv).decode("ascii")
-            blob["kdf"] = {
-                "name": "pbkdf2_hmac_sha256",
-                "iterations": _ITERATIONS,
-                "salt_b64": base64.b64encode(salt).decode("ascii"),
-            }
+            # v2: Argon2id + AES-256-GCM for Ed25519 key
+            enc = _encrypt_v2(bytes.fromhex(self.private_key), pw)
+            blob["private_key_enc_v2"] = enc
             # Also encrypt Ethereum key if present
             if self.eth_private_key:
-                encrypted_eth = f.encrypt(bytes.fromhex(self.eth_private_key.removeprefix("0x")))
-                blob["eth_private_key_enc"] = base64.b64encode(encrypted_eth).decode("ascii")
+                eth_enc = _encrypt_v2(bytes.fromhex(self.eth_private_key.removeprefix("0x")), pw)
+                blob["eth_private_key_enc_v2"] = eth_enc
         else:
             dev_mode = os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes")
             if not dev_mode:
@@ -173,29 +237,39 @@ class NodeIdentity:
         if blob.get("alg") != "ed25519":
             raise ValueError("Unsupported identity alg")
 
-        _version = blob.get("version", 1)  # noqa: F841 — reserved for future migration
         eth_address = blob.get("eth_address", "")
         eth_private_key = ""
+        priv_hex: str
 
-        # Decrypt Ed25519 key
-        if "private_key_enc" in blob:
+        if "private_key_enc_v2" in blob:
+            # v2: Argon2id + AES-256-GCM
+            priv_raw = _decrypt_v2(blob["private_key_enc_v2"], _password())
+            priv_hex = priv_raw.hex()
+            # Decrypt Ethereum key if present (v2)
+            if "eth_private_key_enc_v2" in blob:
+                try:
+                    eth_raw = _decrypt_v2(blob["eth_private_key_enc_v2"], _password())
+                    eth_private_key = eth_raw.hex()
+                except ValueError:
+                    pass  # Non-fatal
+
+        elif "private_key_enc" in blob:
+            # v1: PBKDF2 + Fernet (legacy)
             salt = base64.b64decode(blob["kdf"]["salt_b64"])
             f = Fernet(_derive_fernet_key(_password(), salt))
-
             try:
                 priv_raw = f.decrypt(base64.b64decode(blob["private_key_enc"]))
             except InvalidToken as e:
                 raise ValueError("Invalid password or corrupted identity file") from e
-
             priv_hex = priv_raw.hex()
-
-            # Decrypt Ethereum key if present
+            # Decrypt Ethereum key if present (v1)
             if "eth_private_key_enc" in blob:
                 try:
                     eth_raw = f.decrypt(base64.b64decode(blob["eth_private_key_enc"]))
                     eth_private_key = eth_raw.hex()
                 except InvalidToken:
-                    pass  # Non-fatal: Ed25519 key is sufficient for operations
+                    pass
+
         else:
             # Plaintext fallback
             priv_hex = str(blob["private_key"])
@@ -278,7 +352,6 @@ def generate_node_identity(*, eth_private_key: str | None = None, eth_address: s
         )
 
         addr = eth_address or ""
-        # node_id from Ethereum address if available
         node_id = f"b1e55ed-{addr[2:10].lower()}" if addr else f"b1e55ed-{pub_raw.hex()[:8]}"
 
         return NodeIdentity(

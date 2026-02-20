@@ -2,32 +2,30 @@
 
 > Single source of truth for all crypto used in b1e55ed.
 
-## Current Implementation (v1)
+## Current Implementation (v2)
 
 | Purpose | Primitive | Library | Notes |
 |---------|-----------|---------|-------|
 | Identity signing | Ed25519 | cryptography | Event signing, karma intents |
-| Key derivation | PBKDF2-HMAC-SHA256 (480K iter) | cryptography | Identity + keystore encryption |
-| At-rest encryption | Fernet (AES-128-CBC + HMAC-SHA256) | cryptography | Identity file, keystore vault |
+| Key derivation | **Argon2id** (19 MiB, 2 iter) | argon2-cffi | Memory-hard, GPU-resistant |
+| At-rest encryption | **AES-256-GCM** | cryptography | Authenticated encryption |
 | Hash chain | SHA-256 | hashlib | Event integrity |
 | Canonical serialization | JSON (sorted keys, compact) | json | Deterministic hashing |
 | Vanity grinding | secp256k1 + Keccak-256 | eth-account | Forge identity |
 
-## Target (v2 — Before >$10K AUM)
+## Legacy Support (v1 — read-only)
 
-| Purpose | Current | Target | Why |
-|---------|---------|--------|-----|
-| KDF | PBKDF2 (480K iter) | Argon2id (19 MiB, 2 iter, 1 thread) | Memory-hard, GPU-resistant |
-| Encryption | Fernet (AES-128-CBC) | AES-256-GCM | Stronger cipher, authenticated |
-| Key size | 128-bit (Fernet) | 256-bit (AES-256-GCM) | Industry standard |
+| Purpose | v1 Primitive | Status |
+|---------|-------------|--------|
+| KDF | PBKDF2-HMAC-SHA256 (480K iter) | Read-only (for loading old identity files) |
+| Encryption | Fernet (AES-128-CBC + HMAC-SHA256) | Read-only (for loading old vaults) |
 
-## Migration Plan
+New writes always use v2. Old files are automatically readable.
 
-1. Add Argon2id + AES-256-GCM support alongside existing primitives
-2. New identities use v2 primitives by default
-3. `b1e55ed identity migrate` command upgrades v1 → v2 in place
-4. Read path supports both v1 and v2 (version field in identity file)
-5. After migration period, deprecate v1 (log warning on load)
+## Migration
+
+- `b1e55ed identity migrate` (planned): loads v1 identity, re-saves as v2
+- For now: re-saving any identity automatically upgrades to v2
 
 ## Threat Model
 

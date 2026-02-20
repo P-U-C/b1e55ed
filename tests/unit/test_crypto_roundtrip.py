@@ -1,5 +1,7 @@
 """Crypto primitive roundtrip tests (C1)."""
 
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -55,6 +57,59 @@ def test_keystore_encrypt_decrypt_roundtrip(tmp_path: Path, monkeypatch: pytest.
     ks2 = Keystore(vault_path=vault, salt_path=salt, password="keystore-test-pw", enable_keyring=False, metadata_path=meta)
     assert ks2.get("api_key") == "test-api-key-12345"
     assert ks2.get("other_key") == "value-67890"
+
+
+def test_v1_identity_loads_with_v2_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """v1 identity files (PBKDF2 + Fernet) are still readable."""
+    import base64
+
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    pw = "legacy-password"
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", pw)
+
+    # Create a v1-format identity file manually
+    ident = generate_node_identity()
+    salt = os.urandom(16)
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=480_000)
+    fernet_key = base64.urlsafe_b64encode(kdf.derive(pw.encode()))
+    f = Fernet(fernet_key)
+    encrypted = f.encrypt(bytes.fromhex(ident.private_key))
+
+    v1_blob = {
+        "alg": "ed25519",
+        "created_at": ident.created_at,
+        "node_id": ident.node_id,
+        "public_key": ident.public_key,
+        "private_key_enc": base64.b64encode(encrypted).decode(),
+        "kdf": {
+            "name": "pbkdf2_hmac_sha256",
+            "iterations": 480_000,
+            "salt_b64": base64.b64encode(salt).decode(),
+        },
+    }
+
+    path = tmp_path / "v1_identity.key"
+    path.write_text(json.dumps(v1_blob))
+
+    # v2 code should load v1 file
+    loaded = NodeIdentity.load(path)
+    assert loaded.private_key == ident.private_key
+    assert loaded.verify(loaded.sign(b"test"), b"test")
+
+
+def test_v2_identity_not_readable_with_wrong_password(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """v2 encrypted identity fails with wrong password."""
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "correct")
+    ident = generate_node_identity()
+    path = tmp_path / "identity.key"
+    ident.save(path)
+
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "wrong")
+    with pytest.raises(ValueError, match="Invalid password"):
+        NodeIdentity.load(path)
 
 
 def test_identity_sign_verify_consistency() -> None:
