@@ -14,6 +14,7 @@ async def test_treasury_and_karma_flows(temp_dir, test_config):
     test_config = test_config.model_copy(
         update={
             "api": test_config.api.model_copy(update={"auth_token": "secret"}),
+            "execution": test_config.execution.model_copy(update={"mode": "live"}),
             "karma": test_config.karma.model_copy(update={"treasury_address": "0xabc", "enabled": True, "percentage": 0.01}),
         }
     )

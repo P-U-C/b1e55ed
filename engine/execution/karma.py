@@ -222,6 +222,9 @@ class KarmaEngine:
                 return None
             if not self.enabled:
                 return None
+            if self._config.execution.mode != "live":
+                # Paper PnL must never trigger real settlements.
+                return None
             destination = str(self._config.karma.treasury_address)
             if not destination:
                 return None
