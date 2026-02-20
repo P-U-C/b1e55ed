@@ -576,20 +576,19 @@ class Database:
         - If dedupe_key exists with different payload_hash: conflict.
         """
 
-        with self._lock:
-            with self.conn:
-                ev = self._append_event_inner(
-                    event_type=event_type,
-                    payload=payload,
-                    event_id=event_id,
-                    observed_at=observed_at,
-                    source=source,
-                    contributor_id=contributor_id,
-                    trace_id=trace_id,
-                    schema_version=schema_version,
-                    dedupe_key=dedupe_key,
-                    ts=ts,
-                )
+        with self._lock, self.conn:
+            ev = self._append_event_inner(
+                event_type=event_type,
+                payload=payload,
+                event_id=event_id,
+                observed_at=observed_at,
+                source=source,
+                contributor_id=contributor_id,
+                trace_id=trace_id,
+                schema_version=schema_version,
+                dedupe_key=dedupe_key,
+                ts=ts,
+            )
 
         # Side effects (best-effort): outbound webhooks.
         try:
