@@ -13,6 +13,7 @@ from api.schemas.signals import SignalResponse
 from engine.core.contributors import ContributorRegistry
 from engine.core.database import Database
 from engine.core.events import EventType
+from engine.core.rate_limiter import SignalRateLimiter
 
 router = APIRouter(prefix="/signals", dependencies=[AuthDep])
 
@@ -69,6 +70,19 @@ def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> S
     contributor = reg.get_by_node(req.node_id)
     if contributor is None:
         raise B1e55edError(code="contributor.not_found", message="Contributor not found", status=404, node_id=req.node_id)
+
+    # Rate limiting & anti-spam (S2)
+    limiter = SignalRateLimiter(db)
+    asset = _extract_asset(req.payload)
+    direction = _extract_direction(req.payload)
+    check = limiter.check(contributor_id=contributor.id, asset=asset, direction=direction)
+    if not check.allowed:
+        raise B1e55edError(
+            code="signal.rate_limited",
+            message=check.reason,
+            status=429,
+            retry_after=check.retry_after_seconds,
+        )
 
     ts = None
     if req.ts:
