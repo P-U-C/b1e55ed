@@ -209,6 +209,14 @@ b1e55ed Engine → Events → Alerts → Operator
 
 The OpenClaw skill package (next phase) will make this a one-command install. See **[OpenClaw Integration](docs/openclaw-integration.md)** for the full architecture.
 
+### Distribution
+
+The operator distribution artifacts are checked into this repository:
+
+- `skill.json` — ClawHub metadata for discoverability and installation
+- `setup_operator.sh` — one-command operator setup (installs dependencies and runs `b1e55ed setup`)
+- `crons.json` — OpenClaw cron templates for brain cycles, health checks, and position monitoring
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) - Setup, concepts, troubleshooting
