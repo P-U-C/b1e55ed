@@ -232,13 +232,7 @@ class ContributorScoring:
                 total_karma = float(k_row[0])
 
         # Composite: hardest-to-game components get highest weight
-        composite = (
-            0.35 * hit_rate_norm
-            + 0.20 * calibration_norm
-            + 0.20 * volume_norm
-            + 0.15 * consistency_norm
-            + 0.10 * recency
-        )
+        composite = 0.35 * hit_rate_norm + 0.20 * calibration_norm + 0.20 * volume_norm + 0.15 * consistency_norm + 0.10 * recency
         score_0_100 = 100.0 * _clamp01(composite)
 
         return ContributorScore(
