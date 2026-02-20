@@ -2,6 +2,8 @@
 
 Enforces forged identity as a prerequisite for system access.
 No identity = no access. The work is the gate.
+
+Post-U1: The Forge identity IS the node identity. One key, one address, one gate.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ class ForgedIdentity:
     forged_at: int
     candidates_evaluated: int
     elapsed_ms: int
+    public_key: str = ""  # Ed25519 derived public key
 
 
 def load_identity(repo_root: Path) -> ForgedIdentity | None:
@@ -34,6 +37,7 @@ def load_identity(repo_root: Path) -> ForgedIdentity | None:
             forged_at=data.get("forged_at", 0),
             candidates_evaluated=data.get("candidates_evaluated", 0),
             elapsed_ms=data.get("elapsed_ms", 0),
+            public_key=data.get("public_key", ""),
         )
     except (KeyError, json.JSONDecodeError, OSError):
         return None
