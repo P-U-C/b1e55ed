@@ -1,11 +1,14 @@
 """engine.security.identity
 
-Ed25519 node identity.
+Unified identity: one Ethereum key (from The Forge vanity grind),
+one derived Ed25519 signing key, one node_id.
 
-DECISIONS_V3 #11: generate silently during setup; prompt for backup on first
-network use (or after 7 days). The prompting is handled by higher layers.
+Key hierarchy:
+  Forge (secp256k1) → HKDF → Ed25519 signing key
+  node_id = b1e55ed-{eth_address[2:10]}
 
-Easter egg: node_id is prefixed with `b1e55ed-`.
+The Forge's vanity address IS the identity. Ed25519 is for fast signing
+of events, karma intents, and attestations.
 """
 
 from __future__ import annotations
@@ -21,9 +24,16 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 _ITERATIONS = 480_000
+_HKDF_INFO = b"b1e55ed-ed25519-signing-key-v1"
+
+
+# ---------------------------------------------------------------------------
+# Encryption helpers
+# ---------------------------------------------------------------------------
 
 
 def _derive_fernet_key(password: str, salt: bytes) -> bytes:
@@ -43,16 +53,52 @@ def _password() -> str:
     raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
 
 
+# ---------------------------------------------------------------------------
+# Ed25519 derivation from Ethereum key
+# ---------------------------------------------------------------------------
+
+
+def derive_ed25519_from_eth(eth_private_key_hex: str) -> tuple[Ed25519PrivateKey, Ed25519PublicKey]:
+    """Deterministically derive Ed25519 keypair from Ethereum private key via HKDF."""
+    eth_bytes = bytes.fromhex(eth_private_key_hex.removeprefix("0x"))
+    derived = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=_HKDF_INFO,
+    ).derive(eth_bytes)
+    priv = Ed25519PrivateKey.from_private_bytes(derived)
+    return priv, priv.public_key()
+
+
+# ---------------------------------------------------------------------------
+# Unified Identity
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class NodeIdentity:
+    """Unified identity combining Forge Ethereum address and derived Ed25519 signing key.
+
+    For backwards compatibility, the class name remains NodeIdentity.
+    All signing operations use the derived Ed25519 key.
+    """
+
     node_id: str
-    public_key: str  # hex
-    private_key: str  # hex (in-memory). At rest: encrypted.
+    public_key: str  # Ed25519 public key hex
+    private_key: str  # Ed25519 private key hex (in-memory; encrypted at rest)
     created_at: str
+    eth_address: str = ""  # Forge vanity address (0xb1e55ed...)
+    eth_private_key: str = ""  # Ethereum private key hex (in-memory; encrypted at rest)
 
     @property
     def public_key_hex(self) -> str:
         return self.public_key
+
+    @property
+    def forge_address(self) -> str:
+        """The Forge vanity Ethereum address, if available."""
+        return self.eth_address
 
     def _private_obj(self) -> Ed25519PrivateKey:
         raw = bytes.fromhex(self.private_key)
@@ -73,22 +119,22 @@ class NodeIdentity:
             return False
 
     def save(self, path: str | Path) -> None:
-        """Save identity to JSON, with encrypted private key."""
-
+        """Save identity to JSON, with encrypted private keys."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # If no master password is available, fall back to plaintext-at-rest.
-        # This keeps non-interactive setup/test flows working; operators should
-        # set B1E55ED_MASTER_PASSWORD in real deployments.
         pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
 
-        blob = {
+        blob: dict = {
             "node_id": self.node_id,
             "created_at": self.created_at,
             "public_key": self.public_key,
             "alg": "ed25519",
+            "version": 2,
         }
+
+        if self.eth_address:
+            blob["eth_address"] = self.eth_address
 
         if pw:
             salt = os.urandom(16)
@@ -100,16 +146,20 @@ class NodeIdentity:
                 "iterations": _ITERATIONS,
                 "salt_b64": base64.b64encode(salt).decode("ascii"),
             }
+            # Also encrypt Ethereum key if present
+            if self.eth_private_key:
+                encrypted_eth = f.encrypt(bytes.fromhex(self.eth_private_key.removeprefix("0x")))
+                blob["eth_private_key_enc"] = base64.b64encode(encrypted_eth).decode("ascii")
         else:
-            # Plaintext-at-rest: only allowed in dev mode
             dev_mode = os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes")
             if not dev_mode:
                 raise ValueError(
                     "SECURITY ERROR: Cannot save plaintext identity without B1E55ED_DEV_MODE=1. Set B1E55ED_MASTER_PASSWORD to encrypt identity at rest."
                 )
-
             blob["private_key"] = self.private_key
-            blob["warning"] = "DEVELOPMENT MODE: identity private key stored unencrypted; set B1E55ED_MASTER_PASSWORD in production"
+            if self.eth_private_key:
+                blob["eth_private_key"] = self.eth_private_key
+            blob["warning"] = "DEVELOPMENT MODE: identity private key stored unencrypted"
 
         path.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
         with contextlib.suppress(OSError):
@@ -123,7 +173,11 @@ class NodeIdentity:
         if blob.get("alg") != "ed25519":
             raise ValueError("Unsupported identity alg")
 
-        # Encrypted-at-rest (preferred)
+        _version = blob.get("version", 1)  # noqa: F841 — reserved for future migration
+        eth_address = blob.get("eth_address", "")
+        eth_private_key = ""
+
+        # Decrypt Ed25519 key
         if "private_key_enc" in blob:
             salt = base64.b64decode(blob["kdf"]["salt_b64"])
             f = Fernet(_derive_fernet_key(_password(), salt))
@@ -134,15 +188,26 @@ class NodeIdentity:
                 raise ValueError("Invalid password or corrupted identity file") from e
 
             priv_hex = priv_raw.hex()
+
+            # Decrypt Ethereum key if present
+            if "eth_private_key_enc" in blob:
+                try:
+                    eth_raw = f.decrypt(base64.b64decode(blob["eth_private_key_enc"]))
+                    eth_private_key = eth_raw.hex()
+                except InvalidToken:
+                    pass  # Non-fatal: Ed25519 key is sufficient for operations
         else:
-            # Plaintext-at-rest fallback
+            # Plaintext fallback
             priv_hex = str(blob["private_key"])
+            eth_private_key = blob.get("eth_private_key", "")
 
         return cls(
             node_id=str(blob["node_id"]),
             public_key=str(blob["public_key"]),
             private_key=priv_hex,
             created_at=str(blob["created_at"]),
+            eth_address=eth_address,
+            eth_private_key=eth_private_key,
         )
 
 
@@ -154,17 +219,11 @@ class IdentityHandle:
 
 def _default_identity_path() -> Path:
     home = Path(os.environ.get("HOME", "~")).expanduser()
-    # Historical filename expected by integration tests / legacy tooling.
     return home / ".b1e55ed" / "identity.key"
 
 
 def ensure_identity(path: str | Path | None = None) -> IdentityHandle:
-    """Load identity from disk or generate + persist.
-
-    Setup is allowed to generate silently (DECISIONS_V3 #11).
-    Requires B1E55ED_MASTER_PASSWORD (or B1E55ED_IDENTITY_PASSWORD) to save.
-    """
-
+    """Load identity from disk or generate + persist."""
     p = Path(path) if path else _default_identity_path()
     if p.exists():
         return IdentityHandle(path=p, identity=NodeIdentity.load(p))
@@ -181,20 +240,57 @@ def identity_status(path: str | Path | None = None) -> dict:
 
     try:
         ident = NodeIdentity.load(p)
-        return {
+        status: dict = {
             "present": True,
             "path": str(p),
             "node_id": ident.node_id,
             "created_at": ident.created_at,
             "public_key": ident.public_key,
         }
+        if ident.eth_address:
+            status["eth_address"] = ident.eth_address
+        return status
     except Exception as e:
         return {"present": False, "path": str(p), "error": str(e)}
 
 
-def generate_node_identity() -> NodeIdentity:
-    """Generate a new Ed25519 identity."""
+def generate_node_identity(*, eth_private_key: str | None = None, eth_address: str | None = None) -> NodeIdentity:
+    """Generate a new identity.
 
+    If eth_private_key is provided (from Forge grind), derives Ed25519 from it.
+    Otherwise falls back to standalone Ed25519 generation (legacy/test mode).
+    """
+
+    created_at = datetime.now(tz=UTC).isoformat()
+
+    if eth_private_key:
+        # Unified: derive Ed25519 from Ethereum key
+        priv_ed, pub_ed = derive_ed25519_from_eth(eth_private_key)
+
+        pub_raw = pub_ed.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        priv_raw = priv_ed.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
+        addr = eth_address or ""
+        # node_id from Ethereum address if available
+        node_id = f"b1e55ed-{addr[2:10].lower()}" if addr else f"b1e55ed-{pub_raw.hex()[:8]}"
+
+        return NodeIdentity(
+            node_id=node_id,
+            public_key=pub_raw.hex(),
+            private_key=priv_raw.hex(),
+            created_at=created_at,
+            eth_address=addr,
+            eth_private_key=eth_private_key.removeprefix("0x"),
+        )
+
+    # Legacy: standalone Ed25519 (for tests and pre-Forge bootstrap)
     priv = Ed25519PrivateKey.generate()
     pub = priv.public_key()
 
@@ -209,7 +305,6 @@ def generate_node_identity() -> NodeIdentity:
     )
 
     node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
-    created_at = datetime.now(tz=UTC).isoformat()
 
     return NodeIdentity(
         node_id=node_id,
