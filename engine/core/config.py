@@ -106,6 +106,7 @@ class ApiConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 5050
     auth_token: str = ""
+    kill_switch_token: str = ""  # Separate auth boundary for kill switch endpoints
 
 
 class DashboardConfig(BaseModel):
