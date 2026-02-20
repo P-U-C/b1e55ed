@@ -627,7 +627,10 @@ class Database:
                 with self.conn:
                     for et, payload, dedupe_key in event_list:
                         ev = self._append_event_inner(
-                            event_type=et, payload=payload, dedupe_key=dedupe_key, source=source,
+                            event_type=et,
+                            payload=payload,
+                            dedupe_key=dedupe_key,
+                            source=source,
                         )
                         out.append(ev)
             except Exception:

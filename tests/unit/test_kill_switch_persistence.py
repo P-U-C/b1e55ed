@@ -8,9 +8,7 @@ from engine.core.database import Database
 
 
 def _cfg(tmp_path: Path) -> Config:
-    return Config.from_repo_defaults(repo_root=Path(__file__).resolve().parents[2]).model_copy(
-        update={"data_dir": tmp_path / "data"}
-    )
+    return Config.from_repo_defaults(repo_root=Path(__file__).resolve().parents[2]).model_copy(update={"data_dir": tmp_path / "data"})
 
 
 def test_fresh_db_starts_at_safe(tmp_path: Path) -> None:
