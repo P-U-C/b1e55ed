@@ -50,9 +50,7 @@ class MarketEventsProducer(BaseProducer):
             return []
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
-        resp = asyncio.run(self.ctx.client.request("POST", url, json={"symbols": symbols}))
-
-        data: Any = resp.json()
+        data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
         if not isinstance(data, list):
