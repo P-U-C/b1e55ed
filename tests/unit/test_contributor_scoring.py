@@ -5,7 +5,7 @@ from pathlib import Path
 
 from engine.core.contributors import ContributorRegistry
 from engine.core.database import Database
-from engine.core.scoring import ContributorScoring, MIN_RESOLVED_FOR_HIT_RATE
+from engine.core.scoring import MIN_RESOLVED_FOR_HIT_RATE, ContributorScoring
 
 
 def _insert_signal(db: Database, *, contributor_id: str, event_id: str, accepted: int, profitable: int | None, score: float, created_at: datetime) -> None:
@@ -112,7 +112,6 @@ def test_low_hit_rate_penalty(tmp_path: Path) -> None:
     s = ContributorScoring(db).compute_score(c.id)
     assert s.hit_rate < 0.20
     # Score should be lower than someone with no resolved outcomes
-    s_empty = ContributorScoring(db).compute_score("nonexistent")
     # Bad contributor score should still be >= 0 (clamped)
     assert s.score >= 0.0
 
