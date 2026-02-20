@@ -74,6 +74,16 @@ disable_error_code = ["type-arg", "no-any-return", "no-untyped-def", "assignment
 module = "keyring.*"
 ignore_missing_imports = true
 
+# Optional dependencies (not installed in default CI typecheck job)
+[[tool.mypy.overrides]]
+module = [
+    "eth_account.*",
+    "eth_utils.*",
+    "Crypto.*",
+    "sha3",
+]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = "tests.*"
 disable_error_code = "no-redef"

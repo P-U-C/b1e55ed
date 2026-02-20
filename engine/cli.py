@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
@@ -311,6 +311,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     sub.add_parser("status", help="Print system status")
+
+    # -- replay --
+    p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
+    p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
+    p_replay.add_argument("--to", dest="to_id", help="End at event ID (inclusive)")
+    p_replay.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- integrity --
+    p_integrity = sub.add_parser("integrity", help="Verify event chain integrity and projection consistency")
+    p_integrity.add_argument("--fast", action="store_true", help="Check only recent events")
+    p_integrity.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     return parser
 
@@ -1672,6 +1683,108 @@ def _write_user_config(*, user_cfg_path: Path, preset: str) -> None:
     user_cfg_path.write_text(content, encoding="utf-8")
 
 
+def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Rebuild all projections from event replay."""
+    import time
+
+    from engine.core.database import Database
+    from engine.core.projections import ProjectionManager
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    try:
+        t0 = time.monotonic()
+        events = db.iter_events_ascending(
+            from_id=getattr(args, "from_id", None),
+            to_id=getattr(args, "to_id", None),
+        )
+        pm = ProjectionManager()
+        pm.rebuild(events)
+        elapsed = time.monotonic() - t0
+        state: dict[str, Any] = pm.get_state()
+
+        result = {
+            "status": "ok",
+            "events_replayed": len(events),
+            "elapsed_seconds": round(elapsed, 3),
+            "projections": {k: len(v) if isinstance(v, dict) else v for k, v in state.items()},
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            print(f"Replayed {len(events)} events in {elapsed:.3f}s")
+            projections = cast(dict[str, object], result["projections"])
+            for name, val in projections.items():
+                print(f"  {name}: {val} entries")
+            print("Projections rebuilt successfully.")
+    finally:
+        db.close()
+    return 0
+
+
+def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Verify event chain integrity and projection determinism."""
+    import time
+
+    from engine.core.database import Database
+    from engine.core.projections import ProjectionManager
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    try:
+        t0 = time.monotonic()
+        checks: dict[str, object] = {}
+
+        # 1. Hash chain verification
+        fast = getattr(args, "fast", False)
+        chain_ok = db.verify_hash_chain(fast=fast)
+        checks["hash_chain"] = "pass" if chain_ok else "FAIL"
+
+        # 2. Concurrent writer detection
+        concurrent = db.detect_concurrent_writers()
+        checks["single_writer"] = "FAIL (concurrent writer detected)" if concurrent else "pass"
+
+        # 3. Projection determinism: replay twice, compare
+        events = db.iter_events_ascending()
+        pm1 = ProjectionManager()
+        pm1.rebuild(events)
+        state1 = pm1.get_state()
+
+        pm2 = ProjectionManager()
+        pm2.rebuild(events)
+        state2 = pm2.get_state()
+
+        deterministic = _json_dumps(state1) == _json_dumps(state2)
+        checks["projection_determinism"] = "pass" if deterministic else "FAIL"
+
+        # 4. Event count
+        checks["event_count"] = len(events)
+
+        elapsed = time.monotonic() - t0
+        all_pass = all(v == "pass" for k, v in checks.items() if k != "event_count")
+
+        result = {
+            "status": "ok" if all_pass else "FAIL",
+            "checks": checks,
+            "elapsed_seconds": round(elapsed, 3),
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            print(f"Integrity check ({'PASS' if all_pass else 'FAIL'}):")
+            for name, val in checks.items():
+                icon = "✅" if val == "pass" or isinstance(val, int) else "❌"
+                print(f"  {icon} {name}: {val}")
+            print(f"  Completed in {elapsed:.3f}s")
+        return 0 if all_pass else 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1733,6 +1846,8 @@ def main(argv: list[str] | None = None) -> int:
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,
+        "replay": _cmd_replay,
+        "integrity": _cmd_integrity,
     }
 
     fn = dispatch.get(str(args.command))
