@@ -213,6 +213,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_bt_wf.add_argument("--seed", type=int, default=0, help="RNG seed")
     p_bt_wf.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- backtest gridsweep --
+    p_bt_gs = bt_sub.add_parser("gridsweep", help="Parameter grid sweep with FDR correction across all combos")
+    p_bt_gs.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_gs.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_gs.add_argument(
+        "--param",
+        action="append",
+        dest="params",
+        default=[],
+        metavar="NAME=v1,v2,...",
+        help="Parameter sweep specification (repeatable). E.g. --param lookback=10,20,30",
+    )
+    p_bt_gs.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_gs.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_gs.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_gs.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_gs.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_gs.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_gs.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_gs.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_gs.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_producers = sub.add_parser("producers", help="Register and manage producers")
     prod_sub = p_producers.add_subparsers(dest="producers_cmd")
 
@@ -1950,6 +1985,158 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
         db.close()
 
 
+def _parse_param_spec(spec: str) -> tuple[str, list[Any]]:
+    """Parse a ``--param`` value of the form ``name=v1,v2,v3``.
+
+    Values are auto-detected as ``int`` > ``float`` > ``str`` in that order.
+    """
+    if "=" not in spec:
+        raise ValueError(f"Invalid --param spec {spec!r}. Expected format: name=v1,v2,v3")
+    name, raw_values = spec.split("=", 1)
+    name = name.strip()
+    if not name:
+        raise ValueError(f"Empty parameter name in --param spec {spec!r}")
+    values: list[Any] = []
+    for raw in raw_values.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        # auto-detect: try int first, then float, else keep as str
+        try:
+            values.append(int(raw))
+            continue
+        except ValueError:
+            pass
+        try:
+            values.append(float(raw))
+            continue
+        except ValueError:
+            pass
+        values.append(raw)
+    if not values:
+        raise ValueError(f"No values found in --param spec {spec!r}")
+    return name, values
+
+
+def _handle_backtest_gridsweep(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest gridsweep``."""
+    import dataclasses as _dc
+
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.sweep import GridConfig, run_grid_sweep  # noqa: I001
+
+    # --- parse --param specs ---
+    raw_params: list[str] = list(getattr(args, "params", []) or [])
+    param_grid: dict[str, list[Any]] = {}
+    for spec in raw_params:
+        try:
+            name, values = _parse_param_spec(spec)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        param_grid[name] = values
+
+    # --- validate param names exist on the strategy ---
+    from engine.backtest.sweep import _get_registry  # noqa: I001
+
+    registry = _get_registry()
+    strategy_name = str(args.strategy)
+    cls = registry.get(strategy_name)
+    if cls is None:
+        print(f"error: unknown strategy {strategy_name!r}", file=sys.stderr)
+        return 2
+
+    known_fields: set[str] = {f.name for f in _dc.fields(cls)}
+    for param_name in param_grid:
+        if param_name not in known_fields:
+            print(
+                f"error: strategy {strategy_name!r} has no parameter {param_name!r}. Valid fields: {', '.join(sorted(known_fields))}",
+                file=sys.stderr,
+            )
+            return 2
+
+    # --- load prices ---
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    # --- run sweep ---
+    config = GridConfig(strategy=strategy_name, params=param_grid)
+    result = run_grid_sweep(
+        config=config,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        train_size=int(args.train),
+        test_size=int(args.test),
+        step_size=int(args.step),
+        embargo=int(args.embargo),
+        backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+        n_boot=int(args.bootstrap),
+        seed=int(args.seed),
+        q=float(args.q),
+    )
+
+    # --- find best by Sharpe ---
+    best = max(result.items, key=lambda r: r.oos_sharpe) if result.items else None
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "strategy": strategy_name,
+            "summary": {
+                "total_configs": result.total_configs,
+                "fdr_survivors": result.fdr_survivors,
+                "q": result.q,
+                "best_by_sharpe": {
+                    "params": best.params,
+                    "oos_sharpe": best.oos_sharpe,
+                    "oos_total_return": best.oos_total_return,
+                    "bh_fdr_pass": best.bh_fdr_pass,
+                }
+                if best
+                else None,
+            },
+            "results": [
+                {
+                    "params": r.params,
+                    "oos_total_return": r.oos_total_return,
+                    "oos_sharpe": r.oos_sharpe,
+                    "oos_max_drawdown": r.oos_max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.items
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        # Human-readable table
+        print(f"\nGrid Sweep: {strategy_name}")
+        print(f"  Total configs : {result.total_configs}")
+        print(f"  FDR survivors : {result.fdr_survivors}  (q={result.q})")
+        if best:
+            print(f"  Best (Sharpe) : params={best.params}  sharpe={best.oos_sharpe:.4f}  fdr={'PASS' if best.bh_fdr_pass else 'FAIL'}")
+        print()
+        # Header
+        header_params = list(param_grid.keys()) if param_grid else []
+        col_widths = {k: max(len(k), 8) for k in header_params}
+        hdr = "  ".join(f"{k:>{col_widths[k]}}" for k in header_params)
+        print(f"  {hdr}   {'ret%':>8}  {'sharpe':>8}  {'mdd':>8}  {'p_val':>8}  {'fdr':>5}")
+        print("  " + "-" * (sum(col_widths.values()) + 2 * len(col_widths) + 50))
+        for r in result.items:
+            param_part = "  ".join(f"{str(r.params.get(k, '')):>{col_widths[k]}}" for k in header_params)
+            fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+            print(f"  {param_part}   {r.oos_total_return * 100:>7.2f}%  {r.oos_sharpe:>8.4f}  {r.oos_max_drawdown:>8.4f}  {r.p_value:>8.4f}  {fdr_str:>5}")
+        print()
+
+    return 0
+
+
 def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.engine import BacktestConfig  # noqa: I001
     from engine.backtest.io import load_prices_csv  # noqa: I001
@@ -1966,9 +2153,12 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.walkforward import run_walkforward  # noqa: I001
 
     cmd = str(getattr(args, "backtest_cmd", "") or "")
-    if cmd != "walkforward":
-        print("error: missing/unknown backtest subcommand (walkforward)", file=sys.stderr)
+    if cmd not in ("walkforward", "gridsweep"):
+        print("error: missing/unknown backtest subcommand (walkforward|gridsweep)", file=sys.stderr)
         return 2
+
+    if cmd == "gridsweep":
+        return _handle_backtest_gridsweep(args)
 
     series = load_prices_csv(str(args.prices))
 
