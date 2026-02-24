@@ -156,18 +156,47 @@ class TestConvenienceFunction:
 
 class TestIntegrationWithSynthesis:
     def test_synthesis_onchain_score_in_range(self) -> None:
-        """Verify synthesis domain_score returns valid 0-1 scores for onchain features."""
+        """domain_score returns a valid 0-1 score for onchain features."""
         from engine.brain.synthesis import VectorSynthesis
 
         synth = VectorSynthesis.__new__(VectorSynthesis)
         synth.config = type("Config", (), {"weights": type("W", (), {"model_dump": lambda: {}})()})()
 
-        # Test with on-chain features (symbol kwarg added in SQ1 — not yet on this branch)
         features = {
             "whale_netflow": 1_000_000_000.0,
             "exchange_flow": 500_000_000.0,
         }
-        score = synth.domain_score("onchain", features)
+        score = synth.domain_score("onchain", features, symbol="BTC")
+
+        assert score is not None
+        assert 0.0 <= score <= 1.0
+
+    def test_synthesis_onchain_symbol_changes_score(self) -> None:
+        """Different symbols produce different scores for the same raw dollar flow."""
+        from engine.brain.synthesis import VectorSynthesis
+
+        synth = VectorSynthesis.__new__(VectorSynthesis)
+        synth.config = type("Config", (), {"weights": type("W", (), {"model_dump": lambda: {}})()})()
+
+        features = {"whale_netflow": 5_000_000.0}  # $5M — big for small-cap, tiny for BTC
+
+        score_btc = synth.domain_score("onchain", features, symbol="BTC")
+        score_default = synth.domain_score("onchain", features, symbol="SMALLCAP")
+
+        assert score_btc is not None
+        assert score_default is not None
+        # Same dollar flow should produce a higher bullish score on a smaller asset
+        assert score_default > score_btc
+
+    def test_synthesis_onchain_no_symbol_still_works(self) -> None:
+        """Omitting symbol falls back to defaults — must not raise."""
+        from engine.brain.synthesis import VectorSynthesis
+
+        synth = VectorSynthesis.__new__(VectorSynthesis)
+        synth.config = type("Config", (), {"weights": type("W", (), {"model_dump": lambda: {}})()})()
+
+        features = {"whale_netflow": 100_000.0}
+        score = synth.domain_score("onchain", features)  # no symbol
 
         assert score is not None
         assert 0.0 <= score <= 1.0
