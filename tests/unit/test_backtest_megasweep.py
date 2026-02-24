@@ -351,6 +351,60 @@ class TestCLIMegasweep:
         finally:
             csv_path.unlink(missing_ok=True)
 
+    def test_cli_megasweep_bad_strategy_graceful(self) -> None:
+        from engine.cli import main
+
+        csv_path = _make_csv(300)
+        try:
+            rc = main(
+                [
+                    "backtest",
+                    "megasweep",
+                    "--prices",
+                    str(csv_path),
+                    "--grid",
+                    "momemtum:lookback=10,20",
+                    "--train",
+                    "100",
+                    "--test",
+                    "50",
+                    "--step",
+                    "50",
+                    "--bootstrap",
+                    "100",
+                ]
+            )
+            assert rc == 2
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+    def test_cli_megasweep_bad_param_graceful(self) -> None:
+        from engine.cli import main
+
+        csv_path = _make_csv(300)
+        try:
+            rc = main(
+                [
+                    "backtest",
+                    "megasweep",
+                    "--prices",
+                    str(csv_path),
+                    "--grid",
+                    "momentum:bad_param=10,20",
+                    "--train",
+                    "100",
+                    "--test",
+                    "50",
+                    "--step",
+                    "50",
+                    "--bootstrap",
+                    "100",
+                ]
+            )
+            assert rc == 2
+        finally:
+            csv_path.unlink(missing_ok=True)
+
     def test_cli_megasweep_both_flags_fails(self) -> None:
         from engine.cli import main
 

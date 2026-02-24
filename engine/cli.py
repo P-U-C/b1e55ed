@@ -2229,21 +2229,25 @@ def _handle_backtest_megasweep(args: argparse.Namespace) -> int:
         return 1
 
     # --- run mega sweep ---
-    result: MultiSweepResult = run_multi_sweep(
-        configs=configs,
-        close=series.close,
-        high=series.high,
-        low=series.low,
-        volume=series.volume,
-        train_size=int(args.train),
-        test_size=int(args.test),
-        step_size=int(args.step),
-        embargo=int(args.embargo),
-        backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
-        n_boot=int(args.bootstrap),
-        seed=int(args.seed),
-        q=float(args.q),
-    )
+    try:
+        result: MultiSweepResult = run_multi_sweep(
+            configs=configs,
+            close=series.close,
+            high=series.high,
+            low=series.low,
+            volume=series.volume,
+            train_size=int(args.train),
+            test_size=int(args.test),
+            step_size=int(args.step),
+            embargo=int(args.embargo),
+            backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+            n_boot=int(args.bootstrap),
+            seed=int(args.seed),
+            q=float(args.q),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     # --- find best by Sharpe ---
     best = max(result.items, key=lambda r: r.oos_sharpe) if result.items else None
