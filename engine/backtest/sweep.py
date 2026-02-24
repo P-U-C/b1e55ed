@@ -430,7 +430,6 @@ def run_multi_sweep(
     all_partial: list[dict[str, Any]] = []
     all_p_values: list[float] = []
     strategies_seen: list[str] = []
-    combo_idx = 0
 
     for config in configs:
         if config.strategy not in strategies_seen:
@@ -477,7 +476,8 @@ def run_multi_sweep(
                 oos_sharpe = 0.0
                 oos_max_drawdown = 0.0
 
-            test_result = bootstrap_p_value_mean_gt_zero(oos_returns, n_boot=n_boot, seed=seed + combo_idx)
+            combo_rng_seed = _combo_seed(seed, config.strategy, combo)
+            test_result = bootstrap_p_value_mean_gt_zero(oos_returns, n_boot=n_boot, seed=combo_rng_seed)
             all_p_values.append(test_result.p_value)
             all_partial.append(
                 {
@@ -490,7 +490,6 @@ def run_multi_sweep(
                     "p_value": test_result.p_value,
                 }
             )
-            combo_idx += 1
 
     # --- FDR correction across ALL strategies × ALL combos ---
     fdr_mask = benjamini_hochberg(all_p_values, q=q)
