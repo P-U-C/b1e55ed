@@ -131,8 +131,10 @@ class DynamicKelly:
                 b = avg_win / avg_loss if avg_loss > 0 else cfg.prior_b
             used_prior = False
 
-        # Safety floor
-        if p < cfg.min_p_for_betting:
+        # Safety floor — zero out both kelly_fraction AND params.fraction_multiplier
+        # so any caller using compute() → PositionSizer(kelly=params) also gets zero.
+        below_floor = p < cfg.min_p_for_betting
+        if below_floor:
             kelly_f = 0.0
         else:
             q = 1.0 - p
@@ -141,7 +143,7 @@ class DynamicKelly:
         params = KellyParams(
             p=p,
             b=b,
-            fraction_multiplier=cfg.fraction_multiplier,
+            fraction_multiplier=0.0 if below_floor else cfg.fraction_multiplier,
         )
 
         return KellyEstimate(
@@ -197,17 +199,20 @@ class DynamicKelly:
         is_win = (pnls > 0).astype(np.float64)
         p = float(np.dot(weights, is_win))
 
-        # Weighted payoff ratio
-        wins = pnls.copy()
-        wins[wins <= 0] = 0.0
-        losses = np.abs(pnls.copy())
-        losses[pnls >= 0] = 0.0
+        # Weighted payoff ratio — conditional means (wins-only / losses-only)
+        # Using unconditional means would double-count win-rate effects into b.
+        win_mask = pnls > 0
+        loss_mask = pnls < 0
 
-        weighted_avg_win = float(np.dot(weights, wins))
-        weighted_avg_loss = float(np.dot(weights, losses))
+        win_weights = weights[win_mask]
+        loss_weights = weights[loss_mask]
+        win_amounts = pnls[win_mask]
+        loss_amounts = np.abs(pnls[loss_mask])
 
-        if weighted_avg_loss > 0:
-            b = weighted_avg_win / weighted_avg_loss
+        if win_weights.sum() > 0 and loss_weights.sum() > 0:
+            cond_avg_win = float(np.dot(win_weights, win_amounts) / win_weights.sum())
+            cond_avg_loss = float(np.dot(loss_weights, loss_amounts) / loss_weights.sum())
+            b = cond_avg_win / cond_avg_loss if cond_avg_loss > 0 else self.config.prior_b
         else:
             b = self.config.prior_b
 

@@ -834,9 +834,9 @@ def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig
 
     repo_root = ctx.repo_root
-    db_path = repo_root / "brain.db"
+    db_path = repo_root / "data" / "brain.db"
     if not db_path.exists():
-        print("error: brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
+        print("error: data/brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
         return 1
 
     db = Database(str(db_path))

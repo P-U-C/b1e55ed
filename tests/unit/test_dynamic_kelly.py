@@ -155,6 +155,17 @@ class TestDynamicKellyFiltering:
 
 
 class TestDecayWeighting:
+    def test_b_is_conditional_not_unconditional(self, tmp_path) -> None:
+        """b = avg_win / avg_loss must use conditional means, not contaminate with win rate."""
+        db = _setup_db(tmp_path)
+        # 70% win rate, avg_win=$100, avg_loss=$50 → b should = 2.0, not 4.67
+        trades = [{"pnl": 100.0}] * 7 + [{"pnl": -50.0}] * 3
+        _insert_trades(db, trades)
+        dk = DynamicKelly(db, config=DynamicKellyConfig(decay_halflife=5, min_trades=5))
+        est = dk.estimate()
+        # b should be close to 2.0 regardless of win rate
+        assert est.b == pytest.approx(2.0, abs=0.1)
+
     def test_recent_trades_matter_more(self, tmp_path) -> None:
         db = _setup_db(tmp_path)
         # Old trades: all losses. Recent trades: all wins.
@@ -203,14 +214,38 @@ class TestMinPForBetting:
         assert est.p < 0.35
         assert est.kelly_fraction == 0.0
 
+    def test_low_p_zeros_params_fraction_multiplier(self, tmp_path) -> None:
+        """params.fraction_multiplier must be 0 when below floor — not just kelly_fraction."""
+        db = _setup_db(tmp_path)
+        trades = [{"pnl": 100.0}] * 4 + [{"pnl": -50.0}] * 16
+        _insert_trades(db, trades)
+        dk = DynamicKelly(db, config=DynamicKellyConfig(decay_halflife=None, min_p_for_betting=0.35))
+        est = dk.estimate()
+
+        # Any caller using compute() → PositionSizer(kelly=params) must also get 0
+        assert est.params.fraction_multiplier == 0.0
+
+        # Verify PositionSizer also gives 0
+        from engine.execution.position_sizer import PositionSizer
+
+        sizer = PositionSizer(kelly=est.params)
+        assert sizer.kelly_fraction() == 0.0
+
+
+def _setup_cli_db(tmp_path) -> None:
+    """Create data/brain.db (the correct path used by CLI commands)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+    db = Database(str(data_dir / "brain.db"))
+    _insert_trades(db, [{"pnl": 100.0}] * 8 + [{"pnl": -60.0}] * 4)
+    db.close()
+
 
 class TestCLIKelly:
     def test_cli_kelly_json(self, tmp_path) -> None:
         from engine.cli import main
 
-        db = Database(str(tmp_path / "brain.db"))
-        _insert_trades(db, [{"pnl": 100.0}] * 8 + [{"pnl": -60.0}] * 4)
-        db.close()
+        _setup_cli_db(tmp_path)
 
         import io
         import os
@@ -237,9 +272,7 @@ class TestCLIKelly:
     def test_cli_kelly_human(self, tmp_path) -> None:
         from engine.cli import main
 
-        db = Database(str(tmp_path / "brain.db"))
-        _insert_trades(db, [{"pnl": 100.0}] * 8 + [{"pnl": -60.0}] * 4)
-        db.close()
+        _setup_cli_db(tmp_path)
 
         import io
         import os
