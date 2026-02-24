@@ -120,7 +120,7 @@ class DynamicKelly:
 
         if n_trades < cfg.min_trades:
             # Blend with prior (Bayesian smoothing)
-            p, b = self._blend_with_prior(n_wins, n_losses, avg_win, avg_loss)
+            p, b = self._blend_with_prior(n_wins, n_losses, avg_win, avg_loss, n_trades=n_trades)
             used_prior = True
         else:
             # Enough data — compute with optional decay weighting
@@ -165,21 +165,30 @@ class DynamicKelly:
         n_losses: int,
         avg_win: float,
         avg_loss: float,
+        *,
+        n_trades: int | None = None,
     ) -> tuple[float, float]:
-        """Bayesian blending with prior for small sample sizes."""
+        """Bayesian blending with prior for small sample sizes.
+
+        ``n_trades`` is used as the denominator for the win-rate blend so that
+        flat trades (``realized_pnl == 0``) are counted consistently with the
+        non-prior branch.  Falls back to ``n_wins + n_losses`` when not supplied
+        for backward compatibility.
+        """
         cfg = self.config
         pw = int(cfg.prior_weight)
-        n_total = n_wins + n_losses
+        # Use n_trades (includes flat trades) for consistency with non-prior branch
+        n_total = n_trades if n_trades is not None else (n_wins + n_losses)
 
         # Blended win rate: (prior_wins + actual_wins) / (prior_total + actual_total)
         prior_wins = cfg.prior_p * pw
         p = (prior_wins + n_wins) / (pw + n_total) if (pw + n_total) > 0 else cfg.prior_p
 
-        # Blended payoff ratio
+        # Blended payoff ratio (use n_wins+n_losses for payoff — flat trades carry no info)
+        n_wl = n_wins + n_losses
         if avg_loss > 0 and avg_win > 0:
             actual_b = avg_win / avg_loss
-            # Weight by number of observations
-            b = (cfg.prior_b * pw + actual_b * n_total) / (pw + n_total)
+            b = (cfg.prior_b * pw + actual_b * n_wl) / (pw + n_wl)
         else:
             b = cfg.prior_b
 

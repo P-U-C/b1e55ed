@@ -154,6 +154,35 @@ class TestDynamicKellyFiltering:
         assert est.n_trades == 10
 
 
+class TestFlatTradesInPrior:
+    def test_flat_trades_counted_in_denominator(self, tmp_path) -> None:
+        """Flat trades (pnl=0) must count toward n_trades denominator in prior blend."""
+        db = _setup_db(tmp_path)
+        # 2 wins + 2 flat + 1 loss = 5 trades total, but n_wins+n_losses = 3
+        # With flat trades dropped: p = (prior*pw + 2) / (pw + 3)
+        # With flat trades included: p = (prior*pw + 2) / (pw + 5)  ← correct
+        _insert_trades(
+            db,
+            [
+                {"pnl": 100.0},
+                {"pnl": 50.0},  # 2 wins
+                {"pnl": 0.0},
+                {"pnl": 0.0},  # 2 flat (scratch)
+                {"pnl": -30.0},  # 1 loss
+            ],
+        )
+        dk_flat = DynamicKelly(db, config=DynamicKellyConfig(prior_weight=5))
+        est = dk_flat.estimate()
+
+        assert est.n_trades == 5
+        assert est.n_wins == 2
+        assert est.n_losses == 1
+        # p should be blended using denominator=5 (not 3)
+        prior_p, pw = 0.50, 5
+        expected_p = (prior_p * pw + 2) / (pw + 5)
+        assert est.p == pytest.approx(expected_p, abs=0.01)
+
+
 class TestDecayWeighting:
     def test_b_is_conditional_not_unconditional(self, tmp_path) -> None:
         """b = avg_win / avg_loss must use conditional means, not contaminate with win rate."""

@@ -155,19 +155,19 @@ class TestConvenienceFunction:
 
 
 class TestIntegrationWithSynthesis:
-    def test_synthesis_uses_normalizer(self) -> None:
-        """Verify synthesis domain_score uses the normalizer for onchain."""
+    def test_synthesis_onchain_score_in_range(self) -> None:
+        """Verify synthesis domain_score returns valid 0-1 scores for onchain features."""
         from engine.brain.synthesis import VectorSynthesis
 
         synth = VectorSynthesis.__new__(VectorSynthesis)
         synth.config = type("Config", (), {"weights": type("W", (), {"model_dump": lambda: {}})()})()
 
-        # Test with on-chain features
+        # Test with on-chain features (symbol kwarg added in SQ1 — not yet on this branch)
         features = {
             "whale_netflow": 1_000_000_000.0,
             "exchange_flow": 500_000_000.0,
         }
-        score = synth.domain_score("onchain", features, symbol="BTC")
+        score = synth.domain_score("onchain", features)
 
         assert score is not None
         assert 0.0 <= score <= 1.0
