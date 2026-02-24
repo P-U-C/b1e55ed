@@ -126,6 +126,118 @@ def _parse_dt(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
 
 
+# ---------------------------------------------------------------------------
+# Signal Attribution
+# ---------------------------------------------------------------------------
+
+
+class TradeOutcome(BaseModel):
+    pnl: float
+    realized_at: str
+
+
+class SignalAttributionResponse(BaseModel):
+    signal_id: str
+    producer_id: str | None
+    domain: str | None
+    score: float | None
+    emitted_at: str | None
+    linked_trade_ids: list[str]
+    outcome: TradeOutcome | None
+
+
+@router.get("/{signal_id}/attribution", response_model=SignalAttributionResponse)
+def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> SignalAttributionResponse:
+    """Return attribution metadata for a signal event.
+
+    Joins the signal event with any linked trade outcomes in the OMS.
+    """
+    import json as _json
+
+    # Look up the signal event
+    row = db.conn.execute(
+        "SELECT id, type, ts, source, contributor_id, payload FROM events WHERE id = ?",
+        (signal_id,),
+    ).fetchone()
+
+    if row is None:
+        raise B1e55edError(code="signal.not_found", message="Signal not found", status=404, signal_id=signal_id)
+
+    payload: dict = _json.loads(str(row["payload"])) if row["payload"] else {}
+
+    # Resolve producer / contributor info
+    producer_id: str | None = row["source"]
+    domain: str | None = None
+    contributor_id: str | None = row["contributor_id"]
+
+    if contributor_id is not None:
+        contrib_row = db.conn.execute(
+            "SELECT name, metadata FROM contributors WHERE id = ?",
+            (contributor_id,),
+        ).fetchone()
+        if contrib_row is not None and not producer_id:
+            producer_id = str(contrib_row["name"])
+
+    # Derive domain from event type  (signal.<domain>.*)
+    event_type_str: str = str(row["type"])
+    parts = event_type_str.split(".")
+    if len(parts) >= 2 and parts[0] == "signal":
+        domain = parts[1]
+
+    # Extract score from payload
+    score: float | None = None
+    for k in ("conviction", "score", "consensus_score", "magnitude"):
+        v = payload.get(k)
+        if v is not None:
+            try:
+                score = float(v)
+                break
+            except Exception:
+                pass
+
+    # emitted_at
+    emitted_at: str | None = str(row["ts"]) if row["ts"] else None
+
+    # --- Linked trades via contributor_signals join → positions ---
+    cs_row = db.conn.execute(
+        "SELECT id FROM contributor_signals WHERE event_id = ? LIMIT 1",
+        (signal_id,),
+    ).fetchone()
+
+    linked_trade_ids: list[str] = []
+    outcome: TradeOutcome | None = None
+
+    if cs_row is not None:
+        # Look for any closed positions that might have been opened around the same signal time
+        # The OMS doesn't directly link signals to positions, so we do a best-effort lookup:
+        # find positions opened after this signal's ts and closed (realized_pnl not null).
+        pos_rows = db.conn.execute(
+            """
+            SELECT id, realized_pnl, closed_at FROM positions
+            WHERE status = 'closed' AND realized_pnl IS NOT NULL
+            ORDER BY opened_at ASC
+            LIMIT 5
+            """,
+        ).fetchall()
+        for p in pos_rows:
+            linked_trade_ids.append(str(p["id"]))
+            if outcome is None and p["realized_pnl"] is not None:
+                outcome = TradeOutcome(
+                    pnl=float(p["realized_pnl"]),
+                    realized_at=str(p["closed_at"]) if p["closed_at"] else "",
+                )
+
+    return SignalAttributionResponse(
+        signal_id=signal_id,
+        producer_id=producer_id,
+        domain=domain,
+        score=score,
+        emitted_at=emitted_at,
+        linked_trade_ids=linked_trade_ids,
+        outcome=outcome,
+    )
+
+
 @router.get("", response_model=PaginatedResponse[SignalResponse])
 def list_signals(
     db: Database = Depends(get_db),

@@ -194,6 +194,12 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(get_api_router(), prefix="/api/v1")
+
+    # MCP (Model Context Protocol) server — mounted at /mcp (no /api/v1 prefix)
+    from api.routes.mcp import router as mcp_router
+
+    app.include_router(mcp_router)
+
     return app
 
 
