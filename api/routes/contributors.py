@@ -18,6 +18,7 @@ class ContributorAttestationResponse(BaseModel):
     contributor_id: str
     uid: str
     attestation: dict[str, Any]
+    published: dict[str, Any] | None = None
 
 
 class ContributorAttestationSummaryResponse(BaseModel):
@@ -107,7 +108,14 @@ def get_contributor_attestation(contributor_id: str, db: Database = Depends(get_
     if not isinstance(att, dict):
         raise B1e55edError(code="contributor.attestation_invalid", message="Attestation invalid", status=500, id=contributor_id)
 
-    return ContributorAttestationResponse(contributor_id=contributor_id, uid=str(eas_meta.get("uid") or ""), attestation=att)
+    pub = eas_meta.get("publish")
+    published: dict[str, Any] | None = pub if isinstance(pub, dict) else None
+    return ContributorAttestationResponse(
+        contributor_id=contributor_id,
+        uid=str(eas_meta.get("uid") or ""),
+        attestation=att,
+        published=published,
+    )
 
 
 @router.post("/register", response_model=ContributorResponse)

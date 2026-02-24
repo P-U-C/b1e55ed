@@ -21,9 +21,10 @@ class Contributor:
 
 
 class ContributorRegistry:
-    def __init__(self, db: Database, *, eas_client: object | None = None):
+    def __init__(self, db: Database, *, eas_client: object | None = None, github_publisher: object | None = None):
         self._db = db
         self._eas = eas_client
+        self._gh_publisher = github_publisher
 
     @staticmethod
     def _row_to_contributor(row: sqlite3.Row) -> Contributor:
@@ -86,6 +87,23 @@ class ContributorRegistry:
                 if isinstance(meta["eas"], dict):
                     meta["eas"]["uid"] = str(att_obj.get("uid") or "")
                     meta["eas"]["attestation"] = att_obj
+            except Exception:
+                pass
+
+        # Best-effort GitHub publish (fail-open)
+        if self._gh_publisher is not None and isinstance(meta.get("eas"), dict) and meta["eas"].get("uid"):
+            try:
+                pub_result = self._gh_publisher(  # type: ignore[operator]
+                    attestation=meta["eas"]["attestation"],
+                    contributor_id=contributor_id,
+                    node_id=node_id,
+                    name=name,
+                    role=role,
+                    registered_at=now,
+                )
+                if pub_result:
+                    meta["eas"].setdefault("publish", {})
+                    meta["eas"]["publish"]["github"] = pub_result
             except Exception:
                 pass
 
