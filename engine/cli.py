@@ -280,6 +280,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_bt_ms.add_argument("--seed", type=int, default=0, help="RNG seed")
     p_bt_ms.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- backtest regime --
+    p_bt_rg = bt_sub.add_parser("regime", help="Regime-conditioned backtest — per-regime performance + FDR")
+    p_bt_rg.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_rg.add_argument("--prices", required=True, help="CSV with columns: close[,high,low,volume]")
+    p_bt_rg.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_rg.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_rg.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_rg.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_rg.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_producers = sub.add_parser("producers", help="Register and manage producers")
     prod_sub = p_producers.add_subparsers(dest="producers_cmd")
 
@@ -2389,6 +2412,94 @@ def _handle_backtest_megasweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_backtest_regime(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest regime``."""
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.regime import run_regime_backtest  # noqa: I001
+    from engine.backtest.strategies.breakout import BreakoutStrategy  # noqa: I001
+    from engine.backtest.strategies.combined import CombinedStrategy  # noqa: I001
+    from engine.backtest.strategies.ma_crossover import MACrossoverStrategy  # noqa: I001
+    from engine.backtest.strategies.mean_reversion import MeanReversionStrategy  # noqa: I001
+    from engine.backtest.strategies.momentum import MomentumStrategy  # noqa: I001
+    from engine.backtest.strategies.rsi_reversion import RSIReversionStrategy  # noqa: I001
+    from engine.backtest.strategies.trend_following import TrendFollowingStrategy  # noqa: I001
+    from engine.backtest.strategies.volatility import VolatilityFilterStrategy  # noqa: I001
+
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    strat = {
+        "momentum": MomentumStrategy(),
+        "ma_crossover": MACrossoverStrategy(),
+        "rsi_reversion": RSIReversionStrategy(),
+        "breakout": BreakoutStrategy(),
+        "mean_reversion": MeanReversionStrategy(),
+        "trend_following": TrendFollowingStrategy(),
+        "volatility": VolatilityFilterStrategy(),
+        "combined": CombinedStrategy(),
+    }[str(args.strategy)]
+
+    result = run_regime_backtest(
+        strategy=strat,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+        n_boot=int(args.bootstrap),
+        seed=int(args.seed),
+        q=float(args.q),
+    )
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "strategy": result.strategy,
+            "overall": {"sharpe": result.overall_sharpe, "total_return": result.overall_return},
+            "best_regime": result.best_regime,
+            "worst_regime": result.worst_regime,
+            "regimes": [
+                {
+                    "regime": r.regime,
+                    "n_bars": r.n_bars,
+                    "n_trades": r.n_trades,
+                    "total_return": r.total_return,
+                    "sharpe": r.sharpe,
+                    "max_drawdown": r.max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.regime_results
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        print(f"\nRegime-Conditioned Backtest: {result.strategy}")
+        print(f"{'=' * 60}")
+        print(f"  Overall   : sharpe={result.overall_sharpe:.4f}  ret={result.overall_return * 100:.2f}%")
+        if result.best_regime:
+            print(f"  Best (FDR): {result.best_regime}")
+        if result.worst_regime:
+            print(f"  Worst     : {result.worst_regime}")
+        print()
+        print(f"  {'Regime':<12} {'Bars':>6} {'Trades':>7} {'Ret%':>8} {'Sharpe':>8} {'MDD':>8} {'p-val':>8} {'FDR':>5}")
+        print(f"  {'-' * 65}")
+        for r in result.regime_results:
+            fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+            print(
+                f"  {r.regime:<12} {r.n_bars:>6} {r.n_trades:>7} "
+                f"{r.total_return * 100:>7.2f}% {r.sharpe:>8.4f} {r.max_drawdown:>8.4f} "
+                f"{r.p_value:>8.4f} {fdr_str:>5}"
+            )
+        print()
+
+    return 0
+
+
 def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.engine import BacktestConfig  # noqa: I001
     from engine.backtest.io import load_prices_csv  # noqa: I001
@@ -2405,8 +2516,8 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.walkforward import run_walkforward  # noqa: I001
 
     cmd = str(getattr(args, "backtest_cmd", "") or "")
-    if cmd not in ("walkforward", "gridsweep", "megasweep"):
-        print("error: missing/unknown backtest subcommand (walkforward|gridsweep|megasweep)", file=sys.stderr)
+    if cmd not in ("walkforward", "gridsweep", "megasweep", "regime"):
+        print("error: missing/unknown backtest subcommand (walkforward|gridsweep|megasweep|regime)", file=sys.stderr)
         return 2
 
     if cmd == "gridsweep":
@@ -2414,6 +2525,9 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
 
     if cmd == "megasweep":
         return _handle_backtest_megasweep(args)
+
+    if cmd == "regime":
+        return _handle_backtest_regime(args)
 
     series = load_prices_csv(str(args.prices))
 
