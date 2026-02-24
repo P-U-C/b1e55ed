@@ -72,20 +72,34 @@ def test_cli_gate_json_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ca
 
 
 def test_cli_gate_allows_identity_forge_without_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import importlib
+    import sys
+
     import engine.cli as cli
 
-    monkeypatch.chdir(tmp_path)
+    # Force the submodule into sys.modules then retrieve it via sys.modules.
+    # engine.cli.main *attribute* resolves to the re-exported function (naming
+    # collision), so direct `import engine.cli.main` gives the function, not
+    # the module.  sys.modules["engine.cli.main"] gives the actual submodule.
+    importlib.import_module("engine.cli.main")
+    cli_main = sys.modules["engine.cli.main"]
 
-    monkeypatch.setattr(cli, "_identity_forge", lambda _ctx, _args: 0)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_main, "_identity_forge", lambda _ctx, _args: 0)
     assert cli.main(["identity", "forge", "--json"]) == 0
 
 
 def test_cli_gate_allows_setup_without_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import importlib
+    import sys
+
     import engine.cli as cli
 
-    monkeypatch.chdir(tmp_path)
+    importlib.import_module("engine.cli.main")
+    cli_main = sys.modules["engine.cli.main"]
 
-    monkeypatch.setattr(cli, "_cmd_setup", lambda _ctx, _args: 0)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_main, "_cmd_setup", lambda _ctx, _args: 0)
     assert cli.main(["setup"]) == 0
 
 
