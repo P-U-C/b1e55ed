@@ -2035,6 +2035,9 @@ def _handle_backtest_gridsweep(args: argparse.Namespace) -> int:
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
+        if name in param_grid:
+            print(f"error: duplicate --param {name!r}. Specify all values in one flag: --param {name}=v1,v2,...", file=sys.stderr)
+            return 2
         param_grid[name] = values
 
     # --- validate param names exist on the strategy ---

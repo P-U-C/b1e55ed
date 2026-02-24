@@ -342,3 +342,62 @@ def test_expand_grid_single() -> None:
 
 def test_expand_grid_empty() -> None:
     assert _expand_grid({}) == [{}]
+
+
+# ---------------------------------------------------------------------------
+# 10. Deterministic combo seeds (PR #69 review fix)
+# ---------------------------------------------------------------------------
+
+
+def test_combo_seed_order_independent() -> None:
+    """Reordering params in the grid should not change p-values."""
+    from engine.backtest.sweep import _combo_seed
+
+    # Same combo, different dict ordering
+    seed_a = _combo_seed(42, "momentum", {"lookback": 10, "threshold": 0.01})
+    seed_b = _combo_seed(42, "momentum", {"threshold": 0.01, "lookback": 10})
+    assert seed_a == seed_b
+
+
+def test_combo_seed_differs_across_combos() -> None:
+    from engine.backtest.sweep import _combo_seed
+
+    seed_a = _combo_seed(42, "momentum", {"lookback": 10})
+    seed_b = _combo_seed(42, "momentum", {"lookback": 20})
+    assert seed_a != seed_b
+
+
+# ---------------------------------------------------------------------------
+# 11. Reject duplicate --param names (PR #69 review fix)
+# ---------------------------------------------------------------------------
+
+
+def test_cli_duplicate_param_rejected(tmp_path: Path) -> None:
+    from engine.cli import main
+
+    csv_path = tmp_path / "prices.csv"
+    _write_prices_csv(csv_path, n=300)
+    rc = main(
+        [
+            "backtest",
+            "gridsweep",
+            "--strategy",
+            "momentum",
+            "--prices",
+            str(csv_path),
+            "--param",
+            "lookback=10,20",
+            "--param",
+            "lookback=30,40",
+            "--train",
+            "60",
+            "--test",
+            "30",
+            "--step",
+            "30",
+            "--bootstrap",
+            "100",
+            "--json",
+        ]
+    )
+    assert rc == 2

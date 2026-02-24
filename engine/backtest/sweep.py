@@ -26,6 +26,7 @@ Correcting once across the whole grid keeps FDR ≤ q.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import itertools
 from dataclasses import dataclass
 from typing import Any
@@ -149,6 +150,17 @@ def make_strategy(name: str, params: dict[str, Any]) -> Strategy:
 # ---------------------------------------------------------------------------
 
 
+def _combo_seed(base_seed: int, strategy: str, combo: dict[str, Any]) -> int:
+    """Derive a deterministic seed from the strategy name and param values.
+
+    This ensures the bootstrap RNG stream is tied to the *identity* of the
+    combo, not its iteration order — so reordering ``--param`` flags or
+    grid declarations produces identical results.
+    """
+    key = f"{base_seed}:{strategy}:" + ";".join(f"{k}={v}" for k, v in sorted(combo.items()))
+    return int(hashlib.sha256(key.encode()).hexdigest()[:8], 16)
+
+
 def _expand_grid(params: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """Expand a dict of param->values into all combinations."""
     if not params:
@@ -233,7 +245,7 @@ def run_grid_sweep(
     partial_results: list[dict[str, Any]] = []
     p_values: list[float] = []
 
-    for i, combo in enumerate(combos):
+    for combo in combos:
         strat = make_strategy(config.strategy, combo)
         wf = run_walkforward(
             strategy=strat,
@@ -262,7 +274,8 @@ def run_grid_sweep(
             oos_sharpe = 0.0
             oos_max_drawdown = 0.0
 
-        test_result = bootstrap_p_value_mean_gt_zero(oos_returns, n_boot=n_boot, seed=seed + i)
+        combo_rng_seed = _combo_seed(seed, config.strategy, combo)
+        test_result = bootstrap_p_value_mean_gt_zero(oos_returns, n_boot=n_boot, seed=combo_rng_seed)
         p_values.append(test_result.p_value)
 
         partial_results.append(
