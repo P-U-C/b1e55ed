@@ -75,6 +75,20 @@ class SweepResult:
     q: float
 
 
+@dataclass(frozen=True, slots=True)
+class MultiSweepResult:
+    """Aggregated results for a multi-strategy mega sweep.
+
+    FDR is applied across ALL strategies × ALL parameter combos simultaneously.
+    """
+
+    items: list[GridResult]
+    total_configs: int
+    fdr_survivors: int
+    q: float
+    strategies_tested: list[str]
+
+
 # ---------------------------------------------------------------------------
 # Strategy registry + instantiation helper
 # ---------------------------------------------------------------------------
@@ -315,4 +329,192 @@ def run_grid_sweep(
         total_configs=len(items),
         fdr_survivors=fdr_survivors,
         q=q,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Default parameter grids per strategy
+# ---------------------------------------------------------------------------
+
+DEFAULT_GRIDS: dict[str, dict[str, list[Any]]] = {
+    "momentum": {
+        "lookback": [10, 20, 30, 50],
+        "threshold": [0.01, 0.02, 0.05],
+    },
+    "ma_crossover": {
+        "fast": [5, 10, 20],
+        "slow": [50, 100, 200],
+    },
+    "rsi_reversion": {
+        "period": [7, 14, 21],
+        "oversold": [20.0, 30.0],
+        "exit": [45.0, 50.0],
+    },
+    "breakout": {
+        "lookback": [10, 20, 30, 50],
+    },
+    "mean_reversion": {
+        "lookback": [10, 20, 30],
+        "entry_z": [1.0, 1.5, 2.0],
+        "exit_z": [0.0, 0.2, 0.5],
+    },
+    "trend_following": {
+        "lookback": [20, 50, 100, 200],
+    },
+    "volatility": {
+        "lookback": [10, 20, 30],
+        "max_vol": [0.02, 0.03, 0.05],
+    },
+    "combined": {
+        "mom_lookback": [10, 20, 30],
+        "mom_threshold": [0.01, 0.02, 0.05],
+        "fast": [5, 10],
+        "slow": [50, 100],
+    },
+}
+
+
+def get_default_configs() -> list[GridConfig]:
+    """Return a list of GridConfig using default parameter grids for all strategies."""
+    return [GridConfig(strategy=name, params=grid) for name, grid in DEFAULT_GRIDS.items()]
+
+
+# ---------------------------------------------------------------------------
+# Multi-strategy mega sweep
+# ---------------------------------------------------------------------------
+
+
+def run_multi_sweep(
+    *,
+    configs: list[GridConfig],
+    close: np.ndarray,
+    high: np.ndarray | None = None,
+    low: np.ndarray | None = None,
+    volume: np.ndarray | None = None,
+    train_size: int,
+    test_size: int,
+    step_size: int,
+    embargo: int = 0,
+    backtest_cfg: BacktestConfig | None = None,
+    n_boot: int = 2000,
+    seed: int = 0,
+    q: float = 0.05,
+) -> MultiSweepResult:
+    """Run multiple strategy grids and apply FDR across the ENTIRE universe.
+
+    This is the real deal: sweeping 8 strategies × N param combos each gives
+    hundreds of tests.  Applying BH-FDR once across all of them means anything
+    that survives has genuine edge, not p-hacking luck.
+
+    Parameters
+    ----------
+    configs:
+        List of GridConfig, one per strategy (or per strategy variant).
+    close, high, low, volume:
+        Price arrays.
+    train_size, test_size, step_size, embargo:
+        Walk-forward window parameters.
+    backtest_cfg:
+        Fee assumptions, etc.
+    n_boot:
+        Bootstrap resamples.
+    seed:
+        RNG seed.
+    q:
+        FDR threshold for BH.
+
+    Returns
+    -------
+    MultiSweepResult
+    """
+    all_partial: list[dict[str, Any]] = []
+    all_p_values: list[float] = []
+    strategies_seen: list[str] = []
+
+    for config in configs:
+        if config.strategy not in strategies_seen:
+            strategies_seen.append(config.strategy)
+
+        combos = _expand_grid(config.params)
+
+        # Validate strategy + params
+        registry = _get_registry()
+        cls = registry.get(config.strategy)
+        if cls is None:
+            valid = ", ".join(sorted(registry))
+            raise ValueError(f"Unknown strategy {config.strategy!r}. Valid names: {valid}")
+
+        known_fields: set[str] = {f.name for f in dataclasses.fields(cls)}
+        for combo in combos:
+            for key in combo:
+                if key not in known_fields:
+                    raise ValueError(f"Strategy {config.strategy!r} has no parameter {key!r}. Valid fields: {', '.join(sorted(known_fields))}")
+
+        for combo in combos:
+            strat = make_strategy(config.strategy, combo)
+            wf = run_walkforward(
+                strategy=strat,
+                close=close,
+                high=high,
+                low=low,
+                volume=volume,
+                train_size=train_size,
+                test_size=test_size,
+                step_size=step_size,
+                embargo=embargo,
+                cfg=backtest_cfg,
+            )
+
+            oos_returns = wf.combined_oos_returns
+            oos_equity = wf.combined_oos_equity
+            oos_total_return = float(oos_equity[-1] - 1.0) if oos_equity.size else 0.0
+
+            if wf.window_metrics:
+                oos_sharpe = float(np.mean([m["sharpe"] for m in wf.window_metrics]))
+                oos_max_drawdown = float(np.mean([m["max_drawdown"] for m in wf.window_metrics]))
+            else:
+                oos_sharpe = 0.0
+                oos_max_drawdown = 0.0
+
+            combo_rng_seed = _combo_seed(seed, config.strategy, combo)
+            test_result = bootstrap_p_value_mean_gt_zero(oos_returns, n_boot=n_boot, seed=combo_rng_seed)
+            all_p_values.append(test_result.p_value)
+            all_partial.append(
+                {
+                    "strategy": config.strategy,
+                    "params": combo,
+                    "oos_total_return": oos_total_return,
+                    "oos_sharpe": oos_sharpe,
+                    "oos_max_drawdown": oos_max_drawdown,
+                    "mean_return": test_result.statistic,
+                    "p_value": test_result.p_value,
+                }
+            )
+
+    # --- FDR correction across ALL strategies × ALL combos ---
+    fdr_mask = benjamini_hochberg(all_p_values, q=q)
+
+    items: list[GridResult] = []
+    for pr, fdr_pass in zip(all_partial, fdr_mask, strict=True):
+        items.append(
+            GridResult(
+                strategy=pr["strategy"],
+                params=pr["params"],
+                oos_total_return=pr["oos_total_return"],
+                oos_sharpe=pr["oos_sharpe"],
+                oos_max_drawdown=pr["oos_max_drawdown"],
+                mean_return=pr["mean_return"],
+                p_value=pr["p_value"],
+                bh_fdr_pass=bool(fdr_pass),
+            )
+        )
+
+    fdr_survivors = sum(1 for it in items if it.bh_fdr_pass)
+
+    return MultiSweepResult(
+        items=items,
+        total_configs=len(items),
+        fdr_survivors=fdr_survivors,
+        q=q,
+        strategies_tested=strategies_seen,
     )

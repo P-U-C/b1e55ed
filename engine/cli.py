@@ -248,6 +248,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_bt_gs.add_argument("--seed", type=int, default=0, help="RNG seed")
     p_bt_gs.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- backtest megasweep --
+    p_bt_ms = bt_sub.add_parser("megasweep", help="Multi-strategy parameter sweep with FDR across ALL strategies × ALL combos")
+    p_bt_ms.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_ms.add_argument(
+        "--grid",
+        action="append",
+        dest="grids",
+        default=[],
+        metavar="STRATEGY:p1=v1,v2;p2=v3,v4",
+        help="Strategy grid spec (repeatable). E.g. --grid 'momentum:lookback=10,20;threshold=0.01,0.02'. Omit to use --all-defaults.",
+    )
+    p_bt_ms.add_argument(
+        "--all-defaults",
+        action="store_true",
+        help="Run all 8 strategies with predefined parameter grids.",
+    )
+    p_bt_ms.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_ms.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_ms.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_ms.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_ms.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_ms.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_ms.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_ms.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_ms.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_producers = sub.add_parser("producers", help="Register and manage producers")
     prod_sub = p_producers.add_subparsers(dest="producers_cmd")
 
@@ -2140,6 +2166,174 @@ def _handle_backtest_gridsweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_grid_spec(spec: str) -> tuple[str, dict[str, list[Any]]]:
+    """Parse a ``--grid`` value of the form ``strategy:p1=v1,v2;p2=v3,v4``.
+
+    Returns (strategy_name, param_grid).
+    """
+    if ":" not in spec:
+        raise ValueError(f"Invalid --grid spec {spec!r}. Expected format: strategy:param=v1,v2;param2=v3,v4")
+    strategy, param_part = spec.split(":", 1)
+    strategy = strategy.strip()
+    if not strategy:
+        raise ValueError(f"Empty strategy name in --grid spec {spec!r}")
+
+    param_grid: dict[str, list[Any]] = {}
+    if param_part.strip():
+        for param_spec in param_part.split(";"):
+            param_spec = param_spec.strip()
+            if not param_spec:
+                continue
+            name, values = _parse_param_spec(param_spec)
+            param_grid[name] = values
+
+    return strategy, param_grid
+
+
+def _handle_backtest_megasweep(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest megasweep``."""
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.sweep import GridConfig, MultiSweepResult, get_default_configs, run_multi_sweep  # noqa: I001
+
+    use_defaults = bool(getattr(args, "all_defaults", False))
+    raw_grids: list[str] = list(getattr(args, "grids", []) or [])
+
+    if not use_defaults and not raw_grids:
+        print("error: must specify --all-defaults or at least one --grid spec", file=sys.stderr)
+        return 2
+
+    if use_defaults and raw_grids:
+        print("error: --all-defaults and --grid are mutually exclusive", file=sys.stderr)
+        return 2
+
+    # --- build configs ---
+    configs: list[GridConfig]
+    if use_defaults:
+        configs = get_default_configs()
+    else:
+        configs = []
+        for raw in raw_grids:
+            try:
+                strategy, param_grid = _parse_grid_spec(raw)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            configs.append(GridConfig(strategy=strategy, params=param_grid))
+
+    # --- load prices ---
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    # --- run mega sweep ---
+    try:
+        result: MultiSweepResult = run_multi_sweep(
+            configs=configs,
+            close=series.close,
+            high=series.high,
+            low=series.low,
+            volume=series.volume,
+            train_size=int(args.train),
+            test_size=int(args.test),
+            step_size=int(args.step),
+            embargo=int(args.embargo),
+            backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+            n_boot=int(args.bootstrap),
+            seed=int(args.seed),
+            q=float(args.q),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # --- find best by Sharpe ---
+    best = max(result.items, key=lambda r: r.oos_sharpe) if result.items else None
+    survivors = [r for r in result.items if r.bh_fdr_pass]
+    best_survivor = max(survivors, key=lambda r: r.oos_sharpe) if survivors else None
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "summary": {
+                "strategies_tested": result.strategies_tested,
+                "total_configs": result.total_configs,
+                "fdr_survivors": result.fdr_survivors,
+                "q": result.q,
+                "best_by_sharpe": {
+                    "strategy": best.strategy,
+                    "params": best.params,
+                    "oos_sharpe": best.oos_sharpe,
+                    "oos_total_return": best.oos_total_return,
+                    "bh_fdr_pass": best.bh_fdr_pass,
+                }
+                if best
+                else None,
+                "best_fdr_survivor": {
+                    "strategy": best_survivor.strategy,
+                    "params": best_survivor.params,
+                    "oos_sharpe": best_survivor.oos_sharpe,
+                    "oos_total_return": best_survivor.oos_total_return,
+                }
+                if best_survivor
+                else None,
+            },
+            "results": [
+                {
+                    "strategy": r.strategy,
+                    "params": r.params,
+                    "oos_total_return": r.oos_total_return,
+                    "oos_sharpe": r.oos_sharpe,
+                    "oos_max_drawdown": r.oos_max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.items
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        # Human-readable output
+        print(f"\n{'=' * 70}")
+        print(f"  MEGA SWEEP — {len(result.strategies_tested)} strategies × {result.total_configs} total configs")
+        print(f"{'=' * 70}")
+        print(f"  Strategies : {', '.join(result.strategies_tested)}")
+        print(f"  FDR survivors : {result.fdr_survivors} / {result.total_configs}  (q={result.q})")
+        if best:
+            print(f"  Best (Sharpe) : {best.strategy} {best.params}  sharpe={best.oos_sharpe:.4f}  fdr={'PASS' if best.bh_fdr_pass else 'FAIL'}")
+        if best_survivor:
+            print(f"  Best FDR pass : {best_survivor.strategy} {best_survivor.params}  sharpe={best_survivor.oos_sharpe:.4f}")
+        print()
+
+        # Group by strategy
+        by_strat: dict[str, list[Any]] = {}
+        for r in result.items:
+            by_strat.setdefault(r.strategy, []).append(r)
+
+        for strat_name, strat_results in by_strat.items():
+            strat_survivors = sum(1 for r in strat_results if r.bh_fdr_pass)
+            print(f"  --- {strat_name} ({len(strat_results)} combos, {strat_survivors} FDR pass) ---")
+            # Find param keys for this strategy
+            all_param_keys: list[str] = []
+            for r in strat_results:
+                for k in r.params:
+                    if k not in all_param_keys:
+                        all_param_keys.append(k)
+            col_widths = {k: max(len(k), 8) for k in all_param_keys}
+            hdr = "  ".join(f"{k:>{col_widths[k]}}" for k in all_param_keys)
+            print(f"  {hdr}   {'ret%':>8}  {'sharpe':>8}  {'mdd':>8}  {'p_val':>8}  {'fdr':>5}")
+            print("  " + "-" * (sum(col_widths.values()) + 2 * len(col_widths) + 50))
+            for r in sorted(strat_results, key=lambda x: x.oos_sharpe, reverse=True):
+                param_part = "  ".join(f"{str(r.params.get(k, '')):>{col_widths[k]}}" for k in all_param_keys)
+                fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+                print(f"  {param_part}   {r.oos_total_return * 100:>7.2f}%  {r.oos_sharpe:>8.4f}  {r.oos_max_drawdown:>8.4f}  {r.p_value:>8.4f}  {fdr_str:>5}")
+            print()
+
+    return 0
+
+
 def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.engine import BacktestConfig  # noqa: I001
     from engine.backtest.io import load_prices_csv  # noqa: I001
@@ -2156,12 +2350,15 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.backtest.walkforward import run_walkforward  # noqa: I001
 
     cmd = str(getattr(args, "backtest_cmd", "") or "")
-    if cmd not in ("walkforward", "gridsweep"):
-        print("error: missing/unknown backtest subcommand (walkforward|gridsweep)", file=sys.stderr)
+    if cmd not in ("walkforward", "gridsweep", "megasweep"):
+        print("error: missing/unknown backtest subcommand (walkforward|gridsweep|megasweep)", file=sys.stderr)
         return 2
 
     if cmd == "gridsweep":
         return _handle_backtest_gridsweep(args)
+
+    if cmd == "megasweep":
+        return _handle_backtest_megasweep(args)
 
     series = load_prices_csv(str(args.prices))
 
