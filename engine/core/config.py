@@ -125,6 +125,19 @@ class EASConfig(BaseModel):
     mode: Literal["onchain", "offchain"] = "offchain"
 
 
+class PublishGithubConfig(BaseModel):
+    enabled: bool = False
+    owner: str = "P-U-C"
+    repo: str = "offchain-attestations"
+    token: str = ""  # PAT or installation token; never logged
+    labels: list[str] = Field(default_factory=lambda: ["attestation", "offchain"])
+    mode: str = "issues"  # future: contents/ipfs
+
+
+class PublishConfig(BaseModel):
+    github: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
+
+
 class Config(BaseSettings):
     """Root configuration. Single source of truth."""
 
@@ -147,6 +160,7 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
+    publish: PublishConfig = Field(default_factory=PublishConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 

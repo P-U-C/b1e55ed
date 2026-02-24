@@ -432,6 +432,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Print system status")
 
+    # -- anchor --
+    from engine.cli.commands.anchor import build_anchor_parser
+
+    build_anchor_parser(sub)
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -2593,6 +2598,12 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.anchor import run_anchor
+
+    return run_anchor(args, repo_root=ctx.repo_root)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2658,6 +2669,7 @@ def main(argv: list[str] | None = None) -> int:
         "integrity": _cmd_integrity,
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
+        "anchor": _cmd_anchor,
     }
 
     fn = dispatch.get(str(args.command))
