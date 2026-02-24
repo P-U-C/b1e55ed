@@ -235,3 +235,121 @@ def list_producers(db: Database = Depends(get_db)) -> dict[str, Any]:
         )
 
     return {"producers": producers}
+
+
+# ---------------------------------------------------------------------------
+# Producer Capability Discovery
+# ---------------------------------------------------------------------------
+
+# Domain → canonical signal event types emitted by that domain
+_DOMAIN_SIGNAL_TYPES: dict[str, list[str]] = {
+    "technical": ["signal.ta.v1"],
+    "onchain": ["signal.onchain.v1", "signal.whale.v1", "signal.orderbook.v1"],
+    "tradfi": ["signal.tradfi.v1", "signal.etf.v1"],
+    "social": ["signal.social.v1", "signal.sentiment.v1", "signal.curator.v1"],
+    "events": ["signal.events.v1"],
+    "macro": ["signal.stablecoin.v1"],
+    "aci": ["signal.aci.v1"],
+    "price": ["signal.price_alert.v1", "signal.price_ws.v1"],
+}
+
+
+def _schema_for_event_type(event_type_str: str) -> dict[str, Any]:
+    """Return the JSON schema for a known event type's payload, or {}."""
+    from engine.core.events import _EVENT_PAYLOAD_MODELS, EventType  # noqa: PLC2701
+
+    try:
+        et = EventType(event_type_str)
+        model = _EVENT_PAYLOAD_MODELS.get(et)
+        if model is not None:
+            return model.model_json_schema()
+    except Exception:
+        pass
+    return {}
+
+
+class SignalTypeCapability(BaseModel):
+    name: str
+    schema_: dict[str, Any] = Field(default_factory=dict, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+class ProducerCapability(BaseModel):
+    producer_id: str
+    signal_types: list[SignalTypeCapability]
+    last_seen: str | None
+    health: str  # "healthy" | "degraded" | "unknown"
+
+
+@router.get("/capabilities", response_model=list[ProducerCapability])
+def producer_capabilities(
+    db: Database = Depends(get_db),
+) -> list[ProducerCapability]:
+    """List all registered producers with their signal types and schemas.
+
+    Signal types are derived from the producer's domain.  The ``schema`` for
+    each signal type is the JSON schema of the corresponding payload model.
+    """
+    _ensure_endpoint_column(db)
+
+    rows = db.conn.execute(
+        """
+        SELECT name, domain, last_success_at, consecutive_failures,
+               last_run_at, quarantined_until, updated_at
+        FROM producer_health
+        ORDER BY name ASC
+        """
+    ).fetchall()
+
+    result: list[ProducerCapability] = []
+    now = datetime.now(tz=UTC)
+
+    for r in rows:
+        name = str(r[0])
+        domain = str(r[1]) if r[1] is not None else ""
+        last_success_at = str(r[2]) if r[2] is not None else None
+        consecutive_failures = int(r[3]) if r[3] is not None else 0
+        quarantined_until_raw = str(r[4]) if r[4] is not None else None
+
+        # Determine health string
+        quarantined = False
+        if quarantined_until_raw:
+            try:
+                qu = datetime.fromisoformat(quarantined_until_raw.replace("Z", "+00:00"))
+                if qu.tzinfo is None:
+                    qu = qu.replace(tzinfo=UTC)
+                quarantined = qu > now
+            except Exception:
+                pass
+
+        if quarantined or consecutive_failures > 0:
+            health = "degraded"
+        elif last_success_at is not None:
+            health = "healthy"
+        else:
+            health = "unknown"
+
+        # Build signal type list from domain mapping, or fall back to events table
+        signal_type_names: list[str] = _DOMAIN_SIGNAL_TYPES.get(domain, [])
+
+        if not signal_type_names:
+            # Look up event types this producer has actually emitted
+            type_rows = db.conn.execute(
+                "SELECT DISTINCT type FROM events WHERE source = ? AND type LIKE 'signal.%' LIMIT 20",
+                (name,),
+            ).fetchall()
+            signal_type_names = [str(tr[0]) for tr in type_rows]
+
+        signal_types = [SignalTypeCapability(name=stn, **{"schema": _schema_for_event_type(stn)}) for stn in signal_type_names]
+
+        result.append(
+            ProducerCapability(
+                producer_id=name,
+                signal_types=signal_types,
+                last_seen=last_success_at,
+                health=health,
+            )
+        )
+
+    return result
