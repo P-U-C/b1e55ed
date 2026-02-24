@@ -183,6 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    # -- kelly --
+    p_kelly = sub.add_parser("kelly", help="Show dynamic Kelly criterion estimate from trade history")
+    p_kelly.add_argument("--asset", default=None, help="Filter by asset (e.g. BTC)")
+    p_kelly.add_argument("--lookback", type=int, default=50, help="Max trades to consider")
+    p_kelly.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     # -- backtest --
     p_backtest = sub.add_parser("backtest", help="Run backtests (walk-forward + stats)")
     bt_sub = p_backtest.add_subparsers(dest="backtest_cmd")
@@ -882,6 +888,55 @@ def _latest_mark_prices(db) -> dict[str, float]:
         if sym and px is not None and sym not in prices:
             prices[sym] = float(px)
     return prices
+
+
+def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig
+
+    repo_root = ctx.repo_root
+    db_path = repo_root / "data" / "brain.db"
+    if not db_path.exists():
+        print("error: data/brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
+        return 1
+
+    db = Database(str(db_path))
+    config = DynamicKellyConfig(lookback=int(getattr(args, "lookback", 50)))
+    dk = DynamicKelly(db, config=config)
+
+    asset = getattr(args, "asset", None)
+    est = dk.estimate(asset=asset)
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "p": est.p,
+            "b": est.b,
+            "n_trades": est.n_trades,
+            "n_wins": est.n_wins,
+            "n_losses": est.n_losses,
+            "avg_win_usd": est.avg_win_usd,
+            "avg_loss_usd": est.avg_loss_usd,
+            "used_prior": est.used_prior,
+            "kelly_fraction": est.kelly_fraction,
+            "half_kelly": est.kelly_fraction * est.params.fraction_multiplier,
+        }
+        print(_json_dumps(out))
+    else:
+        print(f"\nDynamic Kelly Estimate{f' ({asset.upper()})' if asset else ''}")
+        print(f"{'=' * 40}")
+        print(f"  Trades used  : {est.n_trades}  ({'prior-blended' if est.used_prior else 'data-driven'})")
+        print(f"  Win rate (p) : {est.p:.3f}  ({est.n_wins}W / {est.n_losses}L)")
+        print(f"  Payoff (b)   : {est.b:.3f}  (avg win ${est.avg_win_usd:.2f} / avg loss ${est.avg_loss_usd:.2f})")
+        print(f"  Kelly f*     : {est.kelly_fraction:.4f}")
+        print(f"  Half-Kelly   : {est.kelly_fraction * est.params.fraction_multiplier:.4f}")
+        print()
+        if est.used_prior:
+            print(f"  ⚠  Only {est.n_trades} trades — blended with prior (p={config.prior_p}, b={config.prior_b})")
+            print(f"     Need {config.min_trades}+ trades for pure data-driven estimate.")
+        print()
+
+    db.close()
+    return 0
 
 
 def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -2488,6 +2543,7 @@ def main(argv: list[str] | None = None) -> int:
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,
         "backtest": _cmd_backtest,
+        "kelly": _cmd_kelly,
     }
 
     fn = dispatch.get(str(args.command))
