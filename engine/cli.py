@@ -286,8 +286,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--strategy",
         required=True,
         choices=[
-            "momentum", "ma_crossover", "rsi_reversion", "breakout",
-            "mean_reversion", "trend_following", "volatility", "combined",
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
         ],
     )
     p_bt_rg.add_argument("--prices", required=True, help="CSV with columns: close[,high,low,volume]")
@@ -2457,10 +2463,15 @@ def _handle_backtest_regime(args: argparse.Namespace) -> int:
             "worst_regime": result.worst_regime,
             "regimes": [
                 {
-                    "regime": r.regime, "n_bars": r.n_bars, "n_trades": r.n_trades,
-                    "total_return": r.total_return, "sharpe": r.sharpe,
-                    "max_drawdown": r.max_drawdown, "mean_return": r.mean_return,
-                    "p_value": r.p_value, "bh_fdr_pass": r.bh_fdr_pass,
+                    "regime": r.regime,
+                    "n_bars": r.n_bars,
+                    "n_trades": r.n_trades,
+                    "total_return": r.total_return,
+                    "sharpe": r.sharpe,
+                    "max_drawdown": r.max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
                 }
                 for r in result.regime_results
             ],
