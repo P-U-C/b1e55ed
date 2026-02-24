@@ -220,11 +220,22 @@ class VectorSynthesis:
             version="v2",
         )
 
-    def domain_score(self, domain: str, features: dict[str, float]) -> float | None:
+    def domain_score(
+        self,
+        domain: str,
+        features: dict[str, float],
+        *,
+        symbol: str | None = None,
+    ) -> float | None:
         """Compute a 0..1 domain score from raw feature values.
+
+        ``symbol`` is used by the on-chain path to scale flows relative to the
+        asset's market cap / volume (via :mod:`engine.brain.signal_normalizer`).
+        Other domains ignore it.  Omitting it falls back to default thresholds.
 
         This is intentionally simple; v2 keeps vectors for later learning.
         """
+        from engine.brain.signal_normalizer import normalize_onchain_signal  # noqa: I001
 
         dom = str(domain)
         f = features
@@ -242,16 +253,16 @@ class VectorSynthesis:
                 scores.append(_clamp01((float(vr) - 0.5) / 2.0))
 
         elif dom == "onchain":
-            whale = f.get("whale_netflow")
-            if whale is not None:
-                scores.append(_clamp01(0.5 + float(whale) / 200.0))
-            exch = f.get("exchange_flow")
-            if exch is not None:
-                # positive exchange inflow bearish -> lower score
-                scores.append(_clamp01(0.5 - float(exch) / 200.0))
-            mom = f.get("price_momentum_24h")
-            if mom is not None:
-                scores.append(_clamp01(0.5 + float(mom) / 20.0))
+            # Use asset-aware normalizer — falls back to BTC/ETH/SOL defaults when
+            # symbol is None or not in the thresholds table.
+            sym = symbol or ""
+            ns = normalize_onchain_signal(sym, dict(f))
+            if ns.whale_netflow is not None:
+                scores.append(ns.whale_netflow)
+            if ns.exchange_flow is not None:
+                scores.append(ns.exchange_flow)
+            if ns.price_momentum_24h is not None:
+                scores.append(ns.price_momentum_24h)
 
         elif dom == "tradfi":
             fund = f.get("funding_annualized")
