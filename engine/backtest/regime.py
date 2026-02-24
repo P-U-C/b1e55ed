@@ -81,7 +81,9 @@ def classify_regimes(
                 rsi[i] = 100.0 - (100.0 / (1.0 + rs))
 
     # --- Realized volatility ---
-    returns = np.diff(c, prepend=c[0]) / np.maximum(c, 1e-10)
+    # Divide by prior close (not current) — avoids asymmetric return magnitudes
+    prior_close = np.concatenate([[c[0]], c[:-1]])
+    returns = np.diff(c, prepend=c[0]) / np.maximum(prior_close, 1e-10)
     vol = np.full(t_len, 0.0, dtype=np.float64)
     vl = int(vol_lookback)
     if vl > 0:
@@ -205,10 +207,12 @@ def run_regime_backtest(
     c = close.astype(np.float64)
 
     # Run full backtest
-    bt = run_backtest(strategy=strategy, close=c, high=high, low=low, volume=volume, cfg=cfg)
+    # Resolve once so periods_per_year is consistent throughout
+    resolved_cfg = cfg if cfg is not None else BacktestConfig()
+    bt = run_backtest(strategy=strategy, close=c, high=high, low=low, volume=volume, cfg=resolved_cfg)
     full_returns = bt.sim.returns
     full_equity = bt.sim.equity
-    full_metrics = compute_metrics(equity=full_equity, returns=full_returns)
+    full_metrics = compute_metrics(equity=full_equity, returns=full_returns, periods_per_year=resolved_cfg.periods_per_year)
 
     # Classify regimes
     if regimes is None:
@@ -243,12 +247,13 @@ def run_regime_backtest(
             p_values.append(1.0)
             continue
 
-        # Build equity from regime returns
+        # Build equity — include rets[0] (first regime bar is often non-zero)
         eq = np.ones(rets.size, dtype=np.float64)
+        eq[0] = 1.0 + rets[0]
         for j in range(1, eq.size):
             eq[j] = eq[j - 1] * (1.0 + rets[j])
 
-        metrics = compute_metrics(equity=eq, returns=rets)
+        metrics = compute_metrics(equity=eq, returns=rets, periods_per_year=resolved_cfg.periods_per_year)
 
         # Count position changes as proxy for trades
         regime_position = bt.sim.position[regimes == regime_name]

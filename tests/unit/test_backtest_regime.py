@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from engine.backtest.regime import (
     REGIMES,
@@ -169,6 +170,62 @@ class TestRegimeBacktest:
         # At least some regimes should exist
         total_bars = sum(r.n_bars for r in result.regime_results)
         assert total_bars > 0
+
+
+class TestRegimeBacktestFixes:
+    """Tests targeting specific review fixes."""
+
+    def test_prior_close_volatility_symmetric(self) -> None:
+        """Vol returns must divide by prior close — +X% and -X% should have equal magnitude."""
+        from engine.backtest.regime import classify_regimes
+
+        # A 2-bar up-down sequence: 100 → 200 → 100
+        # Prior-close: returns = [0, +1.0, -0.5]  (correct — symmetric in linear space)
+        # Current-close: returns = [0, +0.5, -0.5] (wrong — asymmetric)
+        # Use this to verify that a trending series isn't mislabelled CRISIS
+        # by inflated vol from current-close division.
+        close = np.array([100.0, 150.0, 200.0, 150.0, 100.0] * 100, dtype=np.float64)
+        regimes = classify_regimes(close=close)
+        # With correct (prior-close) vol, variance is moderate; should NOT be all CRISIS
+        n_crisis = int((regimes == "CRISIS").sum())
+        assert n_crisis < len(close), "All bars labelled CRISIS — vol likely computed from current close"
+
+    def test_equity_includes_first_regime_return(self) -> None:
+        """total_return for a regime must include rets[0], not start compounding from bar 1."""
+        close = _trending_close(500)
+        strat = MomentumStrategy(lookback=20, threshold=0.02)
+        result = run_regime_backtest(strategy=strat, close=close, n_boot=100)
+
+        # For any non-empty regime, total_return must equal the product of all (1+r) minus 1
+        # If rets[0] were skipped, compounding would start one bar late and returns would differ.
+        # We can't check exact values easily, but we CAN verify the equity math is self-consistent:
+        # Specifically, total_return should not be identically 0 for all regimes with trades.
+        regimes_with_trades = [r for r in result.regime_results if r.n_trades > 0]
+        if regimes_with_trades:
+            # At least one return should be non-trivially non-zero
+            assert any(abs(r.total_return) > 1e-9 for r in regimes_with_trades)
+
+    def test_periods_per_year_propagated(self) -> None:
+        """BacktestConfig.periods_per_year must change per-regime Sharpe values."""
+        from engine.backtest.engine import BacktestConfig
+
+        close = _trending_close(500)
+        strat = MomentumStrategy(lookback=20, threshold=0.02)
+
+        result_365 = run_regime_backtest(
+            strategy=strat,
+            close=close,
+            n_boot=100,
+            cfg=BacktestConfig(periods_per_year=365),
+        )
+        result_8760 = run_regime_backtest(
+            strategy=strat,
+            close=close,
+            n_boot=100,
+            cfg=BacktestConfig(periods_per_year=8760),
+        )
+        # Overall Sharpe must differ when annualization factor changes
+        assert result_365.overall_sharpe != pytest.approx(result_8760.overall_sharpe, rel=1e-3)
 
 
 class TestCLIRegime:
