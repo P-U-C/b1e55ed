@@ -41,16 +41,19 @@ CORPORATE_SPEAK=(
     "At the end of the day"
 )
 
+# Files excluded from brand vocabulary checks (contain terms as negative examples or reference material)
+BRAND_EXCLUDE="--exclude=EASTER_EGG_REFERENCE.md"
+
 # Check for banned terms (exclude legitimate uses of "based")
 for term in "${BANNED_TERMS[@]}"; do
     if [ "$term" = "based" ]; then
         # Only flag standalone "based" (not "based on", "file-based", etc.)
-        if grep -r -i "\bbased\b" "$DOCS_DIR" --include="*.md" 2>/dev/null | grep -v "based on" | grep -v "\-based"; then
+        if grep -r -i "\bbased\b" "$DOCS_DIR" --include="*.md" $BRAND_EXCLUDE 2>/dev/null | grep -v "based on" | grep -v "\-based"; then
             echo -e "${RED}✗${NC} Found banned CT term: ${term}"
             ERRORS=$((ERRORS + 1))
         fi
     else
-        if grep -r -i "\b${term}\b" "$DOCS_DIR" --include="*.md" 2>/dev/null; then
+        if grep -r -i "\b${term}\b" "$DOCS_DIR" --include="*.md" $BRAND_EXCLUDE 2>/dev/null; then
             echo -e "${RED}✗${NC} Found banned CT term: ${term}"
             ERRORS=$((ERRORS + 1))
         fi
@@ -59,7 +62,7 @@ done
 
 # Check for corporate speak
 for phrase in "${CORPORATE_SPEAK[@]}"; do
-    if grep -r -i "${phrase}" "$DOCS_DIR" --include="*.md" 2>/dev/null; then
+    if grep -r -i "${phrase}" "$DOCS_DIR" --include="*.md" $BRAND_EXCLUDE 2>/dev/null; then
         echo -e "${RED}✗${NC} Found corporate speak: ${phrase}"
         ERRORS=$((ERRORS + 1))
     fi

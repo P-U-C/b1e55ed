@@ -1,0 +1,59 @@
+name: a b1e55ing (on merge)
+
+# Post-merge fallback — runs after a PR is merged into main or develop.
+# Handles fork PRs (where the agent couldn't push pre-merge) and any case
+# where the agent was offline. Every merged PR ends up with "a b1e55ing"
+# in the git log, regardless of which path delivered it.
+#
+# Path summary:
+#   Internal PR          → Agent (heartbeat)  |  Gemini via b1e55ing.yml (10min)
+#   Fork PR, edits ON    → Agent (heartbeat)  |  Gemini via this workflow
+#   Fork PR, edits OFF   → Skipped pre-merge  |  Gemini via this workflow
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main, develop]
+
+jobs:
+  bless_on_merge:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 20
+
+      - name: Check if already blessed
+        id: blessed
+        run: |
+          BLESSED=$(git log --oneline -20 --grep="a b1e55ing" | head -1)
+          [ -n "$BLESSED" ] && echo "already_blessed=true" >> $GITHUB_OUTPUT || echo "already_blessed=false" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-python@v5
+        if: steps.blessed.outputs.already_blessed == 'false'
+        with:
+          python-version: "3.12"
+
+      - name: Install + bless
+        if: steps.blessed.outputs.already_blessed == 'false'
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install google-generativeai httpx
+          python scripts/b1e55ing.py \
+            --pr-number ${{ github.event.pull_request.number }} \
+            --github-token "$GITHUB_TOKEN" \
+            --mode gemini
+
+      - name: Commit
+        if: steps.blessed.outputs.already_blessed == 'false'
+        run: |
+          git config user.name "a b1e55ing"
+          git config user.email "bot@permanentupperclass.com"
+          git diff --quiet || (git add -A && git commit -m "chore: a b1e55ing [skip ci]" && git push)
