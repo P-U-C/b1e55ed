@@ -1,4 +1,4 @@
-# Operator Layer Sprint Plan (beta.2)
+# Operator Layer Sprint Plan (beta.3)
 
 **Goal**: Agents and humans can install and operate b1e55ed through conversation.
 
@@ -324,7 +324,7 @@ b1e55ed/
 ```json
 {
   "name": "b1e55ed",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Sovereign AI trading intelligence with compound learning",
   "tags": ["trading", "crypto", "intelligence", "compound-learning"],
   "author": "Permanent Upper Class",
@@ -390,7 +390,7 @@ Any system that can serve an HTTP endpoint returning JSON can be a producer. No 
 
 ---
 
-## What's NOT in beta.2
+## What's NOT in beta.3
 
 | Item | Why Not | When |
 |------|---------|------|
@@ -404,7 +404,7 @@ Any system that can serve an HTTP endpoint returning JSON can be a producer. No 
 
 ## Success Criteria
 
-beta.2 is done when:
+beta.3 is done when:
 
 1. ✅ `clawhub install b1e55ed` works on a fresh system
 2. ✅ An agent with no prior knowledge reads SKILL.md and operates the engine

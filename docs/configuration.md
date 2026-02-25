@@ -152,13 +152,22 @@ There is no YAML configuration block for webhooks in this version.
 
 Optional publishing of contributor attestations to a GitHub repo as issues.
 
+Config key: `publish.github` (nested under `publish:` in `config.yaml`).
+
 ```yaml
-github_publish:
-  enabled: false
-  token: ""            # GitHub personal access token (ghp_...)
-  repo: ""             # target repo (e.g. "your-org/attestations")
-  label: "attestation"
+publish:
+  github:
+    owner: ""            # GitHub org or user (e.g. "my-org")
+    repo: ""             # target repo (e.g. "my-org/attestations")
+    token: ""            # GitHub personal access token (ghp_...); if empty, publishing is
+                         # skipped and a WARN is logged — never raises
+    labels:              # Issue labels applied to published attestations
+      - "attestation"
+      - "offchain"
+    mode: "issues"       # Publish mode: "issues" (default); future: "contents" / "ipfs"
 ```
+
+> **Note**: If `token` is empty, publishing is silently skipped with a `WARN` log entry. No error is raised and the contributor registration still completes normally.
 
 See: [contributors.md](contributors.md) → GitHub auto-publish.
 
