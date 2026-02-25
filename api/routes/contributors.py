@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from api.auth import AuthDep
-from api.deps import get_db
+from api.deps import get_db, get_publisher
 from api.errors import B1e55edError
 from engine.core.contributors import Contributor, ContributorRegistry
 from engine.core.database import Database
@@ -18,6 +18,7 @@ class ContributorAttestationResponse(BaseModel):
     contributor_id: str
     uid: str
     attestation: dict[str, Any]
+    published: dict[str, Any] | None = None
 
 
 class ContributorAttestationSummaryResponse(BaseModel):
@@ -43,9 +44,14 @@ class ContributorResponse(BaseModel):
     role: str
     registered_at: str
     metadata: dict[str, Any]
+    published: bool | None = None
 
     @classmethod
-    def from_contributor(cls, c: Contributor) -> ContributorResponse:
+    def from_contributor(cls, c: Contributor, *, published: bool | None = None) -> ContributorResponse:
+        # If caller doesn't override, derive from metadata (True if github publish succeeded, else None)
+        if published is None:
+            pub_github = (c.metadata.get("publish") or {}).get("github")
+            published = True if pub_github else None
         return cls(
             id=c.id,
             node_id=c.node_id,
@@ -53,6 +59,7 @@ class ContributorResponse(BaseModel):
             role=c.role,
             registered_at=c.registered_at,
             metadata=dict(c.metadata),
+            published=published,
         )
 
 
@@ -61,7 +68,10 @@ class ContributorScoreResponse(BaseModel):
     signals_submitted: int
     signals_accepted: int
     signals_profitable: int
+    signals_resolved: int = 0
     hit_rate: float
+    acceptance_rate: float = 0.0
+    brier_score: float = 0.25
     avg_conviction: float
     total_karma_usd: float
     score: float
@@ -104,12 +114,23 @@ def get_contributor_attestation(contributor_id: str, db: Database = Depends(get_
     if not isinstance(att, dict):
         raise B1e55edError(code="contributor.attestation_invalid", message="Attestation invalid", status=500, id=contributor_id)
 
-    return ContributorAttestationResponse(contributor_id=contributor_id, uid=str(eas_meta.get("uid") or ""), attestation=att)
+    pub = eas_meta.get("publish")
+    published: dict[str, Any] | None = pub if isinstance(pub, dict) else None
+    return ContributorAttestationResponse(
+        contributor_id=contributor_id,
+        uid=str(eas_meta.get("uid") or ""),
+        attestation=att,
+        published=published,
+    )
 
 
 @router.post("/register", response_model=ContributorResponse)
-def register_contributor(req: ContributorRegisterRequest, db: Database = Depends(get_db)) -> ContributorResponse:
-    reg = ContributorRegistry(db)
+def register_contributor(
+    req: ContributorRegisterRequest,
+    db: Database = Depends(get_db),
+    publisher: object | None = Depends(get_publisher),
+) -> ContributorResponse:
+    reg = ContributorRegistry(db, github_publisher=publisher)
     try:
         c = reg.register(node_id=req.node_id, name=req.name, role=req.role, metadata=req.metadata)
     except ValueError as e:
@@ -119,7 +140,13 @@ def register_contributor(req: ContributorRegisterRequest, db: Database = Depends
             status=409,
             node_id=req.node_id,
         ) from e
-    return ContributorResponse.from_contributor(c)
+    # Determine published: True if github publish succeeded, False if publisher configured but failed, None if not configured
+    if publisher is not None:
+        pub_github = (c.metadata.get("publish") or {}).get("github")
+        reg_published: bool | None = bool(pub_github)
+    else:
+        reg_published = None
+    return ContributorResponse.from_contributor(c, published=reg_published)
 
 
 @router.get("/leaderboard", response_model=list[ContributorScoreResponse])

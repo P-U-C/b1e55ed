@@ -85,6 +85,7 @@ class KillSwitchConfig(BaseModel):
 
 
 class KarmaConfig(BaseModel):
+    # default-on per PRD §18; operators can disable with karma.enabled = false in user.yaml
     enabled: bool = True
     percentage: float = 0.005
     settlement_mode: Literal["manual", "daily", "weekly", "threshold"] = "manual"
@@ -106,6 +107,7 @@ class ApiConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 5050
     auth_token: str = ""
+    kill_switch_token: str = ""  # Separate auth boundary for kill switch endpoints
 
 
 class DashboardConfig(BaseModel):
@@ -122,6 +124,18 @@ class EASConfig(BaseModel):
     schema_uid: str = ""  # Set after schema registration
     attester_private_key: str = ""  # Private key for signing attestations
     mode: Literal["onchain", "offchain"] = "offchain"
+
+
+class PublishGithubConfig(BaseModel):
+    owner: str = "P-U-C"
+    repo: str = "offchain-attestations"
+    token: str = ""  # PAT or installation token; never logged
+    labels: list[str] = Field(default_factory=lambda: ["attestation", "offchain"])
+    mode: str = "issues"  # future: contents/ipfs
+
+
+class PublishConfig(BaseModel):
+    github: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
 
 
 class Config(BaseSettings):
@@ -146,6 +160,8 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
+    publish: PublishConfig = Field(default_factory=PublishConfig)
+    github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 

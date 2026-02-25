@@ -12,12 +12,54 @@ from starlette.responses import JSONResponse
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
+from engine.core.rate_limiter import ApiRateLimiter
+
+
+class ApiRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Allow health/docs without rate limiting
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+            return await call_next(request)
+
+        # Key by bearer token if present, else by client IP.
+        auth = request.headers.get("authorization") or ""
+        key = "ip:" + (request.client.host if request.client else "unknown")
+        if auth.lower().startswith("bearer "):
+            # Avoid storing raw token; use a stable hash.
+            import hashlib
+
+            tok = auth.split(" ", 1)[1].strip().encode("utf-8")
+            key = "token:" + hashlib.sha256(tok).hexdigest()
+
+        db = getattr(request.app.state, "db", None)
+        if db is None:
+            return await call_next(request)
+
+        limiter = ApiRateLimiter(db, window_seconds=60, max_requests=240)
+        allowed, retry_after = limiter.allow(key=key)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "rate_limited",
+                        "message": "Rate limit exceeded",
+                        "retry_after": retry_after,
+                    }
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        return await call_next(request)
 
 
 class IdentityGateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Dev/test bypass
         if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            import logging
+
+            logging.getLogger("b1e55ed.security").critical("B1E55ED_DEV_MODE is active — IdentityGateMiddleware is BYPASSED. Never use in production.")
             return await call_next(request)
 
         # Allow health/docs without identity (monitoring + introspection)
@@ -77,6 +119,14 @@ def create_app() -> FastAPI:
         # Expose config/db in app state for dependency injection + tests.
         app.state.config = getattr(app.state, "config", None) or config
 
+        import logging as _log
+
+        if not getattr(config.eas, "enabled", False):
+            _log.getLogger("b1e55ed.startup").warning(
+                "EAS attestation is DISABLED (eas.enabled=false). "
+                "No on-chain proofs will be created. Set eas.enabled=true and configure eas.rpc_url to activate."
+            )
+
         from engine.core.database import Database
 
         created_db = False
@@ -90,10 +140,23 @@ def create_app() -> FastAPI:
         # Auto-register local node as an operator contributor.
         try:
             from engine.core.contributors import ContributorRegistry
+            from engine.integrations.github_publish import make_publisher
             from engine.security import ensure_identity
 
             ident = ensure_identity().identity
-            reg = ContributorRegistry(app.state.db)
+            _cfg = app.state.config
+            _pub_cfg = _cfg.publish.github
+            _pub = (
+                make_publisher(
+                    owner=_pub_cfg.owner,
+                    repo=_pub_cfg.repo,
+                    token=_pub_cfg.token,
+                    labels=_pub_cfg.labels,
+                )
+                if _pub_cfg.token
+                else None
+            )
+            reg = ContributorRegistry(app.state.db, github_publisher=_pub)
             if reg.get_by_node(ident.node_id) is None:
                 reg.register(
                     node_id=ident.node_id,
@@ -137,6 +200,9 @@ def create_app() -> FastAPI:
 
     app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
 
+    # API rate limiting (SEC1)
+    app.add_middleware(ApiRateLimitMiddleware)
+
     # Identity gate: require forged identity for all endpoints (except health/docs)
     app.add_middleware(IdentityGateMiddleware)
 
@@ -152,6 +218,12 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(get_api_router(), prefix="/api/v1")
+
+    # MCP (Model Context Protocol) server — mounted at /mcp (no /api/v1 prefix)
+    from api.routes.mcp import router as mcp_router
+
+    app.include_router(mcp_router)
+
     return app
 
 

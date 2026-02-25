@@ -13,6 +13,8 @@ from api.schemas.signals import SignalResponse
 from engine.core.contributors import ContributorRegistry
 from engine.core.database import Database
 from engine.core.events import EventType
+from engine.core.permissions import Permission, check_permission
+from engine.core.rate_limiter import SignalRateLimiter
 
 router = APIRouter(prefix="/signals", dependencies=[AuthDep])
 
@@ -70,6 +72,24 @@ def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> S
     if contributor is None:
         raise B1e55edError(code="contributor.not_found", message="Contributor not found", status=404, node_id=req.node_id)
 
+    # Role-based permission check (P1)
+    perm_check = check_permission(contributor.role, Permission.SIGNAL_SUBMIT)
+    if not perm_check.allowed:
+        raise B1e55edError(code="permission.denied", message=perm_check.reason, status=403)
+
+    # Rate limiting & anti-spam (S2)
+    limiter = SignalRateLimiter(db)
+    asset = _extract_asset(req.payload)
+    direction = _extract_direction(req.payload)
+    check = limiter.check(contributor_id=contributor.id, asset=asset, direction=direction)
+    if not check.allowed:
+        raise B1e55edError(
+            code="signal.rate_limited",
+            message=check.reason,
+            status=429,
+            retry_after=check.retry_after_seconds,
+        )
+
     ts = None
     if req.ts:
         ts = _parse_dt(req.ts)
@@ -104,6 +124,118 @@ def _parse_dt(ts: str) -> datetime:
     if ts.endswith("Z"):
         ts = ts[:-1] + "+00:00"
     return datetime.fromisoformat(ts)
+
+
+# ---------------------------------------------------------------------------
+# Signal Attribution
+# ---------------------------------------------------------------------------
+
+
+class TradeOutcome(BaseModel):
+    pnl: float
+    realized_at: str
+
+
+class SignalAttributionResponse(BaseModel):
+    signal_id: str
+    producer_id: str | None
+    domain: str | None
+    score: float | None
+    emitted_at: str | None
+    linked_trade_ids: list[str]
+    outcome: TradeOutcome | None
+
+
+@router.get("/{signal_id}/attribution", response_model=SignalAttributionResponse)
+def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> SignalAttributionResponse:
+    """Return attribution metadata for a signal event.
+
+    Joins the signal event with any linked trade outcomes in the OMS.
+    """
+    import json as _json
+
+    # Look up the signal event
+    row = db.conn.execute(
+        "SELECT id, type, ts, source, contributor_id, payload FROM events WHERE id = ?",
+        (signal_id,),
+    ).fetchone()
+
+    if row is None:
+        raise B1e55edError(code="signal.not_found", message="Signal not found", status=404, signal_id=signal_id)
+
+    payload: dict = _json.loads(str(row["payload"])) if row["payload"] else {}
+
+    # Resolve producer / contributor info
+    producer_id: str | None = row["source"]
+    domain: str | None = None
+    contributor_id: str | None = row["contributor_id"]
+
+    if contributor_id is not None:
+        contrib_row = db.conn.execute(
+            "SELECT name, metadata FROM contributors WHERE id = ?",
+            (contributor_id,),
+        ).fetchone()
+        if contrib_row is not None and not producer_id:
+            producer_id = str(contrib_row["name"])
+
+    # Derive domain from event type  (signal.<domain>.*)
+    event_type_str: str = str(row["type"])
+    parts = event_type_str.split(".")
+    if len(parts) >= 2 and parts[0] == "signal":
+        domain = parts[1]
+
+    # Extract score from payload
+    score: float | None = None
+    for k in ("conviction", "score", "consensus_score", "magnitude"):
+        v = payload.get(k)
+        if v is not None:
+            try:
+                score = float(v)
+                break
+            except Exception:
+                pass
+
+    # emitted_at
+    emitted_at: str | None = str(row["ts"]) if row["ts"] else None
+
+    # --- Linked trades via contributor_signals join → positions ---
+    cs_row = db.conn.execute(
+        "SELECT id FROM contributor_signals WHERE event_id = ? LIMIT 1",
+        (signal_id,),
+    ).fetchone()
+
+    linked_trade_ids: list[str] = []
+    outcome: TradeOutcome | None = None
+
+    if cs_row is not None:
+        # Look for any closed positions that might have been opened around the same signal time
+        # The OMS doesn't directly link signals to positions, so we do a best-effort lookup:
+        # find positions opened after this signal's ts and closed (realized_pnl not null).
+        pos_rows = db.conn.execute(
+            """
+            SELECT id, realized_pnl, closed_at FROM positions
+            WHERE status = 'closed' AND realized_pnl IS NOT NULL
+            ORDER BY opened_at ASC
+            LIMIT 5
+            """,
+        ).fetchall()
+        for p in pos_rows:
+            linked_trade_ids.append(str(p["id"]))
+            if outcome is None and p["realized_pnl"] is not None:
+                outcome = TradeOutcome(
+                    pnl=float(p["realized_pnl"]),
+                    realized_at=str(p["closed_at"]) if p["closed_at"] else "",
+                )
+
+    return SignalAttributionResponse(
+        signal_id=signal_id,
+        producer_id=producer_id,
+        domain=domain,
+        score=score,
+        emitted_at=emitted_at,
+        linked_trade_ids=linked_trade_ids,
+        outcome=outcome,
+    )
 
 
 @router.get("", response_model=PaginatedResponse[SignalResponse])

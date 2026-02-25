@@ -95,5 +95,5 @@ $ b1e55ed identity forge
 
 - Private key never written unencrypted to disk
 - Master password required (prompted or env var)
-- Key encryption: AES-256-GCM with Argon2id KDF
+- Key encryption: Fernet (AES-128-CBC + HMAC-SHA256) with PBKDF2 KDF (v1); AES-256-GCM with Argon2id planned for v2 (see docs/crypto-primitives.md)
 - Identity file contains: encrypted private key, public address, node_id, created_at

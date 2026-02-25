@@ -91,9 +91,16 @@ class ACIProducer(BaseProducer):
             return []
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
-        resp = asyncio.run(self.ctx.client.request("POST", url, json={"symbols": symbols}))
-
-        data: Any = resp.json()
+        data: Any = asyncio.run(
+            self.ctx.client.request_json(
+                "POST",
+                url,
+                expected=(list, dict),
+                json={"symbols": symbols},
+                max_bytes=1024 * 1024,
+                max_items=2000,
+            )
+        )
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
 

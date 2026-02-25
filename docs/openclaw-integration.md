@@ -39,41 +39,43 @@ b1e55ed is designed to run under [OpenClaw](https://openclaw.ai) as a sovereign 
 
 The curator producer accepts structured signals from the operator layer. This is how human intelligence enters the system.
 
+**Via CLI:**
+```bash
+b1e55ed signal "Whale cluster accumulating SOL — 3 wallets, $2M+ in 48h" \
+  --symbols SOL --direction bullish --conviction 7
+```
+
 **Via API:**
 ```bash
-POST /signals/curator
+POST /api/v1/signals/submit
 {
-  "content": "Whale cluster accumulating SOL — 3 wallets, $2M+ in 48h",
-  "source": "operator",
-  "assets": ["SOL"],
-  "direction": "bullish",
-  "conviction": 7
+  "event_type": "signal.curator.v1",
+  "node_id": "your-node-id",
+  "source": "operator:telegram",
+  "payload": {
+    "symbol": "SOL",
+    "direction": "bullish",
+    "conviction": 7.0,
+    "rationale": "Whale cluster accumulating"
+  }
 }
 ```
 
-**Via OpenClaw:**
-Operator drops alpha in chat. The `/signal` command (or auto-detection) classifies, structures, and forwards to the curator endpoint. Multi-message accumulation with a 60-second window handles the natural rhythm of human intel sharing.
-
-**Via Agent:**
-Any agent that can POST JSON can curate. The schema is the same regardless of who's sending it — human or machine.
+See: [curator.md](curator.md).
 
 ### 2. Brain Control (Operator → Engine)
 
 ```bash
 # Trigger brain cycle
-POST /brain/run
+POST /api/v1/brain/run
 
 # Check status
-GET /brain/status
-
-# Kill switch override (operator-only, requires auth)
-POST /brain/kill-switch
-{ "level": 0, "reason": "Manual reset after review" }
+GET /api/v1/brain/status
 ```
 
 ### 3. Alerts (Engine → Operator)
 
-The engine emits alert events. The operator layer decides how to deliver them:
+The engine emits alert events. The operator layer decides how to deliver them.
 
 | Alert | Event Type | Urgency |
 |-------|-----------|---------|
@@ -83,49 +85,46 @@ The engine emits alert events. The operator layer decides how to deliver them:
 | Regime change | `alert.regime_shift` | Standard |
 | Learning loop update | `alert.weights_adjusted` | Low |
 
-OpenClaw routes these to Telegram, Discord, or wherever the operator lives. A custom integration reads the event stream and routes however it wants.
+Subscribe via SSE stream: `GET /api/v1/events/stream?domain=alert`
 
-### 4. Dashboard (Passive Monitoring)
+### 4. Agent Interfaces
 
-The web dashboard at `localhost:5051` provides real-time visualization. It reads the same event store — no special integration needed. Works alongside any operator layer.
+Agents connect via SSE stream or MCP server.
+
+```bash
+# Real-time event feed
+GET /api/v1/events/stream
+
+# MCP tool calls
+POST /api/v1/mcp
+
+# Producer provenance (no auth)
+GET /api/v1/oracle/producers/{id}/provenance
+```
+
+See: [agent-interfaces.md](agent-interfaces.md).
+
+### 5. Dashboard (Passive Monitoring)
+
+The web dashboard at `localhost:5051` provides real-time visualization. It reads the same event store — no special integration needed.
 
 ---
 
-## OpenClaw Skill (Next Phase)
+## Component Status
 
-The planned OpenClaw skill package will provide:
-
-| Component | Purpose |
-|-----------|---------|
-| `SKILL.md` | Agent instructions for operating b1e55ed |
-| Cron templates | Brain cycle, monitoring sweep, daily summaries |
-| Heartbeat checks | Position alerts, system health |
-| `/signal` handler | Chat → curator pipeline |
-| Alert routing | Engine events → chat notifications |
-
-This makes b1e55ed installable as a skill — one command to give any OpenClaw agent trading intelligence.
-
----
-
-## Agent-First Design
-
-b1e55ed treats agents as first-class operators, not just API consumers.
-
-**For agents integrating b1e55ed:**
-
-- **Discovery**: Standard REST API with OpenAPI schema at `/docs`
-- **Authentication**: Bearer token, same for humans and agents
-- **Event format**: JSON events with consistent schema, hash-chained for auditability
-- **Idempotency**: All write operations are idempotent — safe for retry-happy agents
-- **Structured errors**: Machine-readable error responses with error codes
-
-**For agents contributing to b1e55ed:**
-
-- **Custom producers**: Implement the producer interface, register via config
-- **Signal submission**: POST to `/signals/{producer_id}` with structured data
-- **Strategy plugins**: Implement the strategy interface for custom brain logic
-
-The event contract is the universal integration point. If you can emit a JSON event, you can participate in the system.
+| Component | Status |
+|-----------|--------|
+| REST API | ✅ Live |
+| Dashboard | ✅ Live |
+| Event store | ✅ Live |
+| Curator endpoint | ✅ Live |
+| SSE event stream | ✅ Live (`GET /api/v1/events/stream`) |
+| MCP server | ✅ Live (`POST /api/v1/mcp`) |
+| Signal attribution | ✅ Live |
+| Oracle endpoint | ✅ Live (public, no auth) |
+| Provenance check MCP tool | ✅ Live |
+| OpenClaw skill package | ⬜ Planned |
+| Alert → chat routing | ⬜ Planned |
 
 ---
 
@@ -145,7 +144,7 @@ No operator layer. Direct API calls. Good for backtesting, CI pipelines, or embe
 Chat → OpenClaw → b1e55ed API → Brain → Events → OpenClaw → Chat
 ```
 
-Full conversational loop. Drop alpha, get alerts, control the system through natural language. The intended production setup.
+Full conversational loop. Drop alpha, get alerts, control the system through natural language.
 
 ### Pattern 3: Multi-Agent
 
@@ -157,26 +156,3 @@ Agent C (Social)   → Curator API ──┘
 ```
 
 Multiple agents feeding signals. One operator with kill switch authority. The compound learning loop benefits from every participant.
-
----
-
-## What's Not Built Yet
-
-Transparency about current state:
-
-| Component | Status | Phase |
-|-----------|--------|-------|
-| REST API | ✅ Live | Current |
-| Dashboard | ✅ Live | Current |
-| Event store | ✅ Live | Current |
-| Curator endpoint | ✅ Live | Current |
-| OpenClaw skill package | ⬜ Planned | Next |
-| `/signal` chat handler | ⬜ Planned | Next |
-| Cron templates | ⬜ Planned | Next |
-| Alert → chat routing | ⬜ Planned | Next |
-| Agent discovery (MCP/OpenAPI) | ⬜ Planned | Future |
-| Multi-agent coordination | ⬜ Planned | Future |
-
----
-
-*The engine is ready. The interface layer is next.*

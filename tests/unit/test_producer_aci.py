@@ -26,6 +26,10 @@ class DummyClient:
         assert self._response is not None
         return self._response
 
+    async def request_json(self, method: str, url: str, **kwargs: Any) -> Any:
+        resp = await self.request(method, url, **kwargs)
+        return resp.json()
+
 
 @pytest.mark.parametrize(
     ("text", "expected"),

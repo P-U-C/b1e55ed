@@ -25,6 +25,10 @@ class DummyClient:
         assert self._response is not None
         return self._response
 
+    async def request_json(self, method: str, url: str, **kwargs: Any) -> Any:
+        resp = await self.request(method, url, **kwargs)
+        return resp.json()
+
 
 def test_curator_intel_producer_publishes_events_from_url(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("B1E55ED_CURATOR_URL", "https://example.test/curator")

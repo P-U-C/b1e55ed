@@ -12,6 +12,7 @@ No ``dry_run`` mode (DECISIONS_V3 #4).
 from __future__ import annotations
 
 from engine.execution.circuit_breaker import CircuitBreaker, CircuitBreakerError, TokenBucket
+from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig, KellyEstimate
 from engine.execution.oms import OMS, OMSResult
 from engine.execution.paper import PaperBroker, PaperFill
 from engine.execution.pnl import PnLSnapshot, PnLTracker
@@ -34,4 +35,7 @@ __all__ = [
     "TokenBucket",
     "CircuitBreaker",
     "CircuitBreakerError",
+    "DynamicKelly",
+    "DynamicKellyConfig",
+    "KellyEstimate",
 ]

@@ -23,7 +23,7 @@ def test_execution_pipeline_intent_to_karma(tmp_path: Path) -> None:
         update={
             "data_dir": tmp_path / "data",
             "execution": base.execution.model_copy(update={"mode": "paper"}),
-            "karma": base.karma.model_copy(update={"treasury_address": "0xTEST"}),
+            "karma": base.karma.model_copy(update={"enabled": True, "treasury_address": "0xTEST"}),
         }
     )
 

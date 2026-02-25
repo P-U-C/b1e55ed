@@ -57,8 +57,7 @@ class CuratorIntelProducer(BaseProducer):
 
         if url:
             # Endpoint can be mocked in tests via ctx.client
-            resp = asyncio.run(self.ctx.client.request("GET", url))
-            data = resp.json()
+            data = asyncio.run(self.ctx.client.request_json("GET", url, expected=(list, dict), max_bytes=512 * 1024, max_items=2000))
         elif fp:
             p = Path(fp)
             if not p.exists():

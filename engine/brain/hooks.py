@@ -41,5 +41,13 @@ class BrainHooks:
         return None
 
     def post_cycle(self, ctx: PostCycleContext) -> None:
-        # Placeholder for: projections update, alerts, learning trigger.
-        return None
+        try:
+            from engine.integration.learning_loop import LearningLoopIntegration
+
+            integration = LearningLoopIntegration(db=self.db, config=self.config)
+            if integration.should_run("daily"):
+                integration.run_daily()
+        except Exception:
+            import logging
+
+            logging.getLogger("b1e55ed.hooks").warning("Learning loop failed in post_cycle", exc_info=True)

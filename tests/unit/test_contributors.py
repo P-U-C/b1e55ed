@@ -56,33 +56,35 @@ def test_scoring_and_leaderboard(tmp_path: Path) -> None:
     c2 = reg.register(node_id="n2", name="two", role="agent", metadata={})
 
     with db.conn:
-        # c1: accepted+profitable
-        db.conn.execute(
-            """
-            INSERT INTO contributor_signals (contributor_id, event_id, signal_score, accepted, profitable, created_at)
-            VALUES (?, ?, ?, 1, 1, datetime('now'))
-            """,
-            (c1.id, "e1", 8.0),
-        )
-        # c2: accepted but not profitable
-        db.conn.execute(
-            """
-            INSERT INTO contributor_signals (contributor_id, event_id, signal_score, accepted, profitable, created_at)
-            VALUES (?, ?, ?, 1, 0, datetime('now'))
-            """,
-            (c2.id, "e2", 8.0),
-        )
+        # c1: 5 accepted+profitable (meets MIN_RESOLVED threshold)
+        for i in range(5):
+            db.conn.execute(
+                """
+                INSERT INTO contributor_signals (contributor_id, event_id, signal_score, accepted, profitable, created_at)
+                VALUES (?, ?, ?, 1, 1, datetime('now'))
+                """,
+                (c1.id, f"e1_{i}", 8.0),
+            )
+        # c2: 5 accepted but not profitable
+        for i in range(5):
+            db.conn.execute(
+                """
+                INSERT INTO contributor_signals (contributor_id, event_id, signal_score, accepted, profitable, created_at)
+                VALUES (?, ?, ?, 1, 0, datetime('now'))
+                """,
+                (c2.id, f"e2_{i}", 8.0),
+            )
 
     scoring = ContributorScoring(db)
     s1 = scoring.compute_score(c1.id)
     s2 = scoring.compute_score(c2.id)
 
-    assert s1.signals_submitted == 1
-    assert s1.signals_accepted == 1
-    assert s1.signals_profitable == 1
+    assert s1.signals_submitted == 5
+    assert s1.signals_accepted == 5
+    assert s1.signals_profitable == 5
     assert s1.hit_rate == 1.0
 
-    assert s2.hit_rate == 0.0
+    assert s2.hit_rate == 0.0  # 0% hit rate (all unprofitable)
 
     lb = scoring.leaderboard(limit=10)
     assert lb[0].contributor_id == c1.id

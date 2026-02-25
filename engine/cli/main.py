@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
@@ -183,6 +183,126 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    # -- kelly --
+    p_kelly = sub.add_parser("kelly", help="Show dynamic Kelly criterion estimate from trade history")
+    p_kelly.add_argument("--asset", default=None, help="Filter by asset (e.g. BTC)")
+    p_kelly.add_argument("--lookback", type=int, default=50, help="Max trades to consider")
+    p_kelly.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- backtest --
+    p_backtest = sub.add_parser("backtest", help="Run backtests (walk-forward + stats)")
+    bt_sub = p_backtest.add_subparsers(dest="backtest_cmd")
+
+    p_bt_wf = bt_sub.add_parser("walkforward", help="Walk-forward backtest")
+    p_bt_wf.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_wf.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_wf.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_wf.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_wf.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_wf.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_wf.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_wf.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_wf.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_wf.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_wf.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- backtest gridsweep --
+    p_bt_gs = bt_sub.add_parser("gridsweep", help="Parameter grid sweep with FDR correction across all combos")
+    p_bt_gs.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_gs.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_gs.add_argument(
+        "--param",
+        action="append",
+        dest="params",
+        default=[],
+        metavar="NAME=v1,v2,...",
+        help="Parameter sweep specification (repeatable). E.g. --param lookback=10,20,30",
+    )
+    p_bt_gs.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_gs.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_gs.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_gs.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_gs.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_gs.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_gs.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_gs.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_gs.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- backtest megasweep --
+    p_bt_ms = bt_sub.add_parser("megasweep", help="Multi-strategy parameter sweep with FDR across ALL strategies × ALL combos")
+    p_bt_ms.add_argument("--prices", required=True, help="Path to CSV with columns: close[,high,low,volume]")
+    p_bt_ms.add_argument(
+        "--grid",
+        action="append",
+        dest="grids",
+        default=[],
+        metavar="STRATEGY:p1=v1,v2;p2=v3,v4",
+        help="Strategy grid spec (repeatable). E.g. --grid 'momentum:lookback=10,20;threshold=0.01,0.02'. Omit to use --all-defaults.",
+    )
+    p_bt_ms.add_argument(
+        "--all-defaults",
+        action="store_true",
+        help="Run all 8 strategies with predefined parameter grids.",
+    )
+    p_bt_ms.add_argument("--train", type=int, default=180, help="Train window size (bars)")
+    p_bt_ms.add_argument("--test", type=int, default=60, help="Test window size (bars)")
+    p_bt_ms.add_argument("--step", type=int, default=60, help="Step size (bars)")
+    p_bt_ms.add_argument("--embargo", type=int, default=0, help="Embargo gap between train/test (bars)")
+    p_bt_ms.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_ms.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_ms.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_ms.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_ms.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- backtest regime --
+    p_bt_rg = bt_sub.add_parser("regime", help="Regime-conditioned backtest — per-regime performance + FDR")
+    p_bt_rg.add_argument(
+        "--strategy",
+        required=True,
+        choices=[
+            "momentum",
+            "ma_crossover",
+            "rsi_reversion",
+            "breakout",
+            "mean_reversion",
+            "trend_following",
+            "volatility",
+            "combined",
+        ],
+    )
+    p_bt_rg.add_argument("--prices", required=True, help="CSV with columns: close[,high,low,volume]")
+    p_bt_rg.add_argument("--fee-bps", type=float, default=10.0, help="Fee per position change (bps)")
+    p_bt_rg.add_argument("--q", type=float, default=0.05, help="FDR q-value")
+    p_bt_rg.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap samples")
+    p_bt_rg.add_argument("--seed", type=int, default=0, help="RNG seed")
+    p_bt_rg.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_producers = sub.add_parser("producers", help="Register and manage producers")
     prod_sub = p_producers.add_subparsers(dest="producers_cmd")
 
@@ -312,6 +432,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Print system status")
 
+    # -- anchor --
+    from engine.cli.commands.anchor import build_anchor_parser
+
+    build_anchor_parser(sub)
+
+    # -- export --
+    from engine.cli.commands.export import build_export_parser
+
+    build_export_parser(sub)
+
+    # -- replay --
+    p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
+    p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
+    p_replay.add_argument("--to", dest="to_id", help="End at event ID (inclusive)")
+    p_replay.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- integrity --
+    p_integrity = sub.add_parser("integrity", help="Verify event chain integrity and projection consistency")
+    p_integrity.add_argument("--fast", action="store_true", help="Check only recent events")
+    p_integrity.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     return parser
 
 
@@ -439,6 +580,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
         from engine.core.client import DataClient
         from engine.core.metrics import REGISTRY
+        from engine.core.types import ProducerHealth
         from engine.producers.base import BaseProducer, ProducerContext
         from engine.producers.registry import discover, get_producer, list_producers
 
@@ -457,13 +599,137 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         client = DataClient()
         pctx = ProducerContext(config=config, db=db, client=client, metrics=REGISTRY, logger=logger)
         producer_results: list[dict[str, object]] = []
+
+        def _schedule_interval_ms(schedule: str) -> int | None:
+            # Handles "*/N * * * *" only (good enough for health estimation)
+            s = str(schedule).strip()
+            if s.startswith("*/"):
+                try:
+                    n = int(s.split()[0][2:])
+                    return int(n * 60_000)
+                except Exception:
+                    return None
+            return None
+
+        from datetime import UTC, datetime, timedelta
+
+        def _parse_iso(ts: str | None) -> datetime | None:
+            if not ts:
+                return None
+            s = str(ts)
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            try:
+                return datetime.fromisoformat(s)
+            except Exception:
+                return None
+
+        def _is_quarantined(name: str) -> tuple[bool, str | None]:
+            row = db.conn.execute(
+                "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = ?",
+                (name,),
+            ).fetchone()
+            if row is None:
+                return False, None
+            until = str(row[0]) if row[0] is not None else None
+            reason = str(row[1]) if row[1] is not None else None
+            dt = _parse_iso(until)
+            if dt is None:
+                return False, None
+            return dt > datetime.now(tz=UTC), reason
+
         for n in names:
             from typing import cast
+
+            quarantined, q_reason = _is_quarantined(n)
+            if quarantined:
+                producer_results.append(
+                    {
+                        "name": n,
+                        "events_published": 0,
+                        "errors": [f"quarantined:{q_reason or 'unknown'}"],
+                        "duration_ms": 0,
+                        "timestamp": datetime.now(tz=UTC).isoformat(),
+                        "staleness_ms": None,
+                        "health": "quarantined",
+                    }
+                )
+                continue
 
             cls = get_producer(n)
             producer_cls = cast(type[BaseProducer], cls)
             producer = producer_cls(pctx)
             res = producer.run()
+
+            # Persist producer health (PH1)
+            domain = str(getattr(producer_cls, "domain", "") or "")
+            schedule = str(getattr(producer_cls, "schedule", "") or "")
+            expected_interval_ms = _schedule_interval_ms(schedule)
+            last_error = "; ".join(list(res.errors)) if res.errors else None
+            success = str(res.health) == str(ProducerHealth.OK)
+
+            # Update row (create if missing)
+            with db.conn:
+                db.conn.execute(
+                    """
+                    INSERT INTO producer_health (
+                        name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
+                        consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms,
+                        quarantined_until, quarantined_reason, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, datetime('now'))
+                    ON CONFLICT(name) DO UPDATE SET
+                        domain=excluded.domain,
+                        schedule=excluded.schedule,
+                        last_run_at=excluded.last_run_at,
+                        last_success_at=CASE WHEN ? THEN excluded.last_success_at ELSE producer_health.last_success_at END,
+                        last_error=excluded.last_error,
+                        consecutive_failures=CASE WHEN ? THEN 0 ELSE producer_health.consecutive_failures + 1 END,
+                        events_produced=producer_health.events_produced + excluded.events_produced,
+                        avg_duration_ms=CASE
+                            WHEN producer_health.avg_duration_ms IS NULL THEN excluded.avg_duration_ms
+                            ELSE (producer_health.avg_duration_ms * 0.8 + excluded.avg_duration_ms * 0.2)
+                        END,
+                        expected_interval_ms=excluded.expected_interval_ms,
+                        updated_at=datetime('now')
+                    """,
+                    (
+                        n,
+                        domain,
+                        schedule,
+                        None,
+                        res.timestamp.isoformat(),
+                        res.timestamp.isoformat(),
+                        last_error,
+                        0 if success else 1,
+                        int(res.events_published),
+                        float(res.duration_ms),
+                        expected_interval_ms,
+                        1 if success else 0,
+                        1 if success else 0,
+                    ),
+                )
+
+                # Auto-quarantine after repeated failures (PH1b)
+                row = db.conn.execute(
+                    "SELECT consecutive_failures FROM producer_health WHERE name = ?",
+                    (n,),
+                ).fetchone()
+                failures = int(row[0] or 0) if row else 0
+                if not success and failures >= 5:
+                    until = datetime.now(tz=UTC) + timedelta(hours=1)
+                    db.conn.execute(
+                        "UPDATE producer_health SET quarantined_until = ?, quarantined_reason = ? WHERE name = ?",
+                        (until.isoformat(), "consecutive_failures", n),
+                    )
+                    db.conn.execute(
+                        "INSERT INTO audit_log (action, actor, details, ts) VALUES (?, ?, ?, datetime('now'))",
+                        (
+                            "producer.quarantined",
+                            "system",
+                            f"{n} quarantined for consecutive_failures",
+                        ),
+                    )
+
             producer_results.append(
                 {
                     "name": n,
@@ -477,6 +743,15 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             )
 
         from engine.brain.orchestrator import BrainOrchestrator
+
+        ks = _kill_switch_state(db)
+        if _safe_int(ks.get("level")) > 0:
+            print(
+                f"error: brain cycle blocked — kill switch level {ks['level']} active: {ks.get('reason', '')}",
+                file=sys.stderr,
+            )
+            db.close()
+            return 1
 
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
@@ -525,6 +800,19 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
 
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
+
+    # Look up contributor for signal attribution (fail-open).
+    try:
+        from engine.core.contributors import ContributorRegistry
+
+        _contrib_reg = ContributorRegistry(db)
+        _contributor = _contrib_reg.get_by_node(identity.identity.node_id)
+        contributor_id = _contributor.id if _contributor is not None else None
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger("b1e55ed.cli").warning("Could not look up contributor for signal attribution; signal will still be emitted.")
+        contributor_id = None
 
     # We accept flags both before and after the free-form text / `add` subcommand.
     # The top-level argparse only knows about `args.*` values. Any flags placed after
@@ -615,6 +903,15 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
             source="cli.signal",
             dedupe_key=compute_dedupe_key(EventType.SIGNAL_CURATOR_V1, payload),
         )
+        if contributor_id is not None:
+            with db.conn:
+                db.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO contributor_signals (contributor_id, event_id, accepted)
+                    VALUES (?, ?, 0)
+                    """,
+                    (str(contributor_id), str(ev.id)),
+                )
         events.append({"id": ev.id, "type": str(ev.type), "ts": ev.ts.isoformat(), "payload": ev.payload})
 
     out = {
@@ -655,6 +952,55 @@ def _latest_mark_prices(db) -> dict[str, float]:
         if sym and px is not None and sym not in prices:
             prices[sym] = float(px)
     return prices
+
+
+def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig
+
+    repo_root = ctx.repo_root
+    db_path = repo_root / "data" / "brain.db"
+    if not db_path.exists():
+        print("error: data/brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
+        return 1
+
+    db = Database(str(db_path))
+    config = DynamicKellyConfig(lookback=int(getattr(args, "lookback", 50)))
+    dk = DynamicKelly(db, config=config)
+
+    asset = getattr(args, "asset", None)
+    est = dk.estimate(asset=asset)
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "p": est.p,
+            "b": est.b,
+            "n_trades": est.n_trades,
+            "n_wins": est.n_wins,
+            "n_losses": est.n_losses,
+            "avg_win_usd": est.avg_win_usd,
+            "avg_loss_usd": est.avg_loss_usd,
+            "used_prior": est.used_prior,
+            "kelly_fraction": est.kelly_fraction,
+            "half_kelly": est.kelly_fraction * est.params.fraction_multiplier,
+        }
+        print(_json_dumps(out))
+    else:
+        print(f"\nDynamic Kelly Estimate{f' ({asset.upper()})' if asset else ''}")
+        print(f"{'=' * 40}")
+        print(f"  Trades used  : {est.n_trades}  ({'prior-blended' if est.used_prior else 'data-driven'})")
+        print(f"  Win rate (p) : {est.p:.3f}  ({est.n_wins}W / {est.n_losses}L)")
+        print(f"  Payoff (b)   : {est.b:.3f}  (avg win ${est.avg_win_usd:.2f} / avg loss ${est.avg_loss_usd:.2f})")
+        print(f"  Kelly f*     : {est.kelly_fraction:.4f}")
+        print(f"  Half-Kelly   : {est.kelly_fraction * est.params.fraction_multiplier:.4f}")
+        print()
+        if est.used_prior:
+            print(f"  ⚠  Only {est.n_trades} trades — blended with prior (p={config.prior_p}, b={config.prior_b})")
+            print(f"     Need {config.min_trades}+ trades for pure data-driven estimate.")
+        print()
+
+    db.close()
+    return 0
 
 
 def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -725,10 +1071,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
 
     def ensure_endpoint_column(db: Database) -> None:
         cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
-        if "endpoint" in cols:
-            return
         with db.conn:
-            db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+            if "endpoint" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+            if "quarantined_until" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+            if "quarantined_reason" not in cols:
+                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
     repo_root = ctx.repo_root
     db = Database(repo_root / "data" / "brain.db")
@@ -743,6 +1092,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         name = str(args.name)
         domain = str(args.domain)
         endpoint = str(args.endpoint)
+
+        from engine.security.ssrf import check_url
+
+        url_check = check_url(endpoint)
+        if not url_check.allowed:
+            print(f"error: endpoint blocked ({url_check.reason})", file=sys.stderr)
+            return 1
         schedule = str(args.schedule)
 
         now = datetime.now(tz=UTC).isoformat()
@@ -1000,25 +1356,39 @@ def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> ContributorRegistry:
-    """Construct a ContributorRegistry, optionally wired with an EAS client."""
+    """Construct a ContributorRegistry wired with EAS client and GitHub publisher."""
 
     from engine.core.contributors import ContributorRegistry
 
+    # GitHub publisher — always active when token is configured (fail-open)
+    github_publisher: object | None = None
+    pub_cfg = config.publish.github
+    if pub_cfg.token:
+        from engine.integrations.github_publish import make_publisher
+
+        github_publisher = make_publisher(
+            owner=pub_cfg.owner,
+            repo=pub_cfg.repo,
+            token=pub_cfg.token,
+            labels=pub_cfg.labels,
+        )
+
+    # EAS client — only when explicitly enabled
+    eas_client: object | None = None
     try:
         from engine.integrations.eas import EASClient
+
+        if bool(config.eas.enabled):
+            eas_client = EASClient(
+                rpc_url=str(config.eas.rpc_url),
+                eas_address=str(config.eas.eas_contract),
+                schema_registry_address=str(config.eas.schema_registry),
+                private_key=str(config.eas.attester_private_key),
+            )
     except Exception:
-        return ContributorRegistry(db)
+        pass
 
-    if not bool(config.eas.enabled):
-        return ContributorRegistry(db)
-
-    client = EASClient(
-        rpc_url=str(config.eas.rpc_url),
-        eas_address=str(config.eas.eas_contract),
-        schema_registry_address=str(config.eas.schema_registry),
-        private_key=str(config.eas.attester_private_key),
-    )
-    return ContributorRegistry(db, eas_client=client)
+    return ContributorRegistry(db, eas_client=eas_client, github_publisher=github_publisher)
 
 
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -1062,7 +1432,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
-def _kill_switch_state(db) -> dict[str, object]:
+def _kill_switch_state(db) -> dict[str, Any]:
     from engine.brain.kill_switch import LEVEL_MESSAGES, KillSwitchLevel
     from engine.core.events import EventType
 
@@ -1535,7 +1905,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
                         "nodeId": identity_data["node_id"],
                         "name": "",
                         "role": "operator",
-                        "version": "1.0.0-beta.2",
+                        "version": "1.0.0-beta.3",
                         "registeredAt": identity_data["forged_at"],
                     },
                 )
@@ -1672,6 +2042,624 @@ def _write_user_config(*, user_cfg_path: Path, preset: str) -> None:
     user_cfg_path.write_text(content, encoding="utf-8")
 
 
+def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Rebuild all projections from event replay."""
+    import time
+
+    from engine.core.database import Database
+    from engine.core.projections import ProjectionManager
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    try:
+        t0 = time.monotonic()
+        events = db.iter_events_ascending(
+            from_id=getattr(args, "from_id", None),
+            to_id=getattr(args, "to_id", None),
+        )
+        pm = ProjectionManager()
+        pm.rebuild(events)
+        elapsed = time.monotonic() - t0
+        state: dict[str, Any] = pm.get_state()
+
+        result = {
+            "status": "ok",
+            "events_replayed": len(events),
+            "elapsed_seconds": round(elapsed, 3),
+            "projections": {k: len(v) if isinstance(v, dict) else v for k, v in state.items()},
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            print(f"Replayed {len(events)} events in {elapsed:.3f}s")
+            projections = cast(dict[str, object], result["projections"])
+            for name, val in projections.items():
+                print(f"  {name}: {val} entries")
+            print("Projections rebuilt successfully.")
+    finally:
+        db.close()
+    return 0
+
+
+def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Verify event chain integrity and projection determinism."""
+    import time
+
+    from engine.core.database import Database
+    from engine.core.projections import ProjectionManager
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    try:
+        t0 = time.monotonic()
+        checks: dict[str, object] = {}
+
+        # 1. Hash chain verification
+        fast = getattr(args, "fast", False)
+        chain_ok = db.verify_hash_chain(fast=fast)
+        checks["hash_chain"] = "pass" if chain_ok else "FAIL"
+
+        # 2. Concurrent writer detection
+        concurrent = db.detect_concurrent_writers()
+        checks["single_writer"] = "FAIL (concurrent writer detected)" if concurrent else "pass"
+
+        # 3. Projection determinism: replay twice, compare
+        events = db.iter_events_ascending()
+        pm1 = ProjectionManager()
+        pm1.rebuild(events)
+        state1 = pm1.get_state()
+
+        pm2 = ProjectionManager()
+        pm2.rebuild(events)
+        state2 = pm2.get_state()
+
+        deterministic = _json_dumps(state1) == _json_dumps(state2)
+        checks["projection_determinism"] = "pass" if deterministic else "FAIL"
+
+        # 4. Event count
+        checks["event_count"] = len(events)
+
+        elapsed = time.monotonic() - t0
+        all_pass = all(v == "pass" for k, v in checks.items() if k != "event_count")
+
+        result = {
+            "status": "ok" if all_pass else "FAIL",
+            "checks": checks,
+            "elapsed_seconds": round(elapsed, 3),
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            print(f"Integrity check ({'PASS' if all_pass else 'FAIL'}):")
+            for name, val in checks.items():
+                icon = "✅" if val == "pass" or isinstance(val, int) else "❌"
+                print(f"  {icon} {name}: {val}")
+            print(f"  Completed in {elapsed:.3f}s")
+        return 0 if all_pass else 1
+    finally:
+        db.close()
+
+
+def _parse_param_spec(spec: str) -> tuple[str, list[Any]]:
+    """Parse a ``--param`` value of the form ``name=v1,v2,v3``.
+
+    Values are auto-detected as ``int`` > ``float`` > ``str`` in that order.
+    """
+    if "=" not in spec:
+        raise ValueError(f"Invalid --param spec {spec!r}. Expected format: name=v1,v2,v3")
+    name, raw_values = spec.split("=", 1)
+    name = name.strip()
+    if not name:
+        raise ValueError(f"Empty parameter name in --param spec {spec!r}")
+    values: list[Any] = []
+    for raw in raw_values.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        # auto-detect: try int first, then float, else keep as str
+        try:
+            values.append(int(raw))
+            continue
+        except ValueError:
+            pass
+        try:
+            values.append(float(raw))
+            continue
+        except ValueError:
+            pass
+        values.append(raw)
+    if not values:
+        raise ValueError(f"No values found in --param spec {spec!r}")
+    return name, values
+
+
+def _handle_backtest_gridsweep(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest gridsweep``."""
+    import dataclasses as _dc
+
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.sweep import GridConfig, run_grid_sweep  # noqa: I001
+
+    # --- parse --param specs ---
+    raw_params: list[str] = list(getattr(args, "params", []) or [])
+    param_grid: dict[str, list[Any]] = {}
+    for spec in raw_params:
+        try:
+            name, values = _parse_param_spec(spec)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if name in param_grid:
+            print(f"error: duplicate --param {name!r}. Specify all values in one flag: --param {name}=v1,v2,...", file=sys.stderr)
+            return 2
+        param_grid[name] = values
+
+    # --- validate param names exist on the strategy ---
+    from engine.backtest.sweep import _get_registry  # noqa: I001
+
+    registry = _get_registry()
+    strategy_name = str(args.strategy)
+    cls = registry.get(strategy_name)
+    if cls is None:
+        print(f"error: unknown strategy {strategy_name!r}", file=sys.stderr)
+        return 2
+
+    known_fields: set[str] = {f.name for f in _dc.fields(cls)}
+    for param_name in param_grid:
+        if param_name not in known_fields:
+            print(
+                f"error: strategy {strategy_name!r} has no parameter {param_name!r}. Valid fields: {', '.join(sorted(known_fields))}",
+                file=sys.stderr,
+            )
+            return 2
+
+    # --- load prices ---
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    # --- run sweep ---
+    config = GridConfig(strategy=strategy_name, params=param_grid)
+    result = run_grid_sweep(
+        config=config,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        train_size=int(args.train),
+        test_size=int(args.test),
+        step_size=int(args.step),
+        embargo=int(args.embargo),
+        backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+        n_boot=int(args.bootstrap),
+        seed=int(args.seed),
+        q=float(args.q),
+    )
+
+    # --- find best by Sharpe ---
+    best = max(result.items, key=lambda r: r.oos_sharpe) if result.items else None
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "strategy": strategy_name,
+            "summary": {
+                "total_configs": result.total_configs,
+                "fdr_survivors": result.fdr_survivors,
+                "q": result.q,
+                "best_by_sharpe": {
+                    "params": best.params,
+                    "oos_sharpe": best.oos_sharpe,
+                    "oos_total_return": best.oos_total_return,
+                    "bh_fdr_pass": best.bh_fdr_pass,
+                }
+                if best
+                else None,
+            },
+            "results": [
+                {
+                    "params": r.params,
+                    "oos_total_return": r.oos_total_return,
+                    "oos_sharpe": r.oos_sharpe,
+                    "oos_max_drawdown": r.oos_max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.items
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        # Human-readable table
+        print(f"\nGrid Sweep: {strategy_name}")
+        print(f"  Total configs : {result.total_configs}")
+        print(f"  FDR survivors : {result.fdr_survivors}  (q={result.q})")
+        if best:
+            print(f"  Best (Sharpe) : params={best.params}  sharpe={best.oos_sharpe:.4f}  fdr={'PASS' if best.bh_fdr_pass else 'FAIL'}")
+        print()
+        # Header
+        header_params = list(param_grid.keys()) if param_grid else []
+        col_widths = {k: max(len(k), 8) for k in header_params}
+        hdr = "  ".join(f"{k:>{col_widths[k]}}" for k in header_params)
+        print(f"  {hdr}   {'ret%':>8}  {'sharpe':>8}  {'mdd':>8}  {'p_val':>8}  {'fdr':>5}")
+        print("  " + "-" * (sum(col_widths.values()) + 2 * len(col_widths) + 50))
+        for r in result.items:
+            param_part = "  ".join(f"{str(r.params.get(k, '')):>{col_widths[k]}}" for k in header_params)
+            fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+            print(f"  {param_part}   {r.oos_total_return * 100:>7.2f}%  {r.oos_sharpe:>8.4f}  {r.oos_max_drawdown:>8.4f}  {r.p_value:>8.4f}  {fdr_str:>5}")
+        print()
+
+    return 0
+
+
+def _parse_grid_spec(spec: str) -> tuple[str, dict[str, list[Any]]]:
+    """Parse a ``--grid`` value of the form ``strategy:p1=v1,v2;p2=v3,v4``.
+
+    Returns (strategy_name, param_grid).
+    """
+    if ":" not in spec:
+        raise ValueError(f"Invalid --grid spec {spec!r}. Expected format: strategy:param=v1,v2;param2=v3,v4")
+    strategy, param_part = spec.split(":", 1)
+    strategy = strategy.strip()
+    if not strategy:
+        raise ValueError(f"Empty strategy name in --grid spec {spec!r}")
+
+    param_grid: dict[str, list[Any]] = {}
+    if param_part.strip():
+        for param_spec in param_part.split(";"):
+            param_spec = param_spec.strip()
+            if not param_spec:
+                continue
+            name, values = _parse_param_spec(param_spec)
+            param_grid[name] = values
+
+    return strategy, param_grid
+
+
+def _handle_backtest_megasweep(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest megasweep``."""
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.sweep import GridConfig, MultiSweepResult, get_default_configs, run_multi_sweep  # noqa: I001
+
+    use_defaults = bool(getattr(args, "all_defaults", False))
+    raw_grids: list[str] = list(getattr(args, "grids", []) or [])
+
+    if not use_defaults and not raw_grids:
+        print("error: must specify --all-defaults or at least one --grid spec", file=sys.stderr)
+        return 2
+
+    if use_defaults and raw_grids:
+        print("error: --all-defaults and --grid are mutually exclusive", file=sys.stderr)
+        return 2
+
+    # --- build configs ---
+    configs: list[GridConfig]
+    if use_defaults:
+        configs = get_default_configs()
+    else:
+        configs = []
+        for raw in raw_grids:
+            try:
+                strategy, param_grid = _parse_grid_spec(raw)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            configs.append(GridConfig(strategy=strategy, params=param_grid))
+
+    # --- load prices ---
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    # --- run mega sweep ---
+    try:
+        result: MultiSweepResult = run_multi_sweep(
+            configs=configs,
+            close=series.close,
+            high=series.high,
+            low=series.low,
+            volume=series.volume,
+            train_size=int(args.train),
+            test_size=int(args.test),
+            step_size=int(args.step),
+            embargo=int(args.embargo),
+            backtest_cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+            n_boot=int(args.bootstrap),
+            seed=int(args.seed),
+            q=float(args.q),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # --- find best by Sharpe ---
+    best = max(result.items, key=lambda r: r.oos_sharpe) if result.items else None
+    survivors = [r for r in result.items if r.bh_fdr_pass]
+    best_survivor = max(survivors, key=lambda r: r.oos_sharpe) if survivors else None
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "summary": {
+                "strategies_tested": result.strategies_tested,
+                "total_configs": result.total_configs,
+                "fdr_survivors": result.fdr_survivors,
+                "q": result.q,
+                "best_by_sharpe": {
+                    "strategy": best.strategy,
+                    "params": best.params,
+                    "oos_sharpe": best.oos_sharpe,
+                    "oos_total_return": best.oos_total_return,
+                    "bh_fdr_pass": best.bh_fdr_pass,
+                }
+                if best
+                else None,
+                "best_fdr_survivor": {
+                    "strategy": best_survivor.strategy,
+                    "params": best_survivor.params,
+                    "oos_sharpe": best_survivor.oos_sharpe,
+                    "oos_total_return": best_survivor.oos_total_return,
+                }
+                if best_survivor
+                else None,
+            },
+            "results": [
+                {
+                    "strategy": r.strategy,
+                    "params": r.params,
+                    "oos_total_return": r.oos_total_return,
+                    "oos_sharpe": r.oos_sharpe,
+                    "oos_max_drawdown": r.oos_max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.items
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        # Human-readable output
+        print(f"\n{'=' * 70}")
+        print(f"  MEGA SWEEP — {len(result.strategies_tested)} strategies × {result.total_configs} total configs")
+        print(f"{'=' * 70}")
+        print(f"  Strategies : {', '.join(result.strategies_tested)}")
+        print(f"  FDR survivors : {result.fdr_survivors} / {result.total_configs}  (q={result.q})")
+        if best:
+            print(f"  Best (Sharpe) : {best.strategy} {best.params}  sharpe={best.oos_sharpe:.4f}  fdr={'PASS' if best.bh_fdr_pass else 'FAIL'}")
+        if best_survivor:
+            print(f"  Best FDR pass : {best_survivor.strategy} {best_survivor.params}  sharpe={best_survivor.oos_sharpe:.4f}")
+        print()
+
+        # Group by strategy
+        by_strat: dict[str, list[Any]] = {}
+        for r in result.items:
+            by_strat.setdefault(r.strategy, []).append(r)
+
+        for strat_name, strat_results in by_strat.items():
+            strat_survivors = sum(1 for r in strat_results if r.bh_fdr_pass)
+            print(f"  --- {strat_name} ({len(strat_results)} combos, {strat_survivors} FDR pass) ---")
+            # Find param keys for this strategy
+            all_param_keys: list[str] = []
+            for r in strat_results:
+                for k in r.params:
+                    if k not in all_param_keys:
+                        all_param_keys.append(k)
+            col_widths = {k: max(len(k), 8) for k in all_param_keys}
+            hdr = "  ".join(f"{k:>{col_widths[k]}}" for k in all_param_keys)
+            print(f"  {hdr}   {'ret%':>8}  {'sharpe':>8}  {'mdd':>8}  {'p_val':>8}  {'fdr':>5}")
+            print("  " + "-" * (sum(col_widths.values()) + 2 * len(col_widths) + 50))
+            for r in sorted(strat_results, key=lambda x: x.oos_sharpe, reverse=True):
+                param_part = "  ".join(f"{str(r.params.get(k, '')):>{col_widths[k]}}" for k in all_param_keys)
+                fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+                print(f"  {param_part}   {r.oos_total_return * 100:>7.2f}%  {r.oos_sharpe:>8.4f}  {r.oos_max_drawdown:>8.4f}  {r.p_value:>8.4f}  {fdr_str:>5}")
+            print()
+
+    return 0
+
+
+def _handle_backtest_regime(args: argparse.Namespace) -> int:
+    """Handle ``b1e55ed backtest regime``."""
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.regime import run_regime_backtest  # noqa: I001
+    from engine.backtest.strategies.breakout import BreakoutStrategy  # noqa: I001
+    from engine.backtest.strategies.combined import CombinedStrategy  # noqa: I001
+    from engine.backtest.strategies.ma_crossover import MACrossoverStrategy  # noqa: I001
+    from engine.backtest.strategies.mean_reversion import MeanReversionStrategy  # noqa: I001
+    from engine.backtest.strategies.momentum import MomentumStrategy  # noqa: I001
+    from engine.backtest.strategies.rsi_reversion import RSIReversionStrategy  # noqa: I001
+    from engine.backtest.strategies.trend_following import TrendFollowingStrategy  # noqa: I001
+    from engine.backtest.strategies.volatility import VolatilityFilterStrategy  # noqa: I001
+
+    try:
+        series = load_prices_csv(str(args.prices))
+    except Exception as exc:
+        print(f"error loading prices: {exc}", file=sys.stderr)
+        return 1
+
+    strat = {
+        "momentum": MomentumStrategy(),
+        "ma_crossover": MACrossoverStrategy(),
+        "rsi_reversion": RSIReversionStrategy(),
+        "breakout": BreakoutStrategy(),
+        "mean_reversion": MeanReversionStrategy(),
+        "trend_following": TrendFollowingStrategy(),
+        "volatility": VolatilityFilterStrategy(),
+        "combined": CombinedStrategy(),
+    }[str(args.strategy)]
+
+    result = run_regime_backtest(
+        strategy=strat,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+        n_boot=int(args.bootstrap),
+        seed=int(args.seed),
+        q=float(args.q),
+    )
+
+    if bool(getattr(args, "json", False)):
+        out = {
+            "strategy": result.strategy,
+            "overall": {"sharpe": result.overall_sharpe, "total_return": result.overall_return},
+            "best_regime": result.best_regime,
+            "worst_regime": result.worst_regime,
+            "regimes": [
+                {
+                    "regime": r.regime,
+                    "n_bars": r.n_bars,
+                    "n_trades": r.n_trades,
+                    "total_return": r.total_return,
+                    "sharpe": r.sharpe,
+                    "max_drawdown": r.max_drawdown,
+                    "mean_return": r.mean_return,
+                    "p_value": r.p_value,
+                    "bh_fdr_pass": r.bh_fdr_pass,
+                }
+                for r in result.regime_results
+            ],
+        }
+        print(_json_dumps(out))
+    else:
+        print(f"\nRegime-Conditioned Backtest: {result.strategy}")
+        print(f"{'=' * 60}")
+        print(f"  Overall   : sharpe={result.overall_sharpe:.4f}  ret={result.overall_return * 100:.2f}%")
+        if result.best_regime:
+            print(f"  Best (FDR): {result.best_regime}")
+        if result.worst_regime:
+            print(f"  Worst     : {result.worst_regime}")
+        print()
+        print(f"  {'Regime':<12} {'Bars':>6} {'Trades':>7} {'Ret%':>8} {'Sharpe':>8} {'MDD':>8} {'p-val':>8} {'FDR':>5}")
+        print(f"  {'-' * 65}")
+        for r in result.regime_results:
+            fdr_str = "PASS" if r.bh_fdr_pass else "fail"
+            print(
+                f"  {r.regime:<12} {r.n_bars:>6} {r.n_trades:>7} "
+                f"{r.total_return * 100:>7.2f}% {r.sharpe:>8.4f} {r.max_drawdown:>8.4f} "
+                f"{r.p_value:>8.4f} {fdr_str:>5}"
+            )
+        print()
+
+    return 0
+
+
+def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.backtest.engine import BacktestConfig  # noqa: I001
+    from engine.backtest.io import load_prices_csv  # noqa: I001
+    from engine.backtest.stats import benjamini_hochberg  # noqa: I001
+    from engine.backtest.stats import bootstrap_p_value_mean_gt_zero  # noqa: I001
+    from engine.backtest.strategies import BreakoutStrategy  # noqa: I001
+    from engine.backtest.strategies import CombinedStrategy  # noqa: I001
+    from engine.backtest.strategies import MACrossoverStrategy  # noqa: I001
+    from engine.backtest.strategies import MeanReversionStrategy  # noqa: I001
+    from engine.backtest.strategies import MomentumStrategy  # noqa: I001
+    from engine.backtest.strategies import RSIReversionStrategy  # noqa: I001
+    from engine.backtest.strategies import TrendFollowingStrategy  # noqa: I001
+    from engine.backtest.strategies import VolatilityFilterStrategy  # noqa: I001
+    from engine.backtest.walkforward import run_walkforward  # noqa: I001
+
+    cmd = str(getattr(args, "backtest_cmd", "") or "")
+    if cmd not in ("walkforward", "gridsweep", "megasweep", "regime"):
+        print("error: missing/unknown backtest subcommand (walkforward|gridsweep|megasweep|regime)", file=sys.stderr)
+        return 2
+
+    if cmd == "gridsweep":
+        return _handle_backtest_gridsweep(args)
+
+    if cmd == "megasweep":
+        return _handle_backtest_megasweep(args)
+
+    if cmd == "regime":
+        return _handle_backtest_regime(args)
+
+    series = load_prices_csv(str(args.prices))
+
+    strat_name = str(args.strategy)
+    strat = {
+        "momentum": MomentumStrategy(),
+        "ma_crossover": MACrossoverStrategy(),
+        "rsi_reversion": RSIReversionStrategy(),
+        "breakout": BreakoutStrategy(),
+        "mean_reversion": MeanReversionStrategy(),
+        "trend_following": TrendFollowingStrategy(),
+        "volatility": VolatilityFilterStrategy(),
+        "combined": CombinedStrategy(),
+    }[strat_name]
+
+    wf = run_walkforward(
+        strategy=strat,
+        close=series.close,
+        high=series.high,
+        low=series.low,
+        volume=series.volume,
+        train_size=int(args.train),
+        test_size=int(args.test),
+        step_size=int(args.step),
+        embargo=int(args.embargo),
+        cfg=BacktestConfig(fee_bps=float(args.fee_bps)),
+    )
+
+    tr = bootstrap_p_value_mean_gt_zero(wf.combined_oos_returns, n_boot=int(args.bootstrap), seed=int(args.seed))
+    fdr_mask = benjamini_hochberg([tr.p_value], q=float(args.q))
+    passed = bool(fdr_mask[0]) if fdr_mask else False
+
+    out = {
+        "strategy": strat_name,
+        "walkforward": {
+            "windows": [
+                {
+                    "train_start": int(w.train_start),
+                    "train_end": int(w.train_end),
+                    "test_start": int(w.test_start),
+                    "test_end": int(w.test_end),
+                }
+                for w in wf.windows
+            ],
+            "window_metrics": wf.window_metrics,
+            "oos": {
+                "total_return": float(wf.combined_oos_equity[-1] - 1.0) if wf.combined_oos_equity.size else 0.0,
+            },
+        },
+        "stats": {
+            "mean_return": float(tr.statistic),
+            "p_value": float(tr.p_value),
+            "bh_fdr_pass": passed,
+            "q": float(args.q),
+        },
+    }
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(_json_dumps(out))
+
+    return 0
+
+
+def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.anchor import run_anchor
+
+    return run_anchor(args, repo_root=ctx.repo_root)
+
+
+def _cmd_export(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.export import run_export
+
+    return run_export(args, repo_root=ctx.repo_root)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1733,6 +2721,12 @@ def main(argv: list[str] | None = None) -> int:
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,
+        "replay": _cmd_replay,
+        "integrity": _cmd_integrity,
+        "backtest": _cmd_backtest,
+        "kelly": _cmd_kelly,
+        "anchor": _cmd_anchor,
+        "export": _cmd_export,
     }
 
     fn = dispatch.get(str(args.command))

@@ -324,3 +324,27 @@ def test_cli_webhooks_crud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caps
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["status"] == "ok"
+
+
+class TestModuleExecution:
+    def test_python_m_engine_cli_importable(self) -> None:
+        """python -m engine.cli must work — requires engine/cli/__main__.py."""
+        import importlib
+
+        # __main__.py must exist and be importable
+        spec = importlib.util.find_spec("engine.cli.__main__")
+        assert spec is not None, "engine/cli/__main__.py missing — 'python -m engine.cli' will fail"
+
+    def test_python_m_engine_cli_runs(self) -> None:
+        """Running engine.cli as a module must invoke main()."""
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "engine.cli", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        # --help exits with 0 and prints usage
+        assert result.returncode == 0
+        assert "usage" in result.stdout.lower()

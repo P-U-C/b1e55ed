@@ -1,3 +1,23 @@
+"""engine.core.scoring
+
+Contributor reputation scoring — calibrated, anti-gaming.
+
+Review findings addressed (S1):
+- Volume weights accepted signals, not submitted (close gaming vector)
+- Streak counts accepted-signal days only (prevent drip farming)
+- Hit rate requires minimum resolved outcomes before counting
+- Penalty for consistently wrong signals (< 20% hit rate)
+- Brier score for calibration quality
+- Acceptance rate gate (< 10% = scored as zero)
+
+Composite weights:
+  0.35 * hit_rate        (hardest to game, highest weight)
+  0.20 * calibration     (Brier score quality)
+  0.20 * volume          (accepted signals, log-scaled)
+  0.15 * consistency     (sqrt-scaled streak of accepted-signal days)
+  0.10 * recency
+"""
+
 from __future__ import annotations
 
 import math
@@ -6,6 +26,11 @@ from datetime import UTC, datetime
 
 from engine.core.contributors import ContributorRegistry
 from engine.core.database import Database
+
+# Minimum resolved outcomes before hit rate counts
+MIN_RESOLVED_FOR_HIT_RATE = 5
+# Below this acceptance rate, contributor scores zero
+MIN_ACCEPTANCE_RATE = 0.10
 
 
 def _clamp01(x: float) -> float:
@@ -33,7 +58,10 @@ class ContributorScore:
     signals_submitted: int
     signals_accepted: int
     signals_profitable: int
+    signals_resolved: int  # accepted with known outcome (profitable is not null)
     hit_rate: float
+    acceptance_rate: float
+    brier_score: float  # lower is better; 0 = perfect calibration
     avg_conviction: float
     total_karma_usd: float
     score: float
@@ -46,13 +74,13 @@ class ContributorScoring:
         self._db = db
         self._registry = ContributorRegistry(db)
 
-    def _streak_days(self, contributor_id: str) -> int:
-        # Compute consecutive-day streak from contributor_signals.created_at.
+    def _accepted_streak_days(self, contributor_id: str) -> int:
+        """Consecutive days with at least one ACCEPTED signal."""
         rows = self._db.conn.execute(
             """
             SELECT DISTINCT substr(created_at, 1, 10) as d
             FROM contributor_signals
-            WHERE contributor_id = ?
+            WHERE contributor_id = ? AND accepted = 1
             ORDER BY d DESC
             """,
             (contributor_id,),
@@ -79,14 +107,45 @@ class ContributorScoring:
             break
         return streak
 
+    def _brier_score(self, contributor_id: str) -> float:
+        """Compute Brier score for calibration quality.
+
+        Brier = mean((confidence - outcome)^2) where:
+        - confidence = signal_score / 10 (normalized to 0-1)
+        - outcome = 1 if profitable, 0 if not
+
+        Lower is better. 0.25 = random baseline. < 0.25 = better than random.
+        Returns 0.25 (neutral) if insufficient data.
+        """
+        rows = self._db.conn.execute(
+            """
+            SELECT signal_score, profitable
+            FROM contributor_signals
+            WHERE contributor_id = ? AND accepted = 1
+              AND profitable IS NOT NULL AND signal_score IS NOT NULL
+            """,
+            (contributor_id,),
+        ).fetchall()
+
+        if len(rows) < MIN_RESOLVED_FOR_HIT_RATE:
+            return 0.25  # neutral
+
+        total = 0.0
+        for r in rows:
+            confidence = _clamp01(float(r[0]) / 10.0)
+            outcome = 1.0 if int(r[1]) == 1 else 0.0
+            total += (confidence - outcome) ** 2
+
+        return total / len(rows)
+
     def compute_score(self, contributor_id: str) -> ContributorScore:
-        # Aggregates
         row = self._db.conn.execute(
             """
             SELECT
                 COUNT(1) as submitted,
                 SUM(CASE WHEN accepted = 1 THEN 1 ELSE 0 END) as accepted,
                 SUM(CASE WHEN profitable = 1 THEN 1 ELSE 0 END) as profitable,
+                SUM(CASE WHEN accepted = 1 AND profitable IS NOT NULL THEN 1 ELSE 0 END) as resolved,
                 AVG(CASE WHEN signal_score IS NOT NULL THEN signal_score END) as avg_score,
                 MAX(created_at) as last_active
             FROM contributor_signals
@@ -98,13 +157,70 @@ class ContributorScoring:
         submitted = int(row[0] or 0)
         accepted = int(row[1] or 0)
         profitable = int(row[2] or 0)
-        avg_conviction = float(row[3] or 0.0)
-        last_active = str(row[4] or "")
+        resolved = int(row[3] or 0)
+        avg_conviction = float(row[4] or 0.0)
+        last_active = str(row[5] or "")
 
-        # hit rate
-        hit_rate = float(profitable) / float(accepted) if accepted > 0 else 0.0
+        # Acceptance rate gate
+        acceptance_rate = float(accepted) / float(submitted) if submitted > 0 else 0.0
+        if acceptance_rate < MIN_ACCEPTANCE_RATE and submitted >= 10:
+            # Below 10% acceptance with 10+ signals = noise contributor
+            return ContributorScore(
+                contributor_id=contributor_id,
+                signals_submitted=submitted,
+                signals_accepted=accepted,
+                signals_profitable=profitable,
+                signals_resolved=resolved,
+                hit_rate=0.0,
+                acceptance_rate=acceptance_rate,
+                brier_score=0.25,
+                avg_conviction=avg_conviction,
+                total_karma_usd=0.0,
+                score=0.0,
+                last_active=last_active,
+                streak=0,
+            )
 
-        # karma by node_id (best-effort)
+        # Hit rate: profitable / resolved (not profitable / accepted)
+        # Only count if enough resolved outcomes exist
+        if resolved >= MIN_RESOLVED_FOR_HIT_RATE:
+            hit_rate = float(profitable) / float(resolved)
+        else:
+            hit_rate = 0.0  # Insufficient data, not penalized but not rewarded
+
+        # Penalty for consistently wrong (< 20% hit rate with enough data)
+        hit_rate_norm = _clamp01(hit_rate)
+        if resolved >= MIN_RESOLVED_FOR_HIT_RATE and hit_rate < 0.20:
+            # Negative contribution: actively harmful signals
+            hit_rate_norm = -0.1 * (0.20 - hit_rate) / 0.20  # scales from 0 to -0.1
+
+        # Brier score (calibration quality)
+        brier = self._brier_score(contributor_id)
+        # Convert to 0-1 where 1 = perfect calibration
+        # 0.0 brier = 1.0 score, 0.25 brier (random) = 0.0 score, >0.25 = negative
+        calibration_norm = _clamp01(1.0 - brier / 0.25)
+
+        # Volume: accepted signals (not submitted!)
+        volume_norm = 0.0
+        if accepted > 0:
+            volume_norm = _clamp01(math.log1p(float(accepted)) / math.log1p(100.0))
+
+        # Consistency: sqrt-scaled streak of accepted-signal days
+        # sqrt gives diminishing returns (day 9→10 worth less than day 1→2)
+        streak = self._accepted_streak_days(contributor_id)
+        consistency_norm = _clamp01(math.sqrt(float(streak)) / math.sqrt(30.0))
+
+        # Recency bonus
+        recency = 0.0
+        last_dt = _parse_iso(last_active)
+        if last_dt is not None:
+            days_since = max(0.0, (datetime.now(tz=UTC) - last_dt).total_seconds() / 86400.0)
+            if days_since <= 7.0:
+                recency = 1.0
+            else:
+                recency = _clamp01(1.0 - (days_since - 7.0) / 30.0)
+
+        # Karma
         total_karma = 0.0
         contrib = self._registry.get(contributor_id)
         if contrib is not None:
@@ -115,47 +231,8 @@ class ContributorScoring:
             if k_row is not None and k_row[0] is not None:
                 total_karma = float(k_row[0])
 
-        streak = self._streak_days(contributor_id)
-
-        # Composite components
-        hit_rate_norm = _clamp01(hit_rate)
-
-        # log-scaled volume (cap at ~100 submissions)
-        volume_norm = 0.0
-        if submitted > 0:
-            volume_norm = _clamp01(math.log1p(float(submitted)) / math.log1p(100.0))
-
-        consistency_norm = _clamp01(float(streak) / 30.0)
-
-        # conviction accuracy: compare mean conviction for profitable vs unprofitable among accepted with known outcomes
-        acc_row = self._db.conn.execute(
-            """
-            SELECT
-                AVG(CASE WHEN profitable = 1 THEN signal_score END) as avg_win,
-                AVG(CASE WHEN profitable = 0 THEN signal_score END) as avg_loss
-            FROM contributor_signals
-            WHERE contributor_id = ? AND accepted = 1 AND profitable IS NOT NULL AND signal_score IS NOT NULL
-            """,
-            (contributor_id,),
-        ).fetchone()
-
-        conviction_accuracy = 0.5
-        if acc_row is not None and acc_row[0] is not None and acc_row[1] is not None:
-            diff = float(acc_row[0]) - float(acc_row[1])
-            # map diff to 0..1; assume score scale roughly 0..10
-            conviction_accuracy = _clamp01(0.5 + diff / 20.0)
-
-        # recency bonus
-        recency = 0.0
-        last_dt = _parse_iso(last_active)
-        if last_dt is not None:
-            days_since = max(0.0, (datetime.now(tz=UTC) - last_dt).total_seconds() / 86400.0)
-            if days_since <= 7.0:
-                recency = 1.0
-            else:
-                recency = _clamp01(1.0 - (days_since - 7.0) / 30.0)
-
-        composite = 0.3 * hit_rate_norm + 0.25 * volume_norm + 0.2 * consistency_norm + 0.15 * conviction_accuracy + 0.1 * recency
+        # Composite: hardest-to-game components get highest weight
+        composite = 0.35 * hit_rate_norm + 0.20 * calibration_norm + 0.20 * volume_norm + 0.15 * consistency_norm + 0.10 * recency
         score_0_100 = 100.0 * _clamp01(composite)
 
         return ContributorScore(
@@ -163,7 +240,10 @@ class ContributorScoring:
             signals_submitted=submitted,
             signals_accepted=accepted,
             signals_profitable=profitable,
+            signals_resolved=resolved,
             hit_rate=hit_rate,
+            acceptance_rate=acceptance_rate,
+            brier_score=brier,
             avg_conviction=avg_conviction,
             total_karma_usd=total_karma,
             score=score_0_100,

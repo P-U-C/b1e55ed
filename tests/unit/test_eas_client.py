@@ -47,9 +47,11 @@ def test_offchain_attestation_sign_and_verify(tmp_path: Path) -> None:
 
     assert client.verify_offchain_attestation(att) is True
 
-    # Tamper the signed data bytes => verification should fail
+    # Tamper payload => should fail
     att2 = json.loads(json.dumps(att))
-    att2["data_bytes"] = "0x" + "ff" * 32  # corrupt the signed payload
+    assert isinstance(att2["data"], dict)
+    att2["data"]["name"] = "mallory"
+    # data_bytes must be updated to match tampered payload; leaving it as-is should fail.
     assert client.verify_offchain_attestation(att2) is False
 
 

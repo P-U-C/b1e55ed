@@ -338,7 +338,8 @@ def test_event_hash_chain_integrity(tmp_path: Path) -> None:
         prev_hash = r[0]
         h = str(r[1])
         if prev is None:
-            assert prev_hash is None
+            # Genesis event uses well-known prev_hash, not None.
+            assert prev_hash == "0" * 64 or prev_hash is None
         else:
             assert str(prev_hash) == prev
         prev = h

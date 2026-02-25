@@ -51,6 +51,28 @@ class KillSwitch:
         self.config = config
         self.db = db
         self._level: KillSwitchLevel = KillSwitchLevel.SAFE
+        self._restore_from_db()
+
+    def _restore_from_db(self) -> None:
+        """Restore kill switch level from the latest persisted event.
+
+        Without this, the kill switch resets to SAFE on every process restart —
+        meaning the 5-minute brain cron effectively has no kill switch at all.
+        """
+        import json as _json
+
+        try:
+            row = self.db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (str(EventType.KILL_SWITCH_V1),),
+            ).fetchone()
+            if row:
+                data = _json.loads(row[0])
+                persisted = int(data.get("level", 0))
+                self._level = KillSwitchLevel(persisted)
+        except Exception:
+            # Fail-open: if we can't read, stay at SAFE (existing behavior).
+            pass
 
     @property
     def level(self) -> KillSwitchLevel:

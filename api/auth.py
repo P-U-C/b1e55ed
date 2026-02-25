@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hmac
+
 from fastapi import Depends, Header
 
 from api.deps import get_config
@@ -18,6 +20,11 @@ def require_bearer_token(
 
     expected = str(getattr(config.api, "auth_token", "") or "")
     if not expected:
+        import logging
+
+        logging.getLogger("b1e55ed.auth").critical(
+            "API auth token is not configured — all endpoints are PUBLIC. Set api.auth_token or B1E55ED_API_AUTH_TOKEN to enable authentication."
+        )
         return
 
     if not authorization:
@@ -36,7 +43,7 @@ def require_bearer_token(
         )
 
     token = parts[1].strip()
-    if token != expected:
+    if not hmac.compare_digest(token, expected):
         raise B1e55edError(
             code="auth.invalid_token",
             message="Invalid bearer token",
