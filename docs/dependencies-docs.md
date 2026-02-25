@@ -139,11 +139,11 @@ dependencies-code.md
 
 ---
 
-### `docs/DASHBOARD_DESIGN_SPEC.md`
+### `docs/internal/DASHBOARD_DESIGN_SPEC.md`
 
 **References:**
 ```
-DASHBOARD_DESIGN_SPEC.md
+internal/DASHBOARD_DESIGN_SPEC.md
   └→ architecture.md          (Referenced from Dashboard section)
 ```
 
@@ -442,6 +442,7 @@ scripts/validate_doc_deps.sh
 |----------|---------|
 | [eas-integration.md](eas-integration.md) | Ethereum Attestation Service setup and usage |
 | [FORGE_SPEC.md](FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
+| [identity.md](identity.md) | Identity key management, derivation, and recovery |
 | [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
 | [agent-interfaces.md](agent-interfaces.md) | SSE, MCP, signal attribution, oracle |
 | [oracle.md](oracle.md) | Producer provenance endpoint (public, no auth) |

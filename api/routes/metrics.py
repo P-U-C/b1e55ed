@@ -7,6 +7,12 @@ Does not require a full prometheus_client integration — computed on-demand
 from the database.
 
 Endpoint: GET /metrics
+
+Prometheus was named by engineers at SoundCloud in 2012. The monitoring
+system was a joke at first — named after the god who stole fire from the
+heavens, because they were stealing metrics from their infrastructure.
+The exposition format became an industry standard. The original system
+was retired years ago. The format survived.
 """
 
 from __future__ import annotations

@@ -4,6 +4,24 @@ b1e55ed is a CLI-first trading intelligence engine built around append-only even
 
 This guide covers a local first run.
 
+## Quickstart (recommended)
+
+### Install
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+```
+
+### Setup wizard
+
+```bash
+b1e55ed wizard
+```
+
+> **Running from source?** Use `./b1e55ed wizard` or `uv run b1e55ed wizard` instead.
+
+---
+
 ## Prerequisites
 
 - Python 3.11+
@@ -15,13 +33,25 @@ Recommended:
 
 ## Install
 
-### From source
+### Option A: Installer script (recommended)
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+```
+
+After install, `b1e55ed` is available globally in your PATH.
+
+### Option B: From source
 
 ```bash
 git clone https://github.com/P-U-C/b1e55ed.git
 cd b1e55ed
 uv sync
 ```
+
+From-source users can use `./b1e55ed` (repo wrapper) or `uv run b1e55ed` for all commands.[^1]
+
+[^1]: From-source: use `./b1e55ed command` or `uv run b1e55ed command`. Installed users: just `b1e55ed command`.
 
 ## Quick start (local)
 
@@ -32,8 +62,8 @@ Sequence: install → forge identity → setup → register contributor → run 
 The Forge derives an Ethereum identity with a `0xb1e55ed` prefix. Required if you plan to use EAS attestations.
 
 ```bash
-uv run b1e55ed identity forge
-uv run b1e55ed identity show
+b1e55ed identity forge
+b1e55ed identity show
 ```
 
 Outputs:
@@ -48,7 +78,7 @@ Setup writes `config/user.yaml`, initializes `data/brain.db`, and stores secrets
 
 ```bash
 export B1E55ED_MASTER_PASSWORD="your-secure-password"
-uv run b1e55ed setup
+b1e55ed setup
 ```
 
 ### 3) (Optional) Configure EAS
@@ -77,13 +107,13 @@ Contributors are the attribution unit for signals.
 Register via CLI:
 
 ```bash
-uv run b1e55ed contributors register --name "local-operator" --role operator
+b1e55ed contributors register --name "local-operator" --role operator
 ```
 
 If EAS is enabled and `eas.attester_private_key` is configured:
 
 ```bash
-uv run b1e55ed contributors register --name "local-operator" --role operator --attest
+b1e55ed contributors register --name "local-operator" --role operator --attest
 ```
 
 See: [contributors.md](contributors.md).
@@ -91,13 +121,13 @@ See: [contributors.md](contributors.md).
 ### 5) Run the brain
 
 ```bash
-uv run b1e55ed brain
+b1e55ed brain
 ```
 
 Ingest your first signal:
 
 ```bash
-uv run b1e55ed signal "BTC breakout — confirmed on-chain" \
+b1e55ed signal "BTC breakout — confirmed on-chain" \
   --symbols BTC \
   --direction bullish \
   --conviction 7
@@ -112,10 +142,10 @@ API requires `api.auth_token` unless `B1E55ED_INSECURE_OK=1` is set.
 ```bash
 # Terminal 1
 export B1E55ED_API__AUTH_TOKEN="your-secret-token"
-uv run b1e55ed api
+b1e55ed api
 
 # Terminal 2
-uv run b1e55ed dashboard
+b1e55ed dashboard
 
 # Dashboard: http://localhost:5051
 # API:       http://localhost:5050/api/v1/health

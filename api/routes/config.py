@@ -20,6 +20,9 @@ _SENSITIVE_RE = re.compile(
 )
 
 
+# Phil Zimmermann distributed PGP for free in 1991 because he believed
+# people should be able to keep secrets without asking permission.
+# This function exists for the same reason.
 def _redact(obj: Any) -> Any:
     """Recursively walk a config dict and redact sensitive fields."""
     if isinstance(obj, dict):

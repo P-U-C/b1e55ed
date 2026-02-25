@@ -296,7 +296,7 @@ docker-compose exec api b1e55ed --version
 
 ```bash
 # Checkout previous version
-git checkout v1.0.0-beta.1
+git checkout v1.0.0-beta.3
 
 # Rebuild
 docker-compose build

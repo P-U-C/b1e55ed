@@ -443,6 +443,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Print system status")
 
+    sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
+
     # -- anchor --
     from engine.cli.commands.anchor import build_anchor_parser
 
@@ -767,6 +769,15 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
         from engine.brain.orchestrator import BrainOrchestrator
 
+        ks = _kill_switch_state(db)
+        if _safe_int(ks.get("level")) > 0:
+            print(
+                f"error: brain cycle blocked — kill switch level {ks['level']} active: {ks.get('reason', '')}",
+                file=sys.stderr,
+            )
+            db.close()
+            return 1
+
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
@@ -814,6 +825,19 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
 
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
+
+    # Look up contributor for signal attribution (fail-open).
+    try:
+        from engine.core.contributors import ContributorRegistry
+
+        _contrib_reg = ContributorRegistry(db)
+        _contributor = _contrib_reg.get_by_node(identity.identity.node_id)
+        contributor_id = _contributor.id if _contributor is not None else None
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger("b1e55ed.cli").warning("Could not look up contributor for signal attribution; signal will still be emitted.")
+        contributor_id = None
 
     # We accept flags both before and after the free-form text / `add` subcommand.
     # The top-level argparse only knows about `args.*` values. Any flags placed after
@@ -904,6 +928,15 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
             source="cli.signal",
             dedupe_key=compute_dedupe_key(EventType.SIGNAL_CURATOR_V1, payload),
         )
+        if contributor_id is not None:
+            with db.conn:
+                db.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO contributor_signals (contributor_id, event_id, accepted)
+                    VALUES (?, ?, 0)
+                    """,
+                    (str(contributor_id), str(ev.id)),
+                )
         events.append({"id": ev.id, "type": str(ev.type), "ts": ev.ts.isoformat(), "payload": ev.payload})
 
     out = {
@@ -1348,25 +1381,39 @@ def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> ContributorRegistry:
-    """Construct a ContributorRegistry, optionally wired with an EAS client."""
+    """Construct a ContributorRegistry wired with EAS client and GitHub publisher."""
 
     from engine.core.contributors import ContributorRegistry
 
+    # GitHub publisher — always active when token is configured (fail-open)
+    github_publisher: object | None = None
+    pub_cfg = config.publish.github
+    if pub_cfg.token:
+        from engine.integrations.github_publish import make_publisher
+
+        github_publisher = make_publisher(
+            owner=pub_cfg.owner,
+            repo=pub_cfg.repo,
+            token=pub_cfg.token,
+            labels=pub_cfg.labels,
+        )
+
+    # EAS client — only when explicitly enabled
+    eas_client: object | None = None
     try:
         from engine.integrations.eas import EASClient
+
+        if bool(config.eas.enabled):
+            eas_client = EASClient(
+                rpc_url=str(config.eas.rpc_url),
+                eas_address=str(config.eas.eas_contract),
+                schema_registry_address=str(config.eas.schema_registry),
+                private_key=str(config.eas.attester_private_key),
+            )
     except Exception:
-        return ContributorRegistry(db)
+        pass
 
-    if not bool(config.eas.enabled):
-        return ContributorRegistry(db)
-
-    client = EASClient(
-        rpc_url=str(config.eas.rpc_url),
-        eas_address=str(config.eas.eas_contract),
-        schema_registry_address=str(config.eas.schema_registry),
-        private_key=str(config.eas.attester_private_key),
-    )
-    return ContributorRegistry(db, eas_client=client)
+    return ContributorRegistry(db, eas_client=eas_client, github_publisher=github_publisher)
 
 
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -1410,7 +1457,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
-def _kill_switch_state(db) -> dict[str, object]:
+def _kill_switch_state(db) -> dict[str, Any]:
     from engine.brain.kill_switch import LEVEL_MESSAGES, KillSwitchLevel
     from engine.core.events import EventType
 
@@ -1747,31 +1794,18 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
             encryption_algorithm=serialization.NoEncryption(),
         )
 
-        # Derive Ethereum address from secp256k1 key
-        eth_address = ""
-        try:
-            import eth_keys
-
-            eth_priv = eth_keys.keys.PrivateKey(bytes.fromhex(eth_key_hex))  # type: ignore[attr-defined]
-            eth_address = eth_priv.public_key.to_checksum_address()
-        except ImportError:
-            # eth_keys not installed — derive node_id from pub_raw instead
-            eth_address = ""
-
+        # Derive node_id from public key material (no optional deps required)
         from datetime import UTC, datetime
 
+        node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()
-        if eth_address:
-            node_id = f"b1e55ed-{eth_address[2:10].lower()}"
-        else:
-            node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
 
         identity = NodeIdentity(
             node_id=node_id,
             public_key=pub_raw.hex(),
             private_key=priv_raw.hex(),
             created_at=created_at,
-            eth_address=eth_address,
+            eth_address="",
             eth_private_key=eth_key_hex,
         )
 
@@ -1992,7 +2026,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
                         "nodeId": identity_data["node_id"],
                         "name": "",
                         "role": "operator",
-                        "version": "1.0.0-beta.2",
+                        "version": "1.0.0-beta.4",
                         "registeredAt": identity_data["forged_at"],
                     },
                 )
@@ -2736,6 +2770,12 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.wizard import run_wizard
+
+    return run_wizard(ctx, args)
+
+
 def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.anchor import run_anchor
 
@@ -2763,7 +2803,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup"}
+    ungated_commands = {"identity", "setup", "wizard"}
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
@@ -2815,6 +2855,7 @@ def main(argv: list[str] | None = None) -> int:
         "kelly": _cmd_kelly,
         "anchor": _cmd_anchor,
         "export": _cmd_export,
+        "wizard": _cmd_wizard,
     }
 
     fn = dispatch.get(str(args.command))

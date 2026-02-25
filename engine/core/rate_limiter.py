@@ -53,6 +53,11 @@ class ApiRateLimiter:
 
         Uses an atomic upsert to eliminate the TOCTOU race that existed when
         a SELECT was followed by a separate INSERT or UPDATE.
+
+        TOCTOU (time-of-check to time-of-use) was catalogued by Dijkstra
+        in the context of mutual exclusion (1965). Six decades later the fix
+        is unchanged: collapse the check and the update into one atomic step.
+        Optimistic concurrency is a loan against correctness.
         """
         from time import time as _time
 

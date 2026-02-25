@@ -85,7 +85,8 @@ class KillSwitchConfig(BaseModel):
 
 
 class KarmaConfig(BaseModel):
-    enabled: bool = False
+    # default-on per PRD §18; operators can disable with karma.enabled = false in user.yaml
+    enabled: bool = True
     percentage: float = 0.005
     settlement_mode: Literal["manual", "daily", "weekly", "threshold"] = "manual"
     threshold_usd: float = 50.0
@@ -126,7 +127,6 @@ class EASConfig(BaseModel):
 
 
 class PublishGithubConfig(BaseModel):
-    enabled: bool = False
     owner: str = "P-U-C"
     repo: str = "offchain-attestations"
     token: str = ""  # PAT or installation token; never logged
@@ -161,6 +161,7 @@ class Config(BaseSettings):
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
     publish: PublishConfig = Field(default_factory=PublishConfig)
+    github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 

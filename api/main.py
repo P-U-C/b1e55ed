@@ -70,6 +70,9 @@ class IdentityGateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Dev/test bypass
         if os.environ.get("B1E55ED_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            import logging
+
+            logging.getLogger("b1e55ed.security").critical("B1E55ED_DEV_MODE is active — IdentityGateMiddleware is BYPASSED. Never use in production.")
             return await call_next(request)
 
         # Allow health/docs without identity (monitoring + introspection)
@@ -129,6 +132,14 @@ def create_app() -> FastAPI:
         # Expose config/db in app state for dependency injection + tests.
         app.state.config = getattr(app.state, "config", None) or config
 
+        import logging as _log
+
+        if not getattr(config.eas, "enabled", False):
+            _log.getLogger("b1e55ed.startup").warning(
+                "EAS attestation is DISABLED (eas.enabled=false). "
+                "No on-chain proofs will be created. Set eas.enabled=true and configure eas.rpc_url to activate."
+            )
+
         from engine.core.database import Database
 
         created_db = False
@@ -142,10 +153,23 @@ def create_app() -> FastAPI:
         # Auto-register local node as an operator contributor.
         try:
             from engine.core.contributors import ContributorRegistry
+            from engine.integrations.github_publish import make_publisher
             from engine.security import ensure_identity
 
             ident = ensure_identity().identity
-            reg = ContributorRegistry(app.state.db)
+            _cfg = app.state.config
+            _pub_cfg = _cfg.publish.github
+            _pub = (
+                make_publisher(
+                    owner=_pub_cfg.owner,
+                    repo=_pub_cfg.repo,
+                    token=_pub_cfg.token,
+                    labels=_pub_cfg.labels,
+                )
+                if _pub_cfg.token
+                else None
+            )
+            reg = ContributorRegistry(app.state.db, github_publisher=_pub)
             if reg.get_by_node(ident.node_id) is None:
                 reg.register(
                     node_id=ident.node_id,

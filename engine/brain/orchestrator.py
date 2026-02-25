@@ -64,6 +64,14 @@ class BrainOrchestrator:
         self.decision = DecisionEngine(config, db)
 
     def run_cycle(self, symbols: list[str]) -> CycleResult:
+        # Abort immediately if kill switch is active.
+        ks_level = self.kill_switch.level
+        if int(ks_level) > 0:
+            import logging
+
+            logging.getLogger("b1e55ed.orchestrator").warning("Brain cycle aborted: kill switch level %s is active", ks_level)
+            raise RuntimeError(f"Brain cycle blocked by kill switch (level={ks_level})")
+
         cycle_id = str(uuid.uuid4())
         now = datetime.now(tz=UTC)
 

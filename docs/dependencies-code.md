@@ -149,6 +149,8 @@ engine/brain/pcs_enricher.py       → database.py, feature_store.py
 engine/brain/position_sm.py        → models.py (position state machine)
 ```
 
+> **Note**: Feature snapshots are currently write-only (audit trail). FeatureStore replay is not yet implemented.
+
 ### Backtest engine
 
 ```
@@ -280,26 +282,14 @@ See `docs/security.md` for enforcement details.
 
 ---
 
+---
+
 ## Undocumented (auto-detected)
 
 > Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description.
 
 ```
-api/schemas/brain.py
-api/schemas/common.py
-api/schemas/positions.py
-api/schemas/signals.py
-dashboard/app.py
-dashboard/contributors.py
-dashboard/identity.py
-dashboard/producers.py
-dashboard/routes/home.py
-dashboard/routes/positions.py
-dashboard/routes/regime.py
-dashboard/routes/settings.py
-dashboard/routes/signals.py
-dashboard/routes/treasury.py
-dashboard/services/api_client.py
-dashboard/webhooks.py
-engine/core/identity_gate.py
+api/routes/metrics.py
+engine/cli/commands/wizard.py
+engine/execution/recovery.py
 ```

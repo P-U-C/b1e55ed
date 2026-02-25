@@ -62,7 +62,9 @@ def _check_auth(request: Request, x_api_key: str | None) -> bool:
     config: Config = get_config(request)
     expected = str(getattr(config.api, "auth_token", "") or "")
     if not expected:
-        # Auth disabled
+        import logging
+
+        logging.getLogger("b1e55ed.auth.mcp").critical("MCP endpoint has no auth token configured — MCP is PUBLIC.")
         return True
 
     # Try X-API-Key first

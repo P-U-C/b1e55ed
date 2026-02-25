@@ -37,3 +37,14 @@ api:
   port: 5050
   auth_token: ""  # REQUIRED in production - set via B1E55ED_API__AUTH_TOKEN
   cors_origins: []  # Explicit CORS allow list - empty = CORS disabled
+
+# GitHub auto-publish: registers contributors publicly in a GitHub repository.
+# Requires a personal access token with repo write access.
+# If token is empty, publishing is silently skipped with a warning.
+# Configure via publish.github (maps to Config.publish.github / PublishGithubConfig).
+publish:
+  github:
+    owner: ""       # e.g. "my-org"
+    repo: ""        # e.g. "b1e55ed-contributors"
+    token: ""       # GitHub PAT — set via B1E55ED_GITHUB_PUBLISH__TOKEN env var instead
+    mode: "issues"  # "issues" | "pr"

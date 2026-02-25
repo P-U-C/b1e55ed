@@ -1,6 +1,9 @@
 """tests.unit.test_contributor_github_publish
 
 Unit tests for the GitHub publish hook in ContributorRegistry.register().
+
+Publishing fires on every registration when a publisher is configured —
+no EAS attestation required. Fail-open: never blocks registration.
 """
 
 from __future__ import annotations
@@ -27,136 +30,141 @@ FAKE_ATTESTATION: dict[str, Any] = {
     "onchain": False,
 }
 
+_PUBLISHER_RESULT = {
+    "issue_url": "https://github.com/owner/repo/issues/1",
+    "issue_number": 1,
+    "owner": "owner",
+    "repo": "repo",
+}
+
 
 def _make_eas_client() -> MagicMock:
-    """Return a mock EAS client that produces a fake attestation."""
     mock = MagicMock()
     mock.create_offchain_attestation.return_value = FAKE_ATTESTATION
     return mock
 
 
-def test_register_with_attest_and_publish(tmp_path: Path) -> None:
-    """EAS + publisher both succeed → meta.eas.publish.github is populated."""
-    db = Database(tmp_path / "brain.db")
-    eas_mock = _make_eas_client()
-    publisher_result = {
-        "issue_url": "https://github.com/owner/repo/issues/1",
-        "issue_number": 1,
-        "owner": "owner",
-        "repo": "repo",
-    }
-    publisher_mock = MagicMock(return_value=publisher_result)
+# ---------------------------------------------------------------------------
+# Core behaviour: publisher fires on every registration
+# ---------------------------------------------------------------------------
 
-    reg = ContributorRegistry(db, eas_client=eas_mock, github_publisher=publisher_mock)
+
+def test_register_without_eas_still_publishes(tmp_path: Path) -> None:
+    """Publisher fires even when no EAS client is configured."""
+    db = Database(tmp_path / "brain.db")
+    publisher_mock = MagicMock(return_value=_PUBLISHER_RESULT)
+
+    reg = ContributorRegistry(db, github_publisher=publisher_mock)
+    c = reg.register(node_id="node-1", name="Alice", role="operator", metadata={})
+
+    publisher_mock.assert_called_once()
+    call_kwargs = publisher_mock.call_args.kwargs
+    assert call_kwargs["node_id"] == "node-1"
+    assert call_kwargs["name"] == "Alice"
+    assert call_kwargs["role"] == "operator"
+    assert call_kwargs["contributor_id"] == c.id
+
+    assert c.metadata.get("publish", {}).get("github", {}).get("issue_url") == _PUBLISHER_RESULT["issue_url"]
+
+
+def test_register_with_eas_and_publish(tmp_path: Path) -> None:
+    """EAS + publisher both succeed → publish result stored at meta.publish.github."""
+    db = Database(tmp_path / "brain.db")
+    publisher_mock = MagicMock(return_value=_PUBLISHER_RESULT)
+
+    reg = ContributorRegistry(db, eas_client=_make_eas_client(), github_publisher=publisher_mock)
     c = reg.register(
-        node_id="node-pub-1",
+        node_id="node-2",
         name="Bob",
         role="operator",
         metadata={"eas": {"schema_uid": "0xschema"}},
         attest=True,
     )
 
-    assert isinstance(c.metadata.get("eas"), dict)
-    eas_meta = c.metadata["eas"]
+    # EAS attestation stored
+    eas_meta = c.metadata.get("eas", {})
     assert eas_meta.get("uid") == "0xabcdef"
     assert eas_meta.get("attestation") == FAKE_ATTESTATION
-    assert isinstance(eas_meta.get("publish"), dict)
-    assert eas_meta["publish"]["github"]["issue_url"] == "https://github.com/owner/repo/issues/1"
 
-    # Publisher was called with the right kwargs
-    publisher_mock.assert_called_once()
+    # Publish result at top-level publish key
+    pub = c.metadata.get("publish", {})
+    assert pub.get("github", {}).get("issue_url") == _PUBLISHER_RESULT["issue_url"]
+
+    # Publisher called with the EAS attestation payload
     call_kwargs = publisher_mock.call_args.kwargs
-    assert call_kwargs["contributor_id"] == c.id
-    assert call_kwargs["node_id"] == "node-pub-1"
-    assert call_kwargs["name"] == "Bob"
-    assert call_kwargs["role"] == "operator"
     assert call_kwargs["attestation"] == FAKE_ATTESTATION
 
 
-def test_register_publish_failure_still_registers(tmp_path: Path) -> None:
-    """Publisher raises → contributor is still registered with uid but no publish key."""
+def test_register_without_publisher_no_publish_key(tmp_path: Path) -> None:
+    """No publisher configured → no publish key in metadata."""
     db = Database(tmp_path / "brain.db")
-    eas_mock = _make_eas_client()
+    reg = ContributorRegistry(db)
+    c = reg.register(node_id="node-3", name="Carol", role="agent", metadata={})
+    assert "publish" not in c.metadata
+
+
+# ---------------------------------------------------------------------------
+# Failure modes: fail-open
+# ---------------------------------------------------------------------------
+
+
+def test_register_publish_failure_still_registers(tmp_path: Path) -> None:
+    """Publisher raises → contributor is still registered (fail-open)."""
+    db = Database(tmp_path / "brain.db")
     publisher_mock = MagicMock(side_effect=RuntimeError("GitHub down"))
 
-    reg = ContributorRegistry(db, eas_client=eas_mock, github_publisher=publisher_mock)
-    c = reg.register(
-        node_id="node-pub-2",
-        name="Carol",
-        role="agent",
-        metadata={"eas": {"schema_uid": "0xschema"}},
-        attest=True,
-    )
+    reg = ContributorRegistry(db, github_publisher=publisher_mock)
+    c = reg.register(node_id="node-4", name="Dave", role="agent", metadata={})
 
-    # Contributor was persisted
     assert c.id
     assert reg.get(c.id) is not None
-
-    eas_meta = c.metadata.get("eas")
-    assert isinstance(eas_meta, dict)
-    assert eas_meta.get("uid") == "0xabcdef"  # EAS still worked
-
-    # No publish data (publisher failed gracefully)
-    assert "publish" not in eas_meta
-
-
-def test_register_no_attest_skips_publisher(tmp_path: Path) -> None:
-    """attest=False → publisher is never called."""
-    db = Database(tmp_path / "brain.db")
-    publisher_mock = MagicMock()
-
-    reg = ContributorRegistry(db, github_publisher=publisher_mock)
-    c = reg.register(
-        node_id="node-pub-3",
-        name="Dave",
-        role="tester",
-        metadata={},
-        attest=False,
-    )
-
-    assert c.id
-    publisher_mock.assert_not_called()
-
-
-def test_register_eas_fails_skips_publisher(tmp_path: Path) -> None:
-    """EAS fails → uid is absent → publisher is never called."""
-    db = Database(tmp_path / "brain.db")
-
-    eas_mock = MagicMock()
-    eas_mock.create_offchain_attestation.side_effect = Exception("EAS exploded")
-    publisher_mock = MagicMock()
-
-    reg = ContributorRegistry(db, eas_client=eas_mock, github_publisher=publisher_mock)
-    c = reg.register(
-        node_id="node-pub-4",
-        name="Eve",
-        role="curator",
-        metadata={},
-        attest=True,
-    )
-
-    assert c.id
-    publisher_mock.assert_not_called()
+    # No publish key — publisher failed
+    assert "publish" not in c.metadata
 
 
 def test_register_publisher_returns_none_gracefully(tmp_path: Path) -> None:
-    """Publisher returns None (e.g. GitHub unavailable) → contributor still fully registered."""
+    """Publisher returns None (e.g. no token) → contributor registered, no publish key."""
     db = Database(tmp_path / "brain.db")
-    eas_mock = _make_eas_client()
     publisher_mock = MagicMock(return_value=None)
+
+    reg = ContributorRegistry(db, github_publisher=publisher_mock)
+    c = reg.register(node_id="node-5", name="Eve", role="curator", metadata={})
+
+    assert c.id
+    assert "publish" not in c.metadata
+
+
+def test_register_eas_fails_publisher_still_fires(tmp_path: Path) -> None:
+    """EAS fails → publisher still fires with a synthetic registration record."""
+    db = Database(tmp_path / "brain.db")
+    eas_mock = MagicMock()
+    eas_mock.create_offchain_attestation.side_effect = Exception("EAS exploded")
+    publisher_mock = MagicMock(return_value=_PUBLISHER_RESULT)
 
     reg = ContributorRegistry(db, eas_client=eas_mock, github_publisher=publisher_mock)
     c = reg.register(
-        node_id="node-pub-5",
+        node_id="node-6",
         name="Frank",
-        role="agent",
-        metadata={"eas": {"schema_uid": "0xschema"}},
+        role="operator",
+        metadata={},
         attest=True,
     )
 
     assert c.id
-    eas_meta = c.metadata.get("eas")
-    assert isinstance(eas_meta, dict)
-    assert eas_meta.get("uid") == "0xabcdef"
-    # No publish sub-dict because publisher returned None
-    assert "publish" not in eas_meta
+    # Publisher still called despite EAS failure
+    publisher_mock.assert_called_once()
+    call_kwargs = publisher_mock.call_args.kwargs
+    # Synthetic attestation used (no uid from EAS)
+    assert "type" in call_kwargs["attestation"] or "uid" in call_kwargs["attestation"]
+
+
+def test_publisher_called_once_per_registration(tmp_path: Path) -> None:
+    """Publisher is called exactly once per registration, not multiple times."""
+    db = Database(tmp_path / "brain.db")
+    publisher_mock = MagicMock(return_value=_PUBLISHER_RESULT)
+
+    reg = ContributorRegistry(db, github_publisher=publisher_mock)
+    reg.register(node_id="node-7a", name="Grace", role="operator", metadata={})
+    reg.register(node_id="node-7b", name="Heidi", role="agent", metadata={})
+
+    assert publisher_mock.call_count == 2

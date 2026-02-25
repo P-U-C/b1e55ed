@@ -6,7 +6,7 @@ Version progression from beta to production-ready release.
 
 ## Version Gates
 
-### v1.0.0-beta.1 (Current)
+### v1.0.0-beta.1
 **Status:** Feature-complete, untested with real capital
 
 **What's included:**
@@ -37,7 +37,7 @@ Version progression from beta to production-ready release.
 
 ---
 
-### v1.0.0-beta.2 — Operator Layer
+### v1.0.0-beta.4 — Operator Layer
 **Gate:** Agents and humans can install and operate b1e55ed through conversation
 
 **Sprint status:** O3 ✅ complete, O4 ✅ complete
@@ -151,12 +151,16 @@ Version progression from beta to production-ready release.
 
 | Version | Target | Gate |
 |---------|--------|------|
-| **v1.0.0-beta.1** | 2026-02-19 | Feature-complete ← **NOW** |
-| **v1.0.0-beta.2** | 2026-03-05 | Operator layer (OpenClaw skill) |
+| **v1.0.0-beta.1** | 2026-02-19 | Feature-complete |
+| **v1.0.0-beta.3** | 2026-02-25 | Backtest engine, agent interfaces, oracle, docs ← **NOW** |
+| **v1.0.0-beta.4** | 2026-03-05 | Operator layer (OpenClaw skill) |
 | **v1.0.0-rc.1** | 2026-04-05 | 30-day paper validation |
 | **v1.0.0** | 2026-04-19 | First profitable trade |
 
 Dates are targets, not commitments. Gates are mandatory.
+
+> **Note**: The Operator Layer sprint was previously labelled v1.0.0-beta.2 in early planning docs.
+> It has been renumbered to v1.0.0-beta.4 to restore chronological order (beta.1 → beta.3 → beta.4 → rc.1).
 
 ---
 
