@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# b1e55ed — repo-root wrapper for from-source contributors
+#
+# Usage (from repo root):
+#   ./b1e55ed signal "BTC looking strong" --direction bullish
+#   ./b1e55ed brain
+#   ./b1e55ed wizard
+#
+# For installed users: just run `b1e55ed` directly.
+exec uv run python -m engine.cli "$@"

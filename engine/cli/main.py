@@ -443,6 +443,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Print system status")
 
+    sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
+
     # -- anchor --
     from engine.cli.commands.anchor import build_anchor_parser
 
@@ -1792,31 +1794,18 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
             encryption_algorithm=serialization.NoEncryption(),
         )
 
-        # Derive Ethereum address from secp256k1 key
-        eth_address = ""
-        try:
-            import eth_keys
-
-            eth_priv = eth_keys.keys.PrivateKey(bytes.fromhex(eth_key_hex))  # type: ignore[attr-defined]
-            eth_address = eth_priv.public_key.to_checksum_address()
-        except ImportError:
-            # eth_keys not installed — derive node_id from pub_raw instead
-            eth_address = ""
-
+        # Derive node_id from public key material (no optional deps required)
         from datetime import UTC, datetime
 
+        node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()
-        if eth_address:
-            node_id = f"b1e55ed-{eth_address[2:10].lower()}"
-        else:
-            node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
 
         identity = NodeIdentity(
             node_id=node_id,
             public_key=pub_raw.hex(),
             private_key=priv_raw.hex(),
             created_at=created_at,
-            eth_address=eth_address,
+            eth_address="",
             eth_private_key=eth_key_hex,
         )
 
@@ -2781,6 +2770,12 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.wizard import run_wizard
+
+    return run_wizard(ctx, args)
+
+
 def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.anchor import run_anchor
 
@@ -2808,7 +2803,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup"}
+    ungated_commands = {"identity", "setup", "wizard"}
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
@@ -2860,6 +2855,7 @@ def main(argv: list[str] | None = None) -> int:
         "kelly": _cmd_kelly,
         "anchor": _cmd_anchor,
         "export": _cmd_export,
+        "wizard": _cmd_wizard,
     }
 
     fn = dispatch.get(str(args.command))
