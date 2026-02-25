@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.0.0-beta.4 — 2026-02-25
+
+Customer readiness release. 8-reviewer audit (Stripe, Coinbase, Cloudflare, Palantir — two model sets). Every finding addressed. 583 tests passing.
+
+### 🔴 Security & Data Integrity
+
+- **Config secret leak fixed** — `GET /config` now recursively redacts all sensitive fields (token, key, secret, password, private_key) before returning
+- **Rate limiter TOCTOU fixed** — Replaced SELECT+INSERT race with atomic `INSERT ... ON CONFLICT DO UPDATE` upsert; concurrent requests can no longer cause 500 storms at window boundaries
+- **Global exception handler** — Unhandled exceptions now return `{"error": {"code": "internal_error", "request_id": "..."}}` instead of leaking raw stack traces or `{"detail": "..."}`
+- **Request ID middleware** — Every request gets an `X-Request-ID` header (generated or propagated); included in all error responses for incident correlation
+
+### 🔴 Karma Data Model
+
+- **Double-spend prevention** — `karma_intents.trade_id` now has `UNIQUE` constraint + DB migration; `INSERT OR IGNORE` on retries
+- **Contributor attribution** — `karma_intents.contributor_id` column added; `close_position()` resolves contributor via `conviction_id → conviction_scores → contributors` chain; per-contributor karma now computable directly
+- **Hash v2 — `contributor_id` in hash** — Attribution included in hash computation; operator cannot change who gets credit without breaking the chain
+- **`profitable` field wired** — `ContributorScoring.update_outcomes()` now called on every position close; `hit_rate`, `calibration` scoring factors are real, not zero-initialized
+- **Crash recovery sweep** — `recover_missing_karma_intents()` runs at startup and brain cycle; closed positions without karma intents are reconciled automatically
+
+### 🟠 Attribution Integrity
+
+- **Real `chain_verified`** — Oracle provenance now calls `verify_hash_chain(fast=True, last_n=100)` instead of `hash IS NOT NULL`; semantics documented in `docs/oracle.md`
+- **Accepted audit events** — `SIGNAL_ACCEPTED_V1` emitted into hash-chained log on every synthesis acceptance; operator cannot silently flip `accepted` without a detectable trace
+- **Deterministic score replay** — `compute_score()` and `leaderboard()` accept `as_of: datetime` parameter; contributor score disputes are now reproducible
+- **Signal visibility endpoint** — `GET /api/v1/contributors/{id}/signals` — contributors can see which signals were accepted or rejected
+- **Export karma fixed** — `b1e55ed export karma` now queries `karma_intents JOIN contributors`; previous version queried nonexistent JSON fields
+
+### 🟠 Pagination & Observability
+
+- **All list endpoints paginated** — `/contributors`, `/positions`, `/karma/intents`, `/contributors/leaderboard` accept `?limit=` and `?offset=`; leaderboard capped at 200; N+1 query replaced with 4 batch queries
+- **SSE stream OOM fixed** — Historical replay uses paginated cursor (500 events/page) instead of single `fetchall()`
+- **Real health endpoint** — Returns DB connectivity, brain cycle age (minutes), kill switch level; HTTP 503 on DB failure
+- **Prometheus `/metrics`** — `b1e55ed_contributors_total`, `b1e55ed_brain_cycles_total`, `b1e55ed_karma_intents_total`, `b1e55ed_karma_settled_total`, `b1e55ed_signals_total`, `b1e55ed_positions_total`
+
+### 🟡 Docs & UX
+
+- **KARMA-SPEC.md rewritten** — Replaced EMA formula with accurate 5-factor composite spec matching `engine/core/scoring.py` (hit_rate 35%, calibration 20%, volume 20%, consistency 15%, recency 10%)
+- **Identity recovery documented** — New `docs/identity.md`; new `b1e55ed identity restore --eth-key <hex>` CLI command; Ed25519 key is deterministically recoverable from Ethereum key via HKDF
+- **Consistent error format** — `karma.py` and `positions.py` migrated from `HTTPException` to `B1e55edError`
+
+---
+
 ## v1.0.0-beta.3 — 2026-02-25
 
 226 commits. 583 tests. Full CI green across Python 3.11 + 3.12.
