@@ -34,11 +34,19 @@ Customer readiness release. 8-reviewer audit (Stripe, Coinbase, Cloudflare, Pala
 - **Real health endpoint** — Returns DB connectivity, brain cycle age (minutes), kill switch level; HTTP 503 on DB failure
 - **Prometheus `/metrics`** — `b1e55ed_contributors_total`, `b1e55ed_brain_cycles_total`, `b1e55ed_karma_intents_total`, `b1e55ed_karma_settled_total`, `b1e55ed_signals_total`, `b1e55ed_positions_total`
 
+### 🟡 Install & Onboarding
+
+- **`install.sh`** — Curl-pipeable one-liner installer: installs uv, installs b1e55ed as a uv tool, adds `~/.local/bin` to PATH; works on macOS and Ubuntu; idempotent
+- **`b1e55ed wizard`** — 5-step interactive onboarding: identity forge → config → producer registration → brain first run → API setup; stdlib only, no new dependencies
+- **`./b1e55ed` wrapper** — Repo-root script for from-source contributors; skips `uv run` prefix
+- **README updated** — Primary install path now `curl ... | bash && b1e55ed wizard`
+
 ### 🟡 Docs & UX
 
 - **KARMA-SPEC.md rewritten** — Replaced EMA formula with accurate 5-factor composite spec matching `engine/core/scoring.py` (hit_rate 35%, calibration 20%, volume 20%, consistency 15%, recency 10%)
 - **Identity recovery documented** — New `docs/identity.md`; new `b1e55ed identity restore --eth-key <hex>` CLI command; Ed25519 key is deterministically recoverable from Ethereum key via HKDF
 - **Consistent error format** — `karma.py` and `positions.py` migrated from `HTTPException` to `B1e55edError`
+- **CLI reference updated** — Added `b1e55ed wizard`, `b1e55ed identity restore`; corrected source path from `engine/cli.py` → `engine/cli/main.py`
 
 ---
 
