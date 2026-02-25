@@ -148,6 +148,30 @@ Webhook subscriptions are stored in the database and managed via the CLI:
 
 There is no YAML configuration block for webhooks in this version.
 
+### `github_publish`
+
+Optional publishing of contributor attestations to a GitHub repo as issues.
+
+```yaml
+github_publish:
+  enabled: false
+  token: ""            # GitHub personal access token (ghp_...)
+  repo: ""             # target repo (e.g. "your-org/attestations")
+  label: "attestation"
+```
+
+See: [contributors.md](contributors.md) → GitHub auto-publish.
+
+### `export`
+
+Defaults for `b1e55ed export karma`.
+
+```yaml
+export:
+  default_format: jsonl
+  include_chain: false
+```
+
 ## Schema reference
 
 Authoritative model: `engine/core/config.py`.

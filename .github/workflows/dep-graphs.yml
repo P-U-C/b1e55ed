@@ -1,0 +1,49 @@
+name: Dependency Graphs
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'engine/**/*.py'
+      - 'api/**/*.py'
+      - 'dashboard/**/*.py'
+      - 'docs/**/*.md'
+      - 'README.md'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Update code dependency graph
+        run: python scripts/update_code_deps.py
+
+      - name: Update doc dependency graph
+        run: bash scripts/update_doc_deps.sh
+
+      - name: Validate code deps
+        run: python scripts/validate_code_deps.py
+
+      - name: Validate doc deps
+        run: bash scripts/validate_doc_deps.sh
+
+      - name: Commit if changed
+        run: |
+          git config user.name "b1e55ed[bot]"
+          git config user.email "bot@permanentupperclass.com"
+          git diff --quiet && echo "No changes." || (
+            git add docs/dependencies-code.md docs/dependencies-docs.md
+            git commit -m "chore: auto-update dependency graphs [skip ci]"
+            git push
+          )

@@ -40,8 +40,10 @@ Producers → Brain → Execution
 | Event core | Append-only database with hash chain. Auditable by construction. |
 | Brain | Multi-domain synthesis. Regime-conditioned conviction scoring. |
 | Execution | Dynamic Kelly sizing. Kill switch gating. |
+| Backtest engine | Walk-forward validation. FDR correction. Regime-conditioned results. |
 | Contributors | Signal provenance. Karma accounting. EAS attestations. |
 | Agent interfaces | SSE event stream. MCP server. Signal attribution. |
+| Oracle | Public provenance endpoint. No auth. Anti-Goodhart by design. |
 | CLI | Full operator control plane. |
 | REST API | Mounted at `/api/v1/`. Token auth. |
 
@@ -74,10 +76,23 @@ uv run b1e55ed dashboard  # http://localhost:5051
 
 ## Docs
 
-- [Getting started](docs/getting-started.md)
-- [Contributors](docs/contributors.md)
-- [EAS integration](docs/eas-integration.md)
-- [Operator sprint plan](docs/OPERATOR_SPRINT_PLAN.md)
+| Guide | |
+|-------|-|
+| [Getting started](docs/getting-started.md) | Install and first run |
+| [Architecture](docs/architecture.md) | System design and data flow |
+| [Configuration](docs/configuration.md) | All config keys |
+| [CLI reference](docs/cli-reference.md) | Full command reference |
+| [API reference](docs/api-reference.md) | REST endpoints |
+| [Agent interfaces](docs/agent-interfaces.md) | SSE, MCP, signal attribution |
+| [Oracle](docs/oracle.md) | Producer provenance for agents |
+| [Curator pipeline](docs/curator.md) | Ingest operator intel |
+| [Contributors](docs/contributors.md) | Attribution, karma, attestations |
+| [Learning loop](docs/learning-loop.md) | How the system compounds |
+| [Backtest engine](docs/backtest.md) | Walk-forward and sweep |
+| [Security](docs/security.md) | Key management, kill switch |
+| [Deployment](docs/deployment.md) | Production setup |
+| [Developers](docs/developers.md) | Contributing and extending |
+| [OpenClaw integration](docs/openclaw-integration.md) | Operator layer |
 
 ---
 
