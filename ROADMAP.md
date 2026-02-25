@@ -37,7 +37,7 @@ Version progression from beta to production-ready release.
 
 ---
 
-### v1.0.0-beta.2 — Operator Layer
+### v1.0.0-beta.4 — Operator Layer
 **Gate:** Agents and humans can install and operate b1e55ed through conversation
 
 **Sprint status:** O3 ✅ complete, O4 ✅ complete
