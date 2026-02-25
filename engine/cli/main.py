@@ -744,6 +744,15 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
         from engine.brain.orchestrator import BrainOrchestrator
 
+        ks = _kill_switch_state(db)
+        if _safe_int(ks.get("level")) > 0:
+            print(
+                f"error: brain cycle blocked — kill switch level {ks['level']} active: {ks.get('reason', '')}",
+                file=sys.stderr,
+            )
+            db.close()
+            return 1
+
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
@@ -791,6 +800,19 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
 
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
+
+    # Look up contributor for signal attribution (fail-open).
+    try:
+        from engine.core.contributors import ContributorRegistry
+
+        _contrib_reg = ContributorRegistry(db)
+        _contributor = _contrib_reg.get_by_node(identity.identity.node_id)
+        contributor_id = _contributor.id if _contributor is not None else None
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger("b1e55ed.cli").warning("Could not look up contributor for signal attribution; signal will still be emitted.")
+        contributor_id = None
 
     # We accept flags both before and after the free-form text / `add` subcommand.
     # The top-level argparse only knows about `args.*` values. Any flags placed after
@@ -881,6 +903,15 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
             source="cli.signal",
             dedupe_key=compute_dedupe_key(EventType.SIGNAL_CURATOR_V1, payload),
         )
+        if contributor_id is not None:
+            with db.conn:
+                db.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO contributor_signals (contributor_id, event_id, accepted)
+                    VALUES (?, ?, 0)
+                    """,
+                    (str(contributor_id), str(ev.id)),
+                )
         events.append({"id": ev.id, "type": str(ev.type), "ts": ev.ts.isoformat(), "payload": ev.payload})
 
     out = {

@@ -139,11 +139,11 @@ dependencies-code.md
 
 ---
 
-### `docs/DASHBOARD_DESIGN_SPEC.md`
+### `docs/internal/DASHBOARD_DESIGN_SPEC.md`
 
 **References:**
 ```
-DASHBOARD_DESIGN_SPEC.md
+internal/DASHBOARD_DESIGN_SPEC.md
   └→ architecture.md          (Referenced from Dashboard section)
 ```
 

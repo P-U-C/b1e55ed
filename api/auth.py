@@ -20,6 +20,11 @@ def require_bearer_token(
 
     expected = str(getattr(config.api, "auth_token", "") or "")
     if not expected:
+        import logging
+
+        logging.getLogger("b1e55ed.auth").critical(
+            "API auth token is not configured — all endpoints are PUBLIC. Set api.auth_token or B1E55ED_API_AUTH_TOKEN to enable authentication."
+        )
         return
 
     if not authorization:

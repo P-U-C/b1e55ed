@@ -149,6 +149,8 @@ engine/brain/pcs_enricher.py       → database.py, feature_store.py
 engine/brain/position_sm.py        → models.py (position state machine)
 ```
 
+> **Note**: Feature snapshots are currently write-only (audit trail). FeatureStore replay is not yet implemented.
+
 ### Backtest engine
 
 ```

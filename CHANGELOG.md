@@ -2,7 +2,7 @@
 
 ## v1.0.0-beta.3 — 2026-02-25
 
-226 commits. 530 tests. Full CI green across Python 3.11 + 3.12.
+226 commits. 583 tests. Full CI green across Python 3.11 + 3.12.
 
 ---
 
@@ -18,7 +18,7 @@
 - Prevents a compromised API token from disabling safety mechanisms
 
 **Crypto primitive unification (C1)**
-- Migrated to Argon2id for key derivation (from PBKDF2)
+- Migrated to Argon2id for identity file key derivation (from PBKDF2; keystore still uses PBKDF2+Fernet)
 - AES-256-GCM for all symmetric encryption at rest
 - Single `engine/security/` module handles all crypto — no scattered implementations
 

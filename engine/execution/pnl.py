@@ -12,10 +12,14 @@ position ledger.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from engine.core.config import Config
 from engine.core.database import Database
+
+_log = logging.getLogger("b1e55ed.execution.pnl")
 
 
 def _utc_now() -> datetime:
@@ -30,8 +34,9 @@ class PnLSnapshot:
 
 
 class PnLTracker:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, config: Config | None = None) -> None:
         self.db = db
+        self._config = config
 
     def unrealized_usd(self, *, position_id: str, mark_price: float) -> float:
         row = self.db.conn.execute(
@@ -84,6 +89,44 @@ class PnLTracker:
                 self.db.conn.execute(
                     "INSERT INTO audit_log (action, actor, component, details) VALUES (?, ?, ?, ?)",
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
+                )
+
+        # Best-effort outcome attribution — never block execution on failure.
+        if self._config is not None:
+            try:
+                from engine.integration.outcome_writer import write_outcome_for_closed_position
+
+                write_outcome_for_closed_position(
+                    db=self.db,
+                    config=self._config,
+                    position_id=str(position_id),
+                )
+            except Exception:
+                _log.warning(
+                    "outcome attribution failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
+            # Best-effort karma recording — never block execution on failure.
+            try:
+                from engine.execution.karma import KarmaEngine
+                from engine.security.identity import ensure_identity
+
+                karma = KarmaEngine(
+                    config=self._config,
+                    db=self.db,
+                    identity=ensure_identity().identity,
+                )
+                karma.record_intent(
+                    trade_id=str(position_id),
+                    realized_pnl_usd=float(realized),
+                )
+            except Exception:
+                _log.warning(
+                    "karma recording failed for position %s",
+                    position_id,
+                    exc_info=True,
                 )
 
         return float(realized)
