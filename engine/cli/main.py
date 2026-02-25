@@ -1432,7 +1432,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     return 2
 
 
-def _kill_switch_state(db) -> dict[str, object]:
+def _kill_switch_state(db) -> dict[str, Any]:
     from engine.brain.kill_switch import LEVEL_MESSAGES, KillSwitchLevel
     from engine.core.events import EventType
 
