@@ -19,6 +19,10 @@ README.md
   → docs/api-reference.md
   → docs/contributors.md
   → docs/architecture.md
+  → docs/agent-interfaces.md
+  → docs/oracle.md
+  → docs/curator.md
+  → docs/backtest.md
   → docs/authority-model.md
   → docs/eas-integration.md
   → docs/security.md
@@ -439,6 +443,19 @@ scripts/validate_doc_deps.sh
 | [eas-integration.md](eas-integration.md) | Ethereum Attestation Service setup and usage |
 | [FORGE_SPEC.md](FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
 | [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
-| [OPERATOR_SPRINT_PLAN.md](OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+| [agent-interfaces.md](agent-interfaces.md) | SSE, MCP, signal attribution, oracle |
+| [oracle.md](oracle.md) | Producer provenance endpoint (public, no auth) |
+| [curator.md](curator.md) | Curator pipeline — operator signal ingestion |
+| [backtest.md](backtest.md) | Backtest engine — walk-forward, sweep, Kelly |
+| [EASTER_EGG_REFERENCE.md](EASTER_EGG_REFERENCE.md) | Cultural reference library for codebase easter eggs |
 
-*Last updated: 2026-02-20*
+### Internal Documentation
+
+These files are design references and sprint plans, not operator-facing guides.
+
+| Document | Purpose |
+|----------|---------|
+| [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
+| [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+
+*Last updated: 2026-02-25*

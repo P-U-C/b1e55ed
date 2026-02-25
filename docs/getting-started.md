@@ -29,7 +29,7 @@ Sequence: install → forge identity → setup → register contributor → run 
 
 ### 1) Forge an identity (The Forge)
 
-The Forge derives an Ethereum identity with a `0xb1e55ed` prefix.
+The Forge derives an Ethereum identity with a `0xb1e55ed` prefix. Required if you plan to use EAS attestations.
 
 ```bash
 uv run b1e55ed identity forge
@@ -94,6 +94,17 @@ See: [contributors.md](contributors.md).
 uv run b1e55ed brain
 ```
 
+Ingest your first signal:
+
+```bash
+uv run b1e55ed signal "BTC breakout — confirmed on-chain" \
+  --symbols BTC \
+  --direction bullish \
+  --conviction 7
+```
+
+See: [curator.md](curator.md) for the full curator pipeline.
+
 ### 6) Start API + dashboard
 
 API requires `api.auth_token` unless `B1E55ED_INSECURE_OK=1` is set.
@@ -110,9 +121,19 @@ uv run b1e55ed dashboard
 # API:       http://localhost:5050/api/v1/health
 ```
 
+Check agent interfaces:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/capabilities
+```
+
 ## Next steps
 
 - [Configuration](configuration.md)
 - [CLI reference](cli-reference.md)
 - [API reference](api-reference.md)
 - [Architecture](architecture.md)
+- [Agent interfaces](agent-interfaces.md)
+- [Oracle](oracle.md)
+- [Curator pipeline](curator.md)

@@ -71,6 +71,22 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:5050/api/v1/contributors/
 ```
 
+## GitHub auto-publish
+
+When configured, b1e55ed opens a GitHub issue in a designated repo when a contributor is registered. This creates a public record without requiring on-chain transactions.
+
+Configure in `config/user.yaml`:
+
+```yaml
+github_publish:
+  enabled: true
+  token: "ghp_..."
+  repo: "your-org/attestations"
+  label: "attestation"
+```
+
+The attestation record returned by `GET /api/v1/contributors/{id}/attestation` includes a `published` field indicating whether the GitHub issue was created and its URL.
+
 ## Signal attribution
 
 Signals can be attributed to contributors via:
@@ -127,10 +143,3 @@ API:
 The leaderboard is a projection over the scoring model.
 
 Use it for routing decisions, automated weighting, and operator review.
-
-## Network readiness (future)
-
-Planned direction:
-- peer discovery via on-chain registry
-- contributor identity anchored by attestations
-- portable reputation proofs

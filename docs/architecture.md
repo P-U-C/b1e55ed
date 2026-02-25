@@ -5,60 +5,33 @@ b1e55ed is an event-sourced signal engine. Producers emit events. The brain read
 ## High-level diagram
 
 ```text
-                ┌───────────────────────────────┐
-                │            The Forge           │
-                │  Ethereum-prefixed identity    │
-                └───────────────┬───────────────┘
-                                │
-                                │ (optional)
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Contributor layer (C1)                       │
-│  - Contributor registry (node_id → contributor_id)               │
-│  - Attribution tables (signals submitted/accepted/profitable)    │
-│  - Scoring + leaderboard                                         │
-│  - Optional EAS off-chain attestations                           │
-└─────────────────────────────────────────────────────────────────┘
-
-┌───────────────────────────────┐       ┌─────────────────────────┐
-│          Producers             │       │        Operators         │
-│  - internal producers          │       │  - humans/agents         │
-│  - registered producers        │       │  - submit curator intel  │
-└───────────────┬───────────────┘       └─────────────┬───────────┘
-                │                                     │
-                ▼                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Event store (SQLite)                      │
-│  - append-only events table                                       │
-│  - hash chain integrity                                           │
-│  - projections: positions, regime, alerts                         │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                              Brain                               │
-│  - orchestrator (run_cycle)                                       │
-│  - kill switch gating                                              │
-│  - regime detection                                                │
-│  - intent generation + settlement workflow                         │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                           Execution                               │
-│  - paper/live mode                                                 │
-│  - position tracking                                               │
-│  - karma intents                                                   │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Interfaces (control plane)                    │
-│  - CLI (authoritative)                                             │
-│  - REST API (/api/v1/*)                                            │
-│  - Dashboard (read-oriented)                                       │
-│  - Webhooks (event dispatch; CLI-managed)                          │
-└─────────────────────────────────────────────────────────────────┘
+Producers (internal + registered) ──────────────────────┐
+                                                         │
+Curator Pipeline (operator intel → structured signals) ──┤
+                                                         ▼
+                                                   Event Store
+                                                  (SQLite + hash chain)
+                                                         │
+                                           ┌─────────────┼──────────────┐
+                                           ▼             ▼              ▼
+                                         Brain       Backtest       Oracle
+                                    (synthesis,    (walk-forward, (provenance
+                                     learning,      gridsweep,    projection,
+                                     regime)        megasweep)    no auth)
+                                           │
+                                    Kill Switch
+                                           │
+                                       Execution
+                                    (paper/live, Kelly)
+                                           │
+                              ┌────────────┼────────────────┐
+                              ▼            ▼                ▼
+                             CLI          REST           Dashboard
+                        (authoritative)  (/api/v1/*)    (read-only)
+                                         │
+                                         ├────── MCP server
+                                         ├────── SSE stream
+                                         └────── Oracle endpoint (public)
 ```
 
 ## Contributor layer
@@ -76,6 +49,45 @@ Contributor scoring is computed from event outcomes and attribution tables.
 Reference modules:
 - `engine/core/contributors.py`
 - `engine/core/scoring.py`
+
+## Curator Pipeline
+
+Operator intel enters the system through the curator pipeline.
+
+- CLI: `b1e55ed signal "<text>" [--symbols] [--direction] [--conviction]`
+- API: `POST /api/v1/signals/submit`
+- Signals are attributed to contributors via `node_id`
+- Weight in synthesis: `weights.curator` (default 0.25)
+
+See: [curator.md](curator.md).
+
+## Backtest Engine
+
+The backtest engine reads from the event store and validates strategies against historical data.
+
+- Walk-forward validation with FDR correction
+- Regime-conditioned results (EARLY_BULL, LATE_BULL, BEAR, SIDEWAYS)
+- Dynamic Kelly sizing: `b1e55ed kelly`
+
+See: [backtest.md](backtest.md).
+
+## Agent Interfaces
+
+Three interfaces for AI agents:
+
+| Interface | Endpoint | Auth |
+|-----------|----------|------|
+| SSE stream | `GET /api/v1/events/stream` | Required |
+| MCP server | `POST /api/v1/mcp` | Required |
+| Oracle | `GET /api/v1/oracle/producers/{id}/provenance` | None |
+
+See: [agent-interfaces.md](agent-interfaces.md).
+
+## Oracle
+
+The oracle is a read-only projection layer over the event store. It answers whether a signal producer has verifiable history. No authentication required.
+
+See: [oracle.md](oracle.md).
 
 ## The Forge
 
@@ -130,5 +142,8 @@ Reference modules:
 
 - REST API: `api/main.py` mounts the router at `/api/v1`.
 - CLI: `engine/cli.py` is the authoritative command surface.
+- MCP server: `POST /api/v1/mcp` (JSON-RPC 2.0).
+- SSE stream: `GET /api/v1/events/stream`.
+- Oracle: `GET /api/v1/oracle/producers/{id}/provenance` (no auth).
 
 See: [api-reference.md](api-reference.md).
