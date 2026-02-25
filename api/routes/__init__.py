@@ -10,6 +10,7 @@ from api.routes import (
     health,
     karma,
     kill_switch,
+    oracle,
     positions,
     producers,
     producers_feedback,
@@ -35,5 +36,8 @@ def get_api_router() -> APIRouter:
     router.include_router(config.router, tags=["config"])
     router.include_router(karma.router, tags=["karma"])
     router.include_router(trace.router, tags=["trace"])
+
+    # Oracle: public-facing provenance endpoint (no auth dependency)
+    router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
 
     return router

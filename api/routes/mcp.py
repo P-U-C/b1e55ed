@@ -136,6 +136,28 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "b1e55ed_provenance_check",
+        "description": (
+            "Check signal producer lineage before executing a trade. "
+            "Returns chain-verified history and coverage data. "
+            "Does NOT return a trust score or recommendation — the agent decides what the data means."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "producer_id": {
+                    "type": "string",
+                    "description": "The signal producer or source identifier to check",
+                },
+                "signal_type": {
+                    "type": "string",
+                    "description": "Optional signal type filter (e.g. 'long_btc', 'short_eth')",
+                },
+            },
+            "required": ["producer_id"],
+        },
+    },
+    {
         "name": "emit_producer_signal",
         "description": "Injects a signal into the ingestion bus on behalf of a registered producer.",
         "inputSchema": {
@@ -311,6 +333,42 @@ def _tool_get_signal_attribution(db: Database, params: dict) -> dict:
     return result
 
 
+def _tool_provenance_check(db: Database, params: dict) -> dict:
+    """MCP handler for b1e55ed_provenance_check.
+
+    Delegates to the shared provenance logic in engine.core.provenance so
+    the REST endpoint and the MCP tool always return the same data.
+    """
+    from engine.core.provenance import compute_provenance
+
+    producer_id = params.get("producer_id")
+    if not producer_id:
+        raise ValueError("producer_id is required")
+
+    result = compute_provenance(str(producer_id), db)
+
+    out: dict = {
+        "producer_id": result.producer_id,
+        "has_provenance": result.has_provenance,
+        "chain_verified": result.chain_verified,
+        "total_signals": result.total_signals,
+        "p_and_l_attributed": result.p_and_l_attributed,
+        "operator_coverage": result.operator_coverage,
+        "first_seen": result.first_seen,
+        "last_seen": result.last_seen,
+        "note": result.note,
+        "attribution_windows": {
+            k: {
+                "signals": v.signals,
+                "hit_rate": v.hit_rate,
+                "max_drawdown_pct": v.max_drawdown_pct,
+            }
+            for k, v in result.attribution_windows.items()
+        },
+    }
+    return out
+
+
 def _tool_emit_producer_signal(db: Database, params: dict) -> dict:
     producer_id = params.get("producer_id")
     signal_type = params.get("signal_type")
@@ -353,6 +411,7 @@ _TOOL_HANDLERS = {
     "get_recent_signals": _tool_get_recent_signals,
     "get_open_positions": _tool_get_open_positions,
     "get_signal_attribution": _tool_get_signal_attribution,
+    "b1e55ed_provenance_check": _tool_provenance_check,
     "emit_producer_signal": _tool_emit_producer_signal,
 }
 

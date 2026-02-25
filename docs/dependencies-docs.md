@@ -449,6 +449,9 @@ scripts/validate_doc_deps.sh
 | [backtest.md](backtest.md) | Backtest engine — walk-forward, sweep, Kelly |
 | [EASTER_EGG_REFERENCE.md](EASTER_EGG_REFERENCE.md) | Cultural reference library for codebase easter eggs |
 
+| [KARMA-SPEC.md](KARMA-SPEC.md) | Karma score specification — inputs, update rule, calibration, failure modes |
+| [SEED_MANIFEST.md](SEED_MANIFEST.md) | Reproducibility proof — cryptographic seed data manifest |
+
 ### Internal Documentation
 
 These files are design references and sprint plans, not operator-facing guides.
