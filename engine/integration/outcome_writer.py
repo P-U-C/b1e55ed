@@ -73,4 +73,17 @@ def write_outcome_for_closed_position(
         ts=datetime.now(tz=UTC),
     )
 
+    # Best-effort: propagate profitable outcomes to contributor_signals.
+    try:
+        import logging as _logging
+
+        from engine.core.scoring import ContributorScoring
+
+        scorer = ContributorScoring(db=db)
+        scorer.update_outcomes()
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger("b1e55ed.outcome").warning("update_outcomes failed", exc_info=True)
+
     return payload

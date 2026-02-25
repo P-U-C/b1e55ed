@@ -190,7 +190,8 @@ CREATE TABLE IF NOT EXISTS balances (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS karma_intents (
     id TEXT PRIMARY KEY,
-    trade_id TEXT NOT NULL,
+    trade_id TEXT NOT NULL UNIQUE,
+    contributor_id TEXT,
     realized_pnl_usd REAL NOT NULL,
     karma_percentage REAL NOT NULL,
     karma_amount_usd REAL NOT NULL,
@@ -440,6 +441,9 @@ class Database:
 
         # Lightweight migrations for additive columns (SQLite-friendly).
         self._ensure_column("events", "contributor_id", "TEXT")
+        self._ensure_column("events", "hash_version", "INT DEFAULT 1")
+        self._ensure_column("karma_intents", "contributor_id", "TEXT")
+        self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
         cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -447,6 +451,62 @@ class Database:
             return
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+    def _migrate_karma_intents_unique_trade_id(self) -> None:
+        """Rebuild karma_intents with UNIQUE(trade_id) and contributor_id if not already present.
+
+        Safe to call on both fresh DBs (table already has constraint from SCHEMA) and
+        existing DBs that predate the UNIQUE constraint.
+        """
+        row = self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='karma_intents'").fetchone()
+        if row is None:
+            return  # Table not yet created; SCHEMA will handle it.
+
+        table_sql = str(row[0] or "").upper()
+        # Detect whether trade_id already has a UNIQUE constraint in the DDL.
+        if "UNIQUE" in table_sql:
+            return  # Already migrated.
+
+        # Rebuild: keep the earliest row per trade_id (deduplicate), add UNIQUE constraint.
+        self.conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS karma_intents_new (
+                    id TEXT PRIMARY KEY,
+                    trade_id TEXT NOT NULL UNIQUE,
+                    contributor_id TEXT,
+                    realized_pnl_usd REAL NOT NULL,
+                    karma_percentage REAL NOT NULL,
+                    karma_amount_usd REAL NOT NULL,
+                    node_id TEXT NOT NULL,
+                    signature TEXT,
+                    settled INTEGER DEFAULT 0,
+                    batch_id TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+            # Copy unique trade_ids, keeping the first (by rowid).
+            self.conn.execute(
+                """
+                INSERT OR IGNORE INTO karma_intents_new
+                    (id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd,
+                     node_id, signature, settled, batch_id, created_at)
+                SELECT id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd,
+                       node_id, signature, settled, batch_id, created_at
+                FROM karma_intents
+                WHERE rowid IN (
+                    SELECT MIN(rowid) FROM karma_intents GROUP BY trade_id
+                )
+                """
+            )
+            self.conn.execute("DROP TABLE karma_intents")
+            self.conn.execute("ALTER TABLE karma_intents_new RENAME TO karma_intents")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_karma_intents_settled ON karma_intents(settled)")
+            self.conn.commit()
+        finally:
+            self.conn.execute("PRAGMA foreign_keys=ON")
 
     # Well-known genesis prev_hash — prevents chain-splice attacks where
     # any event could claim to be genesis by setting prev_hash=None.
@@ -513,6 +573,7 @@ class Database:
         db_last = self.conn.execute("SELECT hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
         prev = str(db_last[0]) if db_last else self.GENESIS_PREV_HASH
         self._last_hash = prev  # sync cache
+        hash_version = 2  # v2 includes contributor_id in the hash
         h = compute_event_hash(
             prev_hash=prev,
             event_type=event_type,
@@ -523,6 +584,8 @@ class Database:
             schema_version=schema_version,
             dedupe_key=dedupe_key,
             event_id=eid,
+            contributor_id=contributor_id,
+            hash_version=hash_version,
         )
 
         try:
@@ -530,8 +593,8 @@ class Database:
                 """
                 INSERT INTO events (
                     id, type, ts, observed_at, source, contributor_id, trace_id, schema_version, dedupe_key,
-                    payload, prev_hash, hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    payload, prev_hash, hash, hash_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     eid,
@@ -546,6 +609,7 @@ class Database:
                     canonical_json(payload_canon),
                     prev,
                     h,
+                    hash_version,
                 ),
             )
             if dedupe_key is not None:
@@ -735,7 +799,8 @@ class Database:
         """
 
         q = """
-            SELECT id, type, payload, prev_hash, hash, ts, source, trace_id, schema_version, dedupe_key
+            SELECT id, type, payload, prev_hash, hash, ts, source, trace_id, schema_version,
+                   dedupe_key, contributor_id, hash_version
             FROM events ORDER BY created_at ASC, rowid ASC
         """
         rows = self.conn.execute(q).fetchall()
@@ -750,6 +815,10 @@ class Database:
             et = EventType(str(row[1]))
             payload = json.loads(str(row[2]))
             ts = _iso_to_dt(str(row[5])) or datetime.now(tz=UTC)
+            # hash_version may be NULL for legacy rows written before the column was added.
+            hv_raw = row[11]
+            hv = int(hv_raw) if hv_raw is not None else 1
+            cid = row[10]  # contributor_id (may be None for v1 events)
             expected = compute_event_hash(
                 prev_hash=prev,
                 event_type=et,
@@ -760,6 +829,8 @@ class Database:
                 schema_version=str(row[8]),
                 dedupe_key=row[9],
                 event_id=str(row[0]),
+                contributor_id=cid,
+                hash_version=hv,
             )
             if expected != str(row[4]):
                 return False
@@ -768,6 +839,11 @@ class Database:
 
     def _row_to_event(self, row: sqlite3.Row) -> Event:
         payload = json.loads(row["payload"])
+        # hash_version may be absent in rows written before the column was added.
+        try:
+            hv = int(row["hash_version"]) if row["hash_version"] is not None else 1
+        except (IndexError, KeyError):
+            hv = 1
         return Event(
             id=str(row["id"]),
             type=EventType(str(row["type"])),
@@ -780,4 +856,5 @@ class Database:
             payload=payload,
             prev_hash=row["prev_hash"],
             hash=str(row["hash"]),
+            hash_version=hv,
         )

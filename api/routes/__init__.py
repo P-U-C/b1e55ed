@@ -10,6 +10,7 @@ from api.routes import (
     health,
     karma,
     kill_switch,
+    metrics,
     oracle,
     positions,
     producers,
@@ -24,6 +25,7 @@ def get_api_router() -> APIRouter:
     router = APIRouter()
 
     router.include_router(health.router, tags=["health"])
+    router.include_router(metrics.router, tags=["metrics"])
     router.include_router(brain.router, tags=["brain"])
     router.include_router(kill_switch.router)
     router.include_router(events.router, tags=["events"])

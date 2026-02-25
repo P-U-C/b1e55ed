@@ -11,7 +11,8 @@ Usage:
                          [--to DATE]
 
 Each JSONL line (or JSON array element / CSV row) contains:
-    event_id, source, signal_type, outcome, pnl_pct, karma_delta, timestamp
+    karma_intent_id, trade_id, node_id, realized_pnl_usd, karma_percentage,
+    karma_amount_usd, settled, created_at
     + chain_hash, chain_seq  (only when --include-chain is set)
 """
 
@@ -101,45 +102,51 @@ def build_export_parser(sub: argparse._SubParsersAction) -> argparse.ArgumentPar
 
 
 def _build_query(*, include_chain: bool, date_from: str | None, date_to: str | None) -> tuple[str, list[Any]]:
-    """Build the SQL query and parameter list for the karma export."""
+    """Build the SQL query and parameter list for the karma export.
 
-    # We join events against karma_settlements keyed by producer_id.
-    # The events table stores the raw chain with source, hash, and rowid-as-seq.
-    # karma_settlements doesn't have a producer_id column in the schema we saw,
-    # so we do a LEFT JOIN to pick up any settlement rows where the event source
-    # matches a distinct node.  We include the event's own rowid as chain_seq.
+    Queries karma_intents joined to contributors for human-readable output
+    suitable for dispute resolution.  Each row contains enough context to
+    reconstruct who received what and why.
+    """
 
     select_cols = [
-        "e.id          AS event_id",
-        "e.source      AS source",
-        "e.type        AS signal_type",
-        "e.created_at  AS timestamp",
-        # Outcome derived from payload if available
-        "CASE WHEN json_extract(e.payload, '$.outcome') IS NOT NULL      THEN json_extract(e.payload, '$.outcome')      ELSE 'open' END AS outcome",
-        # pnl_pct from payload
-        "COALESCE(CAST(json_extract(e.payload, '$.pnl_pct') AS REAL), 0.0) AS pnl_pct",
-        # karma_delta: best-effort from payload or settlements
-        "COALESCE(    CAST(json_extract(e.payload, '$.karma_delta') AS REAL),    0.0) AS karma_delta",
+        "ki.id              AS karma_intent_id",
+        "ki.trade_id        AS trade_id",
+        "ki.node_id         AS node_id",
+        "ki.realized_pnl_usd AS realized_pnl_usd",
+        "ki.karma_percentage AS karma_percentage",
+        "ki.karma_amount_usd AS karma_amount_usd",
+        "ki.settled          AS settled",
+        "ki.created_at       AS created_at",
+        "c.id                AS contributor_id",
+        "c.name              AS contributor_name",
     ]
 
     if include_chain:
+        # Include the source event hash chain reference via the events table
+        # keyed on trade_id if present; otherwise NULL.
         select_cols += [
-            "e.hash    AS chain_hash",
-            "e.rowid   AS chain_seq",
+            "e.hash   AS chain_hash",
+            "e.rowid  AS chain_seq",
         ]
 
-    q = f"SELECT {', '.join(select_cols)} FROM events e WHERE 1=1"
+    if include_chain:
+        from_clause = "FROM karma_intents ki LEFT JOIN contributors c ON c.node_id = ki.node_id LEFT JOIN events e ON e.dedupe_key = 'karma.intent:' || ki.id"
+    else:
+        from_clause = "FROM karma_intents ki LEFT JOIN contributors c ON c.node_id = ki.node_id"
+
+    q = f"SELECT {', '.join(select_cols)} {from_clause} WHERE 1=1"
     params: list[Any] = []
 
     if date_from:
-        q += " AND e.created_at >= ?"
+        q += " AND ki.created_at >= ?"
         params.append(date_from)
 
     if date_to:
-        q += " AND e.created_at <= ?"
+        q += " AND ki.created_at <= ?"
         params.append(date_to)
 
-    q += " ORDER BY e.rowid ASC"
+    q += " ORDER BY ki.created_at DESC"
 
     return q, params
 
@@ -147,17 +154,20 @@ def _build_query(*, include_chain: bool, date_from: str | None, date_to: str | N
 def _row_to_record(row: Any, *, include_chain: bool) -> dict[str, Any]:
     """Convert a raw SQLite row to an export dict."""
     record: dict[str, Any] = {
-        "event_id": str(row[0]),
-        "source": str(row[1]) if row[1] is not None else None,
-        "signal_type": str(row[2]) if row[2] is not None else None,
-        "timestamp": str(row[3]) if row[3] is not None else None,
-        "outcome": str(row[4]),
-        "pnl_pct": float(row[5]),
-        "karma_delta": float(row[6]),
+        "karma_intent_id": str(row[0]) if row[0] is not None else None,
+        "trade_id": str(row[1]) if row[1] is not None else None,
+        "node_id": str(row[2]) if row[2] is not None else None,
+        "realized_pnl_usd": float(row[3]) if row[3] is not None else None,
+        "karma_percentage": float(row[4]) if row[4] is not None else None,
+        "karma_amount_usd": float(row[5]) if row[5] is not None else None,
+        "settled": bool(int(row[6])) if row[6] is not None else False,
+        "created_at": str(row[7]) if row[7] is not None else None,
+        "contributor_id": str(row[8]) if row[8] is not None else None,
+        "contributor_name": str(row[9]) if row[9] is not None else None,
     }
     if include_chain:
-        record["chain_hash"] = str(row[7]) if row[7] is not None else None
-        record["chain_seq"] = int(row[8]) if row[8] is not None else None
+        record["chain_hash"] = str(row[10]) if len(row) > 10 and row[10] is not None else None
+        record["chain_seq"] = int(row[11]) if len(row) > 11 and row[11] is not None else None
     return record
 
 

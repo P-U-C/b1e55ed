@@ -157,6 +157,24 @@ def create_app() -> FastAPI:
             # Never block startup on contributor registration.
             pass
 
+        # Best-effort crash-recovery sweep: find closed positions without karma intents.
+        try:
+            from engine.execution.recovery import recover_missing_karma_intents
+            from engine.security import ensure_identity as _ensure_identity
+
+            _ident = _ensure_identity().identity
+            _recovered = recover_missing_karma_intents(
+                db=app.state.db,
+                config=app.state.config,
+                identity=_ident,
+            )
+            if _recovered > 0:
+                import logging as _log
+
+                _log.getLogger("b1e55ed.startup").info("Recovered %d missing karma intents on startup", _recovered)
+        except Exception:
+            pass  # Never block startup on recovery failure.
+
         yield
 
         # Best-effort close DB if we created it in this lifespan.
