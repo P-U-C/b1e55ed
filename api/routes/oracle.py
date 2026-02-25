@@ -41,7 +41,8 @@ class AttributionWindow(BaseModel):
 class ProvenanceResponse(BaseModel):
     producer_id: str
     has_provenance: bool
-    chain_verified: bool
+    chain_verified: bool  # Backwards compat; see chain_integrity_spot_checked
+    chain_integrity_spot_checked: bool  # Last 100 events verified against hash chain
     total_signals: int
     p_and_l_attributed: bool
     operator_coverage: int
@@ -115,6 +116,7 @@ async def get_producer_provenance(
         producer_id=result.producer_id,
         has_provenance=result.has_provenance,
         chain_verified=result.chain_verified,
+        chain_integrity_spot_checked=result.chain_integrity_spot_checked,
         total_signals=result.total_signals,
         p_and_l_attributed=result.p_and_l_attributed,
         operator_coverage=result.operator_coverage,

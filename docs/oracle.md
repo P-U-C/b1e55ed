@@ -27,6 +27,7 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
   "producer_id": "alpha_signals_v2",
   "has_provenance": true,
   "chain_verified": true,
+  "chain_integrity_spot_checked": true,
   "total_signals": 142,
   "p_and_l_attributed": true,
   "operator_coverage": 3,
@@ -56,7 +57,8 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
 | Field | Type | Description |
 |-------|------|-------------|
 | `has_provenance` | bool | Whether any events exist for this producer |
-| `chain_verified` | bool | Events have valid hash signatures |
+| `chain_verified` | bool | Backwards-compat alias for `chain_integrity_spot_checked` |
+| `chain_integrity_spot_checked` | bool | Last 100 events in the global hash chain passed cryptographic verification. This is a lightweight spot-check, not a full chain audit. Use `b1e55ed integrity` for full verification. |
 | `total_signals` | int | Total signals in the event store |
 | `p_and_l_attributed` | bool | At least one karma settlement references this producer |
 | `operator_coverage` | int | Distinct nodes that have observed this producer |

@@ -124,6 +124,21 @@ class BrainOrchestrator:
                         tuple(snap.source_event_ids),
                     )
 
+            # Emit immutable audit event for accepted signals so acceptance
+            # decisions are part of the hash-chained event log.
+            if snap.source_event_ids:
+                self.db.append_event(
+                    event_type=EventType.SIGNAL_ACCEPTED_V1,
+                    payload={
+                        "cycle_id": cycle_id,
+                        "event_ids": list(snap.source_event_ids),
+                        "symbol": sym,
+                        "accepted_count": len(snap.source_event_ids),
+                    },
+                    source="brain.orchestrator",
+                    trace_id=cycle_id,
+                )
+
         # Regime from BTC when available, else transition.
         btc = synth_results.get("BTC")
         regime_res = self.regime.detect(as_of=now, btc_snapshot=(btc.snapshot if btc else None))

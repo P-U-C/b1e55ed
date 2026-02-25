@@ -100,8 +100,17 @@ class KarmaEngine:
     def enabled(self) -> bool:
         return bool(self._config.karma.enabled) and float(self._config.karma.percentage) > 0.0
 
-    def record_intent(self, *, trade_id: str, realized_pnl_usd: float) -> KarmaIntent | None:
+    def record_intent(
+        self,
+        *,
+        trade_id: str,
+        realized_pnl_usd: float,
+        contributor_id: str | None = None,
+    ) -> KarmaIntent | None:
         """Record a signed intent for a profitable trade.
+
+        Uses INSERT OR IGNORE so duplicate trade_ids are silently skipped (safe for
+        retries and crash-recovery sweeps).  Returns None if the row already exists.
 
         Returns intent if recorded, else None.
         """
@@ -134,16 +143,17 @@ class KarmaEngine:
             sig_b64 = _sign_payload(self._identity, payload)
 
             with self._db.conn:
-                self._db.conn.execute(
+                cursor = self._db.conn.execute(
                     """
-                    INSERT INTO karma_intents (
-                        id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd,
-                        node_id, signature, settled, batch_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, datetime('now'))
+                    INSERT OR IGNORE INTO karma_intents (
+                        id, trade_id, contributor_id, realized_pnl_usd, karma_percentage,
+                        karma_amount_usd, node_id, signature, settled, batch_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, datetime('now'))
                     """,
                     (
                         intent_id,
                         str(trade_id),
+                        contributor_id,
                         pnl,
                         pct,
                         amount,
@@ -151,6 +161,10 @@ class KarmaEngine:
                         sig_b64,
                     ),
                 )
+
+            # If the row was not inserted (duplicate trade_id), return None.
+            if cursor.rowcount == 0:
+                return None
 
             # Emit an event as well (append-only memory)
             self._db.append_event(
@@ -163,9 +177,11 @@ class KarmaEngine:
                     "node_id": self._identity.node_id,
                     "signature_b64": sig_b64,
                     "intent_id": intent_id,
+                    "contributor_id": contributor_id,
                 },
                 dedupe_key=f"karma.intent:{intent_id}",
                 source="karma",
+                contributor_id=contributor_id,
             )
 
             return KarmaIntent(
@@ -182,7 +198,7 @@ class KarmaEngine:
             # Non-blocking guarantee: never break execution for karma.
             return None
 
-    def get_pending_intents(self) -> list[KarmaIntent]:
+    def get_pending_intents(self, *, limit: int = 500, offset: int = 0) -> list[KarmaIntent]:
         rows = self._db.conn.execute(
             """
             SELECT id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd,
@@ -190,7 +206,9 @@ class KarmaEngine:
             FROM karma_intents
             WHERE settled = 0
             ORDER BY created_at ASC
-            """
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
         ).fetchall()
         out: list[KarmaIntent] = []
         for r in rows:

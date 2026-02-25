@@ -81,16 +81,31 @@ async def _event_generator(
         since_iso = _iso(since_dt)
 
         type_frag, type_params = _type_clause()
-        q = f"SELECT id, type, ts, payload FROM events WHERE ts >= ?{type_frag} ORDER BY ts ASC, rowid ASC"
-        params: list[object] = [since_iso, *type_params]
+        _page_size = 500
+        _last_rowid_hist = 0  # track by rowid for stable pagination
 
-        rows = db.conn.execute(q, params).fetchall()
-        for row in rows:
-            if await request.is_disconnected():
-                return
-            data = _row_to_sse_json(row)
-            last_id = str(row["id"])
-            yield f"data: {data}\n\n"
+        # Seed: find the rowid boundary for since_ts
+        _seed = db.conn.execute(
+            "SELECT MIN(rowid) FROM events WHERE ts >= ?",
+            (since_iso,),
+        ).fetchone()
+        _start_rowid = int(_seed[0]) - 1 if (_seed and _seed[0] is not None) else 0
+
+        while True:
+            q_page = f"SELECT id, type, ts, payload, rowid FROM events WHERE rowid > ? AND ts >= ?{type_frag} ORDER BY rowid ASC LIMIT ?"
+            page_params: list[object] = [_start_rowid, since_iso, *type_params, _page_size]
+            rows = db.conn.execute(q_page, page_params).fetchall()
+            if not rows:
+                break
+            for row in rows:
+                if await request.is_disconnected():
+                    return
+                data = _row_to_sse_json(row)
+                last_id = str(row["id"])
+                _start_rowid = int(row["rowid"])
+                yield f"data: {data}\n\n"
+            if len(rows) < _page_size:
+                break  # caught up
 
     # --- 2. Poll for new events every 2s ---
     # Track the latest rowid we have delivered

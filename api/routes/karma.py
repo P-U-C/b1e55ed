@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.auth import AuthDep
 from api.deps import get_config, get_db, get_karma
@@ -32,8 +32,12 @@ def treasury(config: Config = Depends(get_config), db: Database = Depends(get_db
 
 
 @router.get("/karma/intents")
-def karma_intents(karma: KarmaEngine = Depends(get_karma)) -> dict[str, Any]:
-    return {"items": [i.__dict__ for i in karma.get_pending_intents()]}
+def karma_intents(
+    karma: KarmaEngine = Depends(get_karma),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    return {"items": [i.__dict__ for i in karma.get_pending_intents(limit=limit, offset=offset)]}
 
 
 @router.post("/karma/settle")
