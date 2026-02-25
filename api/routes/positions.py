@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, Path
 
 from api.auth import AuthDep
 from api.deps import get_db
+from api.errors import B1e55edError
 from api.schemas.positions import PositionResponse
 from engine.core.database import Database
 
@@ -78,6 +79,6 @@ def get_position(
     ).fetchone()
 
     if r is None:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise B1e55edError(code="not_found", message="Position not found", status=404)
 
     return _row_to_position(r)
