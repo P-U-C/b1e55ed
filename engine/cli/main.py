@@ -437,6 +437,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_anchor_parser(sub)
 
+    # -- export --
+    from engine.cli.commands.export import build_export_parser
+
+    build_export_parser(sub)
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -2604,6 +2609,12 @@ def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     return run_anchor(args, repo_root=ctx.repo_root)
 
 
+def _cmd_export(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.export import run_export
+
+    return run_export(args, repo_root=ctx.repo_root)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2670,6 +2681,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
         "anchor": _cmd_anchor,
+        "export": _cmd_export,
     }
 
     fn = dispatch.get(str(args.command))
