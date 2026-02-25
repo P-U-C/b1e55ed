@@ -30,9 +30,24 @@ jobs:
 
       - name: Check if already blessed
         id: blessed
-        run: |
-          BLESSED=$(git log --oneline -20 --grep="a b1e55ing" | head -1)
-          [ -n "$BLESSED" ] && echo "already_blessed=true" >> $GITHUB_OUTPUT || echo "already_blessed=false" >> $GITHUB_OUTPUT
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Check PR commits (works with squash merges — reads the source branch
+            // before squash, where "a b1e55ing" commit is still visible).
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 30,
+            });
+            const blessed = commits.data.some(c =>
+              c.commit.author?.name === 'a b1e55ing' ||
+              c.commit.message.includes('a b1e55ing')
+            );
+            core.setOutput('already_blessed', blessed ? 'true' : 'false');
+            if (blessed) console.log('✓ Already blessed — skipping');
+            else console.log('○ Not blessed — running Gemini fallback');
 
       - uses: actions/setup-python@v5
         if: steps.blessed.outputs.already_blessed == 'false'

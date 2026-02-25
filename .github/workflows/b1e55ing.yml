@@ -8,6 +8,8 @@ on:
 jobs:
   signal:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
     steps:
       - name: Skip fork PRs
         if: github.event.pull_request.head.repo.fork == true
@@ -42,4 +44,11 @@ jobs:
             --data-urlencode "text=[b1e55ing] PR #${{ github.event.pull_request.number }} opened on ${{ github.repository }} — ${{ github.event.pull_request.title }}
 Branch: ${{ github.head_ref }}
 Run: b1e55ing.py --pr-number ${{ github.event.pull_request.number }} --mode agent" \
-            | python3 -c "import sys,json; r=json.load(sys.stdin); print('Signal sent' if r.get('ok') else f'Signal failed: {r}')"
+            | python3 -c "
+import sys, json
+try:
+    r = json.load(sys.stdin)
+    print('Signal sent' if r.get('ok') else f'Signal failed: {r}')
+except Exception as e:
+    print(f'Signal parse error (non-fatal): {e}')
+" || true
