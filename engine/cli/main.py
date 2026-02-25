@@ -1860,7 +1860,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
                         "nodeId": identity_data["node_id"],
                         "name": "",
                         "role": "operator",
-                        "version": "1.0.0-beta.2",
+                        "version": "1.0.0-beta.3",
                         "registeredAt": identity_data["forged_at"],
                     },
                 )
