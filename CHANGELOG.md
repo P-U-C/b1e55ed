@@ -170,9 +170,10 @@ Complete walk-forward backtesting system with FDR-corrected validation.
 - `b1e55ed integrity` — verify hash chain integrity end-to-end
 
 **GitHub auto-publish**
-- On contributor registration, optionally opens a GitHub issue in a designated repo
+- On contributor registration, opens a GitHub issue in a designated repo
 - Creates a public record without requiring on-chain transactions
-- Configurable: `github_publish.enabled`, `github_publish.repo`, `github_publish.label`
+- Configure: `github_publish.token`, `github_publish.owner`, `github_publish.repo`
+- Publishing fires whenever a token is present — no separate enable flag
 - `GET /contributors/{id}/attestation` includes `published` field
 
 ---

@@ -1325,25 +1325,39 @@ def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> ContributorRegistry:
-    """Construct a ContributorRegistry, optionally wired with an EAS client."""
+    """Construct a ContributorRegistry wired with EAS client and GitHub publisher."""
 
     from engine.core.contributors import ContributorRegistry
 
+    # GitHub publisher — always active when token is configured (fail-open)
+    github_publisher: object | None = None
+    pub_cfg = config.publish.github
+    if pub_cfg.token:
+        from engine.integrations.github_publish import make_publisher
+
+        github_publisher = make_publisher(
+            owner=pub_cfg.owner,
+            repo=pub_cfg.repo,
+            token=pub_cfg.token,
+            labels=pub_cfg.labels,
+        )
+
+    # EAS client — only when explicitly enabled
+    eas_client: object | None = None
     try:
         from engine.integrations.eas import EASClient
+
+        if bool(config.eas.enabled):
+            eas_client = EASClient(
+                rpc_url=str(config.eas.rpc_url),
+                eas_address=str(config.eas.eas_contract),
+                schema_registry_address=str(config.eas.schema_registry),
+                private_key=str(config.eas.attester_private_key),
+            )
     except Exception:
-        return ContributorRegistry(db)
+        pass
 
-    if not bool(config.eas.enabled):
-        return ContributorRegistry(db)
-
-    client = EASClient(
-        rpc_url=str(config.eas.rpc_url),
-        eas_address=str(config.eas.eas_contract),
-        schema_registry_address=str(config.eas.schema_registry),
-        private_key=str(config.eas.attester_private_key),
-    )
-    return ContributorRegistry(db, eas_client=client)
+    return ContributorRegistry(db, eas_client=eas_client, github_publisher=github_publisher)
 
 
 def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:

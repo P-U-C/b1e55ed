@@ -126,7 +126,6 @@ class EASConfig(BaseModel):
 
 
 class PublishGithubConfig(BaseModel):
-    enabled: bool = False
     owner: str = "P-U-C"
     repo: str = "offchain-attestations"
     token: str = ""  # PAT or installation token; never logged

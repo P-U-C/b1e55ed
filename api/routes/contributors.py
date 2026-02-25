@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from api.auth import AuthDep
-from api.deps import get_db
+from api.deps import get_db, get_publisher
 from api.errors import B1e55edError
 from engine.core.contributors import Contributor, ContributorRegistry
 from engine.core.database import Database
@@ -119,8 +119,12 @@ def get_contributor_attestation(contributor_id: str, db: Database = Depends(get_
 
 
 @router.post("/register", response_model=ContributorResponse)
-def register_contributor(req: ContributorRegisterRequest, db: Database = Depends(get_db)) -> ContributorResponse:
-    reg = ContributorRegistry(db)
+def register_contributor(
+    req: ContributorRegisterRequest,
+    db: Database = Depends(get_db),
+    publisher: object | None = Depends(get_publisher),
+) -> ContributorResponse:
+    reg = ContributorRegistry(db, github_publisher=publisher)
     try:
         c = reg.register(node_id=req.node_id, name=req.name, role=req.role, metadata=req.metadata)
     except ValueError as e:

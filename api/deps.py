@@ -79,3 +79,24 @@ def get_karma(request: Request) -> KarmaEngine:
     # API uses persisted identity (same as CLI) for consistent audit trail
     identity_handle = ensure_identity()
     return KarmaEngine(config=get_config(request), db=get_db(request), identity=identity_handle.identity)
+
+
+def get_publisher(request: Request) -> object | None:
+    """Return a bound GitHub publisher callable, or None if no token configured.
+
+    The publisher is fail-open — returns None on failure rather than raising.
+    Consumers should inject this and pass to ContributorRegistry; the registry
+    handles the None case gracefully.
+    """
+    from engine.integrations.github_publish import make_publisher
+
+    cfg = get_config(request)
+    pub_cfg = cfg.publish.github
+    if not pub_cfg.token:
+        return None
+    return make_publisher(
+        owner=pub_cfg.owner,
+        repo=pub_cfg.repo,
+        token=pub_cfg.token,
+        labels=pub_cfg.labels,
+    )

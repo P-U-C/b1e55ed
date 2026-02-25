@@ -174,3 +174,24 @@ def publish_attestation_to_github(
 
     logger.warning("github_publish: all %d attempts exhausted (last status=%s)", _MAX_ATTEMPTS, last_status)
     return None
+
+
+def make_publisher(*, owner: str, repo: str, token: str, labels: list[str] | None = None) -> object:
+    """Return a callable publisher bound to the given config.
+
+    The returned callable matches the ``github_publisher`` signature expected by
+    ``ContributorRegistry``:
+
+        publisher(*, attestation, contributor_id, node_id, name, role, registered_at)
+
+    Returns None on any failure (fail-open).
+    """
+    import functools
+
+    return functools.partial(
+        publish_attestation_to_github,
+        owner=owner,
+        repo=repo,
+        token=token,
+        labels=labels,
+    )

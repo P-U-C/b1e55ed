@@ -90,11 +90,26 @@ class ContributorRegistry:
             except Exception:
                 pass
 
-        # Best-effort GitHub publish (fail-open)
-        if self._gh_publisher is not None and isinstance(meta.get("eas"), dict) and meta["eas"].get("uid"):
+        # Best-effort GitHub publish — always fires, fail-open (never blocks registration)
+        if self._gh_publisher is not None:
             try:
+                # Use EAS attestation payload if available; otherwise use registration data
+                attestation: dict[str, Any] = {}
+                if isinstance(meta.get("eas"), dict):
+                    attestation = dict(meta["eas"].get("attestation") or {})
+                if not attestation:
+                    attestation = {
+                        "uid": f"reg-{contributor_id[:8]}",
+                        "type": "contributor-registration",
+                        "data": {
+                            "nodeId": node_id,
+                            "name": name,
+                            "role": role,
+                            "registeredAt": now,
+                        },
+                    }
                 pub_result = self._gh_publisher(  # type: ignore[operator]
-                    attestation=meta["eas"]["attestation"],
+                    attestation=attestation,
                     contributor_id=contributor_id,
                     node_id=node_id,
                     name=name,
@@ -102,8 +117,8 @@ class ContributorRegistry:
                     registered_at=now,
                 )
                 if pub_result:
-                    meta["eas"].setdefault("publish", {})
-                    meta["eas"]["publish"]["github"] = pub_result
+                    meta.setdefault("publish", {})
+                    meta["publish"]["github"] = pub_result
             except Exception:
                 pass
 
