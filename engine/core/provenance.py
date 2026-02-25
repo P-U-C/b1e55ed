@@ -31,7 +31,8 @@ class ProvenanceResult:
 
     producer_id: str
     has_provenance: bool
-    chain_verified: bool
+    chain_verified: bool  # Deprecated alias kept for backwards compat; see chain_integrity_spot_checked
+    chain_integrity_spot_checked: bool  # True if last 100 events passed hash-chain verification
     total_signals: int
     p_and_l_attributed: bool
     operator_coverage: int
@@ -64,6 +65,7 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
             producer_id=producer_id,
             has_provenance=False,
             chain_verified=False,
+            chain_integrity_spot_checked=False,
             total_signals=0,
             p_and_l_attributed=False,
             operator_coverage=0,
@@ -87,13 +89,16 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     operator_coverage = int(cov_row[0]) if cov_row else 0
 
     # -----------------------------------------------------------------------
-    # 3. Chain integrity (simplified: events with non-null, non-empty hashes)
+    # 3. Chain integrity — spot-check last 100 events in the full chain.
+    #    We verify the global chain (not per-producer) since the chain is
+    #    contiguous across all producers.  fast=True verifies last 2000 by
+    #    default; we override to last 100 for a lightweight beta check.
     # -----------------------------------------------------------------------
-    chain_row = db.conn.execute(
-        "SELECT COUNT(*) FROM events WHERE source = ? AND hash IS NOT NULL AND hash != ''",
-        (producer_id,),
-    ).fetchone()
-    chain_verified = bool(chain_row and int(chain_row[0]) > 0)
+    try:
+        chain_integrity_spot_checked = db.verify_hash_chain(fast=True, last_n=100)
+    except Exception:
+        chain_integrity_spot_checked = False
+    chain_verified = chain_integrity_spot_checked  # backwards-compat alias
 
     # -----------------------------------------------------------------------
     # 4. P&L attribution: check if any conviction_scores for this producer
@@ -162,11 +167,15 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
         producer_id=producer_id,
         has_provenance=True,
         chain_verified=chain_verified,
+        chain_integrity_spot_checked=chain_integrity_spot_checked,
         total_signals=total_signals,
         p_and_l_attributed=p_and_l_attributed,
         operator_coverage=operator_coverage,
         first_seen=first_seen,
         last_seen=last_seen,
         attribution_windows=windows,
-        note=("Provenance data available. Fields are informational only — interpret in context."),
+        note=(
+            "Provenance data available. Fields are informational only — interpret in context. "
+            "chain_integrity_spot_checked: last 100 events verified against their stored hashes."
+        ),
     )

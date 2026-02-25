@@ -49,13 +49,32 @@ class ApiRateLimiter:
         self.max_requests = int(max_requests)
 
     def allow(self, *, key: str) -> tuple[bool, int]:
-        """Return (allowed, retry_after_seconds)."""
+        """Return (allowed, retry_after_seconds).
+
+        Uses an atomic upsert to eliminate the TOCTOU race that existed when
+        a SELECT was followed by a separate INSERT or UPDATE.
+        """
         from time import time as _time
 
         now = int(_time())
         window_start = now - (now % self.window_seconds)
 
         with self._db.conn:
+            # Atomic upsert: insert the first request for this window, or
+            # increment the counter if the row already exists.  This collapses
+            # the race window to zero — no two concurrent callers can both see
+            # a missing row and both attempt an INSERT.
+            self._db.conn.execute(
+                """
+                INSERT INTO api_rate_limits (key, window_start, window_seconds, count, updated_at)
+                VALUES (?, ?, ?, 1, datetime('now'))
+                ON CONFLICT(key, window_start, window_seconds) DO UPDATE SET
+                    count = count + 1,
+                    updated_at = datetime('now')
+                """,
+                (key, window_start, self.window_seconds),
+            )
+
             row = self._db.conn.execute(
                 """
                 SELECT count FROM api_rate_limits
@@ -64,30 +83,12 @@ class ApiRateLimiter:
                 (key, window_start, self.window_seconds),
             ).fetchone()
 
-            if row is None:
-                self._db.conn.execute(
-                    """
-                    INSERT INTO api_rate_limits (key, window_start, window_seconds, count, updated_at)
-                    VALUES (?, ?, ?, ?, datetime('now'))
-                    """,
-                    (key, window_start, self.window_seconds, 1),
-                )
-                return True, 0
+        count = int(row[0] or 1) if row else 1
+        if count > self.max_requests:
+            retry_after = max(1, (window_start + self.window_seconds) - now)
+            return False, retry_after
 
-            count = int(row[0] or 0)
-            if count >= self.max_requests:
-                retry_after = max(1, (window_start + self.window_seconds) - now)
-                return False, retry_after
-
-            self._db.conn.execute(
-                """
-                UPDATE api_rate_limits
-                SET count = count + 1, updated_at = datetime('now')
-                WHERE key = ? AND window_start = ? AND window_seconds = ?
-                """,
-                (key, window_start, self.window_seconds),
-            )
-            return True, 0
+        return True, 0
 
 
 class SignalRateLimiter:

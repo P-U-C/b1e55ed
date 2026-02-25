@@ -1,18 +1,31 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
 
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
 from engine.core.rate_limiter import ApiRateLimiter
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Attach a request_id to every request and echo it in the response headers."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
@@ -199,6 +212,31 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(B1e55edError, b1e55ed_error_handler)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = str(getattr(request.state, "request_id", uuid.uuid4()))
+        logging.getLogger("b1e55ed.api").error(
+            "Unhandled exception on %s %s [request_id=%s]",
+            request.method,
+            request.url.path,
+            request_id,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "internal_error",
+                    "message": "An internal error occurred",
+                    "request_id": request_id,
+                }
+            },
+        )
+
+    # Request ID middleware — must be added FIRST so request_id is always
+    # available for downstream middleware and exception handlers.
+    app.add_middleware(RequestIdMiddleware)
 
     # API rate limiting (SEC1)
     app.add_middleware(ApiRateLimitMiddleware)
