@@ -513,7 +513,7 @@ def test_post_merge_already_blessed_skips() -> None:
 
     # The blessed-check step must exist and output a flag
     assert "already_blessed" in src
-    assert "GITHUB_OUTPUT" in src
+    assert "setOutput" in src  # github-script uses core.setOutput(), not $GITHUB_OUTPUT
 
     # The grep target must match the canonical commit message prefix
     assert "a b1e55ing" in src
