@@ -277,3 +277,29 @@ See `docs/security.md` for enforcement details.
 2. Add to LAYERS in `scripts/validate_code_deps.py`
 3. Add to this document under the correct layer section
 4. Run `python scripts/validate_code_deps.py` — must pass before merging
+
+---
+
+## Undocumented (auto-detected)
+
+> Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description.
+
+```
+api/schemas/brain.py
+api/schemas/common.py
+api/schemas/positions.py
+api/schemas/signals.py
+dashboard/app.py
+dashboard/contributors.py
+dashboard/identity.py
+dashboard/producers.py
+dashboard/routes/home.py
+dashboard/routes/positions.py
+dashboard/routes/regime.py
+dashboard/routes/settings.py
+dashboard/routes/signals.py
+dashboard/routes/treasury.py
+dashboard/services/api_client.py
+dashboard/webhooks.py
+engine/core/identity_gate.py
+```
