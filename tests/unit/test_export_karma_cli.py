@@ -11,7 +11,6 @@ from pathlib import Path
 
 from engine.cli.commands.export import run_export
 from engine.core.database import Database
-from engine.core.events import EventType
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -47,20 +46,19 @@ def _scaffold_repo(tmp_path: Path) -> Path:
 
 
 def _seed_db(db: Database, count: int = 5) -> None:
-    """Insert test events into the database."""
+    """Insert test karma_intents into the database via KarmaEngine."""
+    from engine.core.config import Config
+    from engine.execution.karma import KarmaEngine
+    from engine.security import generate_node_identity
+
+    config = Config.from_repo_defaults(Path(__file__).resolve().parents[2])
+    # Enable karma with a minimal config for testing
+    config = config.model_copy(update={"karma": config.karma.model_copy(update={"enabled": True, "percentage": 0.01, "treasury_address": "0xtest"})})
+    identity = generate_node_identity()
+    karma = KarmaEngine(config=config, db=db, identity=identity)
+
     for i in range(count):
-        db.append_event(
-            event_type=EventType.SIGNAL_CURATOR_V1,
-            payload={
-                "symbol": "BTC",
-                "direction": "bullish",
-                "conviction": float(i),
-                "rationale": f"test signal {i}",
-                "source": "test_producer",
-                "pnl_pct": round(0.01 * i, 4),
-            },
-            source="test_producer",
-        )
+        karma.record_intent(trade_id=f"trade_{i}", realized_pnl_usd=float(100 + i * 10))
 
 
 class _FakeArgs:
@@ -103,13 +101,14 @@ class TestExportKarmaJsonl:
         assert len(lines) == 5
         for line in lines:
             record = json.loads(line)
-            assert "event_id" in record
-            assert "source" in record
-            assert "signal_type" in record
-            assert "outcome" in record
-            assert "pnl_pct" in record
-            assert "karma_delta" in record
-            assert "timestamp" in record
+            assert "karma_intent_id" in record
+            assert "trade_id" in record
+            assert "node_id" in record
+            assert "realized_pnl_usd" in record
+            assert "karma_percentage" in record
+            assert "karma_amount_usd" in record
+            assert "settled" in record
+            assert "created_at" in record
 
     def test_export_karma_json(self, tmp_path):
         repo_root = _scaffold_repo(tmp_path)

@@ -138,7 +138,10 @@ class ContributorScoring:
 
         return total / len(rows)
 
-    def compute_score(self, contributor_id: str) -> ContributorScore:
+    def compute_score(self, contributor_id: str, as_of: datetime | None = None) -> ContributorScore:
+        # Deterministic reference time for replay — pass as_of to reproduce historical scores.
+        ref_time = as_of if as_of is not None else datetime.now(tz=UTC)
+
         row = self._db.conn.execute(
             """
             SELECT
@@ -214,7 +217,7 @@ class ContributorScoring:
         recency = 0.0
         last_dt = _parse_iso(last_active)
         if last_dt is not None:
-            days_since = max(0.0, (datetime.now(tz=UTC) - last_dt).total_seconds() / 86400.0)
+            days_since = max(0.0, (ref_time - last_dt).total_seconds() / 86400.0)
             if days_since <= 7.0:
                 recency = 1.0
             else:
@@ -251,13 +254,160 @@ class ContributorScoring:
             streak=streak,
         )
 
-    def leaderboard(self, *, limit: int = 20) -> list[ContributorScore]:
+    def leaderboard(self, *, limit: int = 20, as_of: datetime | None = None) -> list[ContributorScore]:
+        """Compute leaderboard using batch queries to avoid N+1 per contributor."""
         contributors = self._registry.list_all()
-        scores = [self.compute_score(c.id) for c in contributors]
+        if not contributors:
+            return []
+
+        ref_time = as_of if as_of is not None else datetime.now(tz=UTC)
+        contrib_ids = [c.id for c in contributors]
+        placeholders = ",".join("?" * len(contrib_ids))
+
+        # Batch 1: aggregate signal stats for all contributors in one query
+        stats_rows = self._db.conn.execute(
+            f"""
+            SELECT
+                contributor_id,
+                COUNT(1),
+                SUM(CASE WHEN accepted = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN profitable = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN accepted = 1 AND profitable IS NOT NULL THEN 1 ELSE 0 END),
+                AVG(CASE WHEN signal_score IS NOT NULL THEN signal_score END),
+                MAX(created_at)
+            FROM contributor_signals
+            WHERE contributor_id IN ({placeholders})
+            GROUP BY contributor_id
+            """,
+            contrib_ids,
+        ).fetchall()
+        stats_map = {str(r[0]): r for r in stats_rows}
+
+        # Batch 2: brier calibration data for all contributors at once
+        brier_rows = self._db.conn.execute(
+            f"""
+            SELECT contributor_id, signal_score, profitable
+            FROM contributor_signals
+            WHERE contributor_id IN ({placeholders})
+              AND accepted = 1 AND profitable IS NOT NULL AND signal_score IS NOT NULL
+            """,
+            contrib_ids,
+        ).fetchall()
+        brier_map: dict[str, list[tuple[float, int]]] = {}
+        for r in brier_rows:
+            brier_map.setdefault(str(r[0]), []).append((float(r[1]), int(r[2])))
+
+        # Batch 3: accepted days per contributor (for streak calculation)
+        streak_rows = self._db.conn.execute(
+            f"""
+            SELECT contributor_id, substr(created_at, 1, 10)
+            FROM contributor_signals
+            WHERE contributor_id IN ({placeholders}) AND accepted = 1
+            GROUP BY contributor_id, substr(created_at, 1, 10)
+            ORDER BY contributor_id, substr(created_at, 1, 10) DESC
+            """,
+            contrib_ids,
+        ).fetchall()
+        streak_days_map: dict[str, list[str]] = {}
+        for r in streak_rows:
+            streak_days_map.setdefault(str(r[0]), []).append(str(r[1]))
+
+        # Batch 4: karma totals by node_id
+        node_map = {c.id: c.node_id for c in contributors}
+        node_ids = list(node_map.values())
+        kp = ",".join("?" * len(node_ids))
+        karma_rows = self._db.conn.execute(
+            f"SELECT node_id, SUM(karma_amount_usd) FROM karma_intents WHERE node_id IN ({kp}) GROUP BY node_id",
+            node_ids,
+        ).fetchall()
+        karma_by_node: dict[str, float] = {str(r[0]): float(r[1]) for r in karma_rows if r[1] is not None}
+
+        def _score_from_batch(contributor_id: str) -> ContributorScore:
+            row = stats_map.get(contributor_id)
+            submitted = int(row[1] or 0) if row else 0
+            accepted = int(row[2] or 0) if row else 0
+            profitable = int(row[3] or 0) if row else 0
+            resolved = int(row[4] or 0) if row else 0
+            avg_conviction = float(row[5] or 0.0) if row else 0.0
+            last_active = str(row[6] or "") if row else ""
+
+            acceptance_rate = float(accepted) / float(submitted) if submitted > 0 else 0.0
+            if acceptance_rate < MIN_ACCEPTANCE_RATE and submitted >= 10:
+                return ContributorScore(
+                    contributor_id=contributor_id,
+                    signals_submitted=submitted,
+                    signals_accepted=accepted,
+                    signals_profitable=profitable,
+                    signals_resolved=resolved,
+                    hit_rate=0.0,
+                    acceptance_rate=acceptance_rate,
+                    brier_score=0.25,
+                    avg_conviction=avg_conviction,
+                    total_karma_usd=0.0,
+                    score=0.0,
+                    last_active=last_active,
+                    streak=0,
+                )
+
+            hit_rate = float(profitable) / float(resolved) if resolved >= MIN_RESOLVED_FOR_HIT_RATE else 0.0
+            hit_rate_norm = _clamp01(hit_rate)
+            if resolved >= MIN_RESOLVED_FOR_HIT_RATE and hit_rate < 0.20:
+                hit_rate_norm = -0.1 * (0.20 - hit_rate) / 0.20
+
+            brier_data = brier_map.get(contributor_id, [])
+            if len(brier_data) >= MIN_RESOLVED_FOR_HIT_RATE:
+                brier = sum((_clamp01(s / 10.0) - float(p)) ** 2 for s, p in brier_data) / len(brier_data)
+            else:
+                brier = 0.25
+            calibration_norm = _clamp01(1.0 - brier / 0.25)
+
+            volume_norm = _clamp01(math.log1p(float(accepted)) / math.log1p(100.0)) if accepted > 0 else 0.0
+
+            days = streak_days_map.get(contributor_id, [])
+            streak = 0
+            if days:
+                streak = 1
+                prev = datetime.fromisoformat(days[0]).replace(tzinfo=UTC)
+                for d in days[1:]:
+                    cur = datetime.fromisoformat(d).replace(tzinfo=UTC)
+                    if (prev - cur).days == 1:
+                        streak += 1
+                        prev = cur
+                    else:
+                        break
+            consistency_norm = _clamp01(math.sqrt(float(streak)) / math.sqrt(30.0))
+
+            recency = 0.0
+            last_dt = _parse_iso(last_active)
+            if last_dt is not None:
+                days_since = max(0.0, (ref_time - last_dt).total_seconds() / 86400.0)
+                recency = 1.0 if days_since <= 7.0 else _clamp01(1.0 - (days_since - 7.0) / 30.0)
+
+            total_karma = karma_by_node.get(node_map.get(contributor_id, ""), 0.0)
+            composite = 0.35 * hit_rate_norm + 0.20 * calibration_norm + 0.20 * volume_norm + 0.15 * consistency_norm + 0.10 * recency
+
+            return ContributorScore(
+                contributor_id=contributor_id,
+                signals_submitted=submitted,
+                signals_accepted=accepted,
+                signals_profitable=profitable,
+                signals_resolved=resolved,
+                hit_rate=hit_rate,
+                acceptance_rate=acceptance_rate,
+                brier_score=brier,
+                avg_conviction=avg_conviction,
+                total_karma_usd=total_karma,
+                score=100.0 * _clamp01(composite),
+                last_active=last_active,
+                streak=streak,
+            )
+
+        scores = [_score_from_batch(c.id) for c in contributors]
         scores.sort(key=lambda s: (s.score, s.signals_accepted, s.signals_submitted), reverse=True)
         return scores[: int(limit)]
 
-    def update_outcomes(self, contributor_id: str, *, signal_id: str, profitable: bool) -> None:
+    def mark_signal_outcome(self, contributor_id: str, *, signal_id: str, profitable: bool) -> None:
+        """Mark a specific signal as profitable or not.  For targeted updates."""
         with self._db.conn:
             self._db.conn.execute(
                 """
@@ -267,3 +417,57 @@ class ContributorScoring:
                 """,
                 (1 if profitable else 0, contributor_id, signal_id),
             )
+
+    def update_outcomes(self) -> int:
+        """Batch-scan all resolved conviction scores and propagate outcomes to contributor_signals.
+
+        For each contributor who has at least one conviction_score with a non-NULL outcome,
+        find their accepted signals where profitable IS NULL and mark them based on the most
+        recent resolved conviction outcome for that contributor.
+
+        This is intentionally best-effort and approximate: one contributor may have driven
+        multiple convictions; we use the most-recent resolved outcome as a proxy.
+
+        Returns the number of signals updated.
+        """
+        # Find contributors who have at least one resolved conviction outcome.
+        resolved_rows = self._db.conn.execute(
+            """
+            SELECT c.id AS contributor_id,
+                   cs.outcome
+            FROM conviction_scores cs
+            JOIN contributors c ON c.node_id = cs.node_id
+            WHERE cs.outcome IS NOT NULL
+            ORDER BY cs.outcome_ts DESC
+            """
+        ).fetchall()
+
+        if not resolved_rows:
+            return 0
+
+        # Aggregate: per contributor, take the most-recent outcome (rows are DESC by outcome_ts).
+        seen: set[str] = set()
+        per_contributor: list[tuple[str, float]] = []
+        for row in resolved_rows:
+            cid = str(row["contributor_id"])
+            if cid not in seen:
+                seen.add(cid)
+                per_contributor.append((cid, float(row["outcome"])))
+
+        total_updated = 0
+        with self._db.conn:
+            for contributor_id, outcome in per_contributor:
+                profitable_val = 1 if outcome > 0 else 0
+                cur = self._db.conn.execute(
+                    """
+                    UPDATE contributor_signals
+                    SET profitable = ?
+                    WHERE contributor_id = ?
+                      AND accepted = 1
+                      AND profitable IS NULL
+                    """,
+                    (profitable_val, contributor_id),
+                )
+                total_updated += cur.rowcount
+
+        return total_updated

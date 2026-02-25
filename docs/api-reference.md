@@ -60,7 +60,7 @@ Liveness endpoint. No authentication required.
 **Response** (`200`):
 ```json
 {
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "uptime_seconds": 12.34,
   "db_size_bytes": 123456
 }

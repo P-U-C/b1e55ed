@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from api.auth import AuthDep
@@ -80,9 +80,29 @@ class ContributorScoreResponse(BaseModel):
 
 
 @router.get("/", response_model=list[ContributorResponse])
-def list_contributors(db: Database = Depends(get_db)) -> list[ContributorResponse]:
-    reg = ContributorRegistry(db)
-    return [ContributorResponse.from_contributor(c) for c in reg.list_all()]
+def list_contributors(
+    db: Database = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[ContributorResponse]:
+    rows = db.conn.execute(
+        "SELECT id, node_id, name, role, registered_at, metadata FROM contributors ORDER BY registered_at ASC LIMIT ? OFFSET ?",
+        (limit, offset),
+    ).fetchall()
+    import json as _json
+
+    from engine.core.contributors import Contributor
+
+    results = []
+    for r in rows:
+        meta = r[5]
+        try:
+            meta = _json.loads(meta) if isinstance(meta, str) else (meta or {})
+        except Exception:
+            meta = {}
+        c = Contributor(id=str(r[0]), node_id=str(r[1]), name=str(r[2]), role=str(r[3]), registered_at=str(r[4]), metadata=meta)
+        results.append(ContributorResponse.from_contributor(c))
+    return results
 
 
 @router.get("/attestations", response_model=list[ContributorAttestationSummaryResponse])
@@ -150,7 +170,10 @@ def register_contributor(
 
 
 @router.get("/leaderboard", response_model=list[ContributorScoreResponse])
-def leaderboard(db: Database = Depends(get_db), limit: int = 20) -> list[ContributorScoreResponse]:
+def leaderboard(
+    db: Database = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> list[ContributorScoreResponse]:
     scoring = ContributorScoring(db)
     return [ContributorScoreResponse(**asdict(s)) for s in scoring.leaderboard(limit=limit)]
 
@@ -164,6 +187,39 @@ def contributor_score(contributor_id: str, db: Database = Depends(get_db)) -> Co
     scoring = ContributorScoring(db)
     s = scoring.compute_score(contributor_id)
     return ContributorScoreResponse(**asdict(s))
+
+
+@router.get("/{contributor_id}/signals")
+def list_contributor_signals(
+    contributor_id: str,
+    accepted: bool | None = Query(default=None, description="Filter by accepted status"),
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0),
+    db: Database = Depends(get_db),
+) -> dict:
+    """List signals submitted by a contributor with their acceptance/rejection status."""
+    query = """
+        SELECT cs.event_id, cs.signal_asset, cs.accepted, cs.profitable,
+               cs.created_at AS submitted_at, e.payload
+        FROM contributor_signals cs
+        LEFT JOIN events e ON e.id = cs.event_id
+        WHERE cs.contributor_id = ?
+    """
+    params: list = [contributor_id]
+    if accepted is not None:
+        query += " AND cs.accepted = ?"
+        params.append(1 if accepted else 0)
+    query += " ORDER BY cs.created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    rows = db.conn.execute(query, params).fetchall()
+    return {
+        "contributor_id": contributor_id,
+        "signals": [dict(r) for r in rows],
+        "count": len(rows),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/{contributor_id}", response_model=ContributorResponse)

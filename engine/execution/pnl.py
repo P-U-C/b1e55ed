@@ -118,9 +118,32 @@ class PnLTracker:
                     db=self.db,
                     identity=ensure_identity().identity,
                 )
+
+                # Resolve contributor attribution via conviction_id on the position.
+                contributor_id: str | None = None
+                try:
+                    pos_row = self.db.conn.execute(
+                        "SELECT conviction_id FROM positions WHERE id = ?",
+                        (str(position_id),),
+                    ).fetchone()
+                    if pos_row and pos_row["conviction_id"] is not None:
+                        contrib_row = self.db.conn.execute(
+                            "SELECT node_id FROM conviction_scores WHERE id = ?",
+                            (pos_row["conviction_id"],),
+                        ).fetchone()
+                        if contrib_row and contrib_row["node_id"]:
+                            c_row = self.db.conn.execute(
+                                "SELECT id FROM contributors WHERE node_id = ?",
+                                (str(contrib_row["node_id"]),),
+                            ).fetchone()
+                            contributor_id = str(c_row["id"]) if c_row else None
+                except Exception:
+                    contributor_id = None  # fail-open
+
                 karma.record_intent(
                     trade_id=str(position_id),
                     realized_pnl_usd=float(realized),
+                    contributor_id=contributor_id,
                 )
             except Exception:
                 _log.warning(

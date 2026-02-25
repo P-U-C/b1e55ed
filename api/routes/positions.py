@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, Path, Query
 
 from api.auth import AuthDep
 from api.deps import get_db
+from api.errors import B1e55edError
 from api.schemas.positions import PositionResponse
 from engine.core.database import Database
 
@@ -47,7 +48,11 @@ def _row_to_position(r) -> PositionResponse:
 
 
 @router.get("", response_model=list[PositionResponse])
-def list_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
+def list_positions(
+    db: Database = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[PositionResponse]:
     rows = db.conn.execute(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage, margin_type,
@@ -55,7 +60,9 @@ def list_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
                regime_at_entry, pcs_at_entry, cts_at_entry
         FROM positions
         ORDER BY opened_at DESC
-        """
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
     ).fetchall()
     return [_row_to_position(r) for r in rows]
 
@@ -78,6 +85,6 @@ def get_position(
     ).fetchone()
 
     if r is None:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise B1e55edError(code="not_found", message="Position not found", status=404)
 
     return _row_to_position(r)

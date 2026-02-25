@@ -71,6 +71,9 @@ class EventType(StrEnum):
     LEARNING_WEIGHT_ADJ_V1 = "learning.weight_adjustment.v1"
     LEARNING_REPORT_V1 = "learning.report.v1"
 
+    # Attribution audit
+    SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+
     # System
     BALANCE_UPDATED_V1 = "system.balance_updated.v1"
     AUDIT_V1 = "system.audit.v1"

@@ -412,6 +412,17 @@ def build_parser() -> argparse.ArgumentParser:
     show_parser = identity_sub.add_parser("show", help="Show current identity")
     show_parser.add_argument("--json", action="store_true")
 
+    restore_parser = identity_sub.add_parser(
+        "restore",
+        help="Restore identity from Ethereum private key (re-derives Ed25519 via HKDF)",
+    )
+    restore_parser.add_argument(
+        "--eth-key",
+        required=True,
+        help="Ethereum private key hex (from forge_key.enc or backup)",
+    )
+    restore_parser.add_argument("--json", action="store_true")
+
     p_api = sub.add_parser("api", help="Start FastAPI server")
     p_api.add_argument("--host", default=None)
     p_api.add_argument("--port", type=int, default=None)
@@ -431,6 +442,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     sub.add_parser("status", help="Print system status")
+
+    sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
 
     # -- anchor --
     from engine.cli.commands.anchor import build_anchor_parser
@@ -572,6 +585,18 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
 
     db = Database(repo_root / "data" / "brain.db")
     identity = ensure_identity()
+
+    # Best-effort crash-recovery sweep on startup.
+    try:
+        from engine.execution.recovery import recover_missing_karma_intents as _recover_karma
+
+        _n = _recover_karma(db=db, config=config, identity=identity.identity)
+        if _n > 0:
+            import logging as _rlog
+
+            _rlog.getLogger("b1e55ed.brain").info("Recovered %d missing karma intents", _n)
+    except Exception:
+        pass
 
     try:
         # Optional: run producers prior to orchestration.
@@ -1719,9 +1744,105 @@ def _cmd_identity(ctx: CliContext, args: argparse.Namespace) -> int:
         return _identity_forge(ctx, args)
     if action == "show":
         return _identity_show(ctx, args)
+    if action == "restore":
+        return _identity_restore(ctx, args)
 
-    print("error: missing identity subcommand (forge/show)", file=sys.stderr)
+    print("error: missing identity subcommand (forge/show/restore)", file=sys.stderr)
     return 2
+
+
+def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Restore identity from Ethereum private key via HKDF re-derivation."""
+
+    from engine.security.identity import NodeIdentity, derive_ed25519_from_eth
+
+    use_json = bool(getattr(args, "json", False))
+    eth_key_hex = str(getattr(args, "eth_key", "") or "").strip()
+
+    if not eth_key_hex:
+        err = "error: --eth-key is required"
+        if use_json:
+            print(_json_dumps({"ok": False, "error": err}))
+        else:
+            print(err, file=sys.stderr)
+        return 2
+
+    # Strip 0x prefix if present
+    eth_key_hex = eth_key_hex.removeprefix("0x")
+
+    # Validate length (32 bytes = 64 hex chars)
+    if len(eth_key_hex) != 64:
+        err = f"error: eth-key must be 64 hex characters (32 bytes), got {len(eth_key_hex)}"
+        if use_json:
+            print(_json_dumps({"ok": False, "error": err}))
+        else:
+            print(err, file=sys.stderr)
+        return 2
+
+    try:
+        from cryptography.hazmat.primitives import serialization
+
+        priv_ed, pub_ed = derive_ed25519_from_eth(eth_key_hex)
+
+        pub_raw = pub_ed.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        priv_raw = priv_ed.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
+        # Derive node_id from public key material (no optional deps required)
+        from datetime import UTC, datetime
+
+        node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
+        created_at = datetime.now(tz=UTC).isoformat()
+
+        identity = NodeIdentity(
+            node_id=node_id,
+            public_key=pub_raw.hex(),
+            private_key=priv_raw.hex(),
+            created_at=created_at,
+            eth_address="",
+            eth_private_key=eth_key_hex,
+        )
+
+        identity_path = ctx.repo_root / ".b1e55ed" / "identity.key"
+        identity.save(identity_path)
+
+    except Exception as e:  # noqa: BLE001
+        err = f"error: restore failed: {e}"
+        if use_json:
+            print(_json_dumps({"ok": False, "error": str(e)}))
+        else:
+            print(err, file=sys.stderr)
+        return 1
+
+    if use_json:
+        out = {
+            "ok": True,
+            "node_id": identity.node_id,
+            "public_key": identity.public_key,
+            "eth_address": identity.eth_address,
+            "path": str(identity_path),
+        }
+        print(_json_dumps(out))
+    else:
+        print()
+        print("  Identity restored.")
+        print()
+        print(f"  node_id:    {identity.node_id}")
+        print(f"  public_key: {identity.public_key[:16]}...")
+        if identity.eth_address:
+            print(f"  eth_address: {identity.eth_address}")
+        print(f"  path:       {identity_path}")
+        print()
+        print("  Your node_id and public key are identical to the originals.")
+        print("  No re-registration is needed.")
+        print()
+    return 0
 
 
 def _format_elapsed(seconds: float) -> str:
@@ -1905,7 +2026,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
                         "nodeId": identity_data["node_id"],
                         "name": "",
                         "role": "operator",
-                        "version": "1.0.0-beta.3",
+                        "version": "1.0.0-beta.4",
                         "registeredAt": identity_data["forged_at"],
                     },
                 )
@@ -1933,7 +2054,8 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     print(f"  {candidates:,} candidates evaluated in {elapsed_ms / 1000:.1f}s")
     print()
     print(f"  Your key is stored at {key_path}")
-    print("  There is no recovery. Guard it accordingly.")
+    print("  Back it up — your Ed25519 identity is deterministically recoverable")
+    print("  from this key via: b1e55ed identity restore --eth-key <hex>")
     print()
     print("  Welcome to the upper class.")
     print()
@@ -2648,6 +2770,12 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.wizard import run_wizard
+
+    return run_wizard(ctx, args)
+
+
 def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.anchor import run_anchor
 
@@ -2675,7 +2803,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup"}
+    ungated_commands = {"identity", "setup", "wizard"}
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
@@ -2727,6 +2855,7 @@ def main(argv: list[str] | None = None) -> int:
         "kelly": _cmd_kelly,
         "anchor": _cmd_anchor,
         "export": _cmd_export,
+        "wizard": _cmd_wizard,
     }
 
     fn = dispatch.get(str(args.command))
