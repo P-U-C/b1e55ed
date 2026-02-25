@@ -471,3 +471,13 @@ Validates and writes `config/user.yaml`, and updates the in-process config.
 Webhook subscriptions are implemented in the engine (`engine.core.webhooks`) and managed via the CLI.
 
 There are no REST endpoints for webhook subscription management in this version.
+
+## Oracle
+
+The oracle layer exposes producer provenance data for agent consumption. See [KARMA-SPEC.md](KARMA-SPEC.md) for how karma scores are computed and [SEED_MANIFEST.md](SEED_MANIFEST.md) for reproducibility proof.
+
+```
+GET /api/v1/oracle/producers/{producer_id}/provenance
+```
+
+No auth required. Anti-Goodhart header on every response.

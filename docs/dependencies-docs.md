@@ -441,4 +441,7 @@ scripts/validate_doc_deps.sh
 | [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
 | [OPERATOR_SPRINT_PLAN.md](OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
 
-*Last updated: 2026-02-20*
+| [KARMA-SPEC.md](KARMA-SPEC.md) | Karma score specification — inputs, update rule, calibration, failure modes |
+| [SEED_MANIFEST.md](SEED_MANIFEST.md) | Reproducibility proof — cryptographic seed data manifest |
+
+*Last updated: 2026-02-25**
