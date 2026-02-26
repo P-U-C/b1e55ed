@@ -3,8 +3,15 @@
 # Usage: curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
 # Or:    ./install.sh
 #
+# Test from a specific branch (e.g. develop):
+#   BRANCH=develop curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+#
 # Idempotent: safe to re-run.
 set -euo pipefail
+
+# Branch to install from — pinned to main so changing the default branch
+# on GitHub doesn't accidentally install from develop.
+BRANCH="${BRANCH:-main}"
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
@@ -148,8 +155,8 @@ if [ -f "pyproject.toml" ] && grep -q 'b1e55ed' pyproject.toml 2>/dev/null; then
         success "b1e55ed dependencies synced (use ./b1e55ed or uv run b1e55ed)"
     fi
 else
-    # Install from GitHub
-    INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git"
+    # Install from GitHub — always explicit branch (never relies on default branch)
+    INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git@${BRANCH}"
     info "Installing from: $INSTALL_URL"
     if uv tool install "$INSTALL_URL" 2>/dev/null; then
         success "b1e55ed installed as a uv tool"
