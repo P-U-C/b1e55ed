@@ -1956,12 +1956,11 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     # If Rust binary not found and not JSON mode, warn and offer options
     if rust_binary is None and not use_json:
         print()
-        print("  ⚠ Rust grinder not found — vanity address (0xb1e55ed prefix) will take ~90 min in Python.")
+        print("  ⚠ Rust grinder not found — vanity forge requires the b1e55ed-forge binary.")
         print()
         print("  Options:")
-        print("    1) Random address (instant) — recommended, you can upgrade to vanity later")
-        print("    2) Download Rust binary      — fast (~2s), then forge immediately")
-        print("    3) Force Python grinder      — ~90 min, not recommended")
+        print("    1) Download forge binary   — fast (~2-10s), then forge immediately")
+        print("    2) Force Python fallback   — ~90 min, not recommended (no random address)")
         print()
 
         try:
@@ -1970,58 +1969,16 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
             print()
             return 0
 
-        if choice == "2":
+        if choice != "2":
+            # Default: option 1 — download instructions, then exit so user installs and re-runs
             _print_forge_binary_instructions()
             return 0
 
-        if choice == "1":
-            # Generate random identity using eth_account
-            import json as _json
-
-            try:
-                from eth_account import Account
-
-                acct = Account.create()
-                address = acct.address
-                private_key = acct.key.hex()
-
-                identity_dir = ctx.repo_root / ".b1e55ed"
-                identity_dir.mkdir(exist_ok=True)
-
-                identity_data = {
-                    "address": address,
-                    "node_id": f"eth:{address.lower()}",
-                    "forged_at": int(time.time()),
-                    "candidates_evaluated": 1,
-                    "elapsed_ms": 0,
-                }
-
-                identity_path = identity_dir / "identity.json"
-                identity_path.write_text(_json.dumps(identity_data, indent=2), encoding="utf-8")
-
-                key_path = identity_dir / "forge_key.enc"
-                key_path.write_text(private_key, encoding="utf-8")
-                key_path.chmod(0o600)
-
-                print()
-                print("  Random identity created.")
-                print()
-                print(f"  Address:   {address}")
-                print(f"  Node:      eth:{address.lower()}")
-                print()
-                print(f"  Key stored at {key_path}")
-                print("  You can upgrade to a vanity address later: b1e55ed identity forge")
-                print()
-                return 0
-            except ImportError:
-                print("  error: eth_account not installed — cannot generate random address.", file=sys.stderr)
-                print("  Try: pip install eth-account", file=sys.stderr)
-                return 1
-            except Exception as e:  # noqa: BLE001
-                print(f"  error: failed to generate random identity: {e}", file=sys.stderr)
-                return 1
-
-        # choice == "3": fall through to Python grinder below (rust_binary stays None)
+        # choice == "2": force Python grinder below (rust_binary stays None)
+        print()
+        print("  ⚠ Starting Python grinder — this will take ~90 minutes.")
+        print("    The b1e55ed prefix is non-negotiable; no random address will be generated.")
+        print()
 
     if not use_json:
         print()

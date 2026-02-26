@@ -418,50 +418,6 @@ def _print_forge_download_instructions() -> None:
     print()
 
 
-def _generate_random_identity(repo_root: Path) -> bool:
-    """Generate a random Ethereum address and save as identity. Returns True on success."""
-    import json
-    import time
-
-    try:
-        from eth_account import Account
-
-        acct = Account.create()
-        address = acct.address
-        private_key = acct.key.hex()
-
-        identity_dir = repo_root / ".b1e55ed"
-        identity_dir.mkdir(exist_ok=True)
-
-        identity_data = {
-            "address": address,
-            "node_id": f"eth:{address.lower()}",
-            "forged_at": int(time.time()),
-            "candidates_evaluated": 1,
-            "elapsed_ms": 0,
-        }
-
-        identity_path = identity_dir / "identity.json"
-        identity_path.write_text(json.dumps(identity_data, indent=2), encoding="utf-8")
-
-        key_path = identity_dir / "forge_key.enc"
-        key_path.write_text(private_key, encoding="utf-8")
-        key_path.chmod(0o600)
-
-        print(f"\n  {_ok(f'Random identity created: {address}')}")
-        print(f"  {dim(f'node_id: eth:{address.lower()}')}")
-        print(f"  {dim('Key stored at: ' + str(key_path))}")
-        print(f"  {dim('You can upgrade to a vanity address later: b1e55ed identity forge')}")
-        return True
-    except ImportError:
-        print(f"  {red('⚠')} eth_account not installed — cannot generate random address.")
-        print(f"  {dim('Try: pip install eth-account')}")
-        return False
-    except Exception as e:  # noqa: BLE001
-        print(f"  {red('⚠')} Failed to generate random identity: {e}")
-        return False
-
-
 def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
@@ -522,12 +478,11 @@ def _step3_identity(repo_root: Path) -> None:
             print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
     else:
         # Slow path: no Rust binary
-        print(f"  {yellow('⚠')} Rust grinder not found — vanity address (0xb1e55ed prefix) will take ~90 min in Python.")
+        print(f"  {yellow('⚠')} Rust grinder not found — vanity forge requires the b1e55ed-forge binary.")
         print()
         print("  Options:")
-        print(f"    {bold('1)')} Random address (instant) — recommended, you can upgrade to vanity later")
-        print(f"    {bold('2)')} Download Rust binary      — fast (~2s), then forge immediately")
-        print(f"    {bold('3)')} Force Python grinder      — ~90 min, not recommended")
+        print(f"    {bold('1)')} Download forge binary   — fast (~2-10s), then forge immediately")
+        print(f"    {bold('2)')} Skip for now            — run `b1e55ed identity forge` later")
         print()
 
         try:
@@ -540,32 +495,12 @@ def _step3_identity(repo_root: Path) -> None:
         choice = choice.strip()
 
         if choice == "2":
+            print()
+            print(f"  {dim('Run `b1e55ed identity forge` when ready.')}")
+        else:
+            # Default: option 1 — download instructions
             _print_forge_download_instructions()
             print(f"  {dim('After installing the binary, re-run: b1e55ed wizard  or  b1e55ed identity forge')}")
-        elif choice == "3":
-            print()
-            print(f"  {yellow('⚠')} Starting Python grinder — this will take ~90 minutes.")
-            print(f"  {dim('Running: b1e55ed identity forge')}")
-            print()
-            try:
-                proc = subprocess.run(
-                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
-                    cwd=str(repo_root),
-                    check=False,
-                )
-                if proc.returncode == 0:
-                    print(f"\n  {_ok('Identity forged successfully')}")
-                else:
-                    print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
-                    print(f"  {dim('You can retry later: b1e55ed identity forge')}")
-            except Exception as e:  # noqa: BLE001
-                print(f"\n  {red('⚠')} Could not run forge: {e}")
-                print(f"  {dim('Try manually: b1e55ed identity forge')}")
-        else:
-            # Default: option 1 — random address
-            print()
-            print(f"  {dim('Generating random Ethereum address...')}")
-            _generate_random_identity(repo_root)
 
 
 def _step4_configuration(repo_root: Path) -> None:
