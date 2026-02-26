@@ -449,6 +449,15 @@ def _auto_download_forge() -> str | None:
     try:
         urllib.request.urlretrieve(url, dest)  # noqa: S310
         dest.chmod(dest.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        # macOS: clear quarantine bit so Gatekeeper doesn't silently kill the binary
+        import platform as _platform
+
+        if _platform.system() == "Darwin":
+            subprocess.run(
+                ["xattr", "-dr", "com.apple.quarantine", str(dest)],
+                check=False,
+                capture_output=True,
+            )
         print(f"  {_ok(f'Forge binary installed: {dest}')}")
         return str(dest)
     except Exception as e:  # noqa: BLE001
