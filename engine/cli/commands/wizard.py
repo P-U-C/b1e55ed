@@ -400,22 +400,37 @@ def _check_rust_grinder() -> str | None:
     return found
 
 
-def _print_forge_download_instructions() -> None:
-    """Print instructions to download the Rust forge binary."""
-    print()
-    print("  Download the Rust grinder for your platform:")
-    print()
-    print("    macOS arm64:  https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-arm64")
-    print("    macOS x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-x86_64")
-    print("    Linux x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64")
-    print()
-    print("  Install:")
-    print("    mkdir -p ~/.local/share/b1e55ed/bin")
-    print("    curl -Lo ~/.local/share/b1e55ed/bin/b1e55ed-forge <url-for-your-platform>")
-    print("    chmod +x ~/.local/share/b1e55ed/bin/b1e55ed-forge")
-    print()
-    print("  Then re-run: b1e55ed identity forge")
-    print()
+def _auto_download_forge() -> str | None:
+    """Download the Rust forge binary for the current platform. Returns install path or None."""
+    import platform
+    import stat
+    import urllib.request
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == "darwin":
+        artifact = "b1e55ed-forge-macos-arm64" if machine == "arm64" else "b1e55ed-forge-macos-x86_64"
+    elif system == "linux" and machine == "x86_64":
+        artifact = "b1e55ed-forge-linux-x86_64"
+    else:
+        print(f"  {yellow('⚠')} No pre-built binary for {system}/{machine}.")
+        return None
+
+    url = f"https://github.com/P-U-C/b1e55ed/releases/latest/download/{artifact}"
+    dest_dir = Path.home() / ".local" / "share" / "b1e55ed" / "bin"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "b1e55ed-forge"
+
+    print(f"  Downloading {artifact}...")
+    try:
+        urllib.request.urlretrieve(url, dest)  # noqa: S310
+        dest.chmod(dest.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"  {_ok(f'Forge binary installed: {dest}')}")
+        return str(dest)
+    except Exception as e:  # noqa: BLE001
+        print(f"  {red('✗')} Download failed: {e}")
+        return None
 
 
 def _step3_identity(repo_root: Path) -> None:
@@ -477,30 +492,30 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {dim('To restore an existing identity:')}")
             print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
     else:
-        # Slow path: no Rust binary
-        print(f"  {yellow('⚠')} Rust grinder not found — vanity forge requires the b1e55ed-forge binary.")
+        # No Rust binary found — auto-download it
+        print(f"  {yellow('⚠')} Rust forge binary not found — downloading now...")
         print()
-        print("  Options:")
-        print(f"    {bold('1)')} Download forge binary   — fast (~2-10s), then forge immediately")
-        print(f"    {bold('2)')} Skip for now            — run `b1e55ed identity forge` later")
-        print()
-
-        try:
-            choice = _ask("  Choice", default="1")
-        except (EOFError, KeyboardInterrupt):
+        rust_binary = _auto_download_forge()
+        if rust_binary:
             print()
-            print(f"  {dim('Skipping identity setup.')}")
-            return
-
-        choice = choice.strip()
-
-        if choice == "2":
+            print(f"  {dim('Running: b1e55ed identity forge')}")
             print()
-            print(f"  {dim('Run `b1e55ed identity forge` when ready.')}")
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    cwd=str(repo_root),
+                    check=False,
+                )
+                if proc.returncode == 0:
+                    print(f"\n  {_ok('Identity forged successfully')}")
+                else:
+                    print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
+                    print(f"  {dim('You can retry: b1e55ed identity forge')}")
+            except Exception as e:  # noqa: BLE001
+                print(f"\n  {red('⚠')} Could not run forge: {e}")
         else:
-            # Default: option 1 — download instructions
-            _print_forge_download_instructions()
-            print(f"  {dim('After installing the binary, re-run: b1e55ed wizard  or  b1e55ed identity forge')}")
+            print()
+            print(f"  {dim('Run `b1e55ed identity forge` after installing the binary manually.')}")
 
 
 def _step4_configuration(repo_root: Path) -> None:

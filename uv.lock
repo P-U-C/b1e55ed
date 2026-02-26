@@ -98,7 +98,7 @@ wheels = [
 
 [[package]]
 name = "b1e55ed"
-version = "1.0.0b4"
+version = "1.0.0b5"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
