@@ -732,16 +732,20 @@ dashboard:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
+_ORACLE_URL = "https://oracle.b1e55ed.xyz"
+
+
 def _step_register_contributor(repo_root: Path) -> None:
-    """Auto-register the new contributor after identity forge + config write."""
+    """Auto-register new contributor via the oracle (no credentials needed on user machine)."""
     import json as _json
+    import urllib.error
+    import urllib.request
 
     _section("[4b] Contributor registration")
 
     identity_path = repo_root / ".b1e55ed" / "identity.json"
     if not identity_path.exists():
-        print(f"  {dim('No identity found — skipping registration.')}")
-        print(f"  {dim('Run: b1e55ed contributors register --name <handle> --role contributor')}")
+        print(f"  {dim('No identity — skipping registration.')}")
         return
 
     try:
@@ -749,16 +753,37 @@ def _step_register_contributor(repo_root: Path) -> None:
         node_id = data.get("node_id", "")
         address = data.get("address", "")
     except Exception:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not read identity — skipping registration.")
+        print(f"  {yellow('⚠')} Could not read identity — skipping.")
         return
 
     if not node_id:
-        print(f"  {yellow('⚠')} Identity missing node_id — skipping registration.")
         return
 
-    print(f"  Registering contributor: {dim(node_id)}")
+    print(f"  Registering: {dim(node_id)}")
     print()
 
+    # Try oracle first — it holds the GitHub App key, creates the issue server-side
+    issue_url: str | None = None
+    registered = False
+    try:
+        payload = _json.dumps({"node_id": node_id, "name": address or node_id, "role": "contributor"}).encode()
+        req = urllib.request.Request(
+            f"{_ORACLE_URL}/api/v1/oracle/contributors/register",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            result = _json.loads(resp.read())
+            issue_url = result.get("issue_url")
+            registered = True
+    except urllib.error.HTTPError as e:
+        if e.code == 409:
+            registered = True  # already registered — fine
+    except Exception:  # noqa: BLE001
+        pass  # oracle unreachable — fall through to local
+
+    # Always register locally too (idempotent)
     try:
         proc = subprocess.run(
             [
@@ -780,28 +805,17 @@ def _step_register_contributor(repo_root: Path) -> None:
             text=True,
             timeout=30,
         )
-        if proc.returncode == 0:
-            try:
-                result = _json.loads(proc.stdout)
-                cid = result.get("contributor", {}).get("id", "")
-                gh = result.get("contributor", {}).get("metadata", {}).get("publish", {}).get("github", {})
-                issue_url = gh.get("html_url", "") if isinstance(gh, dict) else ""
-                print(f"  {_ok(f'Registered as contributor (id: {cid[:8]}...)')}")
-                if issue_url:
-                    print(f"  {_ok(f'GitHub issue created: {issue_url}')}")
-                else:
-                    print(f"  {dim('(GitHub issue skipped — set B1E55ED_GITHUB_APP_KEY to enable)')}")
-            except Exception:  # noqa: BLE001
-                print(f"  {_ok('Registered as contributor')}")
-        elif "already exists" in (proc.stderr or ""):
-            print(f"  {_ok('Already registered — skipping.')}")
-        else:
-            print(f"  {yellow('⚠')} Registration failed (code {proc.returncode}) — run manually:")
-            print(f"  {dim('b1e55ed contributors register --name <handle> --role contributor')}")
-    except subprocess.TimeoutExpired:
-        print(f"  {yellow('⚠')} Registration timed out — run manually: b1e55ed contributors register")
-    except Exception as e:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not register: {e}")
+        if proc.returncode == 0 or "already exists" in (proc.stderr or ""):
+            registered = True
+    except Exception:  # noqa: BLE001
+        pass
+
+    if registered:
+        print(f"  {_ok('Registered as contributor')}")
+        if issue_url:
+            print(f"  {_ok(f'Announced: {issue_url}')}")
+    else:
+        print(f"  {yellow('⚠')} Registration failed — run manually: b1e55ed contributors register")
 
 
 def _step5_test_run(repo_root: Path) -> None:
