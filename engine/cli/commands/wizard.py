@@ -253,10 +253,17 @@ _SYMBOL_PACKS: dict[str, dict] = {
 
 def _step0_welcome() -> None:
     """Print the welcome banner."""
+    from importlib.metadata import version as _pkg_version
+
+    try:
+        _ver = _pkg_version("b1e55ed")
+    except Exception:  # noqa: BLE001
+        _ver = "?"
+    subtitle = f"contributor intelligence engine v{_ver}".center(40)
     print()
     print("  ╔══════════════════════════════════════════╗")
     print("  ║" + bold("         b1e55ed setup wizard           ") + "║")
-    print("  ║" + dim("  contributor intelligence engine v1.x  ") + "║")
+    print("  ║" + dim(subtitle) + "║")
     print("  ╚══════════════════════════════════════════╝")
     print()
     print("  This wizard will configure b1e55ed in 5 steps.")
@@ -728,8 +735,8 @@ dashboard:
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
-    print("  Run a quick brain cycle to verify your setup?")
-    print(f"  {dim('(Runs: b1e55ed brain --symbols BTC --dry-run)')}")
+    print("  Run a quick health check to verify your setup?")
+    print(f"  {dim('(Runs: b1e55ed health)')}")
     print()
 
     try:
@@ -744,38 +751,25 @@ def _step5_test_run(repo_root: Path) -> None:
         return
 
     print()
-    print(f"  {dim('Running brain cycle...')}")
+    print(f"  {dim('Running health check...')}")
     print()
 
-    # Try --dry-run first; if unsupported, just skip
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "engine.cli", "brain", "--symbols", "BTC", "--dry-run"],
+            [sys.executable, "-m", "engine.cli", "health"],
             cwd=str(repo_root),
             check=False,
-            timeout=120,
+            timeout=30,
         )
         if proc.returncode == 0:
-            print(f"  {_ok('Test run completed successfully')}")
+            print(f"  {_ok('Health check passed')}")
         else:
-            # --dry-run not supported; try plain brain briefly
-            proc2 = subprocess.run(
-                [sys.executable, "-m", "engine.cli", "health"],
-                cwd=str(repo_root),
-                check=False,
-                timeout=30,
-            )
-            if proc2.returncode == 0:
-                print(f"  {_ok('Health check passed (brain test skipped — run manually)')}")
-            else:
-                print(f"  {yellow('⚠')} Test run exited with code {proc.returncode}")
-                print(f"  {dim('Run manually: b1e55ed brain')}")
+            print(f"  {yellow('⚠')} Health check returned code {proc.returncode}")
+            print(f"  {dim('Run manually: b1e55ed health')}")
     except subprocess.TimeoutExpired:
-        print(f"  {yellow('⚠')} Test run timed out (120s)")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Health check timed out")
     except Exception as e:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not run test: {e}")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Could not run health check: {e}")
 
 
 def _completion() -> None:

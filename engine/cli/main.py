@@ -1981,10 +1981,10 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
 
     if not use_json:
         print()
-        print("  ╔══════════════════════════════════════╗")
-        print("  ║         THE FORGE                    ║")
-        print("  ║         b1e55ed identity protocol    ║")
-        print("  ╚══════════════════════════════════════╝")
+        print("  ╔══════════════════════════════════════════╗")
+        print("  ║               THE FORGE                  ║")
+        print("  ║       b1e55ed identity protocol          ║")
+        print("  ╚══════════════════════════════════════════╝")
         print()
         print(f"  Every address in this network begins with 0x{prefix}.")
         print("  Yours is being derived now.")
