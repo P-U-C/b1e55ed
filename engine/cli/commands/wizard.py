@@ -253,10 +253,17 @@ _SYMBOL_PACKS: dict[str, dict] = {
 
 def _step0_welcome() -> None:
     """Print the welcome banner."""
+    from importlib.metadata import version as _pkg_version
+
+    try:
+        _ver = _pkg_version("b1e55ed")
+    except Exception:  # noqa: BLE001
+        _ver = "?"
+    subtitle = f"contributor intelligence engine v{_ver}".center(40)
     print()
     print("  ╔══════════════════════════════════════════╗")
     print("  ║" + bold("         b1e55ed setup wizard           ") + "║")
-    print("  ║" + dim("  contributor intelligence engine v1.x  ") + "║")
+    print("  ║" + dim(subtitle) + "║")
     print("  ╚══════════════════════════════════════════╝")
     print()
     print("  This wizard will configure b1e55ed in 5 steps.")
@@ -725,11 +732,83 @@ dashboard:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
+def _step_register_contributor(repo_root: Path) -> None:
+    """Auto-register the new contributor after identity forge + config write."""
+    import json as _json
+
+    _section("[4b] Contributor registration")
+
+    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    if not identity_path.exists():
+        print(f"  {dim('No identity found — skipping registration.')}")
+        print(f"  {dim('Run: b1e55ed contributors register --name <handle> --role contributor')}")
+        return
+
+    try:
+        data = _json.loads(identity_path.read_text(encoding="utf-8"))
+        node_id = data.get("node_id", "")
+        address = data.get("address", "")
+    except Exception:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not read identity — skipping registration.")
+        return
+
+    if not node_id:
+        print(f"  {yellow('⚠')} Identity missing node_id — skipping registration.")
+        return
+
+    print(f"  Registering contributor: {dim(node_id)}")
+    print()
+
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "engine.cli",
+                "contributors",
+                "register",
+                "--node-id",
+                node_id,
+                "--name",
+                address or node_id,
+                "--role",
+                "contributor",
+            ],
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0:
+            try:
+                result = _json.loads(proc.stdout)
+                cid = result.get("contributor", {}).get("id", "")
+                gh = result.get("contributor", {}).get("metadata", {}).get("publish", {}).get("github", {})
+                issue_url = gh.get("html_url", "") if isinstance(gh, dict) else ""
+                print(f"  {_ok(f'Registered as contributor (id: {cid[:8]}...)')}")
+                if issue_url:
+                    print(f"  {_ok(f'GitHub issue created: {issue_url}')}")
+                else:
+                    print(f"  {dim('(GitHub issue skipped — set B1E55ED_GITHUB_APP_KEY to enable)')}")
+            except Exception:  # noqa: BLE001
+                print(f"  {_ok('Registered as contributor')}")
+        elif "already exists" in (proc.stderr or ""):
+            print(f"  {_ok('Already registered — skipping.')}")
+        else:
+            print(f"  {yellow('⚠')} Registration failed (code {proc.returncode}) — run manually:")
+            print(f"  {dim('b1e55ed contributors register --name <handle> --role contributor')}")
+    except subprocess.TimeoutExpired:
+        print(f"  {yellow('⚠')} Registration timed out — run manually: b1e55ed contributors register")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not register: {e}")
+
+
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
-    print("  Run a quick brain cycle to verify your setup?")
-    print(f"  {dim('(Runs: b1e55ed brain --symbols BTC --dry-run)')}")
+    print("  Run a quick health check to verify your setup?")
+    print(f"  {dim('(Runs: b1e55ed health)')}")
     print()
 
     try:
@@ -744,38 +823,25 @@ def _step5_test_run(repo_root: Path) -> None:
         return
 
     print()
-    print(f"  {dim('Running brain cycle...')}")
+    print(f"  {dim('Running health check...')}")
     print()
 
-    # Try --dry-run first; if unsupported, just skip
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "engine.cli", "brain", "--symbols", "BTC", "--dry-run"],
+            [sys.executable, "-m", "engine.cli", "health"],
             cwd=str(repo_root),
             check=False,
-            timeout=120,
+            timeout=30,
         )
         if proc.returncode == 0:
-            print(f"  {_ok('Test run completed successfully')}")
+            print(f"  {_ok('Health check passed')}")
         else:
-            # --dry-run not supported; try plain brain briefly
-            proc2 = subprocess.run(
-                [sys.executable, "-m", "engine.cli", "health"],
-                cwd=str(repo_root),
-                check=False,
-                timeout=30,
-            )
-            if proc2.returncode == 0:
-                print(f"  {_ok('Health check passed (brain test skipped — run manually)')}")
-            else:
-                print(f"  {yellow('⚠')} Test run exited with code {proc.returncode}")
-                print(f"  {dim('Run manually: b1e55ed brain')}")
+            print(f"  {yellow('⚠')} Health check returned code {proc.returncode}")
+            print(f"  {dim('Run manually: b1e55ed health')}")
     except subprocess.TimeoutExpired:
-        print(f"  {yellow('⚠')} Test run timed out (120s)")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Health check timed out")
     except Exception as e:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not run test: {e}")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Could not run health check: {e}")
 
 
 def _completion() -> None:
@@ -812,6 +878,7 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step2_password(),
         lambda: _step3_identity(repo_root),
         lambda: _step4_configuration(repo_root),
+        lambda: _step_register_contributor(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 
