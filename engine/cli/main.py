@@ -1899,10 +1899,48 @@ def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_rust_forge_binary(repo_root: Path) -> str | None:
+    """Return path to the Rust forge binary if available, else None."""
+    import shutil
+
+    candidates = [
+        Path.home() / ".local" / "share" / "b1e55ed" / "bin" / "b1e55ed-forge",
+        Path.home() / ".local" / "bin" / "b1e55ed-forge",
+    ]
+    for p in candidates:
+        if p.exists() and os.access(str(p), os.X_OK):
+            return str(p)
+    found = shutil.which("b1e55ed-forge")
+    if found:
+        return found
+    # Also check in-repo build artifact
+    repo_binary = repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
+    if repo_binary.exists() and os.access(str(repo_binary), os.X_OK):
+        return str(repo_binary)
+    return None
+
+
+def _print_forge_binary_instructions() -> None:
+    """Print instructions to download the Rust forge binary."""
+    print()
+    print("  Download the Rust grinder for your platform:")
+    print()
+    print("    macOS arm64:  https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-arm64")
+    print("    macOS x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-x86_64")
+    print("    Linux x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64")
+    print()
+    print("  Install:")
+    print("    mkdir -p ~/.local/share/b1e55ed/bin")
+    print("    curl -Lo ~/.local/share/b1e55ed/bin/b1e55ed-forge <url-for-your-platform>")
+    print("    chmod +x ~/.local/share/b1e55ed/bin/b1e55ed-forge")
+    print()
+    print("  Then re-run: b1e55ed identity forge")
+    print()
+
+
 def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     """The Forge — identity derivation ritual."""
 
-    import shutil
     import subprocess
     import time
 
@@ -1912,6 +1950,78 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
 
     # Expected candidates for 7 hex chars
     expected = 16 ** len(prefix)
+
+    rust_binary = _find_rust_forge_binary(ctx.repo_root)
+
+    # If Rust binary not found and not JSON mode, warn and offer options
+    if rust_binary is None and not use_json:
+        print()
+        print("  ⚠ Rust grinder not found — vanity address (0xb1e55ed prefix) will take ~90 min in Python.")
+        print()
+        print("  Options:")
+        print("    1) Random address (instant) — recommended, you can upgrade to vanity later")
+        print("    2) Download Rust binary      — fast (~2s), then forge immediately")
+        print("    3) Force Python grinder      — ~90 min, not recommended")
+        print()
+
+        try:
+            choice = input("  Choice [1]: ").strip() or "1"
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+        if choice == "2":
+            _print_forge_binary_instructions()
+            return 0
+
+        if choice == "1":
+            # Generate random identity using eth_account
+            import json as _json
+
+            try:
+                from eth_account import Account
+
+                acct = Account.create()
+                address = acct.address
+                private_key = acct.key.hex()
+
+                identity_dir = ctx.repo_root / ".b1e55ed"
+                identity_dir.mkdir(exist_ok=True)
+
+                identity_data = {
+                    "address": address,
+                    "node_id": f"eth:{address.lower()}",
+                    "forged_at": int(time.time()),
+                    "candidates_evaluated": 1,
+                    "elapsed_ms": 0,
+                }
+
+                identity_path = identity_dir / "identity.json"
+                identity_path.write_text(_json.dumps(identity_data, indent=2), encoding="utf-8")
+
+                key_path = identity_dir / "forge_key.enc"
+                key_path.write_text(private_key, encoding="utf-8")
+                key_path.chmod(0o600)
+
+                print()
+                print("  Random identity created.")
+                print()
+                print(f"  Address:   {address}")
+                print(f"  Node:      eth:{address.lower()}")
+                print()
+                print(f"  Key stored at {key_path}")
+                print("  You can upgrade to a vanity address later: b1e55ed identity forge")
+                print()
+                return 0
+            except ImportError:
+                print("  error: eth_account not installed — cannot generate random address.", file=sys.stderr)
+                print("  Try: pip install eth-account", file=sys.stderr)
+                return 1
+            except Exception as e:  # noqa: BLE001
+                print(f"  error: failed to generate random identity: {e}", file=sys.stderr)
+                return 1
+
+        # choice == "3": fall through to Python grinder below (rust_binary stays None)
 
     if not use_json:
         print()
@@ -1923,17 +2033,13 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
         print(f"  Every address in this network begins with 0x{prefix}.")
         print("  Yours is being derived now.")
         print()
-        print("  This takes a few minutes.")
-        print("  The work is the point.")
+        if rust_binary:
+            print("  This takes ~2 seconds with the Rust grinder.")
+        else:
+            print("  Rust grinder not found — using Python fallback (~90 min).")
         print()
         print("  Searching...")
         print()
-
-    rust_binary = shutil.which("b1e55ed-forge")
-    if rust_binary is None:
-        repo_binary = ctx.repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
-        if repo_binary.exists():
-            rust_binary = str(repo_binary)
 
     result: dict[str, object] | None = None
 
