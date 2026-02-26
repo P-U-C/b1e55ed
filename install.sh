@@ -9,7 +9,8 @@
 # Idempotent: safe to re-run.
 set -euo pipefail
 
-# Branch to install from (default: main)
+# Branch to install from — pinned to main so changing the default branch
+# on GitHub doesn't accidentally install from develop.
 BRANCH="${BRANCH:-main}"
 
 BOLD='\033[1m'
@@ -154,9 +155,9 @@ if [ -f "pyproject.toml" ] && grep -q 'b1e55ed' pyproject.toml 2>/dev/null; then
         success "b1e55ed dependencies synced (use ./b1e55ed or uv run b1e55ed)"
     fi
 else
-    # Install from GitHub (respects BRANCH env var, default: main)
+    # Install from GitHub — always explicit branch (never relies on default branch)
     INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git@${BRANCH}"
-    info "Installing from: $INSTALL_URL (branch: ${BRANCH})"
+    info "Installing from: $INSTALL_URL"
     if uv tool install "$INSTALL_URL" 2>/dev/null; then
         success "b1e55ed installed as a uv tool"
     else
@@ -254,6 +255,10 @@ fi
 if [ -n "$FORGE_URL" ]; then
     if curl -fsSL "$FORGE_URL" -o "$FORGE_DIR/b1e55ed-forge" 2>/dev/null; then
         chmod +x "$FORGE_DIR/b1e55ed-forge"
+        # macOS: clear quarantine bit so Gatekeeper doesn't block execution
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            xattr -dr com.apple.quarantine "$FORGE_DIR/b1e55ed-forge" 2>/dev/null || true
+        fi
         success "Rust forge binary installed (~50M candidates/sec)"
     else
         warn "Could not download forge binary (no release yet) — Python fallback will be used"
