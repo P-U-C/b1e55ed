@@ -13,6 +13,7 @@ A ⇒ B     A heavily references B
 
 ```text
 README.md
+  → docs/how-it-works.md
   → docs/getting-started.md
   → docs/configuration.md
   → docs/cli-reference.md
@@ -33,6 +34,16 @@ README.md
 ```
 
 ## Core docs
+
+### `docs/how-it-works.md`
+
+```text
+how-it-works.md
+  → getting-started.md
+  → architecture.md
+  → learning-loop.md
+  → oracle.md
+```
 
 ### `docs/getting-started.md`
 

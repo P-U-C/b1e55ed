@@ -81,6 +81,7 @@ cd b1e55ed && uv sync
 
 | Guide | |
 |-------|-|
+| [How it works](docs/how-it-works.md) | Plain-English overview — objectives, flywheel, benefits |
 | [Getting started](docs/getting-started.md) | Install and first run |
 | [Architecture](docs/architecture.md) | System design and data flow |
 | [Configuration](docs/configuration.md) | All config keys |

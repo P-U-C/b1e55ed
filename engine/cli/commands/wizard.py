@@ -101,15 +101,169 @@ def _section(title: str) -> None:
     print()
 
 
+# ── Symbol packs ─────────────────────────────────────────────────────────────
+
+_SYMBOL_PACKS: dict[str, dict] = {
+    "1": {
+        "name": "Top 10 — Large caps (BTC, ETH, SOL, BNB, XRP, ADA, AVAX, DOT, LINK, UNI)",
+        "symbols": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOT", "LINK", "UNI"],
+    },
+    "2": {
+        "name": "Top 30 — Broad coverage",
+        "symbols": [
+            "BTC",
+            "ETH",
+            "SOL",
+            "BNB",
+            "XRP",
+            "ADA",
+            "AVAX",
+            "DOT",
+            "LINK",
+            "UNI",
+            "LTC",
+            "ATOM",
+            "NEAR",
+            "ARB",
+            "OP",
+            "MATIC",
+            "FIL",
+            "AAVE",
+            "CRV",
+            "SNX",
+            "SUI",
+            "APT",
+            "INJ",
+            "TIA",
+            "SEI",
+            "JTO",
+            "WIF",
+            "BONK",
+            "JUP",
+            "PYTH",
+        ],
+    },
+    "3": {
+        "name": "Top 50 — Comprehensive",
+        "symbols": [
+            "BTC",
+            "ETH",
+            "SOL",
+            "BNB",
+            "XRP",
+            "ADA",
+            "AVAX",
+            "DOT",
+            "LINK",
+            "UNI",
+            "LTC",
+            "ATOM",
+            "NEAR",
+            "ARB",
+            "OP",
+            "MATIC",
+            "FIL",
+            "AAVE",
+            "CRV",
+            "SNX",
+            "SUI",
+            "APT",
+            "INJ",
+            "TIA",
+            "SEI",
+            "JTO",
+            "WIF",
+            "BONK",
+            "JUP",
+            "PYTH",
+            "PEPE",
+            "FLOKI",
+            "MEME",
+            "RENDER",
+            "FET",
+            "OCEAN",
+            "AGIX",
+            "TAO",
+            "IO",
+            "HYPE",
+            "VIRTUAL",
+            "AI16Z",
+            "AIXBT",
+            "GOAT",
+            "DEGEN",
+            "BRETT",
+            "TOSHI",
+            "MOG",
+            "TURBO",
+            "WEN",
+        ],
+    },
+    "4": {
+        "name": "Highest TVL — DeFi protocols",
+        "symbols": [
+            "ETH",
+            "BTC",
+            "SOL",
+            "BNB",
+            "AVAX",
+            "MATIC",
+            "ARB",
+            "OP",
+            "AAVE",
+            "UNI",
+            "CRV",
+            "MKR",
+            "COMP",
+            "LDO",
+            "RPL",
+            "SUSHI",
+            "BAL",
+            "FXS",
+            "CVX",
+            "FRAX",
+        ],
+    },
+    "5": {
+        "name": "AI + Agent coins",
+        "symbols": [
+            "FET",
+            "OCEAN",
+            "AGIX",
+            "RENDER",
+            "TAO",
+            "IO",
+            "VIRTUAL",
+            "AI16Z",
+            "AIXBT",
+            "GOAT",
+            "GRASS",
+            "PRIME",
+            "ATH",
+            "NOS",
+        ],
+    },
+    "6": {
+        "name": "Custom — enter your own",
+        "symbols": [],
+    },
+}
+
 # ── Step helpers ──────────────────────────────────────────────────────────────
 
 
 def _step0_welcome() -> None:
     """Print the welcome banner."""
+    from importlib.metadata import version as _pkg_version
+
+    try:
+        _ver = _pkg_version("b1e55ed")
+    except Exception:  # noqa: BLE001
+        _ver = "?"
+    subtitle = f"contributor intelligence engine v{_ver}".center(40)
     print()
     print("  ╔══════════════════════════════════════════╗")
     print("  ║" + bold("         b1e55ed setup wizard           ") + "║")
-    print("  ║" + dim("  contributor intelligence engine v1.x  ") + "║")
+    print("  ║" + dim(subtitle) + "║")
     print("  ╚══════════════════════════════════════════╝")
     print()
     print("  This wizard will configure b1e55ed in 5 steps.")
@@ -238,6 +392,70 @@ def _step2_password() -> None:
         print(f"  {dim('Password not saved — set B1E55ED_MASTER_PASSWORD manually when needed.')}")
 
 
+def _check_rust_grinder() -> str | None:
+    """Return path to Rust forge binary if available, else None."""
+    import shutil
+
+    candidates = [
+        Path.home() / ".local" / "share" / "b1e55ed" / "bin" / "b1e55ed-forge",
+        Path.home() / ".local" / "bin" / "b1e55ed-forge",
+    ]
+    for p in candidates:
+        if p.exists() and os.access(str(p), os.X_OK):
+            return str(p)
+    found = shutil.which("b1e55ed-forge")
+    return found
+
+
+def _auto_download_forge() -> str | None:
+    """Download the Rust forge binary for the current platform. Returns install path or None."""
+    import platform
+    import stat
+    import urllib.request
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == "darwin":
+        artifact = "b1e55ed-forge-macos"  # universal binary (arm64 + x86_64)
+    elif system == "linux" and machine == "x86_64":
+        artifact = "b1e55ed-forge-linux-x86_64"
+    else:
+        print(f"  {yellow('⚠')} No pre-built binary for {system}/{machine}.")
+        return None
+
+    # /releases/latest skips pre-releases — resolve tag via API instead
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            "https://api.github.com/repos/P-U-C/b1e55ed/releases?per_page=1"
+        ) as resp:
+            import json as _json
+
+            releases = _json.loads(resp.read())
+            tag = releases[0]["tag_name"] if releases else None
+    except Exception:  # noqa: BLE001
+        tag = None
+
+    if not tag:
+        print(f"  {red('✗')} Could not resolve latest release tag.")
+        return None
+
+    url = f"https://github.com/P-U-C/b1e55ed/releases/download/{tag}/{artifact}"
+    dest_dir = Path.home() / ".local" / "share" / "b1e55ed" / "bin"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "b1e55ed-forge"
+
+    print(f"  Downloading {artifact}...")
+    try:
+        urllib.request.urlretrieve(url, dest)  # noqa: S310
+        dest.chmod(dest.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"  {_ok(f'Forge binary installed: {dest}')}")
+        return str(dest)
+    except Exception as e:  # noqa: BLE001
+        print(f"  {red('✗')} Download failed: {e}")
+        return None
+
+
 def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
@@ -257,38 +475,70 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {yellow('⚠')} Existing identity file could not be read — will offer to forge.")
 
     print("  Your identity is an Ethereum address with a " + bold("0xb1e55ed") + " prefix.")
-    print("  Forging takes 10–60 seconds (proof-of-work vanity mining).")
     print()
 
-    try:
-        forge = _ask_yn("  Forge new identity?", default=True)
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping identity forge.')}")
-        return
+    rust_binary = _check_rust_grinder()
 
-    if forge:
+    if rust_binary:
+        # Fast path: Rust binary available
+        print(f"  {_ok(f'Rust grinder found: {rust_binary}')}")
+        print("  Forging a vanity address takes ~2 seconds with the Rust binary.")
         print()
-        print(f"  {dim('Running: b1e55ed identity forge')}")
-        print()
+
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "engine.cli", "identity", "forge"],
-                cwd=str(repo_root),
-                check=False,
-            )
-            if proc.returncode == 0:
-                print(f"\n  {_ok('Identity forged successfully')}")
-            else:
-                print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
-                print(f"  {dim('You can retry later: b1e55ed identity forge')}")
-        except Exception as e:  # noqa: BLE001
-            print(f"\n  {red('⚠')} Could not run forge: {e}")
-            print(f"  {dim('Try manually: b1e55ed identity forge')}")
+            forge = _ask_yn("  Forge vanity identity (0xb1e55ed prefix)?", default=True)
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"  {dim('Skipping identity forge.')}")
+            return
+
+        if forge:
+            print()
+            print(f"  {dim('Running: b1e55ed identity forge')}")
+            print()
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    cwd=str(repo_root),
+                    check=False,
+                )
+                if proc.returncode == 0:
+                    print(f"\n  {_ok('Identity forged successfully')}")
+                else:
+                    print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
+                    print(f"  {dim('You can retry later: b1e55ed identity forge')}")
+            except Exception as e:  # noqa: BLE001
+                print(f"\n  {red('⚠')} Could not run forge: {e}")
+                print(f"  {dim('Try manually: b1e55ed identity forge')}")
+        else:
+            print()
+            print(f"  {dim('To restore an existing identity:')}")
+            print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
     else:
+        # No Rust binary found — auto-download it
+        print(f"  {yellow('⚠')} Rust forge binary not found — downloading now...")
         print()
-        print(f"  {dim('To restore an existing identity:')}")
-        print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
+        rust_binary = _auto_download_forge()
+        if rust_binary:
+            print()
+            print(f"  {dim('Running: b1e55ed identity forge')}")
+            print()
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    cwd=str(repo_root),
+                    check=False,
+                )
+                if proc.returncode == 0:
+                    print(f"\n  {_ok('Identity forged successfully')}")
+                else:
+                    print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
+                    print(f"  {dim('You can retry: b1e55ed identity forge')}")
+            except Exception as e:  # noqa: BLE001
+                print(f"\n  {red('⚠')} Could not run forge: {e}")
+        else:
+            print()
+            print(f"  {dim('Run `b1e55ed identity forge` after installing the binary manually.')}")
 
 
 def _step4_configuration(repo_root: Path) -> None:
@@ -336,32 +586,111 @@ def _step4_configuration(repo_root: Path) -> None:
         print(f"  {_ok(f'Generated token: {api_token[:16]}...')}")
 
     print()
-    print("  " + bold("Brain cycle symbols") + ":")
-    try:
-        symbols_raw = _ask("  Symbols (comma-separated)", default="BTC,ETH,SOL")
-    except (EOFError, KeyboardInterrupt):
-        print()
-        symbols_raw = "BTC,ETH,SOL"
-
-    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
-    if not symbols:
-        symbols = ["BTC", "ETH", "SOL"]
-
+    print("  " + bold("Brain cycle symbols") + " — choose a pack:")
     print()
-    print("  " + bold("GitHub publish token") + " (optional, for public contributor attestations):")
+    for key, pack in _SYMBOL_PACKS.items():
+        print(f"  {bold(key)}) {pack['name']}")
+    print()
     try:
-        github_token = _ask("  Token", default="skip")
+        pack_choice = _ask("  Pack", default="1")
     except (EOFError, KeyboardInterrupt):
         print()
-        github_token = "skip"
+        pack_choice = "1"
 
-    if github_token == "skip":
-        github_token = ""
+    if pack_choice not in _SYMBOL_PACKS:
+        pack_choice = "1"
+
+    if pack_choice == "6":
+        try:
+            symbols_raw = _ask("  Symbols (comma-separated)", default="BTC,ETH,SOL")
+        except (EOFError, KeyboardInterrupt):
+            symbols_raw = "BTC,ETH,SOL"
+        symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()] or ["BTC", "ETH", "SOL"]
+    else:
+        symbols = _SYMBOL_PACKS[pack_choice]["symbols"]
+        print(f"  {_ok(f'Pack selected: {len(symbols)} symbols')}")
+
+    # Determine if GitHub App auth is pre-configured (baked-in app_id)
+    try:
+        from engine.config.github_app_defaults import (
+            COMMUNITY_APP_ID,
+            COMMUNITY_INSTALLATION_ID,
+        )
+
+        app_auth_baked_in = COMMUNITY_APP_ID != 0 and COMMUNITY_INSTALLATION_ID != 0
+        baked_app_id = COMMUNITY_APP_ID
+        baked_installation_id = COMMUNITY_INSTALLATION_ID
+    except Exception:  # noqa: BLE001
+        app_auth_baked_in = False
+        baked_app_id = 0
+        baked_installation_id = 0
+
+    github_token = ""
+
+    if app_auth_baked_in:
+        # GitHub App handles auth automatically — no PAT needed
+        print()
+        print(f"  {_ok('GitHub App auth is pre-configured (app_id=' + str(baked_app_id) + ')')}")
+        print(f"  {dim('No GitHub token needed — the community app handles auth automatically.')}")
+        print(f"  {dim('Set B1E55ED_GITHUB_APP_KEY env var to your app private key PEM to enable publishing.')}")
+    else:
+        print()
+        print("  " + bold("GitHub publish token") + " — required to track your contributions publicly.")
+        print()
+        print(f"  {dim('Contributions without a token are scored locally only (not publicly visible).')}")
+        print(f"  {dim('Create a fine-grained PAT at: https://github.com/settings/tokens?type=beta')}")
+        print(f"  {dim('Required permissions: Issues → Read & Write on P-U-C/b1e55ed only.')}")
+        print()
+        print(f"  {dim('Alternative: configure GitHub App auth (see publish.github.app_id in config).')}")
+        print()
+
+        # Check environment first
+        env_token = os.environ.get("B1E55ED_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
+        if env_token:
+            print(f"  {_ok('Token found in environment (B1E55ED_GITHUB_TOKEN / GITHUB_TOKEN)')}")
+            github_token = env_token
+        else:
+            try:
+                github_token = _ask("  GitHub token (or press Enter to skip — you can add later)", default="")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                github_token = ""
+
+            if not github_token:
+                print()
+                print(f"  {yellow('⚠')} No token set — contributions will be scored locally only.")
+                print(f"  {dim('Add later: set B1E55ED_GITHUB_TOKEN=<token> and re-run wizard.')}")
+            else:
+                print(f"  {_ok('Token configured')}")
 
     # Build config YAML
     symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
     github_token_value = github_token if github_token else ""
-    github_token_comment = "" if github_token else "  # set to enable public attestations"
+
+    if app_auth_baked_in:
+        github_publish_block = f"""publish:
+  github:
+    # GitHub App auth (preferred — no token needed when app_id is set)
+    app_id: {baked_app_id}        # community GitHub App (pre-configured)
+    installation_id: {baked_installation_id}
+    # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
+    token: ""        # fallback PAT (used if app_id is 0)
+    owner: "P-U-C"
+    repo: "b1e55ed"
+    labels: ["b1e55ed-attestation"]
+"""
+    else:
+        github_publish_block = f"""publish:
+  github:
+    # GitHub App auth (preferred — no token needed when app_id is set)
+    app_id: 0        # set to enable GitHub App auth
+    installation_id: 0
+    # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
+    token: "{github_token_value}"        # fallback PAT (used if app_id is 0)
+    owner: "P-U-C"
+    repo: "b1e55ed"
+    labels: ["b1e55ed-attestation"]
+"""
 
     config_content = f"""# Generated by `b1e55ed wizard`
 preset: balanced
@@ -390,13 +719,7 @@ dashboard:
   port: 5051
   auth_token: ""
 
-publish:
-  github:
-    token: "{github_token_value}"{github_token_comment}
-    owner: "P-U-C"
-    repo: "b1e55ed"
-    labels: ["b1e55ed-attestation"]
-"""
+{github_publish_block}"""
 
     try:
         user_cfg.parent.mkdir(parents=True, exist_ok=True)
@@ -409,11 +732,97 @@ publish:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
+_ORACLE_URL = "https://oracle.b1e55ed.xyz"
+
+
+def _step_register_contributor(repo_root: Path) -> None:
+    """Auto-register new contributor via the oracle (no credentials needed on user machine)."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    _section("[4b] Contributor registration")
+
+    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    if not identity_path.exists():
+        print(f"  {dim('No identity — skipping registration.')}")
+        return
+
+    try:
+        data = _json.loads(identity_path.read_text(encoding="utf-8"))
+        node_id = data.get("node_id", "")
+        address = data.get("address", "")
+    except Exception:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not read identity — skipping.")
+        return
+
+    if not node_id:
+        return
+
+    print(f"  Registering: {dim(node_id)}")
+    print()
+
+    # Try oracle first — it holds the GitHub App key, creates the issue server-side
+    issue_url: str | None = None
+    registered = False
+    try:
+        payload = _json.dumps({"node_id": node_id, "name": address or node_id, "role": "contributor"}).encode()
+        req = urllib.request.Request(
+            f"{_ORACLE_URL}/api/v1/oracle/contributors/register",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            result = _json.loads(resp.read())
+            issue_url = result.get("issue_url")
+            registered = True
+    except urllib.error.HTTPError as e:
+        if e.code == 409:
+            registered = True  # already registered — fine
+    except Exception:  # noqa: BLE001
+        pass  # oracle unreachable — fall through to local
+
+    # Always register locally too (idempotent)
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "engine.cli",
+                "contributors",
+                "register",
+                "--node-id",
+                node_id,
+                "--name",
+                address or node_id,
+                "--role",
+                "contributor",
+            ],
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0 or "already exists" in (proc.stderr or ""):
+            registered = True
+    except Exception:  # noqa: BLE001
+        pass
+
+    if registered:
+        print(f"  {_ok('Registered as contributor')}")
+        if issue_url:
+            print(f"  {_ok(f'Announced: {issue_url}')}")
+    else:
+        print(f"  {yellow('⚠')} Registration failed — run manually: b1e55ed contributors register")
+
+
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
-    print("  Run a quick brain cycle to verify your setup?")
-    print(f"  {dim('(Runs: b1e55ed brain --symbols BTC --dry-run)')}")
+    print("  Run a quick health check to verify your setup?")
+    print(f"  {dim('(Runs: b1e55ed health)')}")
     print()
 
     try:
@@ -428,38 +837,25 @@ def _step5_test_run(repo_root: Path) -> None:
         return
 
     print()
-    print(f"  {dim('Running brain cycle...')}")
+    print(f"  {dim('Running health check...')}")
     print()
 
-    # Try --dry-run first; if unsupported, just skip
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "engine.cli", "brain", "--symbols", "BTC", "--dry-run"],
+            [sys.executable, "-m", "engine.cli", "health"],
             cwd=str(repo_root),
             check=False,
-            timeout=120,
+            timeout=30,
         )
         if proc.returncode == 0:
-            print(f"  {_ok('Test run completed successfully')}")
+            print(f"  {_ok('Health check passed')}")
         else:
-            # --dry-run not supported; try plain brain briefly
-            proc2 = subprocess.run(
-                [sys.executable, "-m", "engine.cli", "health"],
-                cwd=str(repo_root),
-                check=False,
-                timeout=30,
-            )
-            if proc2.returncode == 0:
-                print(f"  {_ok('Health check passed (brain test skipped — run manually)')}")
-            else:
-                print(f"  {yellow('⚠')} Test run exited with code {proc.returncode}")
-                print(f"  {dim('Run manually: b1e55ed brain')}")
+            print(f"  {yellow('⚠')} Health check returned code {proc.returncode}")
+            print(f"  {dim('Run manually: b1e55ed health')}")
     except subprocess.TimeoutExpired:
-        print(f"  {yellow('⚠')} Test run timed out (120s)")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Health check timed out")
     except Exception as e:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not run test: {e}")
-        print(f"  {dim('Run manually: b1e55ed brain')}")
+        print(f"  {yellow('⚠')} Could not run health check: {e}")
 
 
 def _completion() -> None:
@@ -496,6 +892,7 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step2_password(),
         lambda: _step3_identity(repo_root),
         lambda: _step4_configuration(repo_root),
+        lambda: _step_register_contributor(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 
