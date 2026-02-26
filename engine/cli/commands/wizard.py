@@ -732,6 +732,78 @@ dashboard:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
+def _step_register_contributor(repo_root: Path) -> None:
+    """Auto-register the new contributor after identity forge + config write."""
+    import json as _json
+
+    _section("[4b] Contributor registration")
+
+    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    if not identity_path.exists():
+        print(f"  {dim('No identity found — skipping registration.')}")
+        print(f"  {dim('Run: b1e55ed contributors register --name <handle> --role contributor')}")
+        return
+
+    try:
+        data = _json.loads(identity_path.read_text(encoding="utf-8"))
+        node_id = data.get("node_id", "")
+        address = data.get("address", "")
+    except Exception:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not read identity — skipping registration.")
+        return
+
+    if not node_id:
+        print(f"  {yellow('⚠')} Identity missing node_id — skipping registration.")
+        return
+
+    print(f"  Registering contributor: {dim(node_id)}")
+    print()
+
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "engine.cli",
+                "contributors",
+                "register",
+                "--node-id",
+                node_id,
+                "--name",
+                address or node_id,
+                "--role",
+                "contributor",
+            ],
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0:
+            try:
+                result = _json.loads(proc.stdout)
+                cid = result.get("contributor", {}).get("id", "")
+                gh = result.get("contributor", {}).get("metadata", {}).get("publish", {}).get("github", {})
+                issue_url = gh.get("html_url", "") if isinstance(gh, dict) else ""
+                print(f"  {_ok(f'Registered as contributor (id: {cid[:8]}...)')}")
+                if issue_url:
+                    print(f"  {_ok(f'GitHub issue created: {issue_url}')}")
+                else:
+                    print(f"  {dim('(GitHub issue skipped — set B1E55ED_GITHUB_APP_KEY to enable)')}")
+            except Exception:  # noqa: BLE001
+                print(f"  {_ok('Registered as contributor')}")
+        elif "already exists" in (proc.stderr or ""):
+            print(f"  {_ok('Already registered — skipping.')}")
+        else:
+            print(f"  {yellow('⚠')} Registration failed (code {proc.returncode}) — run manually:")
+            print(f"  {dim('b1e55ed contributors register --name <handle> --role contributor')}")
+    except subprocess.TimeoutExpired:
+        print(f"  {yellow('⚠')} Registration timed out — run manually: b1e55ed contributors register")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not register: {e}")
+
+
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
@@ -806,6 +878,7 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step2_password(),
         lambda: _step3_identity(repo_root),
         lambda: _step4_configuration(repo_root),
+        lambda: _step_register_contributor(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 

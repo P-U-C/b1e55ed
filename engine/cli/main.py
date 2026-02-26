@@ -1398,17 +1398,27 @@ def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> Con
 
     from engine.core.contributors import ContributorRegistry
 
-    # GitHub publisher — always active when token is configured (fail-open)
+    # GitHub publisher — active when token OR GitHub App is configured (fail-open)
     github_publisher: object | None = None
     pub_cfg = config.publish.github
-    if pub_cfg.token:
+    if pub_cfg.token or (int(pub_cfg.app_id or 0) > 0):
         from engine.integrations.github_publish import make_publisher
+
+        app_auth = None
+        if int(pub_cfg.app_id or 0) > 0:
+            try:
+                from engine.integrations.github_app import GitHubAppAuth
+
+                app_auth = GitHubAppAuth.from_env()
+            except Exception:
+                pass
 
         github_publisher = make_publisher(
             owner=pub_cfg.owner,
             repo=pub_cfg.repo,
-            token=pub_cfg.token,
+            token=str(pub_cfg.token or ""),
             labels=pub_cfg.labels,
+            app_auth=app_auth,
         )
 
     # EAS client — only when explicitly enabled
