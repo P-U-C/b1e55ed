@@ -2000,7 +2000,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
         print("  Yours is being derived now.")
         print()
         if rust_binary:
-            print("  This takes ~2 seconds with the Rust grinder.")
+            print("  This takes seconds to ~2 min with the Rust grinder (hardware dependent).")
         else:
             print("  Rust grinder not found — using Python fallback (~90 min).")
         print()
