@@ -19,6 +19,21 @@ b1e55ed wizard
 Covers: identity forge → config → producer registration → brain first run → API setup.
 From source: `./b1e55ed wizard` or `uv run b1e55ed wizard`.
 
+### `b1e55ed uninstall`
+
+Removes b1e55ed from the system. Prompts for confirmation unless `--yes` is given.
+
+```text
+b1e55ed uninstall [--yes] [--keep-data]
+```
+
+| Flag | Description |
+|---|---|
+| `--yes` | Skip confirmation prompts |
+| `--keep-data` | Preserve the data directory (brain DB, logs, config) |
+
+Alternatively, run the standalone script: `./uninstall.sh`.
+
 ### `b1e55ed setup`
 
 Low-level setup. Writes `config/user.yaml`, initializes `data/brain.db`. The wizard calls this internally.
