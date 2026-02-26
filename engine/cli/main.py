@@ -445,6 +445,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
 
+    p_uninstall = sub.add_parser("uninstall", help="Uninstall b1e55ed and clean up all related files")
+    p_uninstall.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip all confirmations and remove everything automatically.",
+    )
+    p_uninstall.add_argument(
+        "--keep-data",
+        action="store_true",
+        dest="keep_data",
+        help="Remove binary/tool but preserve data and config directories.",
+    )
+
     # -- anchor --
     from engine.cli.commands.anchor import build_anchor_parser
 
@@ -2776,6 +2789,12 @@ def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
     return run_wizard(ctx, args)
 
 
+def _cmd_uninstall(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.uninstall import run_uninstall
+
+    return run_uninstall(ctx, args)
+
+
 def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.anchor import run_anchor
 
@@ -2803,7 +2822,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup", "wizard"}
+    ungated_commands = {"identity", "setup", "wizard", "uninstall"}
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
@@ -2856,6 +2875,7 @@ def main(argv: list[str] | None = None) -> int:
         "anchor": _cmd_anchor,
         "export": _cmd_export,
         "wizard": _cmd_wizard,
+        "uninstall": _cmd_uninstall,
     }
 
     fn = dispatch.get(str(args.command))
