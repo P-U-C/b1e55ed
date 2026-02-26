@@ -255,6 +255,10 @@ fi
 if [ -n "$FORGE_URL" ]; then
     if curl -fsSL "$FORGE_URL" -o "$FORGE_DIR/b1e55ed-forge" 2>/dev/null; then
         chmod +x "$FORGE_DIR/b1e55ed-forge"
+        # macOS: clear quarantine bit so Gatekeeper doesn't block execution
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            xattr -dr com.apple.quarantine "$FORGE_DIR/b1e55ed-forge" 2>/dev/null || true
+        fi
         success "Rust forge binary installed (~50M candidates/sec)"
     else
         warn "Could not download forge binary (no release yet) — Python fallback will be used"

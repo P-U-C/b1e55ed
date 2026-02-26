@@ -2024,31 +2024,43 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
     if rust_binary:
-        proc = subprocess.Popen(
-            [rust_binary, "--prefix", prefix, "--threads", str(threads), "--json"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        # macOS: clear quarantine bit so Gatekeeper doesn't silently kill the binary
+        if sys.platform == "darwin":
+            subprocess.run(
+                ["xattr", "-dr", "com.apple.quarantine", rust_binary],
+                check=False,
+                capture_output=True,
+            )
+        try:
+            proc = subprocess.Popen(
+                [rust_binary, "--prefix", prefix, "--threads", str(threads), "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-            if msg.get("type") == "progress" and use_json:
-                print(_json_dumps(msg))
-            elif msg.get("type") == "progress" and not use_json:
-                _render_progress(msg)
-            elif msg.get("type") == "found":
-                result = msg
-                break
-        proc.wait()
-    else:
+                if msg.get("type") == "progress" and use_json:
+                    print(_json_dumps(msg))
+                elif msg.get("type") == "progress" and not use_json:
+                    _render_progress(msg)
+                elif msg.get("type") == "found":
+                    result = msg
+                    break
+            proc.wait()
+        except OSError:
+            # Binary can't be executed — fall through to Python
+            rust_binary = None
+
+    if not rust_binary:
         if not use_json:
             print("  (Rust grinder not found — using Python fallback. This will be slower.)")
             print()
