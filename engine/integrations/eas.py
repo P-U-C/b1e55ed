@@ -245,6 +245,21 @@ class EASClient:
 
             if not attester:
                 return False
+
+            # Consistency check: data_bytes must match data dict if both present
+            data_field = attestation.get("data")
+            if data_field is not None and isinstance(data_field, dict):
+                import json
+
+                # Re-encode data_bytes to compare
+                try:
+                    decoded = json.loads(payload_bytes.decode("utf-8"))
+                    # Sort keys for deterministic comparison
+                    if json.dumps(decoded, sort_keys=True, separators=(",", ":")) != json.dumps(data_field, sort_keys=True, separators=(",", ":")):
+                        return False
+                except Exception:
+                    return False
+
             return recovered == attester
         except Exception:
             return False

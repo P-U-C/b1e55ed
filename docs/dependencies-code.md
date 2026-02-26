@@ -282,6 +282,22 @@ See `docs/security.md` for enforcement details.
 
 ---
 
+---
+
+---
+
+---
+
+---
+
+---
+
+---
+
+---
+
+---
+
 ## Undocumented (auto-detected)
 
 > Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description.
@@ -303,5 +319,8 @@ dashboard/routes/signals.py
 dashboard/routes/treasury.py
 dashboard/services/api_client.py
 dashboard/webhooks.py
+engine/cli/commands/uninstall.py
+engine/config/github_app_defaults.py
 engine/core/identity_gate.py
+engine/integrations/github_app.py
 ```

@@ -9,9 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from engine.integrations.github_app import GitHubAppAuth
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +81,31 @@ def publish_attestation_to_github(
     repo: str,
     token: str,
     labels: list[str] | None = None,
+    app_auth: GitHubAppAuth | None = None,
 ) -> dict[str, Any] | None:
     """Create a GitHub Issue for the given attestation.
+
+    Accepts either a static PAT ``token`` or a ``GitHubAppAuth`` instance.
+    When ``app_auth`` is provided it takes precedence; a fresh installation
+    token is fetched before each request.
 
     Returns ``{issue_url, issue_number, owner, repo}`` on success, or
     ``None`` on any failure (fail-open: never raises).
     """
-    if not token:
-        logger.warning("github_publish: no token provided — skipping")
+
+    # Resolve the effective token (app_auth wins over static PAT)
+    def _get_effective_token() -> str:
+        if app_auth is not None:
+            try:
+                return app_auth.get_token()
+            except Exception as exc:
+                logger.warning("github_publish: app_auth.get_token() failed: %s", exc)
+                return ""
+        return token
+
+    effective = _get_effective_token()
+    if not effective:
+        logger.warning("github_publish: no token available — skipping")
         return None
 
     uid = str(attestation.get("uid") or "unknown")
@@ -104,11 +124,6 @@ def publish_attestation_to_github(
         payload["labels"] = labels
 
     url = f"{GITHUB_API}/repos/{owner}/{repo}/issues"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
 
     attempt = 0
     last_status: int | None = None
@@ -117,6 +132,17 @@ def publish_attestation_to_github(
         with httpx.Client(timeout=15.0) as client:
             while attempt < _MAX_ATTEMPTS:
                 attempt += 1
+                # Re-fetch token each attempt so app_auth can provide a fresh one
+                current_token = _get_effective_token()
+                if not current_token:
+                    logger.warning("github_publish: token unavailable on attempt %d — aborting", attempt)
+                    return None
+
+                headers = {
+                    "Authorization": f"Bearer {current_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                }
                 try:
                     resp = client.post(url, json=payload, headers=headers)
                     last_status = resp.status_code
@@ -144,7 +170,7 @@ def publish_attestation_to_github(
                         resp.status_code,
                         owner,
                         repo,
-                        _redact_token(token),
+                        _redact_token(current_token),
                     )
                     return None
 
@@ -176,8 +202,18 @@ def publish_attestation_to_github(
     return None
 
 
-def make_publisher(*, owner: str, repo: str, token: str, labels: list[str] | None = None) -> object:
+def make_publisher(
+    *,
+    token: str = "",
+    app_auth: GitHubAppAuth | None = None,
+    owner: str = "P-U-C",
+    repo: str = "b1e55ed",
+    labels: list[str] | None = None,
+) -> object:
     """Return a callable publisher bound to the given config.
+
+    Accepts either a static PAT ``token`` or a ``GitHubAppAuth`` instance.
+    When ``app_auth`` is provided it takes precedence over ``token``.
 
     The returned callable matches the ``github_publisher`` signature expected by
     ``ContributorRegistry``:
@@ -194,4 +230,5 @@ def make_publisher(*, owner: str, repo: str, token: str, labels: list[str] | Non
         repo=repo,
         token=token,
         labels=labels,
+        app_auth=app_auth,
     )

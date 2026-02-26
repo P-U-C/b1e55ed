@@ -1,6 +1,6 @@
 # CLI Reference
 
-Authoritative source: `engine/cli.py` (`build_parser()`).
+Authoritative source: `engine/cli/main.py` (`build_parser()`).
 
 All commands support `--help`.
 
@@ -8,9 +8,35 @@ All commands support `--help`.
 
 ## Core
 
+### `b1e55ed wizard`
+
+Interactive 5-step onboarding for new contributors. Recommended first command after install.
+
+```text
+b1e55ed wizard
+```
+
+Covers: identity forge → config → producer registration → brain first run → API setup.
+From source: `./b1e55ed wizard` or `uv run b1e55ed wizard`.
+
+### `b1e55ed uninstall`
+
+Removes b1e55ed from the system. Prompts for confirmation unless `--yes` is given.
+
+```text
+b1e55ed uninstall [--yes] [--keep-data]
+```
+
+| Flag | Description |
+|---|---|
+| `--yes` | Skip confirmation prompts |
+| `--keep-data` | Preserve the data directory (brain DB, logs, config) |
+
+Alternatively, run the standalone script: `./uninstall.sh`.
+
 ### `b1e55ed setup`
 
-Interactive onboarding. Writes `config/user.yaml`, initializes `data/brain.db`.
+Low-level setup. Writes `config/user.yaml`, initializes `data/brain.db`. The wizard calls this internally.
 
 ```text
 b1e55ed setup [--preset conservative|balanced|degen] [--non-interactive]
@@ -157,6 +183,16 @@ Show the currently forged identity.
 ```text
 b1e55ed identity show [--json]
 ```
+
+### `b1e55ed identity restore`
+
+Recover a lost identity from an Ethereum private key. The Ed25519 signing key is deterministically derived via HKDF — no backup file needed.
+
+```text
+b1e55ed identity restore --eth-key <hex-private-key>
+```
+
+See [Identity recovery](identity.md) for the full procedure.
 
 ### `b1e55ed keys list`
 

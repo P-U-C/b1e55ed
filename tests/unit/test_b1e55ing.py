@@ -513,7 +513,7 @@ def test_post_merge_already_blessed_skips() -> None:
 
     # The blessed-check step must exist and output a flag
     assert "already_blessed" in src
-    assert "GITHUB_OUTPUT" in src
+    assert "setOutput" in src  # github-script uses core.setOutput(), not $GITHUB_OUTPUT
 
     # The grep target must match the canonical commit message prefix
     assert "a b1e55ing" in src
@@ -528,9 +528,6 @@ def test_post_merge_already_blessed_skips() -> None:
     # Trigger is pull_request closed, not push (must not run on direct commits)
     assert "types: [closed]" in src
 
-    # Commit message is canonical
-    assert "chore: a b1e55ing [skip ci]" in src
-
-    # Author identity is consistent with the rest of the system
-    assert 'user.name "a b1e55ing"' in src
-    assert "bot@permanentupperclass.com" in src
+    # Post-merge path delivers blessing as a PR comment (not a direct push)
+    assert "createComment" in src
+    assert "a b1e55ing" in src

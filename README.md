@@ -52,22 +52,25 @@ Producers → Brain → Execution
 ## Start
 
 ```bash
-git clone https://github.com/P-U-C/b1e55ed.git
-cd b1e55ed && uv sync
-
-export B1E55ED_MASTER_PASSWORD="..."
-uv run b1e55ed identity forge
-uv run b1e55ed setup
-uv run b1e55ed contributors register --name "you" --role operator
-uv run b1e55ed brain
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+b1e55ed wizard
 ```
 
-API + dashboard:
+The wizard handles identity, setup, and first run — no manual steps.
+
+API + dashboard after setup:
 
 ```bash
-export B1E55ED_API__AUTH_TOKEN="..."
-uv run b1e55ed api        # http://localhost:5050/api/v1/health
-uv run b1e55ed dashboard  # http://localhost:5051
+b1e55ed api        # http://localhost:5050/api/v1/health
+b1e55ed dashboard  # http://localhost:5051
+```
+
+**Running from source?**
+
+```bash
+git clone https://github.com/P-U-C/b1e55ed.git
+cd b1e55ed && uv sync
+./b1e55ed wizard   # repo-root wrapper, no install needed
 ```
 
 → [Getting started](docs/getting-started.md)
@@ -78,6 +81,7 @@ uv run b1e55ed dashboard  # http://localhost:5051
 
 | Guide | |
 |-------|-|
+| [How it works](docs/how-it-works.md) | Plain-English overview — objectives, flywheel, benefits |
 | [Getting started](docs/getting-started.md) | Install and first run |
 | [Architecture](docs/architecture.md) | System design and data flow |
 | [Configuration](docs/configuration.md) | All config keys |

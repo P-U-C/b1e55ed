@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>b1e55ed — Sovereign AI Trading Intelligence</title>
+<meta name="description" content="The sovereign trading OS for operators whose data powers the default pre-trade provenance check for every vibe-coded bot in the ecosystem.">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050505;
+    --bg-panel: #0a0f0a;
+    --bg-elevated: #0f1a0f;
+    --border-dim: #243e24;
+    --border-active: #3a5e3a;
+    --text-primary: #ddeedd;
+    --text-bright: #00ff41;
+    --text-dim: #7a9e7a;
+    --text-muted: #4a6a4a;
+    --cyan: #00ccff;
+    --amber: #ffaa00;
+    --red: #ff3333;
+    --glow-green: 0 0 20px rgba(0,255,65,0.15);
+    --glow-cyan: 0 0 20px rgba(0,204,255,0.15);
+    --glow-amber: 0 0 20px rgba(255,170,0,0.12);
+    --font: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scanlines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Noise */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  a { color: var(--cyan); text-decoration: none; transition: color 0.2s; }
+  a:hover { color: var(--text-bright); }
+  ::selection { background: rgba(0,255,65,0.15); color: var(--text-bright); }
+
+  /* === NAV === */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 52px;
+    background: rgba(5,5,5,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-dim);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    z-index: 1000;
+  }
+
+  .nav-wordmark {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text-primary); }
+
+  .nav-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-bright);
+    box-shadow: 0 0 8px rgba(0,255,65,0.4);
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+
+  /* === LAYOUT === */
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  section { padding: 100px 0; position: relative; }
+
+  /* === HERO === */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-top: 52px;
+    position: relative;
+  }
+
+  .hero-content { position: relative; z-index: 2; }
+
+  .hero-waveform {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+    z-index: 1;
+    opacity: 0.35;
+  }
+
+  .hero-waveform svg { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+  .hero-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    animation: fadeSlideUp 0.8s ease-out 0.2s both;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    margin-bottom: 28px;
+    animation: fadeSlideUp 0.8s ease-out 0.35s both;
+  }
+
+  .hero h1 .hl-green { color: var(--text-bright); text-shadow: var(--glow-green); }
+  .hero h1 .hl-cyan { color: var(--cyan); text-shadow: var(--glow-cyan); }
+
+  .hero-sub {
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--text-dim);
+    max-width: 640px;
+    line-height: 1.8;
+    margin-bottom: 48px;
+    animation: fadeSlideUp 0.8s ease-out 0.5s both;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    animation: fadeSlideUp 0.8s ease-out 0.65s both;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--border-active);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.25s;
+    text-decoration: none;
+  }
+
+  .btn:hover { background: var(--bg-elevated); border-color: var(--text-dim); color: var(--text-bright); }
+
+  .btn-primary {
+    border-color: var(--text-bright);
+    color: var(--text-bright);
+    box-shadow: var(--glow-green);
+  }
+
+  .btn-primary:hover { background: rgba(0,255,65,0.06); color: var(--text-bright); }
+
+  .btn-cyan { border-color: var(--cyan); color: var(--cyan); }
+  .btn-cyan:hover { background: rgba(0,204,255,0.06); color: var(--cyan); }
+
+  .hero-meta {
+    margin-top: 56px;
+    display: flex;
+    gap: 40px;
+    animation: fadeSlideUp 0.8s ease-out 0.8s both;
+  }
+
+  .hero-stat { display: flex; flex-direction: column; }
+  .hero-stat-val { font-size: 18px; font-weight: 500; color: var(--text-bright); }
+  .hero-stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
+
+  /* === SECTION TITLES === */
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--text-primary);
+    margin-bottom: 48px;
+    letter-spacing: 0.02em;
+  }
+
+  /* === THESIS === */
+  .thesis {
+    border-top: 1px solid var(--border-dim);
+    border-bottom: 1px solid var(--border-dim);
+    padding: 80px 0;
+  }
+
+  .thesis-text {
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-dim);
+    max-width: 760px;
+  }
+
+  .thesis-text em { font-style: normal; color: var(--text-bright); }
+
+  /* === DUAL TRACK === */
+  .tracks-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+
+  .track-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 44px 36px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .track-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+  }
+
+  .track-card-a::before { background: linear-gradient(90deg, var(--text-bright), transparent); }
+  .track-card-b::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+
+  .track-tag {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .track-card-a .track-tag { color: var(--text-bright); }
+  .track-card-b .track-tag { color: var(--cyan); }
+
+  .track-heading { font-size: 20px; font-weight: 300; color: var(--text-primary); margin-bottom: 4px; }
+  .track-subtitle { font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 20px; }
+
+  .track-body {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-dim);
+    line-height: 1.8;
+    margin-bottom: 28px;
+  }
+
+  .track-specs { display: grid; gap: 0; }
+
+  .spec-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-dim);
+    font-size: 12px;
+  }
+
+  .spec-row:last-child { border-bottom: none; }
+
+  .spec-key { color: var(--text-dim); letter-spacing: 0.05em; text-transform: uppercase; font-size: 10px; }
+  .spec-val { font-weight: 500; }
+  .track-card-a .spec-val { color: var(--text-bright); }
+  .track-card-b .spec-val { color: var(--cyan); }
+
+  /* === FLYWHEEL (infographic integrated) === */
+  .flywheel-visual {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 56px 40px 48px;
+    text-align: center;
+    position: relative;
+  }
+
+  .flywheel-visual::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  }
+
+  .flywheel-tag {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--amber);
+    text-shadow: var(--glow-amber);
+    margin-bottom: 40px;
+  }
+
+  .flow-chain {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0 auto 12px;
+    max-width: 960px;
+  }
+
+  .flow-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 10px;
+    min-width: 130px;
+    max-width: 160px;
+  }
+
+  .flow-node-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-bottom: 12px;
+  }
+
+  .flow-node-dot.green { background: var(--text-bright); box-shadow: 0 0 12px rgba(0,255,65,0.3); }
+  .flow-node-dot.cyan { background: var(--cyan); box-shadow: 0 0 12px rgba(0,204,255,0.3); }
+  .flow-node-dot.amber { background: var(--amber); box-shadow: 0 0 12px rgba(255,170,0,0.3); }
+
+  .flow-node-label { font-size: 11px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; letter-spacing: 0.03em; text-align: center; }
+  .flow-node-desc { font-size: 9.5px; color: var(--text-dim); text-align: center; letter-spacing: 0.02em; line-height: 1.5; }
+
+  .flow-arrow-seg {
+    color: var(--text-muted);
+    font-size: 18px;
+    padding: 0 2px;
+    margin-top: 12px;
+    animation: arrowPulse 2s ease-in-out infinite;
+  }
+
+  .flow-arrow-seg:nth-child(4n) { animation-delay: 0.3s; }
+  .flow-arrow-seg:nth-child(6n) { animation-delay: 0.6s; }
+  .flow-arrow-seg:nth-child(8n) { animation-delay: 0.9s; }
+
+  @keyframes arrowPulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; color: var(--amber); }
+  }
+
+  .flow-return {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+    padding: 12px 0;
+  }
+
+  .flow-return-line {
+    flex: 1;
+    max-width: 300px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+    opacity: 0.4;
+  }
+
+  .flow-return-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--amber);
+    text-transform: uppercase;
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
+  .flywheel-bottom-text {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 24px auto 0;
+    line-height: 1.8;
+  }
+
+  .flywheel-bottom-text strong { font-weight: 500; color: var(--amber); }
+
+  /* === WHY BOTH (from infographic) === */
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .why-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 28px 24px 24px;
+  }
+
+  .why-card-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .why-card-condition { font-size: 13px; font-weight: 400; color: var(--text-primary); margin-bottom: 8px; }
+  .why-card-result { font-size: 12px; font-weight: 400; color: var(--text-dim); line-height: 1.6; }
+
+  .why-card.active { border-color: var(--border-active); }
+  .why-card.active .why-card-label { color: var(--text-bright); text-shadow: var(--glow-green); }
+
+  /* === ARCHITECTURE === */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-top: 48px;
+  }
+
+  .arch-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 32px 28px 28px;
+  }
+
+  .arch-card-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .arch-card-title { font-size: 15px; font-weight: 400; color: var(--text-primary); margin-bottom: 8px; }
+
+  .arch-card-desc {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  .arch-card-desc .code { color: var(--text-bright); font-size: 12px; }
+
+  .arch-card-full { grid-column: 1 / -1; }
+
+  /* Pipeline flow */
+  .pipeline-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+
+  .pf-step {
+    font-size: 11px;
+    padding: 6px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-dim);
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .pf-step.highlight { border-color: var(--border-active); color: var(--text-bright); }
+  .pf-arrow { color: var(--text-muted); font-size: 14px; }
+
+  /* === AGENT INTERFACES (new section) === */
+  .interfaces-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+    margin-top: 48px;
+  }
+
+  .interface-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 32px 24px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .interface-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+  }
+
+  .ifc-oracle::before { background: linear-gradient(90deg, var(--amber), transparent); }
+  .ifc-mcp::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+  .ifc-sse::before { background: linear-gradient(90deg, var(--text-bright), transparent); }
+
+  .ifc-tag {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .ifc-oracle .ifc-tag { color: var(--amber); }
+  .ifc-mcp .ifc-tag { color: var(--cyan); }
+  .ifc-sse .ifc-tag { color: var(--text-bright); }
+
+  .ifc-title { font-size: 15px; font-weight: 400; color: var(--text-primary); margin-bottom: 4px; }
+  .ifc-endpoint { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; letter-spacing: 0.02em; }
+  .ifc-desc { font-size: 12px; font-weight: 400; color: var(--text-dim); line-height: 1.7; }
+  .ifc-auth { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 12px; }
+  .ifc-auth.none { color: var(--text-bright); }
+  .ifc-auth.required { color: var(--text-muted); }
+
+  /* === SYSTEM STATUS === */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin-top: 40px;
+  }
+
+  .status-cell {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 24px 20px;
+    text-align: center;
+  }
+
+  .status-cell-val { font-size: 18px; font-weight: 500; color: var(--text-bright); margin-bottom: 6px; }
+  .status-cell-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* === CTA === */
+  .cta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-top: 48px;
+  }
+
+  .cta-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    padding: 44px 36px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cta-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+  }
+
+  .cta-card-a::before { background: linear-gradient(90deg, var(--text-bright), transparent); }
+  .cta-card-b::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+
+  .cta-card-tag {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .cta-card-a .cta-card-tag { color: var(--text-bright); }
+  .cta-card-b .cta-card-tag { color: var(--cyan); }
+
+  .cta-card-title { font-size: 18px; font-weight: 300; color: var(--text-primary); margin-bottom: 12px; }
+
+  .cta-card-body {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 24px;
+    flex: 1;
+  }
+
+  .cta-card-code {
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border-dim);
+    padding: 12px 16px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .cta-card-code .cmd { color: var(--text-bright); }
+
+  .cta-card .btn { align-self: flex-start; }
+
+  /* === FOOTER === */
+  footer {
+    border-top: 1px solid var(--border-dim);
+    padding: 40px 0;
+  }
+
+  .footer-inner { display: flex; justify-content: space-between; align-items: center; }
+
+  .footer-brand { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; }
+
+  .footer-links { display: flex; gap: 24px; list-style: none; }
+  .footer-links a { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; }
+
+  .footer-easter {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 32px;
+    letter-spacing: 0.06em;
+  }
+
+  /* === ANIMATIONS === */
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; box-shadow: 0 0 4px rgba(0,255,65,0.2); }
+    50% { opacity: 1; box-shadow: 0 0 12px rgba(0,255,65,0.5); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+  }
+
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  .stagger > .reveal:nth-child(1) { transition-delay: 0s; }
+  .stagger > .reveal:nth-child(2) { transition-delay: 0.1s; }
+  .stagger > .reveal:nth-child(3) { transition-delay: 0.15s; }
+  .stagger > .reveal:nth-child(4) { transition-delay: 0.2s; }
+  .stagger > .reveal:nth-child(5) { transition-delay: 0.25s; }
+  .stagger > .reveal:nth-child(6) { transition-delay: 0.3s; }
+  .stagger > .reveal:nth-child(7) { transition-delay: 0.35s; }
+
+  .wave-line { fill: none; stroke-width: 0.6; opacity: 0.5; }
+
+  /* Hero orbital */
+  .hero-orbital {
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .hero-orbital svg {
+    display: block;
+  }
+
+  .orbital-flow {
+    animation: orbitalSpin 8s linear infinite;
+    transform-origin: 170px 170px;
+  }
+
+  @keyframes orbitalSpin {
+    to { stroke-dashoffset: -80; }
+  }
+
+  .orbital-label {
+    font-family: var(--font);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .orbital-sublabel {
+    font-family: var(--font);
+    font-size: 7.5px;
+    letter-spacing: 0.06em;
+  }
+
+  .orbital-dot {
+    animation: orbitalPulse 3s ease-in-out infinite;
+  }
+
+  .od-1 { animation-delay: 0s; }
+  .od-2 { animation-delay: 0.6s; }
+  .od-3 { animation-delay: 1.2s; }
+  .od-4 { animation-delay: 1.8s; }
+  .od-5 { animation-delay: 2.4s; }
+
+  @keyframes orbitalPulse {
+    0%, 100% { opacity: 0.5; r: 3; }
+    50% { opacity: 1; r: 4.5; }
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 860px) {
+    .wrap { padding: 0 20px; }
+    nav { padding: 0 20px; }
+    .nav-links { display: none; }
+    .hero h1 { font-size: 28px; }
+    .hero-orbital svg { width: 280px; height: 280px; }
+    .tracks-grid,
+    .cta-grid,
+    .arch-grid { grid-template-columns: 1fr; }
+    .arch-card-full { grid-column: 1; }
+    .interfaces-grid { grid-template-columns: 1fr; }
+    .why-grid { grid-template-columns: 1fr; }
+    .status-grid { grid-template-columns: repeat(3, 1fr); }
+    .hero-meta { gap: 24px; flex-wrap: wrap; }
+    .flow-chain { flex-direction: column; align-items: center; }
+    .flow-arrow-seg { transform: rotate(90deg); }
+    .flow-return { flex-direction: column; }
+    .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+    section { padding: 72px 0; }
+    .track-card, .cta-card { padding: 32px 24px; }
+  }
+
+  @media (max-width: 520px) {
+    .hero h1 { font-size: 22px; }
+    .hero-orbital svg { width: 240px; height: 240px; }
+    .status-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-wordmark">b1e55ed</div>
+  <ul class="nav-links">
+    <li><a href="#tracks">Tracks</a></li>
+    <li><a href="#flywheel">Flywheel</a></li>
+    <li><a href="#interfaces">Interfaces</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#start">Start</a></li>
+  </ul>
+  <div class="nav-status">
+    <div class="status-dot"></div>
+    <span>beta.4</span>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-waveform">
+    <svg id="waveformSvg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice"></svg>
+  </div>
+
+  <div class="wrap hero-content">
+
+    <!-- Compact flywheel orbital — centered -->
+    <div class="hero-orbital" style="animation: fadeSlideUp 0.8s ease-out 0.05s both;">
+      <svg viewBox="-30 10 400 320" width="340" height="340">
+        <defs>
+          <marker id="ha-g" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0.5 L4.5,2.5 L0,4.5" fill="none" stroke="rgba(0,255,65,0.6)" stroke-width="0.7"/>
+          </marker>
+          <marker id="ha-a" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0.5 L4.5,2.5 L0,4.5" fill="none" stroke="rgba(255,170,0,0.6)" stroke-width="0.7"/>
+          </marker>
+          <marker id="ha-c" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0.5 L4.5,2.5 L0,4.5" fill="none" stroke="rgba(0,204,255,0.6)" stroke-width="0.7"/>
+          </marker>
+        </defs>
+
+        <!-- Outer guide ring -->
+        <circle cx="170" cy="170" r="120" fill="none" stroke="var(--border-dim)" stroke-width="0.5"/>
+
+        <!-- Animated dashed flow ring -->
+        <circle cx="170" cy="170" r="120" fill="none"
+                stroke="rgba(255,170,0,0.12)" stroke-width="1.2"
+                stroke-dasharray="8 12"
+                class="orbital-flow"/>
+
+        <!-- NODE 1: Operators (top) — green -->
+        <circle cx="170" cy="50" r="4.5" fill="var(--text-bright)" class="orbital-dot od-1"/>
+        <text x="170" y="36" text-anchor="middle" class="orbital-label" fill="var(--text-bright)">Operators</text>
+
+        <!-- NODE 2: Oracle (top-right) — amber -->
+        <circle cx="284.2" cy="120.6" r="4" fill="var(--amber)" class="orbital-dot od-2"/>
+        <text x="306" y="116" text-anchor="start" class="orbital-label" fill="var(--amber)">Oracle</text>
+        <text x="306" y="126" text-anchor="start" class="orbital-sublabel" fill="var(--text-muted)">provenance</text>
+
+        <!-- NODE 3: Agents (bottom-right) — cyan -->
+        <circle cx="240.6" cy="267.1" r="4" fill="var(--cyan)" class="orbital-dot od-3"/>
+        <text x="256" y="275" text-anchor="start" class="orbital-label" fill="var(--cyan)">AI Agents</text>
+        <text x="256" y="285" text-anchor="start" class="orbital-sublabel" fill="var(--text-muted)">recommend</text>
+
+        <!-- NODE 4: Bots (bottom-left) — cyan -->
+        <circle cx="99.4" cy="267.1" r="4" fill="var(--cyan)" class="orbital-dot od-4"/>
+        <text x="83" y="275" text-anchor="end" class="orbital-label" fill="var(--cyan)">Bots</text>
+        <text x="83" y="285" text-anchor="end" class="orbital-sublabel" fill="var(--text-muted)">query</text>
+
+        <!-- NODE 5: Intel (top-left) — amber -->
+        <circle cx="55.8" cy="120.6" r="4" fill="var(--amber)" class="orbital-dot od-5"/>
+        <text x="38" y="116" text-anchor="end" class="orbital-label" fill="var(--amber)">Intel</text>
+        <text x="38" y="126" text-anchor="end" class="orbital-sublabel" fill="var(--text-muted)">flows back</text>
+
+        <!-- Connecting arcs between nodes (clockwise) -->
+        <!-- 1→2 Operators → Oracle -->
+        <path d="M 182 54 Q 260 40, 278 114" fill="none" stroke="rgba(0,255,65,0.35)" stroke-width="0.8" marker-end="url(#ha-g)"/>
+        <!-- 2→3 Oracle → Agents -->
+        <path d="M 288 130 Q 310 210, 247 260" fill="none" stroke="rgba(255,170,0,0.35)" stroke-width="0.8" marker-end="url(#ha-a)"/>
+        <!-- 3→4 Agents → Bots -->
+        <path d="M 232 274 Q 170 310, 108 274" fill="none" stroke="rgba(0,204,255,0.35)" stroke-width="0.8" marker-end="url(#ha-c)"/>
+        <!-- 4→5 Bots → Intel -->
+        <path d="M 93 260 Q 30 210, 52 130" fill="none" stroke="rgba(0,204,255,0.35)" stroke-width="0.8" marker-end="url(#ha-c)"/>
+        <!-- 5→1 Intel → Operators -->
+        <path d="M 62 114 Q 80 40, 158 54" fill="none" stroke="rgba(255,170,0,0.35)" stroke-width="0.8" marker-end="url(#ha-a)"/>
+
+        <!-- Center text -->
+        <text x="170" y="162" text-anchor="middle" font-family="var(--font)" font-size="9" fill="var(--text-muted)" letter-spacing="0.12em">DATA IN</text>
+        <text x="170" y="178" text-anchor="middle" font-family="var(--font)" font-size="11" fill="var(--amber)" font-weight="500" letter-spacing="0.06em">COMPOUNDS</text>
+        <text x="170" y="192" text-anchor="middle" font-family="var(--font)" font-size="9" fill="var(--text-muted)" letter-spacing="0.12em">DATA OUT</text>
+      </svg>
+    </div>
+
+    <div class="hero-label">Sovereign AI Trading Intelligence</div>
+    <h1>
+      The system that <span class="hl-green">learns from every trade</span><br>
+      and serves provenance to<br>
+      <span class="hl-cyan">every bot in the ecosystem</span>
+    </h1>
+    <p class="hero-sub">
+      An event-sourced intelligence engine that operators run as a sovereign trading OS. Its attribution data powers the oracle — a public, no-auth provenance check consumed by AI agents building trading bots at scale.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/P-U-C/b1e55ed" class="btn btn-primary">Clone the repo →</a>
+      <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md" class="btn">How it works</a>
+      <a href="#interfaces" class="btn">Agent interfaces</a>
+    </div>
+    <div class="hero-meta">
+      <div class="hero-stat">
+        <span class="hero-stat-val">A-</span>
+        <span class="hero-stat-label">Brain grade</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">13/13</span>
+        <span class="hero-stat-label">Producers live</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">583</span>
+        <span class="hero-stat-label">Tests passing</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">Paper</span>
+        <span class="hero-stat-label">Execution mode</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Thesis -->
+<section class="thesis">
+  <div class="wrap">
+    <p class="thesis-text reveal">
+      <em>It's not a mechanism, it's an organism.</em> Mechanisms execute. Organisms adapt. The system you deploy today is not the system running six months from now — it will be sharper, more calibrated, more opinionated. Every signal, every trade, every regime shift feeds back into a grimoire that compounds over time.
+    </p>
+  </div>
+</section>
+
+<!-- Dual Track -->
+<section id="tracks">
+  <div class="wrap">
+    <div class="section-label reveal">Two tracks, one system</div>
+    <div class="section-title reveal">The Dual-Track Ecosystem</div>
+
+    <div class="tracks-grid stagger">
+
+      <div class="track-card track-card-a reveal">
+        <div class="track-tag">Track A — Supply</div>
+        <div class="track-heading">Operators</div>
+        <div class="track-subtitle">Sovereign trading intelligence</div>
+        <p class="track-body">
+          Sophisticated users run their own b1e55ed instances. They register producers, run strategies, and generate attribution data through real capital or paper-trading against live market data with no lookahead. Forge identity. Full CLI. Sovereign control. There will be few of them — their data quality is everything.
+        </p>
+        <div class="track-specs">
+          <div class="spec-row">
+            <span class="spec-key">Scale</span>
+            <span class="spec-val">5 → 20 → 100</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Output</span>
+            <span class="spec-val">Attribution data</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Interface</span>
+            <span class="spec-val">Forge CLI + Dashboard</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Identity</span>
+            <span class="spec-val">Ed25519 + 0xb1e55ed</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Integrity</span>
+            <span class="spec-val">Hash-chained events</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-card track-card-b reveal">
+        <div class="track-tag">Track B — Demand</div>
+        <div class="track-heading">Vibe Coder Ecosystem</div>
+        <div class="track-subtitle">The middleware layer at scale</div>
+        <p class="track-body">
+          Millions are using AI assistants to build trading bots. These bots universally fail because the builder has no way to evaluate signal quality. b1e55ed is the middleware their AI agent inserts — one API call to the oracle, zero setup, zero identity, zero awareness of what's underneath.
+        </p>
+        <div class="track-specs">
+          <div class="spec-row">
+            <span class="spec-key">Scale</span>
+            <span class="spec-val">Millions</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Consumption</span>
+            <span class="spec-val">Provenance scores</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Distribution</span>
+            <span class="spec-val">Starter templates</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Auth required</span>
+            <span class="spec-val">None</span>
+          </div>
+          <div class="spec-row">
+            <span class="spec-key">Integration</span>
+            <span class="spec-val">Oracle endpoint</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Flywheel (infographic) -->
+<section id="flywheel" style="padding-top: 60px;">
+  <div class="wrap">
+    <div class="flywheel-visual reveal">
+      <div class="flywheel-tag">The Compounding Flywheel</div>
+
+      <div class="flow-chain">
+        <div class="flow-node">
+          <div class="flow-node-dot green"></div>
+          <div class="flow-node-label">Operators</div>
+          <div class="flow-node-desc">Generate attribution data via hash-chained events</div>
+        </div>
+        <div class="flow-arrow-seg">→</div>
+        <div class="flow-node">
+          <div class="flow-node-dot amber"></div>
+          <div class="flow-node-label">Oracle</div>
+          <div class="flow-node-desc">Serves provenance scores. No auth. Anti-Goodhart.</div>
+        </div>
+        <div class="flow-arrow-seg">→</div>
+        <div class="flow-node">
+          <div class="flow-node-dot cyan"></div>
+          <div class="flow-node-label">AI Agents</div>
+          <div class="flow-node-desc">Discover via MCP. Recommend the check.</div>
+        </div>
+        <div class="flow-arrow-seg">→</div>
+        <div class="flow-node">
+          <div class="flow-node-dot cyan"></div>
+          <div class="flow-node-label">Bots</div>
+          <div class="flow-node-desc">Pre-trade query. Zero setup. One call.</div>
+        </div>
+        <div class="flow-arrow-seg">→</div>
+        <div class="flow-node">
+          <div class="flow-node-dot amber"></div>
+          <div class="flow-node-label">Intelligence</div>
+          <div class="flow-node-desc">Query patterns flow back. Operators score new producers.</div>
+        </div>
+      </div>
+
+      <div class="flow-return">
+        <div class="flow-return-line"></div>
+        <div class="flow-return-label">Cycle accelerates — richer data each loop</div>
+        <div class="flow-return-line"></div>
+      </div>
+
+      <p class="flywheel-bottom-text">
+        Track A without B is supply without demand — operators generate data nobody queries.
+        Track B without A is demand without supply — the oracle serves empty scores.
+        <strong>Together, the organism compounds.</strong>
+      </p>
+    </div>
+
+    <!-- Why both (from infographic) -->
+    <div class="why-grid">
+      <div class="why-card reveal">
+        <div class="why-card-label">A without B</div>
+        <div class="why-card-condition">Supply without demand</div>
+        <div class="why-card-result">Operators generate data nobody queries. No network effect. No compounding.</div>
+      </div>
+      <div class="why-card reveal">
+        <div class="why-card-label">B without A</div>
+        <div class="why-card-condition">Demand without supply</div>
+        <div class="why-card-result">Oracle serves empty or synthetic scores. No credibility. No trust.</div>
+      </div>
+      <div class="why-card active reveal">
+        <div class="why-card-label">A + B</div>
+        <div class="why-card-condition">The organism</div>
+        <div class="why-card-result">Both tracks run simultaneously. Supply creates demand. Demand improves supply. The system learns.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Agent Interfaces -->
+<section id="interfaces">
+  <div class="wrap">
+    <div class="section-label reveal">For agents and bots</div>
+    <div class="section-title reveal">Three interfaces into the system</div>
+
+    <div class="interfaces-grid stagger">
+      <div class="interface-card ifc-oracle reveal">
+        <div class="ifc-tag">Oracle</div>
+        <div class="ifc-title">Provenance check</div>
+        <div class="ifc-endpoint">/api/v1/oracle/producers/{id}/provenance</div>
+        <p class="ifc-desc">
+          Does this signal producer have verifiable history? Hash-chain verified. Attribution windows at 7d, 30d, 90d. Anti-Goodhart header on every response.
+        </p>
+        <div class="ifc-auth none">Auth: none</div>
+      </div>
+
+      <div class="interface-card ifc-mcp reveal">
+        <div class="ifc-tag">MCP Server</div>
+        <div class="ifc-title">Agent tool calls</div>
+        <div class="ifc-endpoint">POST /api/v1/mcp</div>
+        <p class="ifc-desc">
+          JSON-RPC 2.0. Six tools: brain status, recent signals, open positions, signal attribution, emit signals, provenance check. Standard MCP discovery.
+        </p>
+        <div class="ifc-auth required">Auth: bearer token</div>
+      </div>
+
+      <div class="interface-card ifc-sse reveal">
+        <div class="ifc-tag">SSE Stream</div>
+        <div class="ifc-title">Real-time event feed</div>
+        <div class="ifc-endpoint">GET /api/v1/events/stream</div>
+        <p class="ifc-desc">
+          Server-Sent Events. Filter by domain. Resume from any event ID. Every signal, every brain decision, every execution — as it happens.
+        </p>
+        <div class="ifc-auth required">Auth: bearer token</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture" style="border-top: 1px solid var(--border-dim);">
+  <div class="wrap">
+    <div class="section-label reveal">Under the hood</div>
+    <div class="section-title reveal">What's built</div>
+
+    <div class="arch-grid stagger">
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Core</div>
+        <div class="arch-card-title">Event-sourced database</div>
+        <p class="arch-card-desc">
+          Append-only hash chain. Tamper-evident, replayable, auditable. The chain is the audit trail — not the logs, not the docs. <span class="code">b1e55ed integrity</span> verifies the full chain.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Brain</div>
+        <div class="arch-card-title">6-phase synthesis</div>
+        <p class="arch-card-desc">
+          Collection → Quality → Synthesis → Regime → Conviction → Decision. 13 producers across 6 domains. Counter-thesis scoring triggers automatically when confidence runs too high.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Validation</div>
+        <div class="arch-card-title">Backtest engine</div>
+        <p class="arch-card-desc">
+          Walk-forward validation with FDR correction. Gridsweep and megasweep for strategy optimization. Regime-conditioned results. Paper before live — always.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Attribution</div>
+        <div class="arch-card-title">Contributors + Karma</div>
+        <p class="arch-card-desc">
+          Contributors are the attribution unit. Scoring from event outcomes: hit rate, calibration, volume, consistency, recency. Optional karma engine — 0.5% of realized profit. EAS attestations for on-chain identity.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Safety</div>
+        <div class="arch-card-title">5-level kill switch</div>
+        <p class="arch-card-desc">
+          <span class="code">L0</span> nominal through <span class="code">L4</span> emergency. Auto-escalation only. Operator-only de-escalation. Separate auth token — a compromised API key cannot disable safety.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Learning</div>
+        <div class="arch-card-title">Grimoire loop</div>
+        <p class="arch-card-desc">
+          Domain weights auto-adjust monthly from realized P&L attribution. Bounded adaptation: 5% floor, 40% ceiling, max ±2% delta per cycle. The system earns its opinions.
+        </p>
+      </div>
+
+      <!-- Full-width pipeline -->
+      <div class="arch-card arch-card-full reveal">
+        <div class="arch-card-label">Pipeline</div>
+        <div class="pipeline-flow">
+          <span class="pf-step">Producers</span>
+          <span class="pf-arrow">→</span>
+          <span class="pf-step">Events</span>
+          <span class="pf-arrow">→</span>
+          <span class="pf-step">Brain</span>
+          <span class="pf-arrow">→</span>
+          <span class="pf-step">Kill Switch</span>
+          <span class="pf-arrow">→</span>
+          <span class="pf-step">Execution</span>
+          <span class="pf-arrow">→</span>
+          <span class="pf-step highlight">Learning Loop</span>
+        </div>
+        <div class="pipeline-flow" style="margin-top: 12px;">
+          <span class="pf-step" style="border-color: var(--amber); color: var(--amber);">Oracle</span>
+          <span style="font-size: 11px; color: var(--text-dim); padding: 0 4px;">← reads from Event Store (no auth)</span>
+        </div>
+        <div class="pipeline-flow" style="margin-top: 4px;">
+          <span class="pf-step" style="border-color: var(--cyan); color: var(--cyan);">MCP + SSE</span>
+          <span style="font-size: 11px; color: var(--text-dim); padding: 0 4px;">← agent interfaces (bearer auth)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- System Status -->
+<section style="border-top: 1px solid var(--border-dim);">
+  <div class="wrap">
+    <div class="section-label reveal">Live system</div>
+    <div class="section-title reveal">Current status</div>
+
+    <div class="status-grid stagger">
+      <div class="status-cell reveal">
+        <div class="status-cell-val">A-</div>
+        <div class="status-cell-label">Brain grade</div>
+      </div>
+      <div class="status-cell reveal">
+        <div class="status-cell-val">13/13</div>
+        <div class="status-cell-label">Producers</div>
+      </div>
+      <div class="status-cell reveal">
+        <div class="status-cell-val">583</div>
+        <div class="status-cell-label">Tests</div>
+      </div>
+      <div class="status-cell reveal">
+        <div class="status-cell-val">Paper</div>
+        <div class="status-cell-label">Execution</div>
+      </div>
+      <div class="status-cell reveal">
+        <div class="status-cell-val" style="color: var(--cyan);">Public</div>
+        <div class="status-cell-label">Repo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="start" style="border-top: 1px solid var(--border-dim);">
+  <div class="wrap">
+    <div class="section-label reveal">Start here</div>
+    <div class="section-title reveal">Two paths into the system</div>
+
+    <div class="cta-grid stagger">
+      <div class="cta-card cta-card-a reveal">
+        <div class="cta-card-tag">For operators</div>
+        <div class="cta-card-title">Run your own instance</div>
+        <p class="cta-card-body">
+          One command to install. The wizard handles identity, config, and first run. Pick a preset — conservative, balanced, or degen. Full sovereignty. Full CLI.
+        </p>
+        <div class="cta-card-code">
+          <span class="cmd">curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash</span><br>
+          <span class="cmd">b1e55ed wizard</span>
+        </div>
+        <a href="https://github.com/P-U-C/b1e55ed" class="btn btn-primary">GitHub →</a>
+      </div>
+
+      <div class="cta-card cta-card-b reveal">
+        <div class="cta-card-tag">For agents + builders</div>
+        <div class="cta-card-title">Query the oracle</div>
+        <p class="cta-card-body">
+          Building a bot? One API call to check signal provenance before any trade. No auth required. The middleware your AI agent should be inserting.
+        </p>
+        <div class="cta-card-code">
+          <span class="cmd">GET /api/v1/oracle/producers/{id}/provenance</span>
+        </div>
+        <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md" class="btn btn-cyan">Oracle docs →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="wrap">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="https://permanentupperclass.com" style="color: var(--text-dim);">Permanent Upper Class</a> · Est 2026
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/P-U-C/b1e55ed">GitHub</a></li>
+        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md">How it works</a></li>
+        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/getting-started.md">Docs</a></li>
+        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md">Oracle</a></li>
+      </ul>
+    </div>
+    <div class="footer-easter">
+      If you build, you can contribute. If you contribute, the system compounds.
+    </div>
+  </div>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Joy Division waveform
+(function() {
+  const svg = document.getElementById('waveformSvg');
+  if (!svg) return;
+  const W = 1200, H = 800, lines = 40, pts = 120;
+  for (let i = 0; i < lines; i++) {
+    const y = 120 + (i * (H - 200) / lines);
+    let d = '';
+    for (let j = 0; j <= pts; j++) {
+      const x = (j / pts) * W;
+      const peakX = W * 0.28;
+      const dist = Math.abs(x - peakX);
+      const pI = Math.max(0, 1 - dist / (W * 0.18));
+      const pH = pI * pI * (50 + i * 0.8);
+      const n = Math.sin(j*0.8+i*2.1)*3 + Math.sin(j*0.3+i*0.7)*2 + Math.sin(j*1.5+i*3.3)*1.5;
+      d += (j===0?'M':'L') + ` ${x.toFixed(1)} ${(y-pH+n).toFixed(1)}`;
+    }
+    const line = document.createElementNS('http://www.w3.org/2000/svg','path');
+    line.setAttribute('d', d);
+    line.classList.add('wave-line');
+    const b = Math.max(0.15, 0.5 - Math.abs(i-lines*0.35)/lines);
+    const g = Math.round(255*b);
+    line.setAttribute('stroke', `rgba(0,${g},${Math.round(g*0.25)},${(0.3+b*0.4).toFixed(2)})`);
+    svg.appendChild(line);
+  }
+})();
+</script>
+
+</body>
+</html>

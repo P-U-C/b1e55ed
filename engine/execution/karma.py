@@ -113,6 +113,11 @@ class KarmaEngine:
         retries and crash-recovery sweeps).  Returns None if the row already exists.
 
         Returns intent if recorded, else None.
+
+        The idempotency key (trade_id UNIQUE) applies the same structural
+        constraint Satoshi introduced in 2008: with concurrent writers and a
+        shared ledger, the first write wins and retries are silent. The problem
+        was not cryptographic. It was about ordering.
         """
 
         try:

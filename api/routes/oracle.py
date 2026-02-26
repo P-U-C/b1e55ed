@@ -132,3 +132,86 @@ async def get_producer_provenance(
         },
         note=result.note,
     )
+
+
+# ---------------------------------------------------------------------------
+# Public contributor registration — no auth required.
+# The oracle holds the GitHub App key; new installs call this to get
+# their registration issue created without needing credentials.
+# ---------------------------------------------------------------------------
+
+
+class ContributorRegisterOracleRequest(BaseModel):
+    node_id: str
+    name: str = ""
+    role: str = "contributor"
+
+
+class ContributorRegisterOracleResponse(BaseModel):
+    contributor_id: str
+    node_id: str
+    name: str
+    role: str
+    registered_at: str
+    issue_url: str | None = None
+
+
+@router.post("/contributors/register", response_model=ContributorRegisterOracleResponse)
+def oracle_register_contributor(
+    req: ContributorRegisterOracleRequest,
+    request: Request,
+    db: Database = Depends(get_db),
+) -> ContributorRegisterOracleResponse:
+    """Public endpoint — registers a new contributor and creates a GitHub issue.
+
+    Called by ``b1e55ed wizard`` on new installs.  No authentication required.
+    The oracle supplies GitHub App credentials server-side so installers don't
+    need a token.
+    """
+    from api.deps import get_publisher
+    from engine.core.contributors import ContributorRegistry
+
+    if not req.node_id.startswith("eth:0xb1e55ed"):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="node_id must start with eth:0xb1e55ed")
+
+    name = req.name or req.node_id
+    publisher = get_publisher(request)
+    reg = ContributorRegistry(db, github_publisher=publisher)
+
+    try:
+        c = reg.register(node_id=req.node_id, name=name, role=req.role)
+    except ValueError:
+        # Already registered — look up and return existing
+        existing = next((x for x in reg.list_all() if x.node_id == req.node_id), None)
+        if existing:
+            issue_url = None
+            pub = (existing.metadata.get("publish") or {}).get("github") if isinstance(existing.metadata, dict) else None
+            if isinstance(pub, dict):
+                issue_url = pub.get("html_url")
+            return ContributorRegisterOracleResponse(
+                contributor_id=existing.id,
+                node_id=existing.node_id,
+                name=existing.name,
+                role=existing.role,
+                registered_at=existing.registered_at,
+                issue_url=issue_url,
+            )
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=409, detail="contributor already registered") from None
+
+    issue_url: str | None = None
+    pub = (c.metadata.get("publish") or {}).get("github") if isinstance(c.metadata, dict) else None
+    if isinstance(pub, dict):
+        issue_url = pub.get("html_url")
+
+    return ContributorRegisterOracleResponse(
+        contributor_id=c.id,
+        node_id=c.node_id,
+        name=c.name,
+        role=c.role,
+        registered_at=c.registered_at,
+        issue_url=issue_url,
+    )

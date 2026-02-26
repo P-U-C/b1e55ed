@@ -93,6 +93,10 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     #    We verify the global chain (not per-producer) since the chain is
     #    contiguous across all producers.  fast=True verifies last 2000 by
     #    default; we override to last 100 for a lightweight beta check.
+    #
+    #    Ralph Merkle described this integrity property in his 1979 doctoral
+    #    thesis: alter any node and the divergence propagates up the tree.
+    #    The mechanism predates "blockchain" as a term by three decades.
     # -----------------------------------------------------------------------
     try:
         chain_integrity_spot_checked = db.verify_hash_chain(fast=True, last_n=100)
