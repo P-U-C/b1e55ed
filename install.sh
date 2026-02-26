@@ -227,15 +227,21 @@ info "Downloading Rust forge binary..."
 FORGE_DIR="$HOME/.local/share/b1e55ed/bin"
 mkdir -p "$FORGE_DIR"
 
+# Resolve latest release tag (including pre-releases — /releases/latest skips them)
+RELEASE_TAG=$(curl -fsSL "https://api.github.com/repos/P-U-C/b1e55ed/releases?per_page=1" 2>/dev/null \
+    | python3 -c "import sys,json; r=json.load(sys.stdin); print(r[0]['tag_name'])" 2>/dev/null || echo "")
+
 # Detect platform
 FORGE_URL=""
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # Universal binary — works on both Apple Silicon and Intel
-    FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos"
-elif [[ "$OSTYPE" == "linux"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "x86_64" ]]; then
-        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64"
+if [ -n "$RELEASE_TAG" ]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Universal binary — works on both Apple Silicon and Intel
+        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/download/${RELEASE_TAG}/b1e55ed-forge-macos"
+    elif [[ "$OSTYPE" == "linux"* ]]; then
+        ARCH=$(uname -m)
+        if [[ "$ARCH" == "x86_64" ]]; then
+            FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/download/${RELEASE_TAG}/b1e55ed-forge-linux-x86_64"
+        fi
     fi
 fi
 
