@@ -128,9 +128,13 @@ class EASConfig(BaseModel):
 
 class PublishGithubConfig(BaseModel):
     owner: str = "P-U-C"
-    repo: str = "offchain-attestations"
-    token: str = ""  # PAT or installation token; never logged
-    labels: list[str] = Field(default_factory=lambda: ["attestation", "offchain"])
+    repo: str = "b1e55ed"
+    token: str = ""  # PAT (legacy); never logged
+    # GitHub App auth (preferred when app_id is non-zero)
+    # Private key is loaded from B1E55ED_GITHUB_APP_KEY env var — never stored in config.
+    app_id: int = 0  # GitHub App ID
+    installation_id: int = 0  # GitHub App Installation ID
+    labels: list[str] = Field(default_factory=lambda: ["b1e55ed-attestation"])
     mode: str = "issues"  # future: contents/ipfs
 
 

@@ -1,0 +1,63 @@
+name: Build Forge Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag to upload binaries to (e.g. v1.0.0-beta.5)'
+        required: false
+        default: 'v1.0.0-beta.5'
+
+jobs:
+  build-macos-universal:
+    name: Build macos-universal
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Build arm64 + x86_64 and combine into universal binary
+        run: |
+          cd tools/forge
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create \
+            target/aarch64-apple-darwin/release/b1e55ed-forge \
+            target/x86_64-apple-darwin/release/b1e55ed-forge \
+            -output b1e55ed-forge-macos
+          file b1e55ed-forge-macos
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          files: tools/forge/b1e55ed-forge-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build linux-x86_64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Build
+        run: |
+          cd tools/forge
+          cargo build --release --target x86_64-unknown-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/release/b1e55ed-forge b1e55ed-forge-linux-x86_64
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          files: tools/forge/b1e55ed-forge-linux-x86_64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

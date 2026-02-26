@@ -445,6 +445,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
 
+    p_uninstall = sub.add_parser("uninstall", help="Uninstall b1e55ed and clean up all related files")
+    p_uninstall.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip all confirmations and remove everything automatically.",
+    )
+    p_uninstall.add_argument(
+        "--keep-data",
+        action="store_true",
+        dest="keep_data",
+        help="Remove binary/tool but preserve data and config directories.",
+    )
+
     # -- anchor --
     from engine.cli.commands.anchor import build_anchor_parser
 
@@ -1385,17 +1398,27 @@ def _build_contributor_registry_with_eas(*, db: Database, config: Config) -> Con
 
     from engine.core.contributors import ContributorRegistry
 
-    # GitHub publisher — always active when token is configured (fail-open)
+    # GitHub publisher — active when token OR GitHub App is configured (fail-open)
     github_publisher: object | None = None
     pub_cfg = config.publish.github
-    if pub_cfg.token:
+    if pub_cfg.token or (int(pub_cfg.app_id or 0) > 0):
         from engine.integrations.github_publish import make_publisher
+
+        app_auth = None
+        if int(pub_cfg.app_id or 0) > 0:
+            try:
+                from engine.integrations.github_app import GitHubAppAuth
+
+                app_auth = GitHubAppAuth.from_env()
+            except Exception:
+                pass
 
         github_publisher = make_publisher(
             owner=pub_cfg.owner,
             repo=pub_cfg.repo,
-            token=pub_cfg.token,
+            token=str(pub_cfg.token or ""),
             labels=pub_cfg.labels,
+            app_auth=app_auth,
         )
 
     # EAS client — only when explicitly enabled
@@ -1886,10 +1909,47 @@ def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_rust_forge_binary(repo_root: Path) -> str | None:
+    """Return path to the Rust forge binary if available, else None."""
+    import shutil
+
+    candidates = [
+        Path.home() / ".local" / "share" / "b1e55ed" / "bin" / "b1e55ed-forge",
+        Path.home() / ".local" / "bin" / "b1e55ed-forge",
+    ]
+    for p in candidates:
+        if p.exists() and os.access(str(p), os.X_OK):
+            return str(p)
+    found = shutil.which("b1e55ed-forge")
+    if found:
+        return found
+    # Also check in-repo build artifact
+    repo_binary = repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
+    if repo_binary.exists() and os.access(str(repo_binary), os.X_OK):
+        return str(repo_binary)
+    return None
+
+
+def _print_forge_binary_instructions() -> None:
+    """Print instructions to download the Rust forge binary."""
+    print()
+    print("  Download the Rust grinder for your platform:")
+    print()
+    print("    macOS (universal): https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos")
+    print("    Linux x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64")
+    print()
+    print("  Install:")
+    print("    mkdir -p ~/.local/share/b1e55ed/bin")
+    print("    curl -Lo ~/.local/share/b1e55ed/bin/b1e55ed-forge <url-for-your-platform>")
+    print("    chmod +x ~/.local/share/b1e55ed/bin/b1e55ed-forge")
+    print()
+    print("  Then re-run: b1e55ed identity forge")
+    print()
+
+
 def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     """The Forge — identity derivation ritual."""
 
-    import shutil
     import subprocess
     import time
 
@@ -1900,27 +1960,52 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     # Expected candidates for 7 hex chars
     expected = 16 ** len(prefix)
 
+    rust_binary = _find_rust_forge_binary(ctx.repo_root)
+
+    # If Rust binary not found and not JSON mode, warn and offer options
+    if rust_binary is None and not use_json:
+        print()
+        print("  ⚠ Rust grinder not found — vanity forge requires the b1e55ed-forge binary.")
+        print()
+        print("  Options:")
+        print("    1) Download forge binary   — fast (~2-10s), then forge immediately")
+        print("    2) Force Python fallback   — ~90 min, not recommended (no random address)")
+        print()
+
+        try:
+            choice = input("  Choice [1]: ").strip() or "1"
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+        if choice != "2":
+            # Default: option 1 — download instructions, then exit so user installs and re-runs
+            _print_forge_binary_instructions()
+            return 0
+
+        # choice == "2": force Python grinder below (rust_binary stays None)
+        print()
+        print("  ⚠ Starting Python grinder — this will take ~90 minutes.")
+        print("    The b1e55ed prefix is non-negotiable; no random address will be generated.")
+        print()
+
     if not use_json:
         print()
-        print("  ╔══════════════════════════════════════╗")
-        print("  ║         THE FORGE                    ║")
-        print("  ║         b1e55ed identity protocol    ║")
-        print("  ╚══════════════════════════════════════╝")
+        print("  ╔══════════════════════════════════════════╗")
+        print("  ║               THE FORGE                  ║")
+        print("  ║       b1e55ed identity protocol          ║")
+        print("  ╚══════════════════════════════════════════╝")
         print()
         print(f"  Every address in this network begins with 0x{prefix}.")
         print("  Yours is being derived now.")
         print()
-        print("  This takes a few minutes.")
-        print("  The work is the point.")
+        if rust_binary:
+            print("  This takes ~2 seconds with the Rust grinder.")
+        else:
+            print("  Rust grinder not found — using Python fallback (~90 min).")
         print()
         print("  Searching...")
         print()
-
-    rust_binary = shutil.which("b1e55ed-forge")
-    if rust_binary is None:
-        repo_binary = ctx.repo_root / "tools" / "forge" / "target" / "release" / "b1e55ed-forge"
-        if repo_binary.exists():
-            rust_binary = str(repo_binary)
 
     result: dict[str, object] | None = None
 
@@ -2776,6 +2861,12 @@ def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
     return run_wizard(ctx, args)
 
 
+def _cmd_uninstall(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.cli.commands.uninstall import run_uninstall
+
+    return run_uninstall(ctx, args)
+
+
 def _cmd_anchor(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.anchor import run_anchor
 
@@ -2803,7 +2894,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup", "wizard"}
+    ungated_commands = {"identity", "setup", "wizard", "uninstall"}
 
     cmd = getattr(args, "command", None)
     if cmd not in ungated_commands:
@@ -2856,6 +2947,7 @@ def main(argv: list[str] | None = None) -> int:
         "anchor": _cmd_anchor,
         "export": _cmd_export,
         "wizard": _cmd_wizard,
+        "uninstall": _cmd_uninstall,
     }
 
     fn = dispatch.get(str(args.command))

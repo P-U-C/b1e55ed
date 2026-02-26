@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -38,12 +39,17 @@ jobs:
       - name: Validate doc deps
         run: bash scripts/validate_doc_deps.sh
 
-      - name: Commit if changed
-        run: |
-          git config user.name "b1e55ed[bot]"
-          git config user.email "bot@permanentupperclass.com"
-          git diff --quiet && echo "No changes." || (
-            git add docs/dependencies-code.md docs/dependencies-docs.md
-            git commit -m "chore: auto-update dependency graphs [skip ci]"
-            git push
-          )
+      - name: Open PR if changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: auto-update dependency graphs [skip ci]"
+          author: "b1e55ed[bot] <bot@permanentupperclass.com>"
+          branch: chore/auto-dep-graphs
+          delete-branch: true
+          title: "chore: auto-update dependency graphs"
+          body: "Automated dependency graph update triggered by changes to source files.\n\n_This PR was opened automatically by the dep-graphs workflow._"
+          labels: "automated,documentation"
+          add-paths: |
+            docs/dependencies-code.md
+            docs/dependencies-docs.md
