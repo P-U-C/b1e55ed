@@ -14,5 +14,5 @@ from __future__ import annotations
 
 # Placeholder values — update when the GitHub App is created.
 # These are public info (visible in GitHub UI), not secrets.
-COMMUNITY_APP_ID: int = 0  # placeholder — update when app is created
-COMMUNITY_INSTALLATION_ID: int = 0  # placeholder — update when app is created
+COMMUNITY_APP_ID: int = 2953603
+COMMUNITY_INSTALLATION_ID: int = 112556330
