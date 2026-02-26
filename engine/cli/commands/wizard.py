@@ -410,7 +410,7 @@ def _auto_download_forge() -> str | None:
     machine = platform.machine().lower()
 
     if system == "darwin":
-        artifact = "b1e55ed-forge-macos-arm64" if machine == "arm64" else "b1e55ed-forge-macos-x86_64"
+        artifact = "b1e55ed-forge-macos"  # universal binary (arm64 + x86_64)
     elif system == "linux" and machine == "x86_64":
         artifact = "b1e55ed-forge-linux-x86_64"
     else:
