@@ -417,7 +417,23 @@ def _auto_download_forge() -> str | None:
         print(f"  {yellow('⚠')} No pre-built binary for {system}/{machine}.")
         return None
 
-    url = f"https://github.com/P-U-C/b1e55ed/releases/latest/download/{artifact}"
+    # /releases/latest skips pre-releases — resolve tag via API instead
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            "https://api.github.com/repos/P-U-C/b1e55ed/releases?per_page=1"
+        ) as resp:
+            import json as _json
+
+            releases = _json.loads(resp.read())
+            tag = releases[0]["tag_name"] if releases else None
+    except Exception:  # noqa: BLE001
+        tag = None
+
+    if not tag:
+        print(f"  {red('✗')} Could not resolve latest release tag.")
+        return None
+
+    url = f"https://github.com/P-U-C/b1e55ed/releases/download/{tag}/{artifact}"
     dest_dir = Path.home() / ".local" / "share" / "b1e55ed" / "bin"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "b1e55ed-forge"
