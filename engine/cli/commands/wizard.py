@@ -101,6 +101,153 @@ def _section(title: str) -> None:
     print()
 
 
+# ── Symbol packs ─────────────────────────────────────────────────────────────
+
+_SYMBOL_PACKS: dict[str, dict] = {
+    "1": {
+        "name": "Top 10 — Large caps (BTC, ETH, SOL, BNB, XRP, ADA, AVAX, DOT, LINK, UNI)",
+        "symbols": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOT", "LINK", "UNI"],
+    },
+    "2": {
+        "name": "Top 30 — Broad coverage",
+        "symbols": [
+            "BTC",
+            "ETH",
+            "SOL",
+            "BNB",
+            "XRP",
+            "ADA",
+            "AVAX",
+            "DOT",
+            "LINK",
+            "UNI",
+            "LTC",
+            "ATOM",
+            "NEAR",
+            "ARB",
+            "OP",
+            "MATIC",
+            "FIL",
+            "AAVE",
+            "CRV",
+            "SNX",
+            "SUI",
+            "APT",
+            "INJ",
+            "TIA",
+            "SEI",
+            "JTO",
+            "WIF",
+            "BONK",
+            "JUP",
+            "PYTH",
+        ],
+    },
+    "3": {
+        "name": "Top 50 — Comprehensive",
+        "symbols": [
+            "BTC",
+            "ETH",
+            "SOL",
+            "BNB",
+            "XRP",
+            "ADA",
+            "AVAX",
+            "DOT",
+            "LINK",
+            "UNI",
+            "LTC",
+            "ATOM",
+            "NEAR",
+            "ARB",
+            "OP",
+            "MATIC",
+            "FIL",
+            "AAVE",
+            "CRV",
+            "SNX",
+            "SUI",
+            "APT",
+            "INJ",
+            "TIA",
+            "SEI",
+            "JTO",
+            "WIF",
+            "BONK",
+            "JUP",
+            "PYTH",
+            "PEPE",
+            "FLOKI",
+            "MEME",
+            "RENDER",
+            "FET",
+            "OCEAN",
+            "AGIX",
+            "TAO",
+            "IO",
+            "HYPE",
+            "VIRTUAL",
+            "AI16Z",
+            "AIXBT",
+            "GOAT",
+            "DEGEN",
+            "BRETT",
+            "TOSHI",
+            "MOG",
+            "TURBO",
+            "WEN",
+        ],
+    },
+    "4": {
+        "name": "Highest TVL — DeFi protocols",
+        "symbols": [
+            "ETH",
+            "BTC",
+            "SOL",
+            "BNB",
+            "AVAX",
+            "MATIC",
+            "ARB",
+            "OP",
+            "AAVE",
+            "UNI",
+            "CRV",
+            "MKR",
+            "COMP",
+            "LDO",
+            "RPL",
+            "SUSHI",
+            "BAL",
+            "FXS",
+            "CVX",
+            "FRAX",
+        ],
+    },
+    "5": {
+        "name": "AI + Agent coins",
+        "symbols": [
+            "FET",
+            "OCEAN",
+            "AGIX",
+            "RENDER",
+            "TAO",
+            "IO",
+            "VIRTUAL",
+            "AI16Z",
+            "AIXBT",
+            "GOAT",
+            "GRASS",
+            "PRIME",
+            "ATH",
+            "NOS",
+        ],
+    },
+    "6": {
+        "name": "Custom — enter your own",
+        "symbols": [],
+    },
+}
+
 # ── Step helpers ──────────────────────────────────────────────────────────────
 
 
@@ -336,27 +483,56 @@ def _step4_configuration(repo_root: Path) -> None:
         print(f"  {_ok(f'Generated token: {api_token[:16]}...')}")
 
     print()
-    print("  " + bold("Brain cycle symbols") + ":")
+    print("  " + bold("Brain cycle symbols") + " — choose a pack:")
+    print()
+    for key, pack in _SYMBOL_PACKS.items():
+        print(f"  {bold(key)}) {pack['name']}")
+    print()
     try:
-        symbols_raw = _ask("  Symbols (comma-separated)", default="BTC,ETH,SOL")
+        pack_choice = _ask("  Pack", default="1")
     except (EOFError, KeyboardInterrupt):
         print()
-        symbols_raw = "BTC,ETH,SOL"
+        pack_choice = "1"
 
-    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
-    if not symbols:
-        symbols = ["BTC", "ETH", "SOL"]
+    if pack_choice not in _SYMBOL_PACKS:
+        pack_choice = "1"
+
+    if pack_choice == "6":
+        try:
+            symbols_raw = _ask("  Symbols (comma-separated)", default="BTC,ETH,SOL")
+        except (EOFError, KeyboardInterrupt):
+            symbols_raw = "BTC,ETH,SOL"
+        symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()] or ["BTC", "ETH", "SOL"]
+    else:
+        symbols = _SYMBOL_PACKS[pack_choice]["symbols"]
+        print(f"  {_ok(f'Pack selected: {len(symbols)} symbols')}")
 
     print()
-    print("  " + bold("GitHub publish token") + " (optional, for public contributor attestations):")
-    try:
-        github_token = _ask("  Token", default="skip")
-    except (EOFError, KeyboardInterrupt):
-        print()
-        github_token = "skip"
+    print("  " + bold("GitHub publish token") + " — required to track your contributions publicly.")
+    print()
+    print(f"  {dim('Contributions without a token are scored locally only (not publicly visible).')}")
+    print(f"  {dim('Create a fine-grained PAT at: https://github.com/settings/tokens?type=beta')}")
+    print(f"  {dim('Required permissions: Contents → Read & Write on P-U-C/b1e55ed only.')}")
+    print()
 
-    if github_token == "skip":
-        github_token = ""
+    # Check environment first
+    env_token = os.environ.get("B1E55ED_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
+    if env_token:
+        print(f"  {_ok('Token found in environment (B1E55ED_GITHUB_TOKEN / GITHUB_TOKEN)')}")
+        github_token = env_token
+    else:
+        try:
+            github_token = _ask("  GitHub token (or press Enter to skip — you can add later)", default="")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            github_token = ""
+
+        if not github_token:
+            print()
+            print(f"  {yellow('⚠')} No token set — contributions will be scored locally only.")
+            print(f"  {dim('Add later: set B1E55ED_GITHUB_TOKEN=<token> and re-run wizard.')}")
+        else:
+            print(f"  {_ok('Token configured')}")
 
     # Build config YAML
     symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
