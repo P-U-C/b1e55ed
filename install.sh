@@ -230,12 +230,8 @@ mkdir -p "$FORGE_DIR"
 # Detect platform
 FORGE_URL=""
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "arm64" ]]; then
-        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-arm64"
-    else
-        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-x86_64"
-    fi
+    # Universal binary — works on both Apple Silicon and Intel
+    FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos"
 elif [[ "$OSTYPE" == "linux"* ]]; then
     ARCH=$(uname -m)
     if [[ "$ARCH" == "x86_64" ]]; then
