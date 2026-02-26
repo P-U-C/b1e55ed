@@ -221,6 +221,40 @@ else
     echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
+# ── Step 6: Download Rust forge binary ────────────────────────────────────────
+info "Downloading Rust forge binary..."
+
+FORGE_DIR="$HOME/.local/share/b1e55ed/bin"
+mkdir -p "$FORGE_DIR"
+
+# Detect platform
+FORGE_URL=""
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "arm64" ]]; then
+        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-arm64"
+    else
+        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-x86_64"
+    fi
+elif [[ "$OSTYPE" == "linux"* ]]; then
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "x86_64" ]]; then
+        FORGE_URL="https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64"
+    fi
+fi
+
+if [ -n "$FORGE_URL" ]; then
+    if curl -fsSL "$FORGE_URL" -o "$FORGE_DIR/b1e55ed-forge" 2>/dev/null; then
+        chmod +x "$FORGE_DIR/b1e55ed-forge"
+        success "Rust forge binary installed (~50M candidates/sec)"
+    else
+        warn "Could not download forge binary (no release yet) — Python fallback will be used"
+        warn "Run 'b1e55ed identity forge' after a release is published, or use random identity"
+    fi
+else
+    warn "No forge binary available for this platform — use 'b1e55ed identity forge' with Python fallback or random identity"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}══════════════════════════════════════════${RESET}"

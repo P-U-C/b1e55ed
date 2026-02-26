@@ -1,0 +1,43 @@
+name: Build Forge Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: macos-arm64
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            artifact: b1e55ed-forge-macos-arm64
+          - target: macos-x86_64
+            os: macos-13  # Intel runner
+            rust_target: x86_64-apple-darwin
+            artifact: b1e55ed-forge-macos-x86_64
+          - target: linux-x86_64
+            os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            artifact: b1e55ed-forge-linux-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+      - name: Build
+        run: |
+          cd tools/forge
+          cargo build --release --target ${{ matrix.rust_target }}
+          cp target/${{ matrix.rust_target }}/release/b1e55ed-forge ${{ matrix.artifact }}
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tools/forge/${{ matrix.artifact }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

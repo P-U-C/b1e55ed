@@ -385,6 +385,39 @@ def _step2_password() -> None:
         print(f"  {dim('Password not saved — set B1E55ED_MASTER_PASSWORD manually when needed.')}")
 
 
+def _check_rust_grinder() -> str | None:
+    """Return path to Rust forge binary if available, else None."""
+    import shutil
+
+    candidates = [
+        Path.home() / ".local" / "share" / "b1e55ed" / "bin" / "b1e55ed-forge",
+        Path.home() / ".local" / "bin" / "b1e55ed-forge",
+    ]
+    for p in candidates:
+        if p.exists() and os.access(str(p), os.X_OK):
+            return str(p)
+    found = shutil.which("b1e55ed-forge")
+    return found
+
+
+def _print_forge_download_instructions() -> None:
+    """Print instructions to download the Rust forge binary."""
+    print()
+    print("  Download the Rust grinder for your platform:")
+    print()
+    print("    macOS arm64:  https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-arm64")
+    print("    macOS x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos-x86_64")
+    print("    Linux x86_64: https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64")
+    print()
+    print("  Install:")
+    print("    mkdir -p ~/.local/share/b1e55ed/bin")
+    print("    curl -Lo ~/.local/share/b1e55ed/bin/b1e55ed-forge <url-for-your-platform>")
+    print("    chmod +x ~/.local/share/b1e55ed/bin/b1e55ed-forge")
+    print()
+    print("  Then re-run: b1e55ed identity forge")
+    print()
+
+
 def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
@@ -404,38 +437,70 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {yellow('⚠')} Existing identity file could not be read — will offer to forge.")
 
     print("  Your identity is an Ethereum address with a " + bold("0xb1e55ed") + " prefix.")
-    print("  Forging takes 10–60 seconds (proof-of-work vanity mining).")
     print()
 
-    try:
-        forge = _ask_yn("  Forge new identity?", default=True)
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping identity forge.')}")
-        return
+    rust_binary = _check_rust_grinder()
 
-    if forge:
+    if rust_binary:
+        # Fast path: Rust binary available
+        print(f"  {_ok(f'Rust grinder found: {rust_binary}')}")
+        print("  Forging a vanity address takes ~2 seconds with the Rust binary.")
         print()
-        print(f"  {dim('Running: b1e55ed identity forge')}")
-        print()
+
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "engine.cli", "identity", "forge"],
-                cwd=str(repo_root),
-                check=False,
-            )
-            if proc.returncode == 0:
-                print(f"\n  {_ok('Identity forged successfully')}")
-            else:
-                print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
-                print(f"  {dim('You can retry later: b1e55ed identity forge')}")
-        except Exception as e:  # noqa: BLE001
-            print(f"\n  {red('⚠')} Could not run forge: {e}")
-            print(f"  {dim('Try manually: b1e55ed identity forge')}")
+            forge = _ask_yn("  Forge vanity identity (0xb1e55ed prefix)?", default=True)
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"  {dim('Skipping identity forge.')}")
+            return
+
+        if forge:
+            print()
+            print(f"  {dim('Running: b1e55ed identity forge')}")
+            print()
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    cwd=str(repo_root),
+                    check=False,
+                )
+                if proc.returncode == 0:
+                    print(f"\n  {_ok('Identity forged successfully')}")
+                else:
+                    print(f"\n  {yellow('⚠')} Identity forge exited with code {proc.returncode}")
+                    print(f"  {dim('You can retry later: b1e55ed identity forge')}")
+            except Exception as e:  # noqa: BLE001
+                print(f"\n  {red('⚠')} Could not run forge: {e}")
+                print(f"  {dim('Try manually: b1e55ed identity forge')}")
+        else:
+            print()
+            print(f"  {dim('To restore an existing identity:')}")
+            print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
     else:
+        # Slow path: no Rust binary
+        print(f"  {yellow('⚠')} Rust grinder not found — vanity forge requires the b1e55ed-forge binary.")
         print()
-        print(f"  {dim('To restore an existing identity:')}")
-        print("    b1e55ed identity restore --eth-key <your-private-key-hex>")
+        print("  Options:")
+        print(f"    {bold('1)')} Download forge binary   — fast (~2-10s), then forge immediately")
+        print(f"    {bold('2)')} Skip for now            — run `b1e55ed identity forge` later")
+        print()
+
+        try:
+            choice = _ask("  Choice", default="1")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"  {dim('Skipping identity setup.')}")
+            return
+
+        choice = choice.strip()
+
+        if choice == "2":
+            print()
+            print(f"  {dim('Run `b1e55ed identity forge` when ready.')}")
+        else:
+            # Default: option 1 — download instructions
+            _print_forge_download_instructions()
+            print(f"  {dim('After installing the binary, re-run: b1e55ed wizard  or  b1e55ed identity forge')}")
 
 
 def _step4_configuration(repo_root: Path) -> None:
