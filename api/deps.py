@@ -82,21 +82,35 @@ def get_karma(request: Request) -> KarmaEngine:
 
 
 def get_publisher(request: Request) -> object | None:
-    """Return a bound GitHub publisher callable, or None if no token configured.
+    """Return a bound GitHub publisher callable, or None if not configured.
 
-    The publisher is fail-open — returns None on failure rather than raising.
-    Consumers should inject this and pass to ContributorRegistry; the registry
-    handles the None case gracefully.
+    Supports both static PAT (publish.github.token) and GitHub App auth
+    (publish.github.app_id + B1E55ED_GITHUB_APP_KEY env var).
+    Fail-open — returns None on failure rather than raising.
     """
     from engine.integrations.github_publish import make_publisher
 
     cfg = get_config(request)
     pub_cfg = cfg.publish.github
-    if not pub_cfg.token:
+    has_token = bool(pub_cfg.token)
+    has_app = int(pub_cfg.app_id or 0) > 0
+
+    if not has_token and not has_app:
         return None
+
+    app_auth = None
+    if has_app:
+        try:
+            from engine.integrations.github_app import GitHubAppAuth
+
+            app_auth = GitHubAppAuth.from_env()
+        except Exception:
+            pass
+
     return make_publisher(
         owner=pub_cfg.owner,
         repo=pub_cfg.repo,
-        token=pub_cfg.token,
+        token=str(pub_cfg.token or ""),
         labels=pub_cfg.labels,
+        app_auth=app_auth,
     )
