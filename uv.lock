@@ -103,6 +103,7 @@ source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "cryptography" },
+    { name = "eth-account" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jinja2" },
@@ -129,7 +130,6 @@ dev = [
 ]
 eas = [
     { name = "eth-abi" },
-    { name = "eth-account" },
     { name = "eth-typing" },
 ]
 exchange = [
@@ -146,7 +146,7 @@ requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "cryptography", specifier = ">=42.0" },
     { name = "eth-abi", marker = "extra == 'eas'", specifier = ">=5.1" },
-    { name = "eth-account", marker = "extra == 'eas'", specifier = ">=0.11" },
+    { name = "eth-account", specifier = ">=0.11" },
     { name = "eth-typing", marker = "extra == 'eas'", specifier = ">=3.5" },
     { name = "fastapi", specifier = ">=0.109" },
     { name = "httpx", specifier = ">=0.27" },

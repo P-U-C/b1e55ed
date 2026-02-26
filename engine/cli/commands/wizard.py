@@ -507,37 +507,87 @@ def _step4_configuration(repo_root: Path) -> None:
         symbols = _SYMBOL_PACKS[pack_choice]["symbols"]
         print(f"  {_ok(f'Pack selected: {len(symbols)} symbols')}")
 
-    print()
-    print("  " + bold("GitHub publish token") + " — required to track your contributions publicly.")
-    print()
-    print(f"  {dim('Contributions without a token are scored locally only (not publicly visible).')}")
-    print(f"  {dim('Create a fine-grained PAT at: https://github.com/settings/tokens?type=beta')}")
-    print(f"  {dim('Required permissions: Contents → Read & Write on P-U-C/b1e55ed only.')}")
-    print()
+    # Determine if GitHub App auth is pre-configured (baked-in app_id)
+    try:
+        from engine.config.github_app_defaults import (
+            COMMUNITY_APP_ID,
+            COMMUNITY_INSTALLATION_ID,
+        )
 
-    # Check environment first
-    env_token = os.environ.get("B1E55ED_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
-    if env_token:
-        print(f"  {_ok('Token found in environment (B1E55ED_GITHUB_TOKEN / GITHUB_TOKEN)')}")
-        github_token = env_token
+        app_auth_baked_in = COMMUNITY_APP_ID != 0 and COMMUNITY_INSTALLATION_ID != 0
+        baked_app_id = COMMUNITY_APP_ID
+        baked_installation_id = COMMUNITY_INSTALLATION_ID
+    except Exception:  # noqa: BLE001
+        app_auth_baked_in = False
+        baked_app_id = 0
+        baked_installation_id = 0
+
+    github_token = ""
+
+    if app_auth_baked_in:
+        # GitHub App handles auth automatically — no PAT needed
+        print()
+        print(f"  {_ok('GitHub App auth is pre-configured (app_id=' + str(baked_app_id) + ')')}")
+        print(f"  {dim('No GitHub token needed — the community app handles auth automatically.')}")
+        print(f"  {dim('Set B1E55ED_GITHUB_APP_KEY env var to your app private key PEM to enable publishing.')}")
     else:
-        try:
-            github_token = _ask("  GitHub token (or press Enter to skip — you can add later)", default="")
-        except (EOFError, KeyboardInterrupt):
-            print()
-            github_token = ""
+        print()
+        print("  " + bold("GitHub publish token") + " — required to track your contributions publicly.")
+        print()
+        print(f"  {dim('Contributions without a token are scored locally only (not publicly visible).')}")
+        print(f"  {dim('Create a fine-grained PAT at: https://github.com/settings/tokens?type=beta')}")
+        print(f"  {dim('Required permissions: Issues → Read & Write on P-U-C/b1e55ed only.')}")
+        print()
+        print(f"  {dim('Alternative: configure GitHub App auth (see publish.github.app_id in config).')}")
+        print()
 
-        if not github_token:
-            print()
-            print(f"  {yellow('⚠')} No token set — contributions will be scored locally only.")
-            print(f"  {dim('Add later: set B1E55ED_GITHUB_TOKEN=<token> and re-run wizard.')}")
+        # Check environment first
+        env_token = os.environ.get("B1E55ED_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
+        if env_token:
+            print(f"  {_ok('Token found in environment (B1E55ED_GITHUB_TOKEN / GITHUB_TOKEN)')}")
+            github_token = env_token
         else:
-            print(f"  {_ok('Token configured')}")
+            try:
+                github_token = _ask("  GitHub token (or press Enter to skip — you can add later)", default="")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                github_token = ""
+
+            if not github_token:
+                print()
+                print(f"  {yellow('⚠')} No token set — contributions will be scored locally only.")
+                print(f"  {dim('Add later: set B1E55ED_GITHUB_TOKEN=<token> and re-run wizard.')}")
+            else:
+                print(f"  {_ok('Token configured')}")
 
     # Build config YAML
     symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
     github_token_value = github_token if github_token else ""
-    github_token_comment = "" if github_token else "  # set to enable public attestations"
+
+    if app_auth_baked_in:
+        github_publish_block = f"""publish:
+  github:
+    # GitHub App auth (preferred — no token needed when app_id is set)
+    app_id: {baked_app_id}        # community GitHub App (pre-configured)
+    installation_id: {baked_installation_id}
+    # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
+    token: ""        # fallback PAT (used if app_id is 0)
+    owner: "P-U-C"
+    repo: "b1e55ed"
+    labels: ["b1e55ed-attestation"]
+"""
+    else:
+        github_publish_block = f"""publish:
+  github:
+    # GitHub App auth (preferred — no token needed when app_id is set)
+    app_id: 0        # set to enable GitHub App auth
+    installation_id: 0
+    # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
+    token: "{github_token_value}"        # fallback PAT (used if app_id is 0)
+    owner: "P-U-C"
+    repo: "b1e55ed"
+    labels: ["b1e55ed-attestation"]
+"""
 
     config_content = f"""# Generated by `b1e55ed wizard`
 preset: balanced
@@ -566,13 +616,7 @@ dashboard:
   port: 5051
   auth_token: ""
 
-publish:
-  github:
-    token: "{github_token_value}"{github_token_comment}
-    owner: "P-U-C"
-    repo: "b1e55ed"
-    labels: ["b1e55ed-attestation"]
-"""
+{github_publish_block}"""
 
     try:
         user_cfg.parent.mkdir(parents=True, exist_ok=True)
