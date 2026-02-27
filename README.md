@@ -51,6 +51,22 @@ Producers → Brain → Execution
 
 ---
 
+## Quick Setup
+
+**Standalone** (data engine only):
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-standalone.sh | bash
+```
+
+**Full stack** (AI assistant + Telegram alerts):
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-agent.sh | bash
+```
+
+---
+
 ## Deployment
 
 | Guide | Who it's for |
