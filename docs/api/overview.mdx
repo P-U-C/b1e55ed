@@ -1,0 +1,22 @@
+---
+title: "API Overview"
+description: "How to authenticate and interact with the b1e55ed HTTP API."
+---
+
+b1e55ed exposes an HTTP API (typically on `:5050`) for health checks and programmatic integrations.
+
+<Info>
+The most complete API documentation currently lives in the repo at **`docs/api-reference.md`**.
+
+- Read it in Mintlify: **[API Reference (full)](/api-reference)**
+- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/api-reference.md
+</Info>
+
+## Authentication
+
+Most deployments require a bearer token.
+
+```bash
+curl -H "Authorization: Bearer $B1E55ED_API__AUTH_TOKEN" \
+  http://localhost:5050/api/v1/health
+```

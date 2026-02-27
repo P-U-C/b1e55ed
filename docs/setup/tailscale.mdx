@@ -1,0 +1,19 @@
+---
+title: "Tailscale (Optional)"
+description: "Private networking for your VPS and local devices."
+---
+
+Use Tailscale if you want private, simple networking between:
+
+- your b1e55ed VPS
+- your laptop
+- other agents/services
+
+<Note>
+Coming soon. For now, treat this as an optional hardening step: keep APIs private by default and avoid exposing ports publicly.
+</Note>
+
+## Recommended approach
+
+- Run b1e55ed services on localhost
+- Use Tailscale to access `:5050` (API) and `:5051` (dashboard) securely

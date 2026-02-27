@@ -1,0 +1,19 @@
+---
+title: "Troubleshooting"
+description: "Common failures, symptoms, and fixes."
+---
+
+<Note>
+Coming soon. For now, start with:
+
+- `b1e55ed --version`
+- `b1e55ed health`
+- `b1e55ed doctor` (if available in your build)
+- logs for your service manager (systemd/docker)
+</Note>
+
+## Common issues
+
+- `b1e55ed: command not found` → ensure `~/.local/bin` is in `PATH`
+- API auth failures → set `B1E55ED_API__AUTH_TOKEN`
+- Permission issues → run as a dedicated non-root user
