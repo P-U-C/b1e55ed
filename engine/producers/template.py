@@ -15,7 +15,13 @@ Precision is the tone. Not hype.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 
 from engine.core.events import EventType
 from engine.core.models import Event

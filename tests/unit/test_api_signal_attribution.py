@@ -140,7 +140,12 @@ async def test_attribution_score_fields(app_factory, tmp_path):
 @pytest.mark.anyio
 async def test_attribution_outcome_with_closed_position(app_factory, tmp_path):
     """If a closed position exists, outcome should be populated."""
-    from datetime import UTC, datetime
+    from datetime import datetime
+
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        UTC = UTC  # noqa: N806
 
     db = Database(tmp_path / "brain5.db")
     ev = db.append_event(

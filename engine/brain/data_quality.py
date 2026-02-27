@@ -11,7 +11,13 @@ If a domain is stale, its weight is reduced for this cycle and then renormalized
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from typing import Final
 
 from engine.core.config import Config

@@ -18,7 +18,13 @@ scheduler to be useful. The orchestrator (or operator) can call `run_*()`.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from typing import Any, Literal
 
 from engine.brain.learning import LearningLoop, write_learned_weights_yaml
