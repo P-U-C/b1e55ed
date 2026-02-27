@@ -2171,6 +2171,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
 
 def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     """Start API + dashboard as background processes, then tail their logs."""
+    import contextlib
     import signal
     import subprocess as _sp
     import sys
@@ -2197,17 +2198,25 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     print()
 
     exe = sys.executable
+    child_env = os.environ.copy()
+    child_env.setdefault("B1E55ED_REPO_ROOT", str(ctx.repo_root))
+    child_cwd = str(ctx.repo_root)
+
     api_proc = _sp.Popen(
         [exe, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(api_port), "--log-level", "warning"],
         stdout=_sp.PIPE,
         stderr=_sp.STDOUT,
         text=True,
+        cwd=child_cwd,
+        env=child_env,
     )
     dash_proc = _sp.Popen(
         [exe, "-m", "uvicorn", "dashboard.app:app", "--host", host, "--port", str(dash_port), "--log-level", "warning"],
         stdout=_sp.PIPE,
         stderr=_sp.STDOUT,
         text=True,
+        cwd=child_cwd,
+        env=child_env,
     )
 
     # Wait a moment then open browser
@@ -2234,18 +2243,58 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     fds = [p.stdout for p in procs if p.stdout]
     fd_label = {p.stdout.fileno(): lbl for p, lbl in zip(procs, labels, strict=False) if p.stdout}
 
+    startup_failed = False
+
     while True:
-        # Check if both died
-        if all(p.poll() is not None for p in procs):
+        exit_codes = [p.poll() for p in procs]
+        if any(code not in (None, 0) for code in exit_codes):
+            startup_failed = True
+            for p in procs:
+                if p.poll() is None:
+                    p.terminate()
             break
+
+        # Check if both died
+        if all(code is not None for code in exit_codes):
+            break
+
+        if not fds:
+            time.sleep(0.1)
+            continue
+
         try:
             readable, _, _ = select.select(fds, [], [], 0.5)
         except (ValueError, OSError):
             break
+
         for fd in readable:
             line = fd.readline()
             if line:
                 print(f"  {fd_label.get(fd.fileno(), '')} {line}", end="")
+            else:
+                # EOF: stop selecting this fd to avoid busy loops when one child exits.
+                with contextlib.suppress(ValueError):
+                    fds.remove(fd)
+
+    final_codes: list[int] = []
+    for p in procs:
+        rc = p.poll()
+        if rc is None:
+            with contextlib.suppress(Exception):
+                p.terminate()
+            try:
+                rc = p.wait(timeout=2)
+            except _sp.TimeoutExpired:
+                p.kill()
+                rc = p.wait(timeout=2)
+        final_codes.append(int(rc))
+
+    if startup_failed or any(code != 0 for code in final_codes):
+        print("\n  One or more services failed to start.")
+        for lbl, code in zip(labels, final_codes, strict=False):
+            if code != 0:
+                print(f"  {lbl} exited with code {code}")
+        return 1
 
     return 0
 

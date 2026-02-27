@@ -182,12 +182,7 @@ class Config(BaseSettings):
             preset_data = yaml.safe_load(preset_path.read_text()) or {}
             raw = _deep_merge(preset_data, raw)
 
-        # Learned weights overlay (surface 3)
-        learned = path.parent.parent / "data" / "learned_weights.yaml"
-        if learned.exists():
-            learned_data = yaml.safe_load(learned.read_text()) or {}
-            if isinstance(learned_data.get("weights"), dict):
-                raw.setdefault("weights", {}).update(learned_data["weights"])
+        raw = cls._apply_learned_weights_overlay(raw, config_path=path)
 
         return cls(**raw)
 
@@ -195,6 +190,24 @@ class Config(BaseSettings):
     def _bundled_config_root(cls) -> Path:
         """Return the package-bundled config directory (works when installed as uv tool)."""
         return Path(__file__).resolve().parents[1] / "data" / "config"
+
+    @classmethod
+    def _learned_weights_path(cls, *, config_path: Path) -> Path:
+        resolved_cfg = config_path.resolve()
+        bundled_root = cls._bundled_config_root().resolve()
+        if resolved_cfg.is_relative_to(bundled_root):
+            return Path.cwd() / "data" / "learned_weights.yaml"
+        return config_path.parent.parent / "data" / "learned_weights.yaml"
+
+    @classmethod
+    def _apply_learned_weights_overlay(cls, raw: dict[str, Any], *, config_path: Path) -> dict[str, Any]:
+        # Learned weights overlay (surface 3)
+        learned = cls._learned_weights_path(config_path=config_path)
+        if learned.exists():
+            learned_data = yaml.safe_load(learned.read_text()) or {}
+            if isinstance(learned_data.get("weights"), dict):
+                raw.setdefault("weights", {}).update(learned_data["weights"])
+        return raw
 
     @classmethod
     def from_repo_defaults(cls, repo_root: Path | None = None) -> Config:
@@ -221,6 +234,9 @@ class Config(BaseSettings):
         raw["preset"] = preset
         # Emulate from_yaml's behavior (preset chain) without requiring a temp file.
         preset_path = default_path.parent / "presets" / f"{preset}.yaml"
+        if not preset_path.exists():
+            raise ConfigError(f"Preset file not found: {preset_path}")
         preset_data = yaml.safe_load(preset_path.read_text()) or {}
         raw = _deep_merge(preset_data, raw)
+        raw = cls._apply_learned_weights_overlay(raw, config_path=default_path)
         return cls(**raw)
