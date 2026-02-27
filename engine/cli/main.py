@@ -431,6 +431,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--host", default=None)
     p_dash.add_argument("--port", type=int, default=None)
 
+    p_start = sub.add_parser("start", help="Start API + dashboard together (recommended entry point)")
+    p_start.add_argument("--api-port", type=int, default=5050, help="API port (default: 5050)")
+    p_start.add_argument("--dashboard-port", type=int, default=5051, help="Dashboard port (default: 5051)")
+    p_start.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    p_start.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
+
     p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
     eas_sub = p_eas.add_subparsers(dest="eas_cmd")
 
@@ -2163,6 +2169,87 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Start API + dashboard as background processes, then tail their logs."""
+    import signal
+    import subprocess as _sp
+    import sys
+    import time
+
+    host = args.host
+    api_port = args.api_port
+    dash_port = args.dashboard_port
+    open_browser = not args.no_browser
+
+    api_url = f"http://{host}:{api_port}"
+    dash_url = f"http://{host}:{dash_port}"
+
+    print()
+    print("  ╔══════════════════════════════════════════╗")
+    print("  ║         b1e55ed — starting up           ║")
+    print("  ╚══════════════════════════════════════════╝")
+    print()
+    print(f"  API        → {api_url}")
+    print(f"  Dashboard  → {dash_url}")
+    print(f"  API docs   → {api_url}/docs")
+    print()
+    print("  Press Ctrl+C to stop both servers.")
+    print()
+
+    exe = sys.executable
+    api_proc = _sp.Popen(
+        [exe, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(api_port), "--log-level", "warning"],
+        stdout=_sp.PIPE,
+        stderr=_sp.STDOUT,
+        text=True,
+    )
+    dash_proc = _sp.Popen(
+        [exe, "-m", "uvicorn", "dashboard.app:app", "--host", host, "--port", str(dash_port), "--log-level", "warning"],
+        stdout=_sp.PIPE,
+        stderr=_sp.STDOUT,
+        text=True,
+    )
+
+    # Wait a moment then open browser
+    if open_browser:
+        time.sleep(1.5)
+        import webbrowser
+
+        webbrowser.open(dash_url)
+
+    procs = [api_proc, dash_proc]
+    labels = [f"[api:{api_port}]", f"[dash:{dash_port}]"]
+
+    def _stop(sig: int, frame: object) -> None:  # noqa: ARG001
+        print("\n  Stopping…")
+        for p in procs:
+            p.terminate()
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
+
+    import select
+
+    fds = [p.stdout for p in procs if p.stdout]
+    fd_label = {p.stdout.fileno(): lbl for p, lbl in zip(procs, labels, strict=False) if p.stdout}
+
+    while True:
+        # Check if both died
+        if all(p.poll() is not None for p in procs):
+            break
+        try:
+            readable, _, _ = select.select(fds, [], [], 0.5)
+        except (ValueError, OSError):
+            break
+        for fd in readable:
+            line = fd.readline()
+            if line:
+                print(f"  {fd_label.get(fd.fileno(), '')} {line}", end="")
+
+    return 0
+
+
 def _cmd_api(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.config import Config
 
@@ -2951,6 +3038,7 @@ def main(argv: list[str] | None = None) -> int:
         "health": _cmd_health,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
+        "start": _cmd_start,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,
