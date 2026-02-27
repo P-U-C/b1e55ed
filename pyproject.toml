@@ -100,4 +100,4 @@ build-backend = "hatchling.build"
 packages = ["engine", "api", "dashboard"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"engine/data/config" = "engine/data/config"
+"config" = "engine/data/config"
