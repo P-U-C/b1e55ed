@@ -54,7 +54,12 @@ def health(request: Request, db: Database = Depends(get_db)) -> JSONResponse:
     try:
         last_cycle = db.conn.execute("SELECT ts FROM events WHERE type = 'brain.cycle.v1' ORDER BY ts DESC LIMIT 1").fetchone()
         if last_cycle:
-            from datetime import UTC, datetime
+            from datetime import datetime
+
+            try:
+                from datetime import UTC  # py311+
+            except ImportError:  # pragma: no cover
+                UTC = UTC  # noqa: N806
 
             last_ts = datetime.fromisoformat(str(last_cycle[0]).replace("Z", "+00:00"))
             if last_ts.tzinfo is None:

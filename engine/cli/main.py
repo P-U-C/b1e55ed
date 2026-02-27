@@ -655,7 +655,12 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                     return None
             return None
 
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         def _parse_iso(ts: str | None) -> datetime | None:
             if not ts:
@@ -1109,7 +1114,12 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
-    from datetime import UTC, datetime
+    from datetime import datetime
+
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        UTC = UTC  # noqa: N806
 
     from engine.core.database import Database
 
@@ -1826,7 +1836,12 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
         # Derive node_id from public key material (no optional deps required)
-        from datetime import UTC, datetime
+        from datetime import datetime
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()

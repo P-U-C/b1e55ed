@@ -12,7 +12,13 @@ The goal is to validate that the major subsystems connect with the real APIs.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from pathlib import Path
 
 import pytest

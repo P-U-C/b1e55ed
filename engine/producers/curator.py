@@ -22,7 +22,13 @@ import asyncio
 import json
 import os
 import time
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from pathlib import Path
 from typing import Any
 

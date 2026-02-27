@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 
 from engine.core.database import Database
 from engine.integration.learning_loop import LearningLoopIntegration

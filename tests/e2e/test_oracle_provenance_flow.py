@@ -65,7 +65,12 @@ def _seed_producer_events(db: Database, producer_id: str, count: int = 5) -> Non
 
 
 def _seed_conviction_scores(db: Database, node_id: str, count: int = 3) -> None:
-    from datetime import UTC, datetime, timedelta
+    from datetime import datetime, timedelta
+
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        UTC = UTC  # noqa: N806
 
     now = datetime.now(UTC)
     for i in range(count):

@@ -439,7 +439,12 @@ class Keystore:
     def _register_metadata(self, *, name: str, tier: KeystoreTier) -> None:
         data = self._load_metadata()
         if name not in data:
-            from datetime import UTC, datetime
+            from datetime import datetime
+
+            try:
+                from datetime import UTC  # py311+
+            except ImportError:  # pragma: no cover
+                UTC = UTC  # noqa: N806
 
             data[name] = {"tier": int(tier), "created_at": datetime.now(tz=UTC).isoformat()}
         else:
