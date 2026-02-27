@@ -117,7 +117,7 @@ class DashboardConfig(BaseModel):
 
 
 class EASConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = True  # off-chain attestations work without rpc_url; on-chain needs rpc_url
     rpc_url: str = "https://eth.llamarpc.com"  # Free public RPC
     eas_contract: str = "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
     schema_registry: str = "0xA7b39296258348C78294F95B872b282326A97BDF"

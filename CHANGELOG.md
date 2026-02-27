@@ -1,5 +1,67 @@
 # Changelog
 
+## v1.0.0-beta.6 — 2026-02-27
+
+macOS install fixes: stale uv git cache, shell env var scoping bug, EAS on by default, API root info page, dashboard identity path when installed as a uv tool. 589 tests passing.
+
+### 🔴 Bug Fixes
+
+- **Branch install syntax** — `BRANCH=develop curl ... | bash` was wrong: the env var only applies to `curl`, not `bash`. Correct form: `curl ... | BRANCH=develop bash`. install.sh comment, docs, and CHANGELOG all updated.
+- **uv git cache** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale cached git clone from serving old code after `uninstall` + reinstall on a branch
+- **Dashboard identity gate** — `_repo_root()` in all dashboard modules was using `Path(__file__).resolve().parents[1]` (uv tool install dir, not user's cwd); always showed "forge required" even after identity already forged. Fixed to use `B1E55ED_REPO_ROOT` env var or `Path.cwd()` (same as CLI)
+- **EAS enabled by default** — `EASConfig.enabled = True` (was `False`); off-chain attestations need no `rpc_url` and should always be on. Startup log now shows helpful hint instead of scary DISABLED warning
+- **Forge timing** — Banner and wizard said "~2 seconds" (Apple Silicon benchmark); Intel Macs take 30s–2min. Updated to "seconds to ~2 min depending on hardware"
+
+### 🟡 API
+
+- **`GET /` info page** — API root was 404; now returns JSON with version, docs link, and key endpoint map
+
+### 🔧 CI / Workflow
+
+- **Branch guard added** — `.github/workflows/branch-guard.yml` blocks PRs to `main` from any branch except `develop` or `release/*`; enforces the develop → main release flow
+
+## v1.0.0-beta.5 — 2026-02-26
+
+macOS onboarding, Rust forge binary distribution, and zero-credential contributor registration via oracle relay. 589 tests passing.
+
+### 🟡 Install & Onboarding
+
+- **macOS install fixed** — `install.sh` now bootstraps Python via `uv` if none found; suppressed stderr noise; `eth-account>=0.11` moved to default deps (no longer requires `[eas]` extra)
+- **Forge binary auto-download** — `install.sh` and wizard both auto-download the Rust forge binary for macOS (universal arm64+x86_64) and Linux x86_64 from the latest release
+- **Pre-release URL fix** — `/releases/latest` skips pre-releases; both installer and wizard now resolve the real latest tag via `GET /releases?per_page=1` and build explicit download URLs
+- **Universal macOS binary** — CI builds a single `b1e55ed-forge-macos` via `lipo` (arm64 + x86_64); works on both Apple Silicon and Intel without selecting the right binary
+- **`install.sh` supports `BRANCH` env var** — `curl -sSf .../install.sh | BRANCH=develop bash` installs from any branch for testing
+
+### 🟡 Wizard UX
+
+- **Symbol packs menu** — Interactive preset selection instead of raw comma list
+- **GitHub token prominence** — Token field highlighted; explains why it's needed
+- **Real version in banner** — Uses `importlib.metadata.version("b1e55ed")` instead of hardcoded `v1.x`
+- **Forge banner aligned** — Width matches wizard banner (42 chars), text centered
+- **Health check test step** — Step 5 now runs `b1e55ed health` (was `brain --symbols BTC --dry-run` which doesn't exist)
+
+### 🟡 Contributor Registration
+
+- **Auto-registration in wizard** — New step `[4b]` after config: inline `ContributorRegistry.register()` call; no subprocess, no PATH issues
+- **Oracle relay** — Wizard calls `oracle.b1e55ed.xyz/api/v1/oracle/contributors/register`; oracle holds GitHub App key and creates announcement issue server-side; new users need zero credentials
+- **New public oracle endpoint** — `POST /api/v1/oracle/contributors/register` (no auth); validates `eth:0xb1e55ed` prefix; idempotent (409 on duplicate)
+- **GitHub App auth wired** — `get_publisher()` and `_build_contributor_registry_with_eas()` now activate on `app_id > 0`, not just `token`; App auth was previously silently skipped
+
+### 🟡 CLI
+
+- **`b1e55ed uninstall`** — New CLI command + `uninstall.sh`; documented in `docs/cli-reference.md`
+- **GitHub App defaults** — App ID `2953603`, Installation ID `112556330` baked into `engine/config/github_app_defaults.py`
+- **Version sync** — `engine/__init__.py` uses `importlib.metadata.version("b1e55ed")` (no hardcoded version string)
+
+### 🔧 CI
+
+- **No direct pushes to main** — Workflows (`dep-graphs`, `b1e55ing-merge`) create PRs instead of committing directly
+- **Forge release permissions** — `forge-release.yml` now has `contents: write` permission
+- **Manual forge trigger** — `workflow_dispatch` on forge-release accepts `tag_name` input
+- **CLI doc coverage check** — CI fails if a new command is added without a `docs/cli-reference.md` entry
+
+---
+
 ## v1.0.0-beta.4 — 2026-02-25
 
 Customer readiness release. 8-reviewer audit (Stripe, Coinbase, Cloudflare, Palantir — two model sets). Every finding addressed. 583 tests passing.
