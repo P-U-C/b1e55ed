@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.0-beta.6 — 2026-02-27
+
+macOS onboarding fixes: stale uv git cache, EAS on by default, API root info page, dashboard identity path. 589 tests passing.
+
+### 🟡 Install & Onboarding
+
+- **`--refresh` on uv install** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale git cache from serving old code after `uninstall` + reinstall on a branch (e.g. `BRANCH=develop`)
+- **Forge timing honest** — Banner and wizard now say "seconds to ~2 min depending on hardware" instead of "~2 seconds" (was benchmarked on Apple Silicon; Intel Macs are slower)
+
+### 🟡 API & Dashboard
+
+- **EAS enabled by default** — `EASConfig.enabled = True`; off-chain attestations work without `rpc_url`; startup log now shows helpful hint instead of scary DISABLED warning
+- **`GET /` info page** — API root was 404; now returns JSON with version, docs link, and all key endpoint paths
+- **Dashboard identity path fixed** — `_repo_root()` in all dashboard modules was using `Path(__file__).resolve().parents[1]` (uv tool install dir); now uses `B1E55ED_REPO_ROOT` env var or `Path.cwd()` — matches CLI behaviour; fixes "forge required" wall showing even after identity forged
+
+### 🔧 CI
+
+- **Branch guard tightened** — Only `develop` and `release/*` may target `main`; `hotfix/*` exception removed
+
 ## v1.0.0-beta.5 — 2026-02-26
 
 macOS onboarding, Rust forge binary distribution, and zero-credential contributor registration via oracle relay. 589 tests passing.
