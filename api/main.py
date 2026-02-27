@@ -134,11 +134,11 @@ def create_app() -> FastAPI:
 
         import logging as _log
 
-        if not getattr(config.eas, "enabled", False):
-            _log.getLogger("b1e55ed.startup").warning(
-                "EAS attestation is DISABLED (eas.enabled=false). "
-                "No on-chain proofs will be created. Set eas.enabled=true and configure eas.rpc_url to activate."
-            )
+        if getattr(config.eas, "enabled", True):
+            if not getattr(config.eas, "rpc_url", ""):
+                _log.getLogger("b1e55ed.startup").info("EAS off-chain attestations enabled. Set eas.rpc_url to also enable on-chain proofs.")
+        else:
+            _log.getLogger("b1e55ed.startup").warning("EAS attestation is DISABLED (eas.enabled=false in config).")
 
         from engine.core.database import Database
 
@@ -279,6 +279,30 @@ def create_app() -> FastAPI:
     from api.routes.mcp import router as mcp_router
 
     app.include_router(mcp_router)
+
+    @app.get("/", include_in_schema=False)
+    def root() -> dict:
+        """API info page — lists key endpoints."""
+        import engine as _engine
+
+        return {
+            "name": "b1e55ed",
+            "version": _engine.__version__,
+            "docs": "/docs",
+            "health": "/api/v1/health",
+            "endpoints": {
+                "contributors": "/api/v1/contributors",
+                "signals": "/api/v1/signals",
+                "producers": "/api/v1/producers",
+                "karma": "/api/v1/karma",
+                "positions": "/api/v1/positions",
+                "brain": "/api/v1/brain",
+                "oracle": "/api/v1/oracle/producers/{id}/provenance",
+                "config": "/api/v1/config",
+                "metrics": "/api/v1/metrics",
+                "mcp": "/mcp",
+            },
+        }
 
     return app
 

@@ -13,7 +13,12 @@ from fastapi.templating import Jinja2Templates
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    import os
+
+    override = os.environ.get("B1E55ED_REPO_ROOT")
+    if override:
+        return Path(override)
+    return Path.cwd()
 
 
 def _db_path() -> Path:
