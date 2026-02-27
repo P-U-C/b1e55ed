@@ -66,6 +66,7 @@ for doc in $all_docs; do
   grep -v '^\(```\|    \|#\)' "$doc" 2>/dev/null | grep -o '\[.*\]([^)]*\.md[^)]*)' 2>/dev/null | while IFS= read -r link; do
     # Extract path from [text](path)
     path=$(echo "$link" | sed 's/.*(\([^)]*\))/\1/')
+    path="${path%%#*}"  # Strip #fragment anchors before file existence check
     
     # Resolve relative paths
     if [[ "$path" == ../* ]]; then
