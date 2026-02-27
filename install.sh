@@ -4,7 +4,8 @@
 # Or:    ./install.sh
 #
 # Test from a specific branch (e.g. develop):
-#   BRANCH=develop curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+#   curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | BRANCH=develop bash
+#   NOTE: BRANCH=... must prefix 'bash', not 'curl' — env vars only apply to the command they prefix.
 #
 # Idempotent: safe to re-run.
 set -euo pipefail
@@ -158,7 +159,7 @@ else
     # Install from GitHub — always explicit branch (never relies on default branch)
     INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git@${BRANCH}"
     info "Installing from: $INSTALL_URL"
-    if uv tool install "$INSTALL_URL" 2>/dev/null; then
+    if uv tool install --refresh "$INSTALL_URL" 2>/dev/null; then
         success "b1e55ed installed as a uv tool"
     else
         error "Installation failed. Clone the repo and run ./install.sh from inside it."
@@ -259,7 +260,7 @@ if [ -n "$FORGE_URL" ]; then
         if [[ "$OSTYPE" == "darwin"* ]]; then
             xattr -dr com.apple.quarantine "$FORGE_DIR/b1e55ed-forge" 2>/dev/null || true
         fi
-        success "Rust forge binary installed (~50M candidates/sec)"
+        success "Rust forge binary installed (much faster than Python fallback)"
     else
         warn "Could not download forge binary (no release yet) — Python fallback will be used"
         warn "Run 'b1e55ed identity forge' after a release is published, or use random identity"

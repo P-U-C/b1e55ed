@@ -1,0 +1,29 @@
+name: Branch Guard
+
+# Block PRs targeting main from any branch except develop or release/*
+# All work goes through develop. main is release-only.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-source-branch:
+    name: Enforce develop → main flow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          echo "PR source branch: $SOURCE"
+
+          if [[ "$SOURCE" == "develop" ]] || [[ "$SOURCE" == release/* ]]; then
+            echo "✓ Allowed: $SOURCE → main"
+          else
+            echo "✗ PRs to main must come from develop or release/* (got: $SOURCE)"
+            echo ""
+            echo "  Target your PR at 'develop' instead."
+            echo "  main is release-only — all work goes through develop first."
+            exit 1
+          fi
