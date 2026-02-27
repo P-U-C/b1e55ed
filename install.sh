@@ -158,7 +158,7 @@ else
     # Install from GitHub — always explicit branch (never relies on default branch)
     INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git@${BRANCH}"
     info "Installing from: $INSTALL_URL"
-    if uv tool install "$INSTALL_URL" 2>/dev/null; then
+    if uv tool install --refresh "$INSTALL_URL" 2>/dev/null; then
         success "b1e55ed installed as a uv tool"
     else
         error "Installation failed. Clone the repo and run ./install.sh from inside it."
