@@ -333,9 +333,19 @@ b1e55ed webhooks remove <id>
 
 ## Services
 
+### `b1e55ed start`
+
+Start API + dashboard together. **Recommended entry point** — opens browser automatically.
+
+```text
+b1e55ed start [--api-port <port>] [--dashboard-port <port>] [--host <host>] [--no-browser]
+```
+
+Defaults: API on `5050`, dashboard on `5051`, host `127.0.0.1`. Press `Ctrl+C` to stop both.
+
 ### `b1e55ed api`
 
-Start the REST API server.
+Start the REST API server (standalone).
 
 ```text
 b1e55ed api [--host <host>] [--port <port>]
@@ -345,7 +355,7 @@ Default: `http://127.0.0.1:5050`
 
 ### `b1e55ed dashboard`
 
-Start the dashboard.
+Start the dashboard (standalone).
 
 ```text
 b1e55ed dashboard [--host <host>] [--port <port>]
