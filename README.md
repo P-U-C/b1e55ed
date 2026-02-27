@@ -7,7 +7,7 @@
 [![Tests](https://github.com/P-U-C/b1e55ed/workflows/CI/badge.svg)](https://github.com/P-U-C/b1e55ed/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-📚 **[docs.b1e55ed.xyz](https://docs.b1e55ed.xyz)** — Full documentation
+📚 **[docs.b1e55ed.permanentupperclass.com](https://docs.b1e55ed.permanentupperclass.com)** — Full documentation
 
 ---
 
