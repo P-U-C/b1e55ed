@@ -16,7 +16,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -1229,7 +1229,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
     if cmd == "list":
         items = reg.list_all()
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([c.__dict__ for c in items]))
+            print(_json_dumps([asdict(c) for c in items]))
             return 0
 
         rows: list[list[str]] = []
@@ -1280,7 +1280,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
         cid = str(args.id)
         s = scoring.compute_score(cid)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps(s.__dict__))
+            print(_json_dumps(asdict(s)))
         else:
             print(f"score: {s.score:.2f} (hit_rate={s.hit_rate:.2%}, submitted={s.signals_submitted}, accepted={s.signals_accepted}, streak={s.streak})")
         return 0
@@ -1289,7 +1289,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
         limit = int(getattr(args, "limit", 20) or 20)
         items = scoring.leaderboard(limit=limit)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([s.__dict__ for s in items]))
+            print(_json_dumps([asdict(s) for s in items]))
             return 0
 
         rows = []
@@ -1466,7 +1466,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     if cmd == "list":
         subs = list_webhook_subscriptions(db)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([s.__dict__ for s in subs]))
+            print(_json_dumps([asdict(s) for s in subs]))
             return 0
 
         rows: list[list[str]] = []
