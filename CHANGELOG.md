@@ -6,7 +6,8 @@ macOS onboarding fixes: stale uv git cache, EAS on by default, API root info pag
 
 ### 🟡 Install & Onboarding
 
-- **`--refresh` on uv install** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale git cache from serving old code after `uninstall` + reinstall on a branch (e.g. `BRANCH=develop`)
+- **`--refresh` on uv install** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale git cache from serving old code after `uninstall` + reinstall
+- **Branch install syntax fixed** — `BRANCH=develop curl ... | bash` was wrong (only set for curl); correct form is `curl ... | BRANCH=develop bash`
 - **Forge timing honest** — Banner and wizard now say "seconds to ~2 min depending on hardware" instead of "~2 seconds" (was benchmarked on Apple Silicon; Intel Macs are slower)
 
 ### 🟡 API & Dashboard
@@ -29,7 +30,7 @@ macOS onboarding, Rust forge binary distribution, and zero-credential contributo
 - **Forge binary auto-download** — `install.sh` and wizard both auto-download the Rust forge binary for macOS (universal arm64+x86_64) and Linux x86_64 from the latest release
 - **Pre-release URL fix** — `/releases/latest` skips pre-releases; both installer and wizard now resolve the real latest tag via `GET /releases?per_page=1` and build explicit download URLs
 - **Universal macOS binary** — CI builds a single `b1e55ed-forge-macos` via `lipo` (arm64 + x86_64); works on both Apple Silicon and Intel without selecting the right binary
-- **`install.sh` supports `BRANCH` env var** — `BRANCH=develop curl -sSf .../install.sh | bash` installs from any branch for testing
+- **`install.sh` supports `BRANCH` env var** — `curl -sSf .../install.sh | BRANCH=develop bash` installs from any branch for testing (BRANCH must prefix `bash`, not `curl`)
 
 ### 🟡 Wizard UX
 

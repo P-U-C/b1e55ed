@@ -4,7 +4,8 @@
 # Or:    ./install.sh
 #
 # Test from a specific branch (e.g. develop):
-#   BRANCH=develop curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+#   curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | BRANCH=develop bash
+#   NOTE: BRANCH=... must prefix 'bash', not 'curl' — env vars only apply to the command they prefix.
 #
 # Idempotent: safe to re-run.
 set -euo pipefail
