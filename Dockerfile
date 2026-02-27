@@ -10,6 +10,7 @@ COPY pyproject.toml uv.lock ./
 COPY engine ./engine
 COPY api ./api
 COPY dashboard ./dashboard
+COPY config ./config
 COPY README.md LICENSE ./
 
 # Build wheel
