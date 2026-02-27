@@ -57,6 +57,7 @@ Producers → Brain → Execution
 |-------|-------------|
 | [Standalone Operator Guide](docs/operator-standalone.md) | Data engine only — no AI dependency |
 | [Agent Operator Guide (OpenClaw)](docs/operator-agent.md) | Full stack — AI assistant + Telegram alerts + heartbeats |
+| [Producer Configuration Guide](docs/producers.md) | Configure signal producers and symbol packs |
 
 New here? Start with the [standalone guide](docs/operator-standalone.md).
 
