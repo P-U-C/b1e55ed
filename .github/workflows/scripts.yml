@@ -11,28 +11,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-      
-      - name: Run shellcheck on install.sh
-        run: shellcheck scripts/install.sh
-      
+
+      - name: Run shellcheck on all shell scripts
+        run: |
+          SCRIPTS=$(find . -name "*.sh" -not -path "./.git/*" -not -path "./.venv/*" -not -path "./node_modules/*")
+          echo "Checking: $SCRIPTS"
+          shellcheck $SCRIPTS
+
       - name: Check execute permissions
         run: |
-          if [ ! -x scripts/install.sh ]; then
-            echo "❌ install.sh not executable"
+          MISSING=()
+          for f in install.sh scripts/bump-version.sh; do
+            if [ -f "$f" ] && [ ! -x "$f" ]; then
+              MISSING+=("$f")
+            fi
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "❌ Not executable: ${MISSING[*]}"
             exit 1
           fi
-          echo "✅ install.sh is executable"
-      
+          echo "✅ Execute permissions OK"
+
       - name: Bash syntax check
-        run: bash -n scripts/install.sh
-      
+        run: |
+          for f in install.sh scripts/bump-version.sh; do
+            if [ -f "$f" ]; then
+              bash -n "$f" && echo "✅ $f syntax OK"
+            fi
+          done
+
       - name: Check for hardcoded secrets
         run: |
-          if grep -E "(sk-[a-zA-Z0-9]{20,}|xai-[a-zA-Z0-9]{20,})" scripts/install.sh; then
-            echo "❌ Possible hardcoded secret found"
+          FOUND=0
+          for f in install.sh scripts/bump-version.sh; do
+            if [ -f "$f" ] && grep -E "(sk-[a-zA-Z0-9]{20,}|xai-[a-zA-Z0-9]{20,})" "$f"; then
+              echo "❌ Possible hardcoded secret in $f"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -eq 0 ]; then
+            echo "✅ No hardcoded secrets"
+          else
             exit 1
           fi
-          echo "✅ No hardcoded secrets"
