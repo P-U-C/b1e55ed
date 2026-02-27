@@ -259,7 +259,7 @@ if [ -n "$FORGE_URL" ]; then
         if [[ "$OSTYPE" == "darwin"* ]]; then
             xattr -dr com.apple.quarantine "$FORGE_DIR/b1e55ed-forge" 2>/dev/null || true
         fi
-        success "Rust forge binary installed (~50M candidates/sec)"
+        success "Rust forge binary installed (much faster than Python fallback)"
     else
         warn "Could not download forge binary (no release yet) — Python fallback will be used"
         warn "Run 'b1e55ed identity forge' after a release is published, or use random identity"

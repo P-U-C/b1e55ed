@@ -491,7 +491,7 @@ def _step3_identity(repo_root: Path) -> None:
     if rust_binary:
         # Fast path: Rust binary available
         print(f"  {_ok(f'Rust grinder found: {rust_binary}')}")
-        print("  Forging a vanity address takes ~2 seconds with the Rust binary.")
+        print("  Forging a vanity address takes seconds to ~2 min depending on hardware.")
         print()
 
         try:
