@@ -13,7 +13,10 @@ from engine.core.config import Config
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    override = os.environ.get("B1E55ED_REPO_ROOT")
+    if override:
+        return Path(override)
+    return Path.cwd()
 
 
 def _identity_path() -> Path:

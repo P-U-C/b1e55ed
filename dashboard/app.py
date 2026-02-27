@@ -27,7 +27,10 @@ templates = Jinja2Templates(directory=_HERE / "templates")
 
 
 def _repo_root() -> Path:
-    return _HERE.parent
+    override = os.environ.get("B1E55ED_REPO_ROOT")
+    if override:
+        return Path(override)
+    return Path.cwd()
 
 
 @app.middleware("http")
