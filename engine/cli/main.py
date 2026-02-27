@@ -1256,7 +1256,9 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
             print(f"error: contributor already exists for node_id: {node_id}", file=sys.stderr)
             return 2
 
-        print(_json_dumps({"status": "ok", "contributor": c.__dict__}))
+        from dataclasses import asdict as _asdict
+
+        print(_json_dumps({"status": "ok", "contributor": _asdict(c)}))
         return 0
 
     if cmd == "remove":

@@ -792,32 +792,24 @@ def _step_register_contributor(repo_root: Path) -> None:
     except Exception:  # noqa: BLE001
         pass  # oracle unreachable — fall through to local
 
-    # Always register locally too (idempotent)
+    # Always register locally too (idempotent) — use Python API directly
     try:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "engine.cli",
-                "contributors",
-                "register",
-                "--node-id",
-                node_id,
-                "--name",
-                address or node_id,
-                "--role",
-                "contributor",
-            ],
-            cwd=str(repo_root),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
+        from engine.core.contributors import ContributorRegistry as _Registry
+        from engine.core.database import Database as _Database
+
+        _db_path = repo_root / "data" / "brain.db"
+        _db_path.parent.mkdir(parents=True, exist_ok=True)
+        _reg = _Registry(_Database(str(_db_path)))
+        _reg.register(
+            node_id=node_id,
+            name=address or node_id,
+            role="contributor",
         )
-        if proc.returncode == 0 or "already exists" in (proc.stderr or ""):
-            registered = True
+        registered = True
+    except ValueError:
+        registered = True  # already registered — idempotent
     except Exception:  # noqa: BLE001
-        pass
+        pass  # local DB unavailable — oracle registration is enough
 
     if registered:
         print(f"  {_ok('Registered as contributor')}")
