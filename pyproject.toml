@@ -98,3 +98,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["engine", "api", "dashboard"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"engine/data/config" = "engine/data/config"

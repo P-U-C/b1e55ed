@@ -194,7 +194,7 @@ class Config(BaseSettings):
     @classmethod
     def _bundled_config_root(cls) -> Path:
         """Return the package-bundled config directory (works when installed as uv tool)."""
-        return Path(__file__).resolve().parents[2]
+        return Path(__file__).resolve().parents[1] / "data" / "config"
 
     @classmethod
     def from_repo_defaults(cls, repo_root: Path | None = None) -> Config:
@@ -203,7 +203,7 @@ class Config(BaseSettings):
         if not config_path.exists():
             # Fall back to bundled config — handles `uv tool install` where cwd
             # is the user's home dir, not the package source root.
-            config_path = cls._bundled_config_root() / "config" / "default.yaml"
+            config_path = cls._bundled_config_root() / "default.yaml"
         return cls.from_yaml(config_path)
 
     @classmethod
@@ -216,7 +216,7 @@ class Config(BaseSettings):
         root = repo_root or Path.cwd()
         default_path = root / "config" / "default.yaml"
         if not default_path.exists():
-            default_path = cls._bundled_config_root() / "config" / "default.yaml"
+            default_path = cls._bundled_config_root() / "default.yaml"
         raw = yaml.safe_load(default_path.read_text()) or {}
         raw["preset"] = preset
         # Emulate from_yaml's behavior (preset chain) without requiring a temp file.
