@@ -1,0 +1,64 @@
+---
+title: "Introduction"
+description: "What b1e55ed is, who it’s for, and why it’s built around append-only truth."
+---
+
+b1e55ed (0xb1e55ed → “blessed”) is a **CLI-first trading intelligence engine** built around a simple idea:
+
+> *Signals are sacred. Don’t rewrite them — **append events**, attribute contributors, and let conviction evolve over time.*
+
+It’s designed for operators who want a durable, inspectable record of:
+
+- what you believed,
+- when you believed it,
+- why you believed it (sources / contributors), and
+- what you did about it (positions / actions).
+
+<Info>
+If you’ve used journaling, incident logs, or event-sourcing in software, b1e55ed will feel familiar: the **brain** is an append-only ledger, and “truth” is what can be reconstructed from events.
+</Info>
+
+## What does it do?
+
+At a high level, b1e55ed helps you:
+
+- **Capture signals** (human or agent generated)
+- **Synthesize** multiple signals into a view
+- Track **conviction** and changes over time
+- Produce **actions** (alerts, position suggestions, execution hooks)
+- Maintain **attribution** (contributors + karma)
+
+## Who is it for?
+
+- **Solo operators** running a local brain (SQLite) with a CLI + dashboard.
+- **Teams** who want shared, auditable signal history and contributor attribution.
+- **Agent builders** who want a clean API for submitting signals / reading positions.
+
+<CardGroup cols={2}>
+  <Card title="Operator" href="/quickstart">
+    Install → run the wizard → create your first signal.
+  </Card>
+  <Card title="Builder" href="/api/overview">
+    Use the API to post signals, fetch positions, and integrate agents.
+  </Card>
+</CardGroup>
+
+## The “blessed” prefix
+
+The name is a nod to the Ethereum address prefix `0xb1e55ed` (read: *blessed*).
+
+In b1e55ed, **identity and attribution matter**:
+
+- operators and agents can be represented as **contributors**
+- contributors can optionally be **attested** (e.g., via EAS)
+- the system can track **karma** (credit/blame) across time
+
+<Note>
+Identity forging and attestations are optional for a local-first setup, but they unlock stronger provenance guarantees when you’re sharing signals.
+</Note>
+
+## Next steps
+
+- Start here: **[Quickstart](/quickstart)**
+- Understand the flow: **[How It Works](/how-it-works)**
+- Deep dive docs in repo: `docs/architecture.md`, `docs/curator.md`, `docs/authority-model.md`.

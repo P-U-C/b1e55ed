@@ -1,0 +1,27 @@
+---
+title: "Standalone Install"
+description: "Install and run b1e55ed without an AI operator."
+---
+
+This path is for running **b1e55ed by itself** (signals + brain + optional API/dashboard) on a single machine/VPS.
+
+<Info>
+The full standalone operator guide lives in the repo at **`docs/operator-standalone.md`**.
+
+- Read it in Mintlify: **[Operator Standalone Guide](/operator-standalone)**
+- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/operator-standalone.md
+</Info>
+
+## Minimal install
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+b1e55ed wizard
+b1e55ed brain
+```
+
+## When to choose standalone
+
+- You want **no AI dependency**
+- You’ll operate via CLI / dashboard
+- You’re integrating your own alerting/automation

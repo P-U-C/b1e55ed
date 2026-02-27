@@ -1,0 +1,91 @@
+{
+  "name": "b1e55ed",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#10b981",
+    "light": "#34d399",
+    "dark": "#059669",
+    "background": {
+      "dark": "#0a0a0a"
+    },
+    "anchors": {
+      "from": "#10b981",
+      "to": "#059669"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/P-U-C/b1e55ed"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "https://docs.b1e55ed.permanentupperclass.com/quickstart"
+  },
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "how-it-works"
+      ]
+    },
+    {
+      "group": "Setup",
+      "pages": [
+        "setup/standalone-install",
+        "setup/agent-install",
+        "setup/telegram",
+        "setup/tailscale",
+        "setup/oracle"
+      ]
+    },
+    {
+      "group": "Producers",
+      "pages": [
+        "producers/overview",
+        "producers/symbol-packs",
+        "producers/tuning-guide",
+        "producers/reference"
+      ]
+    },
+    {
+      "group": "Operations",
+      "pages": [
+        "operations/daily",
+        "operations/cli-reference",
+        "operations/config-reference",
+        "operations/troubleshooting"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api/overview",
+        "api/brain",
+        "api/signals",
+        "api/positions",
+        "api/contributors",
+        "api/karma"
+      ]
+    },
+    {
+      "group": "Contributing",
+      "pages": [
+        "contributing/how-to-contribute",
+        "contributing/contributor-registration",
+        "contributing/karma-attribution"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/P-U-C/b1e55ed",
+    "twitter": "https://twitter.com/zozDOTeth"
+  }
+}
