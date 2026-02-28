@@ -60,6 +60,7 @@ class TradeIntent:
     horizon: str | None = None
     invalidation: float | None = None
     source_event_ids: list[str] = field(default_factory=list)
+    intended_price: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

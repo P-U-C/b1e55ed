@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
 
 
+from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, SignalAcceptedPayload, TradeIntentPayload
@@ -189,6 +190,30 @@ class OMS:
                 trade_id=fill.order_id,
                 intent=intent,
             )
+
+            # KS-5: Fill divergence check
+            try:
+                if intent.intended_price is not None and intent.intended_price > 0:
+                    divergence = abs(fill.fill_price - intent.intended_price) / intent.intended_price
+                    if divergence > 0.005:
+                        self.preflight.kill_switch.evaluate(
+                            manual_level=KillSwitchLevel.CAUTION,
+                            reason=f"fill_divergence_{divergence:.4f}",
+                        )
+                        self.db.append_event(
+                            event_type=EventType.AUDIT_V1,
+                            payload={
+                                "reason": "ks5_fill_divergence",
+                                "intended": intent.intended_price,
+                                "actual": fill.fill_price,
+                                "divergence": divergence,
+                            },
+                            source="execution.oms",
+                        )
+            except Exception:
+                import logging
+
+                logging.getLogger("b1e55ed.execution.oms").warning("KS-5 fill divergence check failed", exc_info=True)
 
             return OMSResult(
                 status="filled",
