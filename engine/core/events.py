@@ -91,6 +91,7 @@ class EventType(StrEnum):
 
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+    ATTRIBUTION_OUTCOME_V1 = "attribution.outcome.v1"
 
     # System
     BALANCE_UPDATED_V1 = "system.balance_updated.v1"
@@ -276,6 +277,39 @@ class WeightAdjustmentPayload(BaseModel):
     approved: bool = False
 
 
+class SignalAcceptedPayload(BaseModel):
+    """Payload for SIGNAL_ACCEPTED_V1 — links a trade to a contributing signal."""
+
+    trade_id: str
+    producer_id: str
+    domain: str
+    signal_event_id: str
+    contribution_weight: float = 1.0
+    direction: str
+    confidence: float
+    horizon: str | None = None
+    invalidation: float | None = None
+
+
+class ProducerOutcome(BaseModel):
+    """Single producer's outcome within an attribution event."""
+
+    producer_id: str
+    domain: str
+    contribution_weight: float
+    outcome: float  # +1.0 win, -1.0 loss, 0.0 neutral
+    karma_delta: float
+
+
+class AttributionOutcomePayload(BaseModel):
+    """Payload for ATTRIBUTION_OUTCOME_V1 — emitted when position closes."""
+
+    trade_id: str
+    realized_pnl_usd: float
+    confidence_bucket: Literal["high", "mid", "low"]
+    producers: list[ProducerOutcome]
+
+
 PayloadModel = (
     TASignalPayload
     | OnchainSignalPayload
@@ -295,6 +329,8 @@ PayloadModel = (
     | KillSwitchPayload
     | LearningOutcomePayload
     | WeightAdjustmentPayload
+    | SignalAcceptedPayload
+    | AttributionOutcomePayload
 )
 
 
@@ -321,6 +357,9 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     # Learning
     EventType.LEARNING_OUTCOME_V1: LearningOutcomePayload,
     EventType.LEARNING_WEIGHT_ADJ_V1: WeightAdjustmentPayload,
+    # Attribution
+    EventType.SIGNAL_ACCEPTED_V1: SignalAcceptedPayload,
+    EventType.ATTRIBUTION_OUTCOME_V1: AttributionOutcomePayload,
 }
 
 
