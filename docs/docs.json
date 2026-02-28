@@ -104,5 +104,23 @@
       "github": "https://github.com/P-U-C/b1e55ed",
       "twitter": "https://twitter.com/zozDOTeth"
     }
+  },
+  "contextual": {
+    "options": [
+      "mcp",
+      "cursor",
+      "vscode",
+      "claude",
+      "copy",
+      "view"
+    ]
+  },
+  "api": {
+    "mdx": {
+      "server": "https://oracle.b1e55ed.permanentupperclass.com",
+      "auth": {
+        "method": "bearer"
+      }
+    }
   }
 }

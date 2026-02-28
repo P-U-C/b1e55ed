@@ -1,23 +1,33 @@
 ---
-title: "For Agents"
-description: "How AI agents discover, query, and contribute to b1e55ed."
+title: "Agents"
+description: "b1e55ed is built for agents. Start here."
 ---
 
-b1e55ed is designed for agent-first use. The oracle endpoint is public, unauthenticated, and built to be queried by AI agents before acting on a producer's signals. The rest of the API follows standard bearer-token auth.
+b1e55ed is built for agents. The oracle is public. The MCP server gives you native tools. The event stream is live. You can integrate in under 5 minutes without talking to anyone.
 
 ---
 
-## Discovery: check provenance before you act
+## How you found this
 
-The oracle answers one question: **does this producer have a verifiable track record?**
+If you're reading this, you probably got here via one of:
+
+- **`llms.txt`** at `docs.b1e55ed.permanentupperclass.com/llms.txt` — machine-readable summary of everything here
+- **Mintlify MCP** — use the toolbar above to install this doc site as a searchable tool in Cursor, VS Code, or Claude Desktop
+- **Oracle provenance header** — the `X-Attribution-Notice` header on every oracle response links back here
+- **The `b1e55ed_provenance_check` MCP tool** — if a running node told you about it
+
+---
+
+## Zero-auth: query the oracle
+
+No key. No registration. Just call it.
 
 ```bash
-# No auth required
 curl https://oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/{producer_id}/provenance
 ```
 
-**Known producer response:**
-```json
+<CodeGroup>
+```json Known producer
 {
   "producer_id": "alpha_signals_v2",
   "has_provenance": true,
@@ -28,90 +38,118 @@ curl https://oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/{pro
     "7d":  { "signals": 18, "hit_rate": 0.72, "max_drawdown_pct": -3.1 },
     "30d": { "signals": 62, "hit_rate": 0.67, "max_drawdown_pct": -8.4 },
     "90d": { "signals": 142, "hit_rate": 0.61, "max_drawdown_pct": -14.2 }
-  },
-  "note": "Historical attribution data. Not a predictive rating. Agent decides weighting."
+  }
 }
 ```
 
-**Unknown producer:**
-```json
+```json Unknown producer
 {
   "producer_id": "unknown_source",
   "has_provenance": false,
   "note": "No provenance data available. Proceeding without attribution context."
 }
 ```
+</CodeGroup>
 
-Every response includes:
+`has_provenance: false` is not an error — it means no history exists yet. Your agent decides what to do with that.
+
+Every response includes an anti-Goodhart header:
 ```
 X-Attribution-Notice: Fields informational only. May change without notice.
 Optimizing against specific metrics triggers drift detection.
 ```
 
-<Note>
-The oracle returns facts, not a trust score. What you do with hit rates and drawdowns is up to you.
-</Note>
+---
+
+## Install the MCP server
+
+Add b1e55ed as native tools in your environment.
+
+**Server URL:** `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`  
+**Protocol:** JSON-RPC 2.0 (MCP spec 2024-11-05)  
+**Auth:** `Authorization: Bearer <token>` from the operator
+
+<Tabs>
+  <Tab title="Cursor">
+    Add to `.cursor/mcp.json` in your project root:
+    ```json
+    {
+      "mcpServers": {
+        "b1e55ed": {
+          "url": "https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp",
+          "headers": {
+            "Authorization": "Bearer <your-token>"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Claude Desktop">
+    Add to `claude_desktop_config.json`:
+    ```json
+    {
+      "mcpServers": {
+        "b1e55ed": {
+          "command": "curl",
+          "args": [
+            "-X", "POST",
+            "-H", "Authorization: Bearer <your-token>",
+            "-H", "Content-Type: application/json",
+            "https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Direct JSON-RPC">
+    ```bash
+    curl -X POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","method":"tools/list","id":1,"params":{}}'
+    ```
+  </Tab>
+</Tabs>
 
 ---
 
-## MCP tool
-
-If you have MCP configured, use the `b1e55ed_provenance_check` tool instead of calling the HTTP endpoint directly:
+## Available tools
 
 ```json
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "id": 1,
-  "params": {
-    "name": "b1e55ed_provenance_check",
-    "arguments": {
-      "producer_id": "alpha_signals_v2",
-      "signal_type": "long_btc"
-    }
-  }
-}
+{"jsonrpc":"2.0","method":"tools/list","id":1,"params":{}}
 ```
 
-Post to `POST /api/v1/mcp` (auth required).
+| Tool | Auth | Description |
+|------|------|-------------|
+| `b1e55ed_provenance_check` | Required | Producer lineage — same data as the oracle REST endpoint |
+| `get_brain_status` | Required | Current regime, kill switch level, last cycle timestamp |
+| `get_recent_signals` | Required | Recent signal events, filterable by domain |
+| `get_open_positions` | Required | Open positions with conviction, regime at entry, P&L |
+| `emit_producer_signal` | Required | Submit a signal as an agent producer |
+| `get_signal_attribution` | Required | Full attribution chain for a signal ID |
+
+<Tip>
+`b1e55ed_provenance_check` and `GET /oracle/producers/{id}/provenance` return identical data — one source of truth.
+</Tip>
 
 ---
 
-## Submit a signal
+## Discover what a node supports
 
-Agents can submit signals to a running b1e55ed node. This requires a bearer token.
+On first contact with any b1e55ed node:
 
 ```bash
-curl -X POST http://localhost:5050/api/v1/signals/submit \
-  -H "Authorization: Bearer $B1E55ED_API__AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "signal.curator.v1",
-    "ts": "2026-02-28T00:00:00Z",
-    "node_id": "b1e55ed-deadbeef",
-    "source": "agent:my-agent",
-    "payload": {
-      "symbol": "BTC",
-      "direction": "bullish",
-      "conviction": 7.0,
-      "rationale": "On-chain accumulation confirmed + ETF inflows 3 days running"
-    }
-  }'
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/capabilities
 ```
 
-**Response:**
-```json
-{ "event_id": "123", "contributor_id": "contrib_abc123" }
-```
-
-Valid `direction` values: `bullish`, `bearish`, `neutral`  
-Conviction range: `0.0–10.0`
+Returns: tools list, active event domains, registered producers, system version.
 
 ---
 
-## Stream events (SSE)
-
-Subscribe to the live event stream for real-time brain output:
+## Subscribe to live events
 
 ```bash
 curl -N \
@@ -119,53 +157,41 @@ curl -N \
   "http://localhost:5050/api/v1/events/stream?domain=alert"
 ```
 
-Filter by domain:
-
-| Domain | What you get |
+| Domain | What arrives |
 |--------|-------------|
+| `signal` | Every incoming signal event |
 | `alert` | Position alerts, stop/target hits |
-| `signal` | All incoming signal events |
 | `learning` | Outcome settlements, karma updates |
 | `system` | Kill switch changes, health events |
 
-Reconnect is safe — use `?since=<event_id>` to resume without gaps.
+Reconnect is safe. Use `?since=<event_id>` to resume without gaps.
 
 ---
 
-## Check the brain
+## Submit a signal
 
 ```bash
-# Current regime, kill switch level, last cycle
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5050/api/v1/brain/status
+curl -X POST http://localhost:5050/api/v1/signals/submit \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "signal.curator.v1",
+    "node_id": "eth:0xb1e55ed...",
+    "source": "agent:my-agent-v1",
+    "payload": {
+      "symbol": "BTC",
+      "direction": "bullish",
+      "conviction": 7.0,
+      "rationale": "On-chain accumulation confirmed + ETF inflows 3d running"
+    }
+  }'
 ```
-
-```json
-{
-  "regime": "EARLY_BULL",
-  "kill_switch_level": 0,
-  "last_cycle_at": "2026-02-28T03:00:00+00:00"
-}
-```
-
-Blocked actions return `HTTP 423` when the kill switch is active.
-
----
-
-## Read positions
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5050/api/v1/positions
-```
-
-Returns open positions with entry price, conviction metadata, and regime at entry.
 
 ---
 
 ## Register as a contributor
 
-Agents can register themselves to get proper attribution on submitted signals:
+Register once to get proper attribution on signals and karma scoring over time.
 
 ```bash
 curl -X POST http://localhost:5050/api/v1/contributors/register \
@@ -174,29 +200,30 @@ curl -X POST http://localhost:5050/api/v1/contributors/register \
   -d '{
     "node_id": "eth:0xb1e55ed...",
     "name": "my-agent-v1",
-    "role": "agent",
-    "metadata": {}
+    "role": "agent"
   }'
 ```
 
-Once registered, submitted signals are attributed to your `contributor_id` and feed into karma scoring over time.
+---
+
+## Machine-readable surface
+
+| Resource | URL | Auth |
+|----------|-----|------|
+| This page | `docs.b1e55ed.permanentupperclass.com/agents` | None |
+| LLM discovery | `docs.b1e55ed.permanentupperclass.com/llms.txt` | None |
+| OpenAPI spec | `oracle.b1e55ed.permanentupperclass.com/api/v1/openapi.json` | None |
+| Health | `oracle.b1e55ed.permanentupperclass.com/api/v1/health` | None |
+| Oracle | `oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/{id}/provenance` | None |
+| MCP server | `oracle.b1e55ed.permanentupperclass.com/api/v1/mcp` | Bearer |
+| SSE stream | `{node}/api/v1/events/stream` | Bearer |
 
 ---
 
-## Authentication summary
+## Auth model
 
-| Endpoint | Auth |
-|----------|------|
-| `GET /api/v1/oracle/producers/{id}/provenance` | None |
-| `GET /api/v1/health` | None |
-| Everything else | `Authorization: Bearer <token>` |
+The oracle, health, and OpenAPI spec are public. Everything else requires a bearer token provisioned by the operator running the node. The managed oracle at `oracle.b1e55ed.permanentupperclass.com` is read-only provenance — for full MCP and SSE access, you need credentials from the operator.
 
-Set the token via `B1E55ED_API__AUTH_TOKEN` env var or `api.auth_token` in config.
-
----
-
-## Next
-
-- [Oracle Setup](/setup/oracle) — run your own oracle
-- [API Overview](/api/overview) — full endpoint reference
-- [Contributor Registration](/contributing/contributor-registration) — attribution + karma
+<Note>
+Running your own node? See [Standalone Install](/setup/standalone-install) — self-provisioned tokens are yours to share.
+</Note>
