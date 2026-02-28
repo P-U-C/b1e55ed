@@ -539,7 +539,14 @@ def main(argv: list[str] | None = None) -> int:
     # Build prompt and call LLM
     user_prompt = build_user_prompt(pr_title, pr_body, file_contexts, reference_text, budget)
     log.info("calling %s (budget: %d)", args.mode, budget)
-    raw_response = llm.complete(SYSTEM_PROMPT, user_prompt)
+    try:
+        raw_response = llm.complete(SYSTEM_PROMPT, user_prompt)
+    except Exception as exc:  # noqa: BLE001
+        exc_str = str(exc)
+        if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str or "quota" in exc_str.lower():
+            log.warning("LLM quota exhausted — skipping blessing for this PR (not a failure): %s", exc_str[:120])
+            return 0
+        raise
 
     # Parse response — enforce both per-file and global caps
     result = parse_llm_response(raw_response, total_budget=budget)
