@@ -473,7 +473,7 @@ These files are design references and sprint plans, not operator-facing guides.
 | [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-02-28*
 
 ---
 
@@ -486,10 +486,10 @@ All pages below are registered in the nav and deployed to `docs.b1e55ed.permanen
 
 ```text
 docs/docs.json              ← nav/config (registers all MDX pages)
-docs/introduction.mdx       → quickstart.mdx, api/overview.mdx, agents.mdx
+docs/introduction.mdx       → quickstart.mdx, api/overview.mdx
+docs/agents.mdx             → setup/agent-install.mdx
 docs/quickstart.mdx         → setup/standalone-install.mdx, setup/agent-install.mdx, operations/cli-reference.mdx, how-it-works.mdx
 docs/how-it-works.mdx       → api/overview.mdx, producers/overview.mdx
-docs/agents.mdx             → api/overview.mdx, setup/oracle.mdx, contributing/contributor-registration.mdx
 docs/llms.txt               (machine-readable LLM discovery index — not a navigable page)
 ```
 
@@ -546,4 +546,11 @@ docs/contributing/how-to-contribute.mdx
 docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
 docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
 docs/producers.md           → configuration.md, api-reference.md, producers/overview.mdx
+```
+
+## CLI setup command modules
+
+```text
+engine/cli/main.py             ⇒ engine/cli/commands/setup.py
+engine/cli/commands/setup.py   → engine/cli/main.py (_cmd_setup), scripts/setup-connected.sh
 ```

@@ -62,7 +62,7 @@ curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-sta
 **Full stack** (AI assistant + Telegram alerts):
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-agent.sh | bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-connected.sh | bash
 ```
 
 ---
