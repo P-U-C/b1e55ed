@@ -1,0 +1,202 @@
+---
+title: "For Agents"
+description: "How AI agents discover, query, and contribute to b1e55ed."
+---
+
+b1e55ed is designed for agent-first use. The oracle endpoint is public, unauthenticated, and built to be queried by AI agents before acting on a producer's signals. The rest of the API follows standard bearer-token auth.
+
+---
+
+## Discovery: check provenance before you act
+
+The oracle answers one question: **does this producer have a verifiable track record?**
+
+```bash
+# No auth required
+curl https://oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/{producer_id}/provenance
+```
+
+**Known producer response:**
+```json
+{
+  "producer_id": "alpha_signals_v2",
+  "has_provenance": true,
+  "chain_verified": true,
+  "total_signals": 142,
+  "p_and_l_attributed": true,
+  "attribution_windows": {
+    "7d":  { "signals": 18, "hit_rate": 0.72, "max_drawdown_pct": -3.1 },
+    "30d": { "signals": 62, "hit_rate": 0.67, "max_drawdown_pct": -8.4 },
+    "90d": { "signals": 142, "hit_rate": 0.61, "max_drawdown_pct": -14.2 }
+  },
+  "note": "Historical attribution data. Not a predictive rating. Agent decides weighting."
+}
+```
+
+**Unknown producer:**
+```json
+{
+  "producer_id": "unknown_source",
+  "has_provenance": false,
+  "note": "No provenance data available. Proceeding without attribution context."
+}
+```
+
+Every response includes:
+```
+X-Attribution-Notice: Fields informational only. May change without notice.
+Optimizing against specific metrics triggers drift detection.
+```
+
+<Note>
+The oracle returns facts, not a trust score. What you do with hit rates and drawdowns is up to you.
+</Note>
+
+---
+
+## MCP tool
+
+If you have MCP configured, use the `b1e55ed_provenance_check` tool instead of calling the HTTP endpoint directly:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "id": 1,
+  "params": {
+    "name": "b1e55ed_provenance_check",
+    "arguments": {
+      "producer_id": "alpha_signals_v2",
+      "signal_type": "long_btc"
+    }
+  }
+}
+```
+
+Post to `POST /api/v1/mcp` (auth required).
+
+---
+
+## Submit a signal
+
+Agents can submit signals to a running b1e55ed node. This requires a bearer token.
+
+```bash
+curl -X POST http://localhost:5050/api/v1/signals/submit \
+  -H "Authorization: Bearer $B1E55ED_API__AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "signal.curator.v1",
+    "ts": "2026-02-28T00:00:00Z",
+    "node_id": "b1e55ed-deadbeef",
+    "source": "agent:my-agent",
+    "payload": {
+      "symbol": "BTC",
+      "direction": "bullish",
+      "conviction": 7.0,
+      "rationale": "On-chain accumulation confirmed + ETF inflows 3 days running"
+    }
+  }'
+```
+
+**Response:**
+```json
+{ "event_id": "123", "contributor_id": "contrib_abc123" }
+```
+
+Valid `direction` values: `bullish`, `bearish`, `neutral`  
+Conviction range: `0.0–10.0`
+
+---
+
+## Stream events (SSE)
+
+Subscribe to the live event stream for real-time brain output:
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5050/api/v1/events/stream?domain=alert"
+```
+
+Filter by domain:
+
+| Domain | What you get |
+|--------|-------------|
+| `alert` | Position alerts, stop/target hits |
+| `signal` | All incoming signal events |
+| `learning` | Outcome settlements, karma updates |
+| `system` | Kill switch changes, health events |
+
+Reconnect is safe — use `?since=<event_id>` to resume without gaps.
+
+---
+
+## Check the brain
+
+```bash
+# Current regime, kill switch level, last cycle
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/brain/status
+```
+
+```json
+{
+  "regime": "EARLY_BULL",
+  "kill_switch_level": 0,
+  "last_cycle_at": "2026-02-28T03:00:00+00:00"
+}
+```
+
+Blocked actions return `HTTP 423` when the kill switch is active.
+
+---
+
+## Read positions
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/positions
+```
+
+Returns open positions with entry price, conviction metadata, and regime at entry.
+
+---
+
+## Register as a contributor
+
+Agents can register themselves to get proper attribution on submitted signals:
+
+```bash
+curl -X POST http://localhost:5050/api/v1/contributors/register \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_id": "eth:0xb1e55ed...",
+    "name": "my-agent-v1",
+    "role": "agent",
+    "metadata": {}
+  }'
+```
+
+Once registered, submitted signals are attributed to your `contributor_id` and feed into karma scoring over time.
+
+---
+
+## Authentication summary
+
+| Endpoint | Auth |
+|----------|------|
+| `GET /api/v1/oracle/producers/{id}/provenance` | None |
+| `GET /api/v1/health` | None |
+| Everything else | `Authorization: Bearer <token>` |
+
+Set the token via `B1E55ED_API__AUTH_TOKEN` env var or `api.auth_token` in config.
+
+---
+
+## Next
+
+- [Oracle Setup](/setup/oracle) — run your own oracle
+- [API Overview](/api/overview) — full endpoint reference
+- [Contributor Registration](/contributing/contributor-registration) — attribution + karma
