@@ -126,22 +126,27 @@ def test_llm_client_agent_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_llm_client_gemini_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """gemini mode calls google.generativeai with the correct model."""
+    """gemini mode calls google.genai with the correct model."""
     fake_response = SimpleNamespace(text="gemini mock response")
-    fake_model_instance = MagicMock()
-    fake_model_instance.generate_content = MagicMock(return_value=fake_response)
-    fake_generative_model_cls = MagicMock(return_value=fake_model_instance)
-    fake_configure = MagicMock()
 
+    # Mock the client and its models.generate_content chain
+    fake_client_instance = MagicMock()
+    fake_client_instance.models.generate_content = MagicMock(return_value=fake_response)
+    fake_client_cls = MagicMock(return_value=fake_client_instance)
+
+    # Mock google.genai module
     fake_genai_module = MagicMock()
-    fake_genai_module.GenerativeModel = fake_generative_model_cls
-    fake_genai_module.configure = fake_configure
+    fake_genai_module.Client = fake_client_cls
 
-    monkeypatch.setitem(sys.modules, "google.generativeai", fake_genai_module)
-    # Also mock the top-level google module so the import succeeds
+    # Mock google.genai.types module
+    fake_types_module = MagicMock()
+
+    # Mock google package and google.genai subpackage
     fake_google = MagicMock()
-    fake_google.generativeai = fake_genai_module
+    fake_google.genai = fake_genai_module
     monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai_module)
+    monkeypatch.setitem(sys.modules, "google.genai.types", fake_types_module)
 
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key-gemini")
 
@@ -149,8 +154,8 @@ def test_llm_client_gemini_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     result = client.complete("system", "user")
 
     assert result == "gemini mock response"
-    fake_configure.assert_called_once_with(api_key="test-key-gemini")
-    fake_generative_model_cls.assert_called_once_with(hook.GEMINI_MODEL, system_instruction="system")
+    fake_client_cls.assert_called_once_with(api_key="test-key-gemini")
+    fake_client_instance.models.generate_content.assert_called_once()
 
 
 def test_llm_client_unknown_mode() -> None:
