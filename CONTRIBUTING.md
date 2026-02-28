@@ -80,3 +80,24 @@ mypy engine/ api/
 - Keep PRs scoped.
 - CI must pass (ruff, mypy, pytest).
 - Prefer additive changes with explicit tests over implicit behavior changes.
+
+## Development Setup
+
+After cloning, install local git hooks so documentation validation runs on every commit:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+This installs `.git/hooks/pre-commit` → `scripts/pre-commit.sh`, which runs `validate_doc_deps.sh`.
+
+**What it checks:**
+- No orphaned `.md` or `.mdx` docs (every file must be referenced from another doc)
+- No broken internal links
+- `docs/dependencies-docs.md` graph is up to date
+
+**Adding new docs:**
+- Add the file path to `docs/dependencies-docs.md` under the appropriate section
+- Reference it from at least one other `.md` or `.mdx` file
+
+To bypass in an emergency: `git commit --no-verify`

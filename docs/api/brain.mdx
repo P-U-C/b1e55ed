@@ -1,0 +1,89 @@
+---
+title: "Brain API"
+description: "Inspect brain status and run cycles via the REST API."
+---
+
+## `GET /brain/status`
+
+Returns current brain state derived from events.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/brain/status | jq
+```
+
+Example response (`200`):
+
+```json
+{
+  "regime": "EARLY_BULL",
+  "regime_changed_at": "2026-02-20T00:00:00+00:00",
+  "kill_switch_level": 0,
+  "kill_switch_reason": null,
+  "kill_switch_changed_at": null,
+  "last_cycle_id": "0b6dd0d9-2a21-4d3c-9fd0-7d7f7f6a7d50",
+  "last_cycle_at": "2026-02-20T00:30:00+00:00"
+}
+```
+
+Errors:
+
+- `401 auth.*`
+
+---
+
+## `POST /brain/run`
+
+Runs one brain cycle synchronously.
+
+<Note>
+If the kill switch level is `> 0`, this endpoint is blocked and returns `423`.
+</Note>
+
+```bash
+curl -s \
+  -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/brain/run | jq
+```
+
+Example response (`200`):
+
+```json
+{
+  "cycle_id": "0b6dd0d9-2a21-4d3c-9fd0-7d7f7f6a7d50",
+  "ts": "2026-02-20T00:30:00+00:00",
+  "intents": [],
+  "regime": "EARLY_BULL",
+  "kill_switch_level": 0
+}
+```
+
+Example error (`423 kill_switch.active`):
+
+```json
+{
+  "error": {
+    "code": "kill_switch.active",
+    "message": "Kill switch active",
+    "level": 2
+  }
+}
+```
+
+Errors:
+
+- `401 auth.*`
+- `423 kill_switch.active`
+
+---
+
+## CLI equivalent
+
+Most operators run cycles via CLI:
+
+```bash
+b1e55ed brain
+b1e55ed brain --full
+```

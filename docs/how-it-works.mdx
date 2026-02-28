@@ -1,0 +1,78 @@
+---
+title: "How It Works"
+description: "A mental model: brain → producers → synthesis → conviction → action."
+---
+
+b1e55ed is easiest to understand as an **event-sourced brain** with pluggable producers and an operator-facing workflow.
+
+## The data flow
+
+```mermaid
+flowchart LR
+  P[Producers\n(humans, agents, feeds)] --> S[Signals\nappend-only events]
+  S --> B[Brain\nSQLite event store]
+  B --> Y[Synthesis\nrollups + views]
+  Y --> C[Conviction\nscoring + updates]
+  C --> A[Action\nalerts / positions / execution hooks]
+  B --> K[Karma & Attribution\ncontributors + attestations]
+```
+
+### 1) Brain (append-only)
+
+The **brain** is the source of truth. Instead of mutating state directly, b1e55ed records **events** (signals, updates, confirmations, invalidations) and derives state from them.
+
+Why it matters:
+
+- auditability (what changed, when, and why)
+- reproducibility (rebuild views from events)
+- attribution (who contributed what)
+
+### 2) Producers
+
+A **producer** is anything that emits signals:
+
+- a human operator at the CLI
+- an agent calling the API
+- a connector / scraper / rules engine
+
+Producers should be cheap to add and safe to run. They don’t “control” the brain — they **submit** events.
+
+### 3) Synthesis
+
+Synthesis is the layer that turns raw signals into something you can act on:
+
+- rollups by symbol / timeframe
+- conflict detection
+- aggregation by contributor reputation / karma
+
+### 4) Conviction
+
+Conviction is the system’s representation of *how strongly we believe something* right now.
+
+It can be:
+
+- set directly by a producer
+- adjusted by synthesis over time
+- decayed or overridden by contradictory evidence
+
+### 5) Action
+
+Actions are what you do with the output:
+
+- notifications / alerts
+- suggested positions
+- execution adapters (manual or automated)
+
+<Note>
+b1e55ed is intentionally modular here: you can keep it “analysis-only” or plug in execution as your risk tolerance allows.
+</Note>
+
+## Where to go deeper
+
+- Internal architecture docs: `docs/architecture.md`, `docs/authority-model.md`, `docs/learning-loop.md`
+- API surface: **[API Overview](/api/overview)**
+- Producers: **[Producer Overview](/producers/overview)**
+
+<Info>
+The repo also includes an older/longer explanation at `docs/how-it-works.md`.
+</Info>

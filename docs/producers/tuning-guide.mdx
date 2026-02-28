@@ -1,0 +1,170 @@
+---
+title: "Producer & Weight Tuning Guide"
+description: "Practical presets for different operator styles and regimes."
+---
+
+## Core principle
+
+Weights are applied at the **domain** level:
+
+- curator / onchain / tradfi / social / technical / events
+
+They must sum to **1.0** (±0.001).
+
+```yaml
+weights:
+  curator: 0.25
+  onchain: 0.25
+  tradfi: 0.20
+  social: 0.15
+  technical: 0.10
+  events: 0.05
+```
+
+---
+
+## Presets
+
+<AccordionGroup>
+  <Accordion title="Low-noise operator (curator-heavy, tight universe)">
+
+  Use when:
+
+  - you have strong discretionary edge
+  - you want fewer, higher-conviction decisions
+  - you mostly trade majors
+
+  ```yaml
+  # config/user.yaml
+  universe:
+    symbols: ["BTC", "ETH", "SOL"]
+
+  weights:
+    curator: 0.35
+    onchain: 0.25
+    tradfi: 0.25
+    social: 0.05
+    technical: 0.07
+    events: 0.03
+
+  execution:
+    mode: paper
+    paper_min_days: 14
+  ```
+
+  </Accordion>
+
+  <Accordion title="High-sensitivity scout (social + onchain heavy, broader universe)">
+
+  Use when:
+
+  - narrative rotations are frequent
+  - you want early detection over precision
+  - you’re operating a wider basket
+
+  ```yaml
+  # config/user.yaml
+  universe:
+    symbols: ["BTC","ETH","SOL","HYPE","SUI","AVAX","LINK","MATIC","WIF","BONK"]
+
+  weights:
+    curator: 0.15
+    onchain: 0.30
+    tradfi: 0.05
+    social: 0.30
+    technical: 0.15
+    events: 0.05
+
+  execution:
+    mode: paper
+    paper_min_days: 14
+  ```
+
+  </Accordion>
+
+  <Accordion title="TradFi-aware (ETF flows + basis, BTC/ETH focus)">
+
+  Use when:
+
+  - ETF flows and basis/carry dominate price
+  - you mostly trade BTC/ETH
+
+  ```yaml
+  # config/user.yaml
+  universe:
+    symbols: ["BTC", "ETH"]
+
+  weights:
+    curator: 0.15
+    onchain: 0.15
+    tradfi: 0.45
+    social: 0.10
+    technical: 0.10
+    events: 0.05
+
+  execution:
+    mode: paper
+    paper_min_days: 14
+  ```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Adjusting weights safely
+
+<Steps>
+  <Step title="Change one thing at a time">
+  Adjust a single domain by ±0.05 and re-normalize to sum to 1.0.
+  </Step>
+  <Step title="Verify your producers are actually producing">
+
+  A domain weight is useless if the producer endpoints aren’t configured.
+
+  ```bash
+  b1e55ed status
+  b1e55ed producers list --json | jq
+  b1e55ed brain --full
+  ```
+
+  </Step>
+  <Step title="Paper trade first">
+  Run at least **14 days** in paper mode before any live execution.
+  </Step>
+</Steps>
+
+---
+
+## Kill switch levels (what they do)
+
+The kill switch is an escalating restriction mechanism.
+
+- Level `0`: off
+- Level `1–4`: increasing restriction (configured via `kill_switch.*` thresholds)
+
+Check status:
+
+```bash
+b1e55ed kill-switch --json | jq
+```
+
+Reset (only after investigation):
+
+```bash
+b1e55ed kill-switch set 0
+```
+
+---
+
+## Operational recommendation: paper trading minimum
+
+```yaml
+execution:
+  mode: paper
+  paper_min_days: 14
+```
+
+<Tip>
+Treat paper mode as a burn-in period: verify producer health, confirm signal cadence, and validate your weight profile before risking capital.
+</Tip>

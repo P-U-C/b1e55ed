@@ -1,0 +1,182 @@
+---
+title: "Troubleshooting"
+description: "Common operational failures and how to recover quickly."
+---
+
+## CLI / install issues
+
+### `b1e55ed: command not found`
+
+Most installs place the binary in `~/.local/bin`.
+
+<Steps>
+  <Step title="Confirm the binary exists">
+
+  ```bash
+  ls -la ~/.local/bin/b1e55ed || true
+  ```
+
+  </Step>
+  <Step title="Fix PATH for the current shell">
+
+  ```bash
+  export PATH="$HOME/.local/bin:$PATH"
+  command -v b1e55ed
+  b1e55ed --version
+  ```
+
+  </Step>
+  <Step title="Make PATH permanent">
+
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+  . ~/.bashrc
+  ```
+
+  </Step>
+  <Step title="Reinstall (last resort)">
+
+  ```bash
+  curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+  ```
+
+  </Step>
+</Steps>
+
+### `uv: command not found`
+
+`uv` is used by the installer/tooling. It is also typically installed into `~/.local/bin`.
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+command -v uv
+```
+
+---
+
+## API auth failures (401)
+
+Symptoms:
+
+- API calls return `401` with `auth.*` error codes
+- CLI commands that talk to the API fail with auth errors
+
+Fix by setting the API token in config or env.
+
+### Set via YAML
+
+```yaml
+# config/user.yaml
+api:
+  auth_token: "your-secret-token"
+```
+
+### Set via environment variable
+
+```bash
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
+```
+
+Then restart the API.
+
+---
+
+## Kill switch active (HTTP 423)
+
+When the kill switch level is `> 0`, `POST /brain/run` is blocked and returns `423` (`kill_switch.active`).
+
+### Check current level
+
+```bash
+b1e55ed kill-switch
+b1e55ed kill-switch --json | jq
+```
+
+### Reset to level 0
+
+```bash
+b1e55ed kill-switch set 0
+```
+
+<Note>
+Only reset after you understand why it fired (daily loss, portfolio heat, crisis threshold, or drawdown).
+</Note>
+
+---
+
+## Database / event store issues
+
+### Verify integrity (hash chain)
+
+```bash
+b1e55ed integrity
+b1e55ed integrity --json | jq
+```
+
+If integrity fails, treat it as a **stop-the-line** moment until you understand the failure.
+
+### Rebuild projections
+
+If projections look wrong after a manual repair or crash:
+
+```bash
+b1e55ed replay
+```
+
+---
+
+## Identity / forge issues
+
+### Forge not finding the `0xb1e55ed` prefix
+
+This is normal: forging is a probabilistic search and can take seconds to minutes depending on CPU.
+
+```bash
+b1e55ed identity forge
+# or increase parallelism
+b1e55ed identity forge --threads 4
+```
+
+<Tip>
+If it seems slow on a small VPS, let it run. Typical 2 vCPU shared VPS: ~30–120s.
+</Tip>
+
+### macOS: quarantine blocks the forge binary
+
+If macOS blocks execution due to downloaded binary quarantine:
+
+```bash
+xattr -dr com.apple.quarantine ~/.local/bin/b1e55ed
+```
+
+---
+
+## Secrets & exposure
+
+### Worried about secrets leaking?
+
+- `GET /api/v1/health` is safe and intentionally minimal.
+- **Do not expose** config endpoints publicly (e.g. `GET /api/v1/config`) unless you understand the risk.
+
+Recommendation:
+
+- bind API/dashboard to `127.0.0.1` and access via Tailscale or SSH tunnel
+- keep `api.auth_token` set
+
+---
+
+## Logs
+
+### systemd logs
+
+```bash
+journalctl -u b1e55ed -n 100 --no-pager || true
+journalctl -u b1e55ed-api.service -n 200 --no-pager || true
+journalctl -u b1e55ed-brain.service -n 200 --no-pager || true
+```
+
+### Port conflicts
+
+```bash
+sudo ss -ltnp | grep -E ':(5050|5051)\b' || true
+```

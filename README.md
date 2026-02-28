@@ -7,6 +7,8 @@
 [![Tests](https://github.com/P-U-C/b1e55ed/workflows/CI/badge.svg)](https://github.com/P-U-C/b1e55ed/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+📚 **[docs.b1e55ed.permanentupperclass.com](https://docs.b1e55ed.permanentupperclass.com)** — Full documentation
+
 ---
 
 **A sovereign trading intelligence system.**
@@ -46,6 +48,34 @@ Producers → Brain → Execution
 | Oracle | Public provenance endpoint. No auth. Anti-Goodhart by design. |
 | CLI | Full operator control plane. |
 | REST API | Mounted at `/api/v1/`. Token auth. |
+
+---
+
+## Quick Setup
+
+**Standalone** (data engine only):
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-standalone.sh | bash
+```
+
+**Full stack** (AI assistant + Telegram alerts):
+
+```bash
+curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-connected.sh | bash
+```
+
+---
+
+## Deployment
+
+| Guide | Who it's for |
+|-------|-------------|
+| [Standalone Operator Guide](docs/operator-standalone.md) | Data engine only — no AI dependency |
+| [Agent Operator Guide (OpenClaw)](docs/operator-agent.md) | Full stack — AI assistant + Telegram alerts + heartbeats |
+| [Producer Configuration Guide](docs/producers.md) | Configure signal producers and symbol packs |
+
+New here? Start with the [standalone guide](docs/operator-standalone.md).
 
 ---
 

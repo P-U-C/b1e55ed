@@ -7,7 +7,12 @@ This module is the *only* time helper surface in the codebase.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
 
 
 def utc_now() -> datetime:

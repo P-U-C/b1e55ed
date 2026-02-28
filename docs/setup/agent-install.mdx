@@ -1,0 +1,35 @@
+---
+title: "Agent Install"
+description: "Run b1e55ed with OpenClaw for 24/7 monitoring and Telegram ops."
+---
+
+This path is for running the **full stack**:
+
+- b1e55ed (brain + producers + API + dashboard)
+- OpenClaw (AI operator layer)
+- Telegram alerts and natural-language ops
+
+<Info>
+The full agent operator guide lives in the repo at **`docs/operator-agent.md`**.
+
+- Read it in Mintlify: **[Operator Agent Guide](/operator-agent)**
+- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/operator-agent.md
+</Info>
+
+## High-level steps
+
+<Steps>
+  <Step title="Deploy b1e55ed">
+    Follow **Standalone Install** first.
+  </Step>
+  <Step title="Install and configure OpenClaw">
+    Store your model keys (Anthropic required) and wire it to the local b1e55ed API.
+  </Step>
+  <Step title="Connect Telegram">
+    Create a bot, add it to your chat, and route alerts.
+  </Step>
+</Steps>
+
+<Tip>
+If you only want signals + dashboard, choose **Standalone Install**.
+</Tip>

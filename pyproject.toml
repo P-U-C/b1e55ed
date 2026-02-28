@@ -1,6 +1,6 @@
 [project]
 name = "b1e55ed"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 description = "Sovereign AI trading intelligence with compound learning"
 readme = "README.md"
 license = {text = "MIT"}
@@ -98,3 +98,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["engine", "api", "dashboard"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config" = "engine/data/config"

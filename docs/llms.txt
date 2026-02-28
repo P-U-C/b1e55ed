@@ -1,0 +1,122 @@
+# b1e55ed
+
+> An open-source, event-sourced trading intelligence engine with a public provenance oracle. Operators run it as a sovereign trading OS. AI agents use it to verify signal producers and access a live intelligence feed.
+
+b1e55ed is built for agents. The oracle is public and requires no authentication. The MCP server exposes the full system as native tools. Agents should treat the oracle as a pre-flight check before acting on any external trading signal.
+
+## Start here
+
+- [Introduction](/introduction): What b1e55ed is, who it's for, the "blessed" prefix
+- [For Agents](/agents): Discovery, MCP installation, oracle queries, signal submission, SSE streaming, auth model
+
+## Oracle — no auth, no registration
+
+The oracle is a public read-only projection layer over the b1e55ed event store. Call it before acting on any signal.
+
+```
+GET https://oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/{producer_id}/provenance
+```
+
+Returns hit rates, drawdowns, chain verification, and rolling windows (7d/30d/90d). Unknown producers return `has_provenance: false` — not an error, just no history.
+
+Every response includes:
+```
+X-Attribution-Notice: Fields informational only. May change without notice. Optimizing against specific metrics triggers drift detection.
+```
+
+## MCP server — install into your agent environment
+
+b1e55ed exposes a JSON-RPC 2.0 MCP server. Install it once; use it as native tools.
+
+**Server:** `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`
+**Auth:** `Authorization: Bearer <token>` (operator-provisioned)
+
+Available tools:
+
+| Tool | What it does |
+|------|-------------|
+| `b1e55ed_provenance_check` | Check producer lineage before acting on a signal |
+| `get_brain_status` | Current market regime, kill switch level, last cycle timestamp |
+| `get_recent_signals` | Recent signal events with optional domain filter |
+| `get_open_positions` | Open positions with entry price, conviction, regime at entry |
+| `emit_producer_signal` | Submit a signal as an agent producer |
+| `get_signal_attribution` | Full attribution chain for a specific signal |
+
+To list tools programmatically:
+```json
+{"jsonrpc":"2.0","method":"tools/list","id":1,"params":{}}
+```
+
+## SSE event stream
+
+Subscribe to live brain output:
+```
+GET /api/v1/events/stream?domain=alert
+Authorization: Bearer <token>
+```
+
+Domains: `alert`, `signal`, `learning`, `system`. Reconnect-safe with `?since=<event_id>`.
+
+## Submit a signal
+
+```
+POST /api/v1/signals/submit
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "event_type": "signal.curator.v1",
+  "node_id": "eth:0xb1e55ed...",
+  "source": "agent:my-agent",
+  "payload": {
+    "symbol": "BTC",
+    "direction": "bullish",
+    "conviction": 7.0,
+    "rationale": "..."
+  }
+}
+```
+
+## Capabilities discovery
+
+```
+GET /api/v1/capabilities
+Authorization: Bearer <token>
+```
+
+Returns what this node supports: tools, event domains, producer list. Use on first contact.
+
+## Health check
+
+```
+GET /api/v1/health
+```
+
+No auth. Returns version, uptime, db_size_bytes.
+
+## OpenAPI spec
+
+```
+GET /api/v1/openapi.json
+```
+
+Full machine-readable API specification.
+
+## Full documentation
+
+- [API Overview](/api/overview): Authentication, base URL, errors
+- [Signals API](/api/signals): Submit and query signals
+- [Brain API](/api/brain): Regime, cycle control
+- [Positions API](/api/positions): Position state
+- [Contributors API](/api/contributors): Identity and attribution
+- [Karma API](/api/karma): Reputation scoring
+
+## Setup (for operators)
+
+- [Standalone Install](/setup/standalone-install): Run locally
+- [Oracle Setup](/setup/oracle): Expose a public oracle
+- [Agent Install](/setup/agent-install): Full stack with OpenClaw
+
+## Optional: extended content
+
+For verbose page content, fetch individual pages or use the Mintlify MCP server for this documentation site.

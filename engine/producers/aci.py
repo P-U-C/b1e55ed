@@ -20,7 +20,13 @@ import asyncio
 import os
 import re
 import time
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from typing import Any
 
 import httpx
