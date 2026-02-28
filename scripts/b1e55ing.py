@@ -10,12 +10,6 @@ Agent usage (primary path — local, uses ANTHROPIC_API_KEY from env):
         --github-token $GH_TOKEN \\
         --mode agent
 
-Gemini fallback (CI — uses GOOGLE_API_KEY from env):
-    python scripts/b1e55ing.py \\
-        --pr-number 77 \\
-        --github-token $GH_TOKEN \\
-        --mode gemini
-
 Dry-run (inspect suggestions without writing files):
     python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN \\
         --mode agent --dry-run
@@ -54,7 +48,6 @@ log = logging.getLogger(__name__)
 
 REPO = "P-U-C/b1e55ed"
 ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
-GEMINI_MODEL = "gemini-2.0-flash"
 MAX_EGGS_PER_FILE = 2
 REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.md"
 
@@ -137,34 +130,31 @@ def max_blessings(n_files: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# LLM abstraction — agent (Anthropic) and gemini (Google) paths
+# LLM abstraction — agent (Anthropic) only
 # ---------------------------------------------------------------------------
 
 
 class LLMClient:
-    """Thin wrapper that routes completions to the right backend.
+    """Thin wrapper around the Anthropic Claude API.
 
-    Both backends use lazy imports — neither is a hard dependency at import time.
-    The fallback path (gemini) is invisible: the blessing looks the same
-    regardless of which path ran.
+    Lazy import — anthropic is not a hard dependency at import time.
+    If the agent is offline, b1e55ing-merge.yml posts an on-brand curse instead.
     """
 
     def __init__(self, mode: str, api_key: str = "") -> None:
-        if mode not in ("agent", "gemini"):
-            raise ValueError(f"Unknown mode: {mode!r} — use 'agent' or 'gemini'")
+        if mode not in ("agent",):
+            raise ValueError(f"Unknown mode: {mode!r} — only 'agent' is supported")
         self.mode = mode
         self.api_key = api_key
 
     def complete(self, system: str, user: str) -> str:
         """Return LLM text completion given *system* and *user* prompts."""
-        if self.mode == "agent":
-            return self._call_anthropic(system, user)
-        return self._call_gemini(system, user)
+        return self._call_anthropic(system, user)
 
     def _call_anthropic(self, system: str, user: str) -> str:
         """Anthropic Claude via the official SDK. API key from env."""
         try:
-            import anthropic  # lazy — not required in gemini mode
+            import anthropic  # lazy — not a hard dep at import time
         except ImportError as exc:
             raise RuntimeError("anthropic package not installed — run: pip install anthropic") from exc
 
@@ -180,26 +170,6 @@ class LLMClient:
             messages=[{"role": "user", "content": user}],
         )
         return str(message.content[0].text)  # type: ignore[union-attr]
-
-    def _call_gemini(self, system: str, user: str) -> str:
-        """Google Gemini 2.0 Flash (free tier). API key from env."""
-        try:
-            from google import genai  # lazy — not required in agent mode
-            from google.genai import types as genai_types
-        except ImportError as exc:
-            raise RuntimeError("google-genai package not installed — run: pip install google-genai") from exc
-
-        key = self.api_key or os.environ.get("GOOGLE_API_KEY", "")
-        if not key:
-            raise RuntimeError("GOOGLE_API_KEY is not set — cannot proceed in gemini mode")
-
-        client = genai.Client(api_key=key)
-        resp = client.models.generate_content(
-            model=GEMINI_MODEL,
-            config=genai_types.GenerateContentConfig(system_instruction=system),
-            contents=user,
-        )
-        return str(resp.text)
 
 
 # ---------------------------------------------------------------------------
@@ -472,8 +442,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["agent", "gemini"],
-        help="LLM backend: 'agent' (Anthropic, primary) or 'gemini' (Google, CI fallback)",
+        choices=["agent"],
+        help="LLM backend: 'agent' (Anthropic via heartbeat — only supported mode)",
     )
     parser.add_argument("--base-branch", default="", help="Base branch (informational, optional)")
     parser.add_argument("--dry-run", action="store_true", help="Print suggestions without writing files")
@@ -487,11 +457,6 @@ def main(argv: list[str] | None = None) -> int:
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             log.error("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
-            return 1
-    else:
-        api_key = os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            log.error("GOOGLE_API_KEY is not set — cannot proceed in gemini mode")
             return 1
 
     llm = LLMClient(mode=args.mode, api_key=api_key)
