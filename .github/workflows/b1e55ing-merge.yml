@@ -60,7 +60,7 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pip install google-generativeai httpx
+          pip install google-genai httpx
           python scripts/b1e55ing.py \
             --pr-number ${{ github.event.pull_request.number }} \
             --github-token "$GITHUB_TOKEN" \
