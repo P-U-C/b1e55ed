@@ -179,6 +179,30 @@ class PnLTracker:
                     exc_info=True,
                 )
 
+            # S7: Record outcome for stratification tracking
+            try:
+                from engine.brain.learning import StratificationTracker
+
+                strat = StratificationTracker(self.db)
+                pos_row2 = self.db.conn.execute(
+                    "SELECT conviction_id FROM positions WHERE id = ?",
+                    (str(position_id),),
+                ).fetchone()
+                if pos_row2 and pos_row2["conviction_id"] is not None:
+                    cs_row = self.db.conn.execute(
+                        "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
+                        (pos_row2["conviction_id"],),
+                    ).fetchone()
+                    if cs_row and cs_row["cycle_id"] and cs_row["symbol"]:
+                        sig_id = f"{cs_row['cycle_id']}:{cs_row['symbol']}"
+                        strat.record_outcome(sig_id, float(realized), _utc_now())
+            except Exception:
+                _log.warning(
+                    "stratification outcome recording failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
         return float(realized)
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:

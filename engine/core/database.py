@@ -409,6 +409,22 @@ CREATE TABLE IF NOT EXISTS contributor_signals (
 
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_contributor ON contributor_signals(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_asset ON contributor_signals(signal_asset);
+
+-- ============================================================
+-- Signal Stratification (flywheel S7)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS signal_stratification (
+    signal_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    bucket TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    outcome_pnl_usd REAL,
+    attributed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_strat_bucket ON signal_stratification(bucket);
 """
 
 

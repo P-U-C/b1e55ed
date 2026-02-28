@@ -30,16 +30,22 @@ except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
 
 
+import logging
+
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
 from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
-from engine.brain.kill_switch import KillSwitch, KillSwitchDecision
+from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel
+from engine.brain.learning import StratificationTracker
 from engine.brain.regime import RegimeDetector, RegimeResult
 from engine.brain.synthesis import SynthesisResult, VectorSynthesis
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
+from engine.core.types import TradeIntent
+from engine.execution.oms import OMS, default_sizer_from_config
+from engine.execution.preflight import Preflight
 from engine.security.identity import NodeIdentity
 
 
@@ -68,13 +74,12 @@ class BrainOrchestrator:
         self.kill_switch = KillSwitch(config, db)
         self.conviction = ConvictionEngine(config, db, node_id=identity.node_id)
         self.decision = DecisionEngine(config, db)
+        self.stratification = StratificationTracker(db)
 
     def run_cycle(self, symbols: list[str]) -> CycleResult:
         # Abort immediately if kill switch is active.
         ks_level = self.kill_switch.level
         if int(ks_level) > 0:
-            import logging
-
             logging.getLogger("b1e55ed.orchestrator").warning("Brain cycle aborted: kill switch level %s is active", ks_level)
             raise RuntimeError(f"Brain cycle blocked by kill switch (level={ks_level})")
 
@@ -163,6 +168,15 @@ class BrainOrchestrator:
             convictions[sym] = conv
             self.conviction.emit(conv, cycle_id=cycle_id)
 
+            # S7: Record signal for stratification tracking
+            self.stratification.record_signal(
+                signal_id=f"{cycle_id}:{sym}",
+                symbol=sym,
+                confidence=conv.score.confidence or 0.0,
+                direction=conv.score.direction,
+                ts=now,
+            )
+
             intent = self.decision.decide_and_emit(
                 symbol=sym,
                 pcs=conv.final_conviction,
@@ -175,6 +189,37 @@ class BrainOrchestrator:
                 from dataclasses import asdict
 
                 intents.append(asdict(intent))
+
+        # S7: Auto-paper-trade on high confidence
+        if getattr(self.config.brain, "auto_paper_trade", True):
+            _log = logging.getLogger("b1e55ed.orchestrator")
+            for sym, conv in convictions.items():
+                confidence = conv.score.confidence or 0.0
+                if confidence >= 0.65 and self.kill_switch.level == KillSwitchLevel.SAFE:
+                    try:
+                        direction = conv.score.direction if conv.score.direction != "neutral" else "long"
+                        ti = TradeIntent(
+                            symbol=sym,
+                            direction=direction,
+                            size_pct=0.02,
+                            leverage=1.0,
+                            conviction_score=conv.final_conviction,
+                            regime=regime_res.state.regime,
+                            rationale="auto_paper_trade:high_confidence",
+                            stop_loss_pct=0.05,
+                            take_profit_pct=0.10,
+                        )
+                        preflight = Preflight(self.config, self.db)
+                        sizer = default_sizer_from_config(self.config)
+                        oms = OMS(config=self.config, db=self.db, preflight=preflight, sizer=sizer)
+                        oms_result = oms.submit(ti, mid_price=1.0, equity_usd=10000.0)
+                        _log.info("auto-paper-trade: %s %s -> %s", sym, direction, oms_result.status)
+                    except Exception:
+                        _log.exception("auto-paper-trade failed for %s -- brain cycle continues", sym)
+                elif 0.45 <= confidence < 0.65:
+                    _log.info("watch: %s confidence=%.2f", sym, confidence)
+                elif confidence < 0.45:
+                    _log.debug("low conviction: %s confidence=%.2f", sym, confidence)
 
         result = CycleResult(
             cycle_id=cycle_id,

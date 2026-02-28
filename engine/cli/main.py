@@ -465,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_export_parser(sub)
 
+    # -- report --
+    from engine.cli.commands.report import build_report_parser
+
+    build_report_parser(sub)
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -3105,6 +3110,7 @@ def main(argv: list[str] | None = None) -> int:
         "export": _cmd_export,
         "wizard": _cmd_wizard,
         "uninstall": _cmd_uninstall,
+        "report": lambda ctx, args: __import__("engine.cli.commands.report", fromlist=["run_report"]).run_report(ctx, args),
     }
 
     fn = dispatch.get(str(args.command))
