@@ -38,17 +38,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          MSG="[b1e55ing] PR #${{ github.event.pull_request.number }} opened on ${{ github.repository }} — ${{ github.event.pull_request.title }}"
+          MSG="${MSG}"$'\n'"Branch: ${{ github.head_ref }}"
+          MSG="${MSG}"$'\n'"Run: b1e55ing.py --pr-number ${{ github.event.pull_request.number }} --mode agent"
           curl -s -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=[b1e55ing] PR #${{ github.event.pull_request.number }} opened on ${{ github.repository }} — ${{ github.event.pull_request.title }}
-Branch: ${{ github.head_ref }}
-Run: b1e55ing.py --pr-number ${{ github.event.pull_request.number }} --mode agent" \
-            | python3 -c "
-import sys, json
-try:
-    r = json.load(sys.stdin)
-    print('Signal sent' if r.get('ok') else f'Signal failed: {r}')
-except Exception as e:
-    print(f'Signal parse error (non-fatal): {e}')
-" || true
+            --data-urlencode "text=${MSG}" \
+            | python3 -c "import sys,json; r=json.load(sys.stdin); print('Signal sent' if r.get('ok') else 'Signal failed: '+str(r))" \
+            || true
