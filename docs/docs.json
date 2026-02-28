@@ -5,14 +5,12 @@
   "colors": {
     "primary": "#10b981",
     "light": "#34d399",
-    "dark": "#059669",
-    "background": {
+    "dark": "#059669"
+  },
+  "background": {
+    "color": {
       "dark": "#0a0a0a",
       "light": "#fafaf9"
-    },
-    "anchors": {
-      "from": "#10b981",
-      "to": "#059669"
     }
   },
   "logo": {
@@ -20,83 +18,90 @@
     "light": "/logo/light.svg"
   },
   "favicon": "/favicon.svg",
-  "font": {
-    "headings": {
+  "fonts": {
+    "heading": {
       "family": "JetBrains Mono"
     },
     "body": {
       "family": "JetBrains Mono"
     }
   },
-  "topbarLinks": [
-    {
-      "name": "GitHub",
-      "url": "https://github.com/P-U-C/b1e55ed"
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/P-U-C/b1e55ed"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://docs.b1e55ed.permanentupperclass.com/quickstart"
     }
-  ],
-  "topbarCtaButton": {
-    "name": "Get Started",
-    "url": "https://docs.b1e55ed.permanentupperclass.com/quickstart"
   },
-  "navigation": [
-    {
-      "group": "Getting Started",
-      "pages": [
-        "introduction",
-        "quickstart",
-        "how-it-works"
-      ]
-    },
-    {
-      "group": "Setup",
-      "pages": [
-        "setup/standalone-install",
-        "setup/agent-install",
-        "setup/telegram",
-        "setup/tailscale",
-        "setup/oracle"
-      ]
-    },
-    {
-      "group": "Producers",
-      "pages": [
-        "producers/overview",
-        "producers/symbol-packs",
-        "producers/tuning-guide",
-        "producers/reference"
-      ]
-    },
-    {
-      "group": "Operations",
-      "pages": [
-        "operations/daily",
-        "operations/cli-reference",
-        "operations/config-reference",
-        "operations/troubleshooting"
-      ]
-    },
-    {
-      "group": "API Reference",
-      "pages": [
-        "api/overview",
-        "api/brain",
-        "api/signals",
-        "api/positions",
-        "api/contributors",
-        "api/karma"
-      ]
-    },
-    {
-      "group": "Contributing",
-      "pages": [
-        "contributing/how-to-contribute",
-        "contributing/contributor-registration",
-        "contributing/karma-attribution"
-      ]
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "quickstart",
+          "how-it-works"
+        ]
+      },
+      {
+        "group": "Setup",
+        "pages": [
+          "setup/standalone-install",
+          "setup/agent-install",
+          "setup/telegram",
+          "setup/tailscale",
+          "setup/oracle"
+        ]
+      },
+      {
+        "group": "Producers",
+        "pages": [
+          "producers/overview",
+          "producers/symbol-packs",
+          "producers/tuning-guide",
+          "producers/reference"
+        ]
+      },
+      {
+        "group": "Operations",
+        "pages": [
+          "operations/daily",
+          "operations/cli-reference",
+          "operations/config-reference",
+          "operations/troubleshooting"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/overview",
+          "api/brain",
+          "api/signals",
+          "api/positions",
+          "api/contributors",
+          "api/karma"
+        ]
+      },
+      {
+        "group": "Contributing",
+        "pages": [
+          "contributing/how-to-contribute",
+          "contributing/contributor-registration",
+          "contributing/karma-attribution"
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/P-U-C/b1e55ed",
+      "twitter": "https://twitter.com/zozDOTeth"
     }
-  ],
-  "footerSocials": {
-    "github": "https://github.com/P-U-C/b1e55ed",
-    "twitter": "https://twitter.com/zozDOTeth"
   }
 }
