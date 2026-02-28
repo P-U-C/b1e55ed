@@ -60,6 +60,27 @@ If running as a systemd service:
 sudo systemctl restart b1e55ed.service
 ```
 
+## v1.0.0-beta.6 — 2026-02-27
+
+macOS install fixes: stale uv git cache, shell env var scoping bug, EAS on by default, API root info page, dashboard identity path when installed as a uv tool. 589 tests passing.
+
+### 🔴 Bug Fixes
+
+- **Branch install syntax** — `BRANCH=develop curl ... | bash` was wrong: the env var only applies to `curl`, not `bash`. Correct form: `curl ... | BRANCH=develop bash`. install.sh comment, docs, and CHANGELOG all updated.
+- **uv git cache** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale cached git clone from serving old code after `uninstall` + reinstall on a branch
+- **Dashboard identity gate** — `_repo_root()` in all dashboard modules was using `Path(__file__).resolve().parents[1]` (uv tool install dir, not user's cwd); always showed "forge required" even after identity already forged. Fixed to use `B1E55ED_REPO_ROOT` env var or `Path.cwd()` (same as CLI)
+- **EAS enabled by default** — `EASConfig.enabled = True` (was `False`); off-chain attestations need no `rpc_url` and should always be on. Startup log now shows helpful hint instead of scary DISABLED warning
+- **Forge timing** — Banner and wizard said "~2 seconds" (Apple Silicon benchmark); Intel Macs take 30s–2min. Updated to "seconds to ~2 min depending on hardware"
+
+### 🟡 API
+
+- **`GET /` info page** — API root was 404; now returns JSON with version, docs link, and key endpoint map
+
+### 🔧 CI / Workflow
+
+- **Branch guard added** — `.github/workflows/branch-guard.yml` blocks PRs to `main` from any branch except `develop` or `release/*`; enforces the develop → main release flow
+
+
 ## v1.0.0-beta.5 — 2026-02-26
 
 macOS onboarding, Rust forge binary distribution, and zero-credential contributor registration via oracle relay. 589 tests passing.
