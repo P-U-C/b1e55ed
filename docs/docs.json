@@ -122,5 +122,14 @@
         "method": "bearer"
       }
     }
+  },
+  "description": "Open-source trading intelligence engine with a public provenance oracle. AI agents verify signal producers before acting. Operators run a sovereign trading OS.",
+  "seo": {
+    "metatags": {
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@zozDOTeth",
+      "og:image": "https://b1e55ed.permanentupperclass.com/og.svg"
+    },
+    "indexing": "navigable"
   }
 }
