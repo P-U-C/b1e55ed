@@ -474,11 +474,10 @@ def test_skip_fork_pr() -> None:
 
 
 def test_post_merge_already_blessed_skips() -> None:
-    """b1e55ing-merge.yml must gate all expensive steps on 'already_blessed == false'.
+    """b1e55ing-merge.yml must gate the curse step on 'already_blessed == false'.
 
-    The idempotency contract: if the agent (or a previous Gemini run) already
-    added 'a b1e55ing' to the log, neither Python setup, pip install, nor the
-    script itself should run. Verifies the workflow YAML structure enforces this.
+    The idempotency contract: if the agent already blessed the PR pre-merge,
+    the post-merge curse step must not run. Verifies the workflow YAML structure.
     """
     merge_path = Path(__file__).parent.parent.parent / ".github" / "workflows" / "b1e55ing-merge.yml"
     assert merge_path.exists(), "b1e55ing-merge.yml not found"
@@ -488,12 +487,11 @@ def test_post_merge_already_blessed_skips() -> None:
     assert "already_blessed" in src
     assert "setOutput" in src  # github-script uses core.setOutput(), not $GITHUB_OUTPUT
 
-    # The grep target must match the canonical commit message prefix
+    # The check must look for the canonical blessing string
     assert "a b1e55ing" in src
 
-    # Every expensive step must be conditional on the flag
-    # Count occurrences of the guard condition vs expensive operations
-    assert src.count("already_blessed == 'false'") >= 3  # setup-python, install+bless, commit
+    # The curse step must be conditional on not being blessed
+    assert src.count("already_blessed == 'false'") >= 1
 
     # The workflow only fires on merged PRs — not on closed-without-merge
     assert "merged == true" in src
@@ -501,6 +499,5 @@ def test_post_merge_already_blessed_skips() -> None:
     # Trigger is pull_request closed, not push (must not run on direct commits)
     assert "types: [closed]" in src
 
-    # Post-merge path delivers blessing as a PR comment (not a direct push)
-    assert "createComment" in src
-    assert "a b1e55ing" in src
+    # Curse is delivered as a PR comment via gh cli
+    assert "gh pr comment" in src
