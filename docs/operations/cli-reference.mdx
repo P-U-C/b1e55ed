@@ -1,26 +1,481 @@
 ---
 title: "CLI Reference"
-description: "Command reference and examples for the b1e55ed CLI."
+description: "Command reference and examples for the b1e55ed CLI (authoritative: engine/cli/main.py)."
 ---
 
 <Info>
-The full CLI reference is maintained in the repo at **`docs/cli-reference.md`**.
+All commands support `--help`.
 
-- Read it in Mintlify: **[CLI Reference (full)](/cli-reference)**
-- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/cli-reference.md
+The *canonical* CLI reference in this repo is `docs/cli-reference.md`.
 </Info>
 
-## Common commands
+## Conventions
+
+- Examples assume `b1e55ed` is on your `PATH`.
+- Many commands support `--json` for machine-readable output.
+
+---
+
+## Core (day-to-day)
+
+### `b1e55ed wizard`
+
+Interactive 5-step onboarding for new contributors/operators.
 
 ```bash
 b1e55ed wizard
-b1e55ed setup
-b1e55ed brain
-b1e55ed signal --help
-b1e55ed api
-b1e55ed dashboard
 ```
 
-<Tip>
-For any subcommand: `b1e55ed <command> --help`.
-</Tip>
+<Steps>
+  <Step title="Identity forge">
+    Creates a `0xb1e55ed`-prefixed Ethereum identity used for EAS/network-facing integrations.
+  </Step>
+  <Step title="Config">
+    Writes `config/user.yaml` (and initializes local state).
+  </Step>
+  <Step title="Producer registration">
+    Registers and schedules producers.
+  </Step>
+  <Step title="Brain first run">
+    Runs an initial cycle to verify ingestion → synthesis → storage.
+  </Step>
+  <Step title="API setup">
+    Helps you set API auth and verify health.
+  </Step>
+</Steps>
+
+### `b1e55ed setup`
+
+Low-level setup. Initializes local DB and writes config. (The wizard calls this internally.)
+
+```bash
+b1e55ed setup --help
+b1e55ed setup [--preset conservative|balanced|degen] [--non-interactive]
+```
+
+| Flag | Description |
+|---|---|
+| `--preset` | Applies a preset overlay before writing `config/user.yaml` |
+| `--non-interactive` | Avoid prompts (best for scripts) |
+
+### `b1e55ed brain`
+
+Run one brain cycle.
+
+```bash
+b1e55ed brain --help
+b1e55ed brain [--full] [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--full` | Include slower producers / more expensive work |
+| `--json` | Emit JSON summary (cron/automation friendly) |
+
+### `b1e55ed signal`
+
+Inject operator intel as a **curator** signal.
+
+```bash
+b1e55ed signal "<text>" \
+  [--symbols "BTC,ETH"] \
+  [--source "operator"] \
+  [--direction bullish|bearish|neutral] \
+  [--conviction 0-10] \
+  [--json]
+```
+
+Add from a file:
+
+```bash
+b1e55ed signal add --file <path> \
+  [--symbols "BTC,ETH"] \
+  [--source "operator"] \
+  [--direction bullish|bearish|neutral] \
+  [--conviction 0-10] \
+  [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--symbols` | Comma-separated symbols to associate with the signal |
+| `--source` | Freeform provenance (e.g. `operator:telegram`) |
+| `--direction` | `bullish`, `bearish`, or `neutral` |
+| `--conviction` | 0–10 (used for calibration / scoring) |
+| `--json` | Print JSON output |
+
+### `b1e55ed alerts`
+
+List recent alerts from the event store.
+
+```bash
+b1e55ed alerts --help
+b1e55ed alerts [--since <minutes>] [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--since` | Look back window in minutes |
+| `--json` | JSON output |
+
+### `b1e55ed positions`
+
+List open positions with best-effort mark price PnL.
+
+```bash
+b1e55ed positions --help
+b1e55ed positions [--json]
+```
+
+---
+
+## System
+
+### `b1e55ed health`
+
+Cron-safe health check.
+
+```bash
+b1e55ed health --help
+b1e55ed health [--json]
+```
+
+### `b1e55ed status`
+
+Human-readable system status summary.
+
+```bash
+b1e55ed status
+```
+
+### `b1e55ed integrity`
+
+Verify hash-chain integrity over the event store.
+
+```bash
+b1e55ed integrity --help
+b1e55ed integrity [--json]
+```
+
+### `b1e55ed replay`
+
+Rebuild projections from the event log (useful after DB repair or when validating consistency).
+
+```bash
+b1e55ed replay
+```
+
+---
+
+## Services (API + dashboard)
+
+### `b1e55ed start`
+
+Start API + dashboard together (recommended entry point).
+
+```bash
+b1e55ed start --help
+b1e55ed start \
+  [--api-port <port>] \
+  [--dashboard-port <port>] \
+  [--host <host>] \
+  [--no-browser]
+```
+
+| Flag | Description |
+|---|---|
+| `--api-port` | API port (default `5050`) |
+| `--dashboard-port` | Dashboard port (default `5051`) |
+| `--host` | Bind host (default `127.0.0.1`) |
+| `--no-browser` | Don’t auto-open a browser |
+
+### `b1e55ed api`
+
+Start the REST API server only.
+
+```bash
+b1e55ed api --help
+b1e55ed api [--host <host>] [--port <port>]
+```
+
+### `b1e55ed dashboard`
+
+Start the dashboard only.
+
+```bash
+b1e55ed dashboard --help
+b1e55ed dashboard [--host <host>] [--port <port>]
+```
+
+---
+
+## Identity and keys
+
+### `b1e55ed identity forge`
+
+Forge a `0xb1e55ed`-prefixed Ethereum identity (CPU-bound).
+
+```bash
+b1e55ed identity forge --help
+b1e55ed identity forge [--threads N] [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--threads` | Parallelism for the forge search |
+| `--json` | JSON output |
+
+### `b1e55ed identity show`
+
+Show your currently forged identity.
+
+```bash
+b1e55ed identity show [--json]
+```
+
+### `b1e55ed identity restore`
+
+Recover identity from an Ethereum private key.
+
+```bash
+b1e55ed identity restore --eth-key <hex-private-key>
+```
+
+### `b1e55ed keys`
+
+Manage stored keys/values.
+
+```bash
+b1e55ed keys list [--json]
+b1e55ed keys set <name> <value> [--json]
+b1e55ed keys remove <name> [--json]
+b1e55ed keys test [--json]
+```
+
+### `b1e55ed anchor`
+
+Print the current hash-chain root; optionally publish as an EAS attestation.
+
+```bash
+b1e55ed anchor --help
+b1e55ed anchor [--format json|text] [--eas]
+```
+
+| Flag | Description |
+|---|---|
+| `--format` | Output format |
+| `--eas` | Publish as EAS attestation (requires EAS configured) |
+
+---
+
+## Producers
+
+### `b1e55ed producers register`
+
+Register a producer.
+
+```bash
+b1e55ed producers register \
+  --name <name> \
+  --domain <domain> \
+  --endpoint <url> \
+  [--schedule "*/15 * * * *"]
+```
+
+| Flag | Description |
+|---|---|
+| `--name` | Producer name / identifier |
+| `--domain` | One of: `curator`, `onchain`, `tradfi`, `social`, `technical`, `events` |
+| `--endpoint` | URL the producer polls |
+| `--schedule` | Cron string for polling cadence |
+
+### `b1e55ed producers list`
+
+```bash
+b1e55ed producers list [--json]
+```
+
+### `b1e55ed producers remove`
+
+```bash
+b1e55ed producers remove --name <name>
+```
+
+---
+
+## Contributors
+
+### `b1e55ed contributors register`
+
+Register a contributor (attribution unit).
+
+```bash
+b1e55ed contributors register \
+  --name <name> \
+  --role operator|agent|tester|curator \
+  [--node-id <node_id>] \
+  [--attest]
+```
+
+| Flag | Description |
+|---|---|
+| `--name` | Display name |
+| `--role` | Contributor role |
+| `--node-id` | Override detected node id |
+| `--attest` | Create/store an EAS off-chain attestation (optional) |
+
+### `b1e55ed contributors list`
+
+```bash
+b1e55ed contributors list [--json]
+```
+
+### `b1e55ed contributors remove`
+
+```bash
+b1e55ed contributors remove --id <contributor_id>
+```
+
+### `b1e55ed contributors score`
+
+```bash
+b1e55ed contributors score --id <contributor_id> [--json]
+```
+
+### `b1e55ed contributors leaderboard`
+
+```bash
+b1e55ed contributors leaderboard [--limit N] [--json]
+```
+
+---
+
+## Kill switch
+
+### `b1e55ed kill-switch`
+
+Show current kill switch level.
+
+```bash
+b1e55ed kill-switch [--json]
+```
+
+### `b1e55ed kill-switch set`
+
+Set kill switch level (`0` = off, `1–4` increasing restriction).
+
+```bash
+b1e55ed kill-switch set <level 0-4> [--json]
+```
+
+---
+
+## Export
+
+### `b1e55ed export karma`
+
+Export karma data from the event store.
+
+```bash
+b1e55ed export karma \
+  [--format jsonl|json|csv] \
+  [--include-chain] \
+  [--output <path>] \
+  [--from DATE] \
+  [--to DATE]
+```
+
+| Flag | Description |
+|---|---|
+| `--format` | Output format |
+| `--include-chain` | Include hash-chain data alongside exports |
+| `--output` | Write to a file instead of stdout |
+| `--from` / `--to` | Optional date bounds |
+
+---
+
+<AccordionGroup>
+  <Accordion title="Analysis commands">
+
+  ### `b1e55ed kelly`
+
+  Estimate optimal position sizing from trade history (Kelly criterion).
+
+  ```bash
+  b1e55ed kelly [--json]
+  ```
+
+  ### Backtesting
+
+  Walk-forward:
+
+  ```bash
+  b1e55ed backtest walkforward \
+    [--symbols BTC,ETH,SOL] \
+    [--strategies momentum,ma_crossover] \
+    [--start 2023-01-01] \
+    [--end 2025-12-31]
+  ```
+
+  Grid sweep:
+
+  ```bash
+  b1e55ed backtest gridsweep [--strategies momentum] [--assets BTC,ETH]
+  ```
+
+  Mega sweep:
+
+  ```bash
+  b1e55ed backtest megasweep
+  ```
+
+  Regime-conditioned results:
+
+  ```bash
+  b1e55ed backtest regime [--symbols BTC,ETH]
+  ```
+
+  </Accordion>
+
+  <Accordion title="Webhooks">
+
+  Webhook subscriptions are stored in the local database.
+
+  ```bash
+  b1e55ed webhooks add <url> --events "alert.*,system.kill_switch.*"
+  b1e55ed webhooks list [--json]
+  b1e55ed webhooks remove <id>
+  ```
+
+  </Accordion>
+
+  <Accordion title="EAS integration">
+
+  ```bash
+  b1e55ed eas status [--json]
+  b1e55ed eas verify --uid <uid> [--json]
+  ```
+
+  <Note>
+  EAS is optional and disabled by default. See the config reference for `eas.*` keys.
+  </Note>
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Uninstall
+
+### `b1e55ed uninstall`
+
+Removes b1e55ed from the system. Prompts unless `--yes` is provided.
+
+```bash
+b1e55ed uninstall [--yes] [--keep-data]
+```
+
+| Flag | Description |
+|---|---|
+| `--yes` | Skip confirmation prompts |
+| `--keep-data` | Preserve local data directory (DB, logs, config) |

@@ -1,18 +1,106 @@
 ---
-title: "Karma & Attribution"
-description: "How credit and provenance work in b1e55ed."
+title: "Karma Attribution"
+description: "How contributor karma is computed and how to interpret it."
 ---
 
-b1e55ed treats provenance as a first-class concept: every signal should have an attributable source.
+## What karma is (and isn’t)
 
-<Info>
-Spec/reference material:
+Karma is a **composite reputation score** for a registered contributor.
 
-- `docs/KARMA-SPEC.md`
-- `docs/authority-model.md`
-- `docs/contributors.md`
-</Info>
+- It is **not** a trust score.
+- It does **not** predict the future.
+- It is a compressed, backward-looking summary of **resolved outcomes**.
+
+Karma is used by provenance/oracle projections so downstream agents can decide how much weight to give signals.
 
 <Note>
-Coming soon: an operator-friendly explanation + examples of how karma influences synthesis and trust.
+New contributors start at **0**. Karma can only increase once **resolved** signals accumulate.
+</Note>
+
+---
+
+## The 5‑factor formula
+
+The score is a weighted composite of five factors, scaled to `[0, 100]`:
+
+```text
+score = 100 × clamp(
+    0.35 × hit_rate_norm
+  + 0.20 × calibration_norm
+  + 0.20 × volume_norm
+  + 0.15 × consistency_norm
+  + 0.10 × recency
+, 0, 1)
+```
+
+| Factor | Weight | What it measures |
+|---|---:|---|
+| Hit rate (`hit_rate_norm`) | 35% | Profitable / resolved signals (hardest to game) |
+| Calibration (`calibration_norm`) | 20% | How well conviction matches outcomes (Brier score) |
+| Volume (`volume_norm`) | 20% | Accepted signals count (log-scaled; diminishing returns) |
+| Consistency (`consistency_norm`) | 15% | Streak of active days with accepted signals (sqrt-scaled) |
+| Recency (`recency`) | 10% | How recently the contributor had an accepted signal |
+
+---
+
+## Factor details (operator-friendly)
+
+### 1) Hit rate (35%)
+
+- Computed as: `signals_profitable / signals_resolved`
+- **Gate:** if `signals_resolved < 5`, hit rate contributes `0.0` (no penalty, no reward)
+- **Mild penalty** for persistently wrong signals when `hit_rate < 0.20`
+
+### 2) Calibration (20%) — Brier score
+
+- Converts conviction (0–10) into confidence (0–1)
+- Uses Brier score: `mean((confidence − outcome)^2)`
+- Normalized so `0.0` (perfect) maps to `1.0`, and `0.25` (random baseline) maps to `0.0`
+
+### 3) Volume (20%)
+
+- Counts **accepted** signals only (not merely submitted)
+- Uses log scaling: roughly **100 accepted** signals saturate this component
+
+### 4) Consistency (15%)
+
+- Rewards sustained activity: consecutive calendar days with ≥1 **accepted** signal
+- Uses sqrt scaling; saturates around a **30-day streak**
+
+### 5) Recency (10%)
+
+- Full credit if last accepted signal was within **7 days**
+- Linearly decays to 0 over the next **30 days**
+
+---
+
+## Anti-gaming measures
+
+The system explicitly closes common “spam” vectors:
+
+- **Acceptance rate gate:** if `submitted ≥ 10` and `accepted/submitted < 0.10`, the score is forced to exactly `0.0`.
+- **Volume counts accepted signals only:** spamming rejected signals doesn’t increase volume.
+- **Streak counts accepted days only:** drip-farming rejected signals doesn’t build consistency.
+- **Hit rate requires resolved outcomes:** unresolved signals don’t inflate hit rate.
+
+<Info>
+If you want a quick sanity check for why a score is high/low, look at: accepted, resolved, profitable, streak, and days since active.
+</Info>
+
+---
+
+## Interpretation (rule of thumb)
+
+These ranges are illustrative, not guarantees:
+
+| Score range | Practical interpretation |
+|---:|---|
+| `> 75` | Strong positive attribution (good outcomes + activity) |
+| `50–75` | Positive but may have limited data or recency gaps |
+| `25–50` | Neutral / insufficient resolved outcomes |
+| `< 25` | Below baseline (inactive, wrong, or low acceptance) |
+| `= 0.0` | New contributor or acceptance-rate gate triggered |
+
+<Note>
+Sparse data produces unstable scores. Treat contributors with `< 30` resolved signals as “insufficient data”, regardless of the numeric score.
 </Note>

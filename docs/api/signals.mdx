@@ -1,14 +1,151 @@
 ---
-title: "Signals"
-description: "Create and query signals via the API."
+title: "Signals & Events API"
+description: "List signals, submit curator signals, and subscribe to the SSE stream."
 ---
 
-Signals are the core event type: a time-stamped, attributed statement about an asset.
+## `GET /signals`
 
-<Note>
-Coming soon: signal schema, examples, and filtering.
-</Note>
+Lists recent signal events.
 
-<Info>
-For now, use the CLI (`b1e55ed signal ...`) or consult `docs/api-reference.md`.
-</Info>
+### Query parameters
+
+| Param | Type | Default | Notes |
+|---|---|---:|---|
+| `domain` | string |  | Filters by `signal.<domain>.*` |
+| `limit` | int | 100 | Max 500 |
+| `offset` | int | 0 | For pagination |
+
+### Example
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5050/api/v1/signals?domain=ta&limit=50&offset=0" | jq
+```
+
+### Response (`200`)
+
+```json
+{
+  "items": [
+    {
+      "id": "1",
+      "type": "signal.ta.rsi.v1",
+      "ts": "2026-02-20T00:29:58+00:00",
+      "source": "producer.ta",
+      "payload": {"symbol": "BTC", "rsi_14": 52.1}
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "total": 1
+}
+```
+
+Errors: `401 auth.*`
+
+---
+
+## `POST /signals/submit`
+
+Submit a **curator signal** with contributor attribution.
+
+- Resolves the contributor by `node_id`
+- Writes the signal event
+- Records attribution in `contributor_signals`
+
+### Request body
+
+```json
+{
+  "event_type": "signal.curator.v1",
+  "ts": "2026-02-20T00:29:58Z",
+  "node_id": "b1e55ed-deadbeef",
+  "source": "operator:telegram",
+  "payload": {
+    "symbol": "BTC",
+    "direction": "bullish",
+    "conviction": 7.0,
+    "rationale": "context"
+  }
+}
+```
+
+### Example
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @- \
+  http://localhost:5050/api/v1/signals/submit <<'JSON'
+{
+  "event_type": "signal.curator.v1",
+  "ts": "2026-02-20T00:29:58Z",
+  "node_id": "b1e55ed-deadbeef",
+  "source": "operator:telegram",
+  "payload": {
+    "symbol": "BTC",
+    "direction": "bullish",
+    "conviction": 7.0,
+    "rationale": "ETF flows strong; dips being bought"
+  }
+}
+JSON
+```
+
+### Response (`200`)
+
+```json
+{"event_id": "123", "contributor_id": "contrib_abc123"}
+```
+
+Errors:
+
+- `400 signal.invalid_type`
+- `404 contributor.not_found`
+- `401 auth.*`
+
+---
+
+## `GET /signals/{signal_id}/attribution`
+
+Returns attribution data for a specific signal (contributor, source, and outcome when settled).
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/signals/123/attribution | jq
+```
+
+Errors:
+
+- `401 auth.*`
+- `404` (signal not found)
+
+---
+
+## `GET /events/stream` (SSE)
+
+Server-Sent Events stream. Reconnect is safe.
+
+### Query parameters
+
+| Param | Type | Notes |
+|---|---|---|
+| `domain` | string | Filter by domain (e.g. `signal`, `alert`, `learning`) |
+| `since` | string | Resume from a specific event id (inclusive) |
+
+### Event format
+
+```text
+data: {"id":"123","type":"signal.ta.rsi.v1","ts":"2026-02-20T00:00:00Z","source":"producer.ta","payload":{...}}
+```
+
+### Example
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5050/api/v1/events/stream?domain=alert"
+```

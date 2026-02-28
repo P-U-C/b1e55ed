@@ -1,17 +1,116 @@
 ---
-title: "Oracle Setup (Optional)"
-description: "Configure the oracle endpoint for producer provenance and verification."
+title: "Oracle Setup"
+description: "Enable and verify the read-only provenance oracle."
 ---
 
-The oracle provides a way for external systems (or other agents) to verify producer provenance and related metadata.
+## What the oracle is
 
-<Info>
-A deeper oracle walkthrough exists in the repo at **`docs/oracle.md`**.
+The oracle is a **read-only, publicly accessible projection layer** over the b1e55ed event store.
 
-- Read it in Mintlify: **[Oracle](/oracle)**
-- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/oracle.md
-</Info>
+It answers one question:
 
-<Note>
-Coming soon: a minimal “turn it on” checklist and recommended deployment patterns.
-</Note>
+> Does this signal producer have verifiable history?
+
+It is designed for AI agents and external systems to query before acting on a producer’s signals.
+
+---
+
+## The provenance endpoint
+
+```text
+GET /api/v1/oracle/producers/{producer_id}/provenance
+```
+
+- **No authentication required**
+- Includes an anti-Goodhart header on every response:
+
+```text
+X-Attribution-Notice: Fields informational only. May change without notice. Optimizing against specific metrics triggers drift detection.
+```
+
+Example (managed oracle):
+
+```bash
+curl -s \
+  https://oracle.b1e55ed.permanentupperclass.com/api/v1/oracle/producers/alpha_signals_v2/provenance | jq
+```
+
+---
+
+## MCP tool: `b1e55ed_provenance_check`
+
+Agents can call the oracle through the MCP JSON-RPC tool `b1e55ed_provenance_check`.
+
+Via `POST /api/v1/mcp`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "id": 1,
+  "params": {
+    "name": "b1e55ed_provenance_check",
+    "arguments": {
+      "producer_id": "alpha_signals_v2",
+      "signal_type": "long_btc"
+    }
+  }
+}
+```
+
+---
+
+## Enabling it on your node
+
+Oracle routes activate automatically when the oracle integration is enabled.
+
+<Steps>
+  <Step title="Set the GitHub app key">
+
+  Set the environment variable and restart your service:
+
+  ```bash
+  export B1E55ED_GITHUB_APP_KEY="..."
+  ```
+
+  If running under systemd, put this in an override file or environment file (recommended) and restart.
+
+  </Step>
+
+  <Step title="Restart b1e55ed">
+
+  ```bash
+  sudo systemctl restart b1e55ed-api.service || true
+  ```
+
+  </Step>
+</Steps>
+
+---
+
+## Self-hosted vs managed oracle
+
+You can:
+
+- **Self-host** the oracle by exposing your b1e55ed API (ideally via Tailscale or a private network)
+- Use the **managed** oracle at:
+
+```text
+oracle.b1e55ed.permanentupperclass.com
+```
+
+---
+
+## Verify it’s running
+
+Managed health check:
+
+```bash
+curl -s https://oracle.b1e55ed.permanentupperclass.com/health
+```
+
+Local check (no auth required for oracle endpoint):
+
+```bash
+curl -s http://127.0.0.1:5050/api/v1/oracle/producers/example/provenance | jq
+```

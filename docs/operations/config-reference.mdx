@@ -1,17 +1,326 @@
 ---
 title: "Config Reference"
-description: "How configuration is structured and which knobs matter."
+description: "Configuration keys, precedence rules, and environment variable mapping."
 ---
 
-Configuration lives in `config/` and is typically written/updated by the wizard/setup flow.
+## Config surface precedence
 
-<Info>
-The most complete current config documentation is in the repo at **`docs/configuration.md`**.
+b1e55ed merges configuration from multiple “surfaces”. **Later surfaces override earlier ones.**
 
-- Read it in Mintlify: **[Configuration](/configuration)**
-- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/docs/configuration.md
-</Info>
+1. `config/default.yaml` — repo defaults
+2. `config/presets/*.yaml` — preset overlays
+3. `config/user.yaml` — operator overlay
+4. Environment variables (`B1E55ED_*`) — overrides and secrets
 
 <Note>
-Coming soon: a Mintlify-native reference that mirrors the actual config schema.
+Operationally: keep **structure** in YAML, keep **secrets** in environment variables.
 </Note>
+
+---
+
+## Environment variable mapping
+
+The config model maps nested keys using:
+
+- Prefix: `B1E55ED_`
+- Nested delimiter: `__`
+
+Examples:
+
+```bash
+export B1E55ED_API__AUTH_TOKEN="..."
+export B1E55ED_EXECUTION__MODE="paper"
+export B1E55ED_EAS__ENABLED="true"
+```
+
+---
+
+## `weights`
+
+Domain synthesis weights. Must sum to `1.0` (±0.001).
+
+```yaml
+weights:
+  curator: 0.25
+  onchain: 0.25
+  tradfi: 0.20
+  social: 0.15
+  technical: 0.10
+  events: 0.05
+```
+
+Env var equivalents:
+
+```bash
+export B1E55ED_WEIGHTS__CURATOR="0.25"
+export B1E55ED_WEIGHTS__ONCHAIN="0.25"
+export B1E55ED_WEIGHTS__TRADFI="0.20"
+export B1E55ED_WEIGHTS__SOCIAL="0.15"
+export B1E55ED_WEIGHTS__TECHNICAL="0.10"
+export B1E55ED_WEIGHTS__EVENTS="0.05"
+```
+
+---
+
+## `risk`
+
+Risk controls and hard limits.
+
+```yaml
+risk:
+  max_leverage: 2.0
+  max_position_pct: 0.10
+  max_portfolio_heat_pct: 0.06
+  daily_loss_limit_pct: 0.03
+  max_drawdown_pct: 0.30
+```
+
+Env var equivalents (examples):
+
+```bash
+export B1E55ED_RISK__MAX_LEVERAGE="2.0"
+export B1E55ED_RISK__DAILY_LOSS_LIMIT_PCT="0.03"
+```
+
+---
+
+## `brain`
+
+Brain cycle timing.
+
+```yaml
+brain:
+  cycle_interval_seconds: 1800
+```
+
+Env:
+
+```bash
+export B1E55ED_BRAIN__CYCLE_INTERVAL_SECONDS="1800"
+```
+
+---
+
+## `execution`
+
+Execution mode and paper-trading defaults.
+
+```yaml
+execution:
+  mode: paper                 # paper|live
+  paper_start_balance: 10000
+  confirmation_threshold_usd: 500
+  paper_min_days: 14
+```
+
+Env (examples):
+
+```bash
+export B1E55ED_EXECUTION__MODE="paper"
+export B1E55ED_EXECUTION__PAPER_START_BALANCE="10000"
+```
+
+<Tip>
+`paper_min_days: 14` is the recommended minimum time in paper mode before going live.
+</Tip>
+
+---
+
+## `kill_switch`
+
+Kill switch thresholds (risk tripwires).
+
+```yaml
+kill_switch:
+  l1_daily_loss_pct: 0.03
+  l2_portfolio_heat_pct: 0.06
+  l3_crisis_threshold: 2
+  l4_max_drawdown_pct: 0.30
+```
+
+Env (examples):
+
+```bash
+export B1E55ED_KILL_SWITCH__L1_DAILY_LOSS_PCT="0.03"
+export B1E55ED_KILL_SWITCH__L2_PORTFOLIO_HEAT_PCT="0.06"
+```
+
+---
+
+## `karma`
+
+Karma configuration and treasury routing.
+
+```yaml
+karma:
+  enabled: true
+  percentage: 0.005
+  settlement_mode: manual     # manual|daily|weekly|threshold
+  threshold_usd: 50
+  treasury_address: "0x..."
+```
+
+Env (examples):
+
+```bash
+export B1E55ED_KARMA__ENABLED="true"
+export B1E55ED_KARMA__PERCENTAGE="0.005"
+export B1E55ED_KARMA__TREASURY_ADDRESS="0x..."
+```
+
+---
+
+## `universe`
+
+Defines which symbols b1e55ed collects/scores.
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+  max_size: 100
+```
+
+Env (examples):
+
+```bash
+export B1E55ED_UNIVERSE__SYMBOLS='["BTC","ETH","SOL"]'
+export B1E55ED_UNIVERSE__MAX_SIZE="100"
+```
+
+<Note>
+If you’re unsure what to trade, start with a tight universe (`BTC, ETH, SOL`) and widen later.
+</Note>
+
+---
+
+## `api`
+
+API server settings.
+
+```yaml
+api:
+  host: "127.0.0.1"
+  port: 5050
+  auth_token: ""             # required unless B1E55ED_INSECURE_OK=1
+```
+
+Env:
+
+```bash
+export B1E55ED_API__HOST="127.0.0.1"
+export B1E55ED_API__PORT="5050"
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
+```
+
+<Important>
+All endpoints except `GET /health` and the Oracle provenance endpoint require a bearer token.
+</Important>
+
+---
+
+## `dashboard`
+
+Dashboard server settings.
+
+```yaml
+dashboard:
+  host: "127.0.0.1"
+  port: 5051
+  auth_token: ""             # optional in this version
+```
+
+Env:
+
+```bash
+export B1E55ED_DASHBOARD__HOST="127.0.0.1"
+export B1E55ED_DASHBOARD__PORT="5051"
+```
+
+---
+
+## `eas` (Ethereum Attestation Service)
+
+Optional EAS integration (disabled by default).
+
+```yaml
+eas:
+  enabled: false
+  rpc_url: "https://eth.llamarpc.com"
+  eas_contract: "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
+  schema_registry: "0xA7b39296258348C78294F95B872b282326A97BDF"
+  schema_uid: ""               # set after schema registration
+  attester_private_key: ""     # required for creating attestations
+  mode: offchain               # onchain|offchain
+```
+
+Env (examples):
+
+```bash
+export B1E55ED_EAS__ENABLED="true"
+export B1E55ED_EAS__RPC_URL="https://eth.llamarpc.com"
+export B1E55ED_EAS__ATTESTER_PRIVATE_KEY="0x..."
+```
+
+Related CLI:
+
+- `b1e55ed eas status`
+- `b1e55ed eas verify --uid <uid>`
+
+---
+
+## `publish.github` (GitHub auto-publish)
+
+Optional publishing of contributor attestations to GitHub as **issues**.
+
+```yaml
+publish:
+  github:
+    owner: ""            # GitHub org or user
+    repo: ""             # repo name (or full "owner/repo" depending on deployment)
+    token: ""            # personal access token (ghp_...)
+    labels:
+      - "attestation"
+      - "offchain"
+    mode: "issues"       # default
+```
+
+<Note>
+If `token` is empty, publishing is **skipped** with a WARN log entry — registration still succeeds.
+</Note>
+
+---
+
+## `export`
+
+Defaults for `b1e55ed export karma`.
+
+```yaml
+export:
+  default_format: jsonl
+  include_chain: false
+```
+
+Env:
+
+```bash
+export B1E55ED_EXPORT__DEFAULT_FORMAT="jsonl"
+export B1E55ED_EXPORT__INCLUDE_CHAIN="false"
+```
+
+---
+
+## Webhooks
+
+Webhook subscriptions are **database-backed** and managed via CLI (there is no YAML block in this version):
+
+```bash
+b1e55ed webhooks add <url> --events "alert.*,system.kill_switch.*"
+b1e55ed webhooks list --json
+b1e55ed webhooks remove <id>
+```
+
+---
+
+<Info>
+Authoritative schema/model: `engine/core/config.py`.
+</Info>
