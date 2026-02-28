@@ -11,7 +11,7 @@ It answers one question:
 
 > Does this signal producer have verifiable history?
 
-It is designed for AI agents and external systems to query before acting on a producer’s signals.
+It is designed for AI agents and external systems to query before acting on a producer's signals.
 
 ---
 
@@ -62,55 +62,81 @@ Via `POST /api/v1/mcp`:
 
 ## Enabling it on your node
 
-Oracle routes activate automatically when the oracle integration is enabled.
+Oracle routes are **enabled automatically** when b1e55ed starts. No additional configuration is required.
 
-<Steps>
-  <Step title="Set the GitHub app key">
+Your local oracle endpoint is available at:
 
-  Set the environment variable and restart your service:
+```bash
+curl -s http://127.0.0.1:5050/api/v1/oracle/producers/example/provenance | jq
+```
 
-  ```bash
-  export B1E55ED_GITHUB_APP_KEY="..."
-  ```
-
-  If running under systemd, put this in an override file or environment file (recommended) and restart.
-
-  </Step>
-
-  <Step title="Restart b1e55ed">
-
-  ```bash
-  sudo systemctl restart b1e55ed-api.service || true
-  ```
-
-  </Step>
-</Steps>
+No API key. No environment variables. If b1e55ed is running, the oracle is running.
 
 ---
 
-## Self-hosted vs managed oracle
+## Managed oracle (recommended for external access)
 
-You can:
-
-- **Self-host** the oracle by exposing your b1e55ed API (ideally via Tailscale or a private network)
-- Use the **managed** oracle at:
+The network-wide managed oracle is operated by Permanent Upper Class:
 
 ```text
 oracle.b1e55ed.permanentupperclass.com
 ```
 
----
+This is the oracle AI agents query by default. It aggregates provenance data across the network and handles contributor registration via the GitHub App. **You do not need to run this yourself.**
 
-## Verify it’s running
-
-Managed health check:
+Health check:
 
 ```bash
 curl -s https://oracle.b1e55ed.permanentupperclass.com/health
 ```
 
-Local check (no auth required for oracle endpoint):
+---
+
+## Self-hosted vs managed oracle
+
+| | Managed | Self-hosted |
+|---|---|---|
+| **Who runs it** | Permanent Upper Class | You |
+| **Setup required** | None | Expose your API publicly (Tailscale or reverse proxy) |
+| **Contributor registration** | ✅ Handled by PUC | ❌ Requires a GitHub App |
+| **Use case** | Default for all operators | Air-gapped or sovereign deployments |
+
+For most operators, the managed oracle is the right choice. Your node feeds data into it automatically when you contribute signals.
+
+---
+
+## Advanced: running your own public oracle
+
+<Warning>
+This is only necessary if you are operating a fully sovereign, air-gapped deployment or building an independent oracle network. The GitHub App key is **only held by the oracle server operator** (Permanent Upper Class for the managed network). Operators who run b1e55ed do not need this key.
+</Warning>
+
+To run a public oracle with contributor registration:
+
+1. Create a GitHub App with `issues: write` permission on your repository
+2. Download the private key (`.pem`)
+3. Set the environment variable on your oracle server:
 
 ```bash
-curl -s http://127.0.0.1:5050/api/v1/oracle/producers/example/provenance | jq
+export B1E55ED_GITHUB_APP_KEY="$(cat your-app.pem)"
+```
+
+If running under systemd, use an environment file:
+
+```bash
+# /etc/b1e55ed/env
+B1E55ED_GITHUB_APP_KEY=...
+```
+
+Then reference it in your service unit:
+
+```ini
+[Service]
+EnvironmentFile=/etc/b1e55ed/env
+```
+
+4. Restart:
+
+```bash
+sudo systemctl restart b1e55ed.service
 ```
