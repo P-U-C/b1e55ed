@@ -741,7 +741,7 @@ dashboard:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
-_ORACLE_URL = "https://oracle.b1e55ed.xyz"
+_ORACLE_URL = "https://oracle.b1e55ed.permanentupperclass.com"
 
 
 def _step_register_contributor(repo_root: Path) -> None:
