@@ -45,9 +45,9 @@
         "group": "Getting Started",
         "pages": [
           "introduction",
+          "agents",
           "quickstart",
-          "how-it-works",
-          "agents"
+          "how-it-works"
         ]
       },
       {

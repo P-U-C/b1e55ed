@@ -102,18 +102,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command")
 
-    p_setup = sub.add_parser("setup", help="Interactive onboarding and first-run configuration")
-    p_setup.add_argument(
-        "--preset",
-        choices=["conservative", "balanced", "degen"],
-        default=None,
-        help="Config preset to apply.",
-    )
-    p_setup.add_argument(
-        "--non-interactive",
-        action="store_true",
-        help="Run setup without prompts (uses env vars).",
-    )
+    from engine.cli.commands.setup import build_setup_parser as _build_setup_parser
+
+    _build_setup_parser(sub)
 
     p_brain = sub.add_parser("brain", help="Run one brain cycle")
     p_brain.add_argument(
@@ -3089,7 +3080,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     dispatch: dict[str, Callable[[CliContext, argparse.Namespace], int]] = {
-        "setup": _cmd_setup,
+        "setup": lambda ctx, args: __import__("engine.cli.commands.setup", fromlist=["run_setup"]).run_setup(ctx, args),
         "brain": _cmd_brain,
         "signal": _cmd_signal,
         "alerts": _cmd_alerts,

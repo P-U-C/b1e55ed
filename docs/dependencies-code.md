@@ -256,6 +256,7 @@ api/main.py                  ⇒ api/routes/__init__.py, core/config.py
 ```
 engine/cli/commands/anchor.py  → core/database.py, integrations/eas.py
 engine/cli/commands/export.py  ⇒ core/database.py, execution/karma.py
+engine/cli/commands/setup.py   → scripts/setup-standalone.sh, scripts/setup-connected.sh
 engine/cli/main.py             ⇒ all commands, core/config.py
 engine/cli/__main__.py         → cli/main.py
 engine/cli_keys.py             → security/keystore.py

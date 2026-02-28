@@ -26,7 +26,7 @@ set_env_line() {
 }
 
 echo "╔══════════════════════════════════════════╗"
-echo "║   b1e55ed — agent setup (OpenClaw + TG)   ║"
+echo "║ b1e55ed — connected setup (OpenClaw + TG) ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
