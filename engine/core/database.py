@@ -409,6 +409,20 @@ CREATE TABLE IF NOT EXISTS contributor_signals (
 
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_contributor ON contributor_signals(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_asset ON contributor_signals(signal_asset);
+
+-- ============================================================
+-- Discretionary Signals (operator-injected benchmarks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS discretionary_signals (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    reasoning TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
 """
 
 
