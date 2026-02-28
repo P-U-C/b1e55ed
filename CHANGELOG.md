@@ -1,5 +1,87 @@
 # Changelog
 
+## v1.0.0-beta.7 — 2026-02-28
+
+### Highlights
+
+Two explicit operator deployment modes with guided setup. Full documentation site live at docs.b1e55ed.permanentupperclass.com. Multiple stability and packaging fixes from internal testing.
+
+---
+
+### Features
+
+- **`b1e55ed setup standalone` / `b1e55ed setup connected`** — operator setup now has two explicit paths. `standalone` runs b1e55ed as a self-contained CLI + dashboard node. `connected` adds OpenClaw + Telegram orchestration for AI-driven operation via chat. Prompts interactively if no mode is specified; defaults to `standalone` in non-interactive and CI environments. (#124, #129)
+- **Mintlify documentation site** — full docs live at `docs.b1e55ed.permanentupperclass.com`. Covers quickstart, operator guides, producer configuration, oracle setup, API reference, and agent interfaces. (#123, #126, #128)
+- **Agent-first discoverability** — `docs/llms.txt` machine-readable discovery index for AI crawlers and LLM agents; MCP contextual integration (Cursor, VS Code, Claude); dedicated agents page covering oracle queries, SSE streaming, signal submission, and auth model. (#128)
+- **Interactive setup scripts** — `setup-standalone.sh` and `setup-connected.sh` (renamed from `setup-agent.sh` to eliminate naming ambiguity with AI agents that query the oracle). (#124, #129)
+
+---
+
+### Fixes
+
+- **Oracle URL** — updated to `oracle.b1e55ed.permanentupperclass.com` across all references. (#125)
+- **EAS enabled by default** — Ethereum Attestation Service attestations now active on install without manual configuration. API root route fixed. `repo_root` correctly resolved when b1e55ed is installed as a uv tool rather than run from source. (#108)
+- **uv tool reinstall** — added `--refresh` flag to force re-fetch git cache on reinstall, preventing stale package versions. (#110)
+- **Single-source versioning** — `bump-version.sh` owns the canonical version; release workflow and forge binary auto-build both derive from it. Eliminates version drift between `pyproject.toml`, lockfile, and release artifacts. (#114)
+- **Dashboard 500** — fixed crash on dashboard load for fresh installs. Contributor registration endpoint repaired. `b1e55ed start` command robustness improved. (#115)
+- **Audit fixes** — config packaging corrected (files were excluded from wheel), `slots __dict__` attribute access fixed, `b1e55ed start` made more robust against missing config keys. (#117)
+- **Contributor registration wizard** — now shows the actual error on failure instead of a silent generic fallback; fallback logic correctly handles partial success. (#119)
+- **Forge timing display** — elapsed time shown during identity forge is now accurate (real seconds, not the previous hardcoded "~2 seconds"). (#107)
+- **Oracle setup documentation** — removed incorrect instruction for operators to set `B1E55ED_GITHUB_APP_KEY`. That key is held exclusively by the managed oracle server operator (PUC). Operators need zero extra configuration — oracle routes activate automatically when b1e55ed starts. (#131)
+- **`bless_on_merge` workflow** — migrated from deprecated `google.generativeai` to `google.genai` SDK; model updated from removed `gemini-2.0-flash-exp` to `gemini-2.0-flash`. YAML syntax error in `b1e55ing.yml` fixed. (#134)
+
+---
+
+### Documentation
+
+- **Operator guides** — standalone and connected guides covering installation, first-run setup, systemd service configuration, and ongoing operations. (#121)
+- **Producer configuration guide** — covers producer registration, symbol packs, tuning parameters, and sample configurations for common data sources. (#122)
+- **docs.json v4 schema** — Mintlify configuration migrated from `mint.json` to `docs.json` with correct v4 schema (navigation as object, valid color tokens, sequoia theme, JetBrains Mono font). (#126)
+- **Terminology** — *operators* (humans running b1e55ed), *AI agents* (external software querying the oracle), and deployment modes (*standalone* / *connected*) are now explicitly defined and used consistently throughout docs and the marketing site. (#129)
+- **SEO** — canonical URLs, Open Graph images (1200×630), Twitter cards, JSON-LD schemas, sitemaps, and `robots.txt` across all four PUC domains. AI crawlers explicitly welcomed.
+
+---
+
+### Breaking changes
+
+None. All changes are additive or bug fixes.
+
+---
+
+### Upgrading from beta.6
+
+```bash
+uv tool install --refresh b1e55ed
+b1e55ed --version  # should print 1.0.0-beta.7
+```
+
+If running as a systemd service:
+
+```bash
+sudo systemctl restart b1e55ed.service
+```
+
+
+## v1.0.0-beta.6 — 2026-02-27
+
+macOS install fixes: stale uv git cache, shell env var scoping bug, EAS on by default, API root info page, dashboard identity path when installed as a uv tool. 589 tests passing.
+
+### 🔴 Bug Fixes
+
+- **Branch install syntax** — `BRANCH=develop curl ... | bash` was wrong: the env var only applies to `curl`, not `bash`. Correct form: `curl ... | BRANCH=develop bash`. install.sh comment, docs, and CHANGELOG all updated.
+- **uv git cache** — `install.sh` now passes `--refresh` to `uv tool install`; prevents stale cached git clone from serving old code after `uninstall` + reinstall on a branch
+- **Dashboard identity gate** — `_repo_root()` in all dashboard modules was using `Path(__file__).resolve().parents[1]` (uv tool install dir, not user's cwd); always showed "forge required" even after identity already forged. Fixed to use `B1E55ED_REPO_ROOT` env var or `Path.cwd()` (same as CLI)
+- **EAS enabled by default** — `EASConfig.enabled = True` (was `False`); off-chain attestations need no `rpc_url` and should always be on. Startup log now shows helpful hint instead of scary DISABLED warning
+- **Forge timing** — Banner and wizard said "~2 seconds" (Apple Silicon benchmark); Intel Macs take 30s–2min. Updated to "seconds to ~2 min depending on hardware"
+
+### 🟡 API
+
+- **`GET /` info page** — API root was 404; now returns JSON with version, docs link, and key endpoint map
+
+### 🔧 CI / Workflow
+
+- **Branch guard added** — `.github/workflows/branch-guard.yml` blocks PRs to `main` from any branch except `develop` or `release/*`; enforces the develop → main release flow
+
 ## v1.0.0-beta.5 — 2026-02-26
 
 macOS onboarding, Rust forge binary distribution, and zero-credential contributor registration via oracle relay. 589 tests passing.

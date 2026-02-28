@@ -1,6 +1,6 @@
 [project]
 name = "b1e55ed"
-version = "1.0.0-beta.5"
+version = "1.0.0-beta.7"
 description = "Sovereign AI trading intelligence with compound learning"
 readme = "README.md"
 license = {text = "MIT"}
