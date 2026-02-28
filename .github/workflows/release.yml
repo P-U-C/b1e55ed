@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip tag/release creation, just show version)'
+        required: false
+        default: 'false'
 
 jobs:
   release:
