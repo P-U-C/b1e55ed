@@ -1,10 +1,75 @@
 ---
-title: "Positions"
-description: "Read position state and action outputs."
+title: "Positions API"
+description: "View open positions and details for a single position."
 ---
 
-Positions represent the “action layer” state: what the system thinks should be held or what is being tracked.
+## `GET /positions`
 
-<Note>
-Coming soon: position endpoints and recommended workflows.
-</Note>
+Lists open positions.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/positions | jq
+```
+
+Example response (`200`):
+
+```json
+[
+  {
+    "id": "pos_123",
+    "platform": "paper",
+    "asset": "BTC",
+    "direction": "long",
+    "entry_price": 95000.0,
+    "size_notional": 1000.0,
+    "leverage": 2.0,
+    "margin_type": "isolated",
+    "stop_loss": 93000.0,
+    "take_profit": 98000.0,
+    "opened_at": "2026-02-20T00:00:00+00:00",
+    "closed_at": null,
+    "status": "open",
+    "realized_pnl": null,
+    "conviction_id": 42,
+    "regime_at_entry": "EARLY_BULL",
+    "pcs_at_entry": 0.72,
+    "cts_at_entry": 0.12
+  }
+]
+```
+
+Fields:
+
+- `platform`: `paper` (or a real venue in live mode)
+- `direction`: `long` / `short`
+- `size_notional`: notional exposure
+- `margin_type`: e.g. `isolated`
+- `conviction_id`, `regime_at_entry`, `pcs_at_entry`, `cts_at_entry`: context captured at entry
+
+---
+
+## `GET /positions/{position_id}`
+
+Returns a single position.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/positions/pos_123 | jq
+```
+
+Errors:
+
+- `404` `{"detail":"Position not found"}`
+- `401 auth.*`
+
+---
+
+## CLI equivalent
+
+```bash
+b1e55ed positions
+b1e55ed positions --json | jq
+```

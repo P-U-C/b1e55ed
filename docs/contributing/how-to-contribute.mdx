@@ -1,19 +1,106 @@
 ---
 title: "How to Contribute"
-description: "Code, docs, producers, and ideas — how to help build b1e55ed."
+description: "Ways to contribute code, producers, and docs to b1e55ed."
 ---
 
-Contributions are welcome: code, docs, producers, design feedback, and new signal workflows.
+## Before you start
+
+- Read the repo contribution rules in `CONTRIBUTING.md`.
+- Open an issue first for large changes.
 
 <Info>
-The canonical contribution guide is **`CONTRIBUTING.md`** in the repo.
-
-- Read it on GitHub: https://github.com/P-U-C/b1e55ed/blob/develop/CONTRIBUTING.md
+Pull requests should target the **`develop`** branch (not `main`).
 </Info>
 
-## What to contribute
+---
 
-- Producer improvements and new integrations
-- Docs clarifications and examples
-- Bug fixes + tests
-- UX improvements to the dashboard
+## Contributing code (PR workflow)
+
+<Steps>
+  <Step title="Fork + branch">
+
+  ```bash
+  git checkout develop
+  git checkout -b feat/my-change
+  ```
+
+  </Step>
+
+  <Step title="Keep changes small and testable">
+
+  - Prefer focused PRs
+  - Add/adjust tests when behavior changes
+
+  </Step>
+
+  <Step title="Open a PR into develop">
+
+  - Target branch: `develop`
+  - Describe: what changed, why, how to test
+
+  </Step>
+</Steps>
+
+---
+
+## Contributing producers
+
+Producers are signal generators that publish typed events into the local event store.
+
+A good producer:
+
+- produces **independent** information (low correlation with existing sources)
+- is **observable** (clear inputs/outputs, deterministic payload schema)
+- degrades gracefully (missing endpoint → no events, clear **DEGRADED** health)
+- is safe to run on a VPS (bounded time/cost, robust retries)
+
+### Interface expectations (today)
+
+Even if the upstream data source differs, a producer should:
+
+1. collect data (poll endpoint / read local file / run pipeline)
+2. normalize into a stable event type (e.g. `signal.<domain>.<name>.v1`)
+3. emit events into the DB so they can be consumed by:
+   - the brain synthesis engine
+   - API endpoints (`/signals`, `/events/stream`)
+   - oracle provenance projections
+
+<Note>
+Weights are applied at the **domain** level (curator/onchain/tradfi/social/technical/events), not per producer.
+</Note>
+
+---
+
+## Contributing docs
+
+Docs are Mintlify **MDX** pages.
+
+Guidelines:
+
+- Prefer copy/paste-ready snippets
+- Use Mintlify components for clarity:
+  - `<Steps>` / `<Step>` for procedures
+  - `<Tip>` / `<Note>` / `<Info>` for callouts
+  - `<AccordionGroup>` for long references
+- Keep examples consistent with the CLI/API references
+
+---
+
+## Bug reports
+
+Open a GitHub Issue with:
+
+- what you expected
+- what happened
+- logs/output (redact secrets)
+- version (`b1e55ed --version`)
+- environment (OS, Python version)
+
+---
+
+## Links
+
+- `CONTRIBUTING.md` (repo root)
+- CLI: `/operations/cli-reference`
+- Config: `/operations/config-reference`
+- API: `/api/overview`

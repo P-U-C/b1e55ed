@@ -1,14 +1,67 @@
 ---
-title: "Karma"
-description: "Attribution scoring and incentives across contributors."
+title: "Karma & Treasury API"
+description: "Treasury state and karma settlement endpoints."
 ---
 
-Karma is the system for credit/blame and contributor reputation.
+## Karma concept (brief)
+
+Karma is a 5-factor composite contributor reputation score scaled to **0–100**.
+
+It is used for provenance/oracle projections and downstream agent weighting.
 
 <Info>
-The current spec lives in the repo at `docs/KARMA-SPEC.md`.
+For the full formula and anti-gaming measures, see: `/contributing/karma-attribution`.
 </Info>
 
-<Note>
-Coming soon: API endpoints + a practical explanation of how karma is computed and used.
-</Note>
+---
+
+## `GET /treasury`
+
+Returns current treasury state from config and DB.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/treasury | jq
+```
+
+Example response (`200`):
+
+```json
+{
+  "enabled": true,
+  "percentage": 0.005,
+  "treasury_address": "0x...",
+  "pending_intents": 0,
+  "receipts": 0
+}
+```
+
+---
+
+## Additional karma endpoints
+
+The API also exposes:
+
+- `GET /karma/intents` — list pending karma intents
+- `POST /karma/settle` — record settlement for intent IDs
+- `GET /karma/receipts` — list settlement receipts
+
+---
+
+## Export karma from the CLI
+
+To export karma in a provenance-friendly format:
+
+```bash
+b1e55ed export karma --format jsonl --include-chain
+```
+
+Write to a file:
+
+```bash
+b1e55ed export karma \
+  --format jsonl \
+  --include-chain \
+  --output ./exports/karma.jsonl
+```

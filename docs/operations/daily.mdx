@@ -1,17 +1,172 @@
 ---
 title: "Daily Operations"
-description: "A practical checklist for running b1e55ed day-to-day."
+description: "A practical daily checklist for running b1e55ed safely."
 ---
 
-This page is a practical operator checklist: what to check, what to run, and what “healthy” looks like.
+## Morning startup checklist
 
-<Note>
-Coming soon. For now, use `b1e55ed health` and the dashboard/API health endpoints as your starting point.
-</Note>
+<Steps>
+  <Step title="Confirm services are up (API + dashboard)">
 
-## Suggested daily checklist
+  If you run interactively:
 
-- Confirm the brain loop is running (or run it manually)
-- Review new signals and synthesis outputs
-- Check API + dashboard health if you use them
-- Verify backups / disk space
+  ```bash
+  b1e55ed start --no-browser
+  ```
+
+  If you run under systemd, confirm:
+
+  ```bash
+  systemctl status b1e55ed-api.service --no-pager || true
+  systemctl status b1e55ed-brain.service --no-pager || true
+  ```
+
+  </Step>
+
+  <Step title="Health check (cron-safe)">
+
+  ```bash
+  b1e55ed health
+  b1e55ed health --json
+  ```
+
+  What “healthy” typically looks like at the HTTP layer:
+
+  ```bash
+  curl -s http://127.0.0.1:5050/api/v1/health | jq
+  ```
+
+  Example response:
+
+  ```json
+  {
+    "version": "1.0.0-beta.4",
+    "uptime_seconds": 12.34,
+    "db_size_bytes": 123456
+  }
+  ```
+
+  <Tip>
+  `GET /api/v1/health` is intentionally unauthenticated so it can be used by monitors.
+  </Tip>
+
+  </Step>
+
+  <Step title="Verify brain status">
+
+  ```bash
+  curl -s \
+    -H "Authorization: Bearer $B1E55ED_TOKEN" \
+    http://127.0.0.1:5050/api/v1/brain/status | jq
+  ```
+
+  You’re looking for:
+
+  - a recent `last_cycle_at`
+  - `kill_switch_level: 0`
+
+  </Step>
+
+  <Step title="Run one cycle (optional but recommended before market open)">
+
+  ```bash
+  b1e55ed brain
+  # or, to include slower producers:
+  b1e55ed brain --full
+  ```
+
+  </Step>
+
+  <Step title="Review positions">
+
+  ```bash
+  b1e55ed positions
+  b1e55ed positions --json | jq
+  ```
+
+  Confirm:
+
+  - what’s open
+  - stop loss / take profit (if you use them)
+  - any obvious exposure concentration
+
+  </Step>
+</Steps>
+
+---
+
+## Useful commands (copy/paste)
+
+<CardGroup>
+  <Card title="Health" href="/api/overview">
+    `b1e55ed health --json` and `GET /api/v1/health`
+  </Card>
+  <Card title="Run the brain" href="/api/brain">
+    `b1e55ed brain --full` or `POST /api/v1/brain/run`
+  </Card>
+  <Card title="Positions" href="/api/positions">
+    `b1e55ed positions --json` or `GET /api/v1/positions`
+  </Card>
+</CardGroup>
+
+---
+
+## Monitoring hints
+
+### 1) Watch the event stream (SSE)
+
+The SSE stream is the quickest way to see what the engine is emitting (signals, alerts, etc.).
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $B1E55ED_TOKEN" \
+  "http://127.0.0.1:5050/api/v1/events/stream?domain=alert"
+```
+
+You’ll receive lines like:
+
+```text
+data: {"id":"123","type":"alert.*","ts":"2026-02-20T00:00:00Z","source":"...","payload":{...}}
+```
+
+### 2) Use the dashboard
+
+- Default: `http://127.0.0.1:5051`
+- Best used for quick visual sanity checks (recent signals, last cycles, producer status)
+
+### 3) Producer health intuition
+
+If a domain looks “silent”, it’s usually because the producer **endpoint env var is missing** and the producer is emitting no events (often reported as **DEGRADED** in health metadata).
+
+---
+
+## End-of-day checklist
+
+<Steps>
+  <Step title="Check kill switch status">
+
+  ```bash
+  b1e55ed kill-switch
+  ```
+
+  If it’s non-zero, investigate before letting automation continue.
+
+  </Step>
+
+  <Step title="Export (optional)">
+
+  ```bash
+  b1e55ed export karma --format jsonl --include-chain --output ./exports/karma.jsonl
+  ```
+
+  </Step>
+
+  <Step title="Log review (systemd)">
+
+  ```bash
+  journalctl -u b1e55ed-api.service -n 200 --no-pager || true
+  journalctl -u b1e55ed-brain.service -n 200 --no-pager || true
+  ```
+
+  </Step>
+</Steps>

@@ -1,16 +1,81 @@
 ---
 title: "Symbol Packs"
-description: "Sample symbol sets to get productive quickly."
+description: "Preset universes you can copy into config/user.yaml."
 ---
 
-Symbol packs are curated lists of symbols (tickers / assets) that producers can use as defaults.
+b1e55ed’s **universe** controls which symbols producers collect and the brain scores.
 
-<Note>
-Coming soon: documented packs + how to create your own.
-</Note>
+Config key:
 
-## What to expect
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
 
-- “Majors” packs (BTC, ETH, SOL…)
-- Sector packs (L1s, DeFi, memes…)
-- Custom packs for your watchlists
+---
+
+## Preset packs
+
+### Majors
+
+- BTC
+- ETH
+- SOL
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
+
+### Extended Majors
+
+- BTC, ETH, SOL
+- SUI, HYPE
+- AVAX, LINK, MATIC
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE", "AVAX", "LINK", "MATIC"]
+```
+
+### DeFi
+
+- UNI, AAVE, CRV, SNX, COMP, MKR
+
+```yaml
+universe:
+  symbols: ["UNI", "AAVE", "CRV", "SNX", "COMP", "MKR"]
+```
+
+### L1/L2
+
+- ETH, SOL, AVAX, NEAR, ATOM, DOT, SUI
+
+```yaml
+universe:
+  symbols: ["ETH", "SOL", "AVAX", "NEAR", "ATOM", "DOT", "SUI"]
+```
+
+### Memes
+
+- DOGE, SHIB, PEPE, WIF, BONK
+
+```yaml
+universe:
+  symbols: ["DOGE", "SHIB", "PEPE", "WIF", "BONK"]
+```
+
+---
+
+## Custom pack
+
+Define your own universe in `config/user.yaml`:
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
+
+<Tip>
+Start smaller than you think. A tight universe improves signal quality and reduces producer noise.
+</Tip>

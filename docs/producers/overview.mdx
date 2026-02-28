@@ -1,20 +1,87 @@
 ---
 title: "Producers Overview"
-description: "What producers are and how they emit signals into the brain."
+description: "What producers are, how they feed the brain, and the default producer catalog."
 ---
 
-A **producer** is any component (human, agent, feed, rule engine) that creates **signals**.
+## What is a producer?
 
-Producers should:
+A **producer** is a signal generator that feeds b1e55ed’s brain.
 
-- be easy to add/remove
-- be safe to run repeatedly
-- attribute outputs to a contributor identity
+- It periodically collects data (HTTP endpoints, pipelines, files)
+- Normalizes the data into typed event payloads
+- Publishes events into the local DB
+- The brain maps producer events into one of six **domains** and synthesizes them into conviction
 
 <Info>
-Producer concepts show up throughout the repo docs (see `docs/tutorial-agent-producer.md` and `docs/learning-loop.md`).
+In the current architecture, weights are applied at the **domain** level (not per-producer).
 </Info>
 
+---
+
+## Domains and default weights
+
+Defaults (from `engine/core/config.py`):
+
+| Domain | Default weight |
+|---|---:|
+| curator | 0.25 |
+| onchain | 0.25 |
+| tradfi | 0.20 |
+| social | 0.15 |
+| technical | 0.10 |
+| events | 0.05 |
+
+Change these in `config/user.yaml`:
+
+```yaml
+weights:
+  curator: 0.25
+  onchain: 0.25
+  tradfi: 0.20
+  social: 0.15
+  technical: 0.10
+  events: 0.05
+```
+
+---
+
+## The 13 core producers
+
 <Note>
-Coming soon: a catalog of built-in producers and recommended defaults.
+Most producers are “enabled” by supplying their data endpoints via environment variables. If an endpoint is missing, the producer may run but emit no events and show **DEGRADED** health.
 </Note>
+
+| Producer (config id) | Domain | What it signals | When to enable |
+|---|---|---|---|
+| `curator-intel` | curator | Operator/curator view: direction + conviction + rationale | When humans have discretionary edge |
+| `ai-consensus` | curator | Model/ensemble consensus score with dispersion | When you have a reliable inference endpoint |
+| `onchain-flows` | onchain | Netflows, exchange flows, active address change, momentum | When accumulation/distribution leads |
+| `stablecoin-supply` | onchain | Stablecoin supply deltas + mint/burn count | When liquidity regime dominates |
+| `whale-tracking` | onchain | Smart money/whale netflow, holder changes | For alt regimes / whale-led moves |
+| `tradfi-basis` | tradfi | Basis, funding proxy, OI change, meltup score | For BTC/ETH carry regimes |
+| `etf-flows` | tradfi | Daily ETF flows and streaks | When BTC/ETH ETF flows are a key driver |
+| `social-intel` | social | Narrative ignition + contrarian/echo-chamber flags | For memecoin/narrative regimes |
+| `market-sentiment` | social | Fear/greed + 7d change (+ optional CT sentiment) | For broad risk-on/off overlays |
+| `technical-analysis` | technical | RSI/EMAs/BB position, trend strength, S/R distance | Baseline technical structure |
+| `orderbook-depth` | technical | Depth/imbalance/liquidity fragility | Short-horizon / microstructure |
+| `price-alerts` | technical | Fast price state (polled) | To keep technical context fresh |
+| `market-events` | events | Catalyst list + headline sentiment + impact score | When catalysts/news matter |
+
+---
+
+## Operational notes
+
+### Producer health and DEGRADED
+
+A common reason for **DEGRADED** health:
+
+- the required endpoint env var is not set (e.g. `B1E55ED_TA_URL`)
+- endpoint returns 4xx/5xx or times out
+
+Quick checks:
+
+```bash
+b1e55ed status
+b1e55ed producers list --json | jq
+b1e55ed brain --full
+```
