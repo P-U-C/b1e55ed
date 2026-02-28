@@ -486,9 +486,11 @@ All pages below are registered in the nav and deployed to `docs.b1e55ed.permanen
 
 ```text
 docs/docs.json              ← nav/config (registers all MDX pages)
-docs/introduction.mdx       → quickstart.mdx, api/overview.mdx
+docs/introduction.mdx       → quickstart.mdx, api/overview.mdx, agents.mdx
 docs/quickstart.mdx         → setup/standalone-install.mdx, setup/agent-install.mdx, operations/cli-reference.mdx, how-it-works.mdx
 docs/how-it-works.mdx       → api/overview.mdx, producers/overview.mdx
+docs/agents.mdx             → api/overview.mdx, setup/oracle.mdx, contributing/contributor-registration.mdx
+docs/llms.txt               (machine-readable LLM discovery index — not a navigable page)
 ```
 
 ### Setup

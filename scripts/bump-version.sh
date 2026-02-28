@@ -89,7 +89,22 @@ else:
     print("✓ CHANGELOG.md — stubbed section for ${TAG}")
 PYEOF
 
-# ── 4. Commit ─────────────────────────────────────────────────────────────────
+# ── 4. Update b1e55ed-site fallback version ───────────────────────────────────
+# The site fetches the latest release from GitHub API dynamically,
+# but we keep a hardcoded fallback for offline/rate-limited loads.
+SITE_DIR="$(cd "$REPO_ROOT/../b1e55ed-site" 2>/dev/null && pwd)" || true
+
+if [[ -n "$SITE_DIR" && -f "$SITE_DIR/index.html" ]]; then
+  sed -i.bak "s/id=\"release-version\">[^<]*/id=\"release-version\">${TAG}/" "$SITE_DIR/index.html"
+  rm -f "$SITE_DIR/index.html.bak"
+  echo "✓ b1e55ed-site/index.html fallback version updated"
+  (cd "$SITE_DIR" && git add index.html && git commit -m "chore: bump version to ${TAG}" && git push) || \
+    echo "⚠  b1e55ed-site commit/push failed — update manually"
+else
+  echo "ℹ  b1e55ed-site not found at ../b1e55ed-site — skipping site update"
+fi
+
+# ── 5. Commit ─────────────────────────────────────────────────────────────────
 git add pyproject.toml uv.lock CHANGELOG.md
 git commit -m "chore: bump version to ${TAG}"
 

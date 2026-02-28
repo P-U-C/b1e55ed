@@ -3,9 +3,9 @@
   "theme": "sequoia",
   "name": "b1e55ed",
   "colors": {
-    "primary": "#10b981",
-    "light": "#34d399",
-    "dark": "#059669"
+    "primary": "#22C55E",
+    "light": "#4ADE80",
+    "dark": "#16A34A"
   },
   "background": {
     "color": {
@@ -46,7 +46,8 @@
         "pages": [
           "introduction",
           "quickstart",
-          "how-it-works"
+          "how-it-works",
+          "agents"
         ]
       },
       {
@@ -103,5 +104,32 @@
       "github": "https://github.com/P-U-C/b1e55ed",
       "twitter": "https://twitter.com/zozDOTeth"
     }
+  },
+  "contextual": {
+    "options": [
+      "mcp",
+      "cursor",
+      "vscode",
+      "claude",
+      "copy",
+      "view"
+    ]
+  },
+  "api": {
+    "mdx": {
+      "server": "https://oracle.b1e55ed.permanentupperclass.com",
+      "auth": {
+        "method": "bearer"
+      }
+    }
+  },
+  "description": "Open-source trading intelligence engine with a public provenance oracle. AI agents verify signal producers before acting. Operators run a sovereign trading OS.",
+  "seo": {
+    "metatags": {
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@zozDOTeth",
+      "og:image": "https://b1e55ed.permanentupperclass.com/og.svg"
+    },
+    "indexing": "navigable"
   }
 }
