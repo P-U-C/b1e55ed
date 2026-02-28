@@ -9,7 +9,13 @@ This is a read-only analytics endpoint.  No writes are performed.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from typing import Any
 
 from fastapi import APIRouter, Depends

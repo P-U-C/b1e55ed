@@ -16,7 +16,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -102,18 +102,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command")
 
-    p_setup = sub.add_parser("setup", help="Interactive onboarding and first-run configuration")
-    p_setup.add_argument(
-        "--preset",
-        choices=["conservative", "balanced", "degen"],
-        default=None,
-        help="Config preset to apply.",
-    )
-    p_setup.add_argument(
-        "--non-interactive",
-        action="store_true",
-        help="Run setup without prompts (uses env vars).",
-    )
+    from engine.cli.commands.setup import build_setup_parser as _build_setup_parser
+
+    _build_setup_parser(sub)
 
     p_brain = sub.add_parser("brain", help="Run one brain cycle")
     p_brain.add_argument(
@@ -431,6 +422,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--host", default=None)
     p_dash.add_argument("--port", type=int, default=None)
 
+    p_start = sub.add_parser("start", help="Start API + dashboard together (recommended entry point)")
+    p_start.add_argument("--api-port", type=int, default=5050, help="API port (default: 5050)")
+    p_start.add_argument("--dashboard-port", type=int, default=5051, help="Dashboard port (default: 5051)")
+    p_start.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    p_start.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
+
     p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
     eas_sub = p_eas.add_subparsers(dest="eas_cmd")
 
@@ -649,7 +646,12 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                     return None
             return None
 
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         def _parse_iso(ts: str | None) -> datetime | None:
             if not ts:
@@ -1103,7 +1105,12 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
-    from datetime import UTC, datetime
+    from datetime import datetime
+
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        UTC = UTC  # noqa: N806
 
     from engine.core.database import Database
 
@@ -1223,7 +1230,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
     if cmd == "list":
         items = reg.list_all()
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([c.__dict__ for c in items]))
+            print(_json_dumps([asdict(c) for c in items]))
             return 0
 
         rows: list[list[str]] = []
@@ -1256,7 +1263,9 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
             print(f"error: contributor already exists for node_id: {node_id}", file=sys.stderr)
             return 2
 
-        print(_json_dumps({"status": "ok", "contributor": c.__dict__}))
+        from dataclasses import asdict as _asdict
+
+        print(_json_dumps({"status": "ok", "contributor": _asdict(c)}))
         return 0
 
     if cmd == "remove":
@@ -1272,7 +1281,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
         cid = str(args.id)
         s = scoring.compute_score(cid)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps(s.__dict__))
+            print(_json_dumps(asdict(s)))
         else:
             print(f"score: {s.score:.2f} (hit_rate={s.hit_rate:.2%}, submitted={s.signals_submitted}, accepted={s.signals_accepted}, streak={s.streak})")
         return 0
@@ -1281,7 +1290,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
         limit = int(getattr(args, "limit", 20) or 20)
         items = scoring.leaderboard(limit=limit)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([s.__dict__ for s in items]))
+            print(_json_dumps([asdict(s) for s in items]))
             return 0
 
         rows = []
@@ -1458,7 +1467,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     if cmd == "list":
         subs = list_webhook_subscriptions(db)
         if bool(getattr(args, "json", False)):
-            print(_json_dumps([s.__dict__ for s in subs]))
+            print(_json_dumps([asdict(s) for s in subs]))
             return 0
 
         rows: list[list[str]] = []
@@ -1818,7 +1827,12 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
         # Derive node_id from public key material (no optional deps required)
-        from datetime import UTC, datetime
+        from datetime import datetime
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()
@@ -2158,6 +2172,136 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     print()
     print("  ──────────────────────────────────────")
     print()
+    return 0
+
+
+def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Start API + dashboard as background processes, then tail their logs."""
+    import contextlib
+    import signal
+    import subprocess as _sp
+    import sys
+    import time
+
+    host = args.host
+    api_port = args.api_port
+    dash_port = args.dashboard_port
+    open_browser = not args.no_browser
+
+    api_url = f"http://{host}:{api_port}"
+    dash_url = f"http://{host}:{dash_port}"
+
+    print()
+    print("  ╔══════════════════════════════════════════╗")
+    print("  ║         b1e55ed — starting up           ║")
+    print("  ╚══════════════════════════════════════════╝")
+    print()
+    print(f"  API        → {api_url}")
+    print(f"  Dashboard  → {dash_url}")
+    print(f"  API docs   → {api_url}/docs")
+    print()
+    print("  Press Ctrl+C to stop both servers.")
+    print()
+
+    exe = sys.executable
+    child_env = os.environ.copy()
+    child_env.setdefault("B1E55ED_REPO_ROOT", str(ctx.repo_root))
+    child_cwd = str(ctx.repo_root)
+
+    api_proc = _sp.Popen(
+        [exe, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(api_port), "--log-level", "warning"],
+        stdout=_sp.PIPE,
+        stderr=_sp.STDOUT,
+        text=True,
+        cwd=child_cwd,
+        env=child_env,
+    )
+    dash_proc = _sp.Popen(
+        [exe, "-m", "uvicorn", "dashboard.app:app", "--host", host, "--port", str(dash_port), "--log-level", "warning"],
+        stdout=_sp.PIPE,
+        stderr=_sp.STDOUT,
+        text=True,
+        cwd=child_cwd,
+        env=child_env,
+    )
+
+    # Wait a moment then open browser
+    if open_browser:
+        time.sleep(1.5)
+        import webbrowser
+
+        webbrowser.open(dash_url)
+
+    procs = [api_proc, dash_proc]
+    labels = [f"[api:{api_port}]", f"[dash:{dash_port}]"]
+
+    def _stop(sig: int, frame: object) -> None:  # noqa: ARG001
+        print("\n  Stopping…")
+        for p in procs:
+            p.terminate()
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
+
+    import select
+
+    fds = [p.stdout for p in procs if p.stdout]
+    fd_label = {p.stdout.fileno(): lbl for p, lbl in zip(procs, labels, strict=False) if p.stdout}
+
+    startup_failed = False
+
+    while True:
+        exit_codes = [p.poll() for p in procs]
+        if any(code not in (None, 0) for code in exit_codes):
+            startup_failed = True
+            for p in procs:
+                if p.poll() is None:
+                    p.terminate()
+            break
+
+        # Check if both died
+        if all(code is not None for code in exit_codes):
+            break
+
+        if not fds:
+            time.sleep(0.1)
+            continue
+
+        try:
+            readable, _, _ = select.select(fds, [], [], 0.5)
+        except (ValueError, OSError):
+            break
+
+        for fd in readable:
+            line = fd.readline()
+            if line:
+                print(f"  {fd_label.get(fd.fileno(), '')} {line}", end="")
+            else:
+                # EOF: stop selecting this fd to avoid busy loops when one child exits.
+                with contextlib.suppress(ValueError):
+                    fds.remove(fd)
+
+    final_codes: list[int] = []
+    for p in procs:
+        rc = p.poll()
+        if rc is None:
+            with contextlib.suppress(Exception):
+                p.terminate()
+            try:
+                rc = p.wait(timeout=2)
+            except _sp.TimeoutExpired:
+                p.kill()
+                rc = p.wait(timeout=2)
+        final_codes.append(int(rc))
+
+    if startup_failed or any(code != 0 for code in final_codes):
+        print("\n  One or more services failed to start.")
+        for lbl, code in zip(labels, final_codes, strict=False):
+            if code != 0:
+                print(f"  {lbl} exited with code {code}")
+        return 1
+
     return 0
 
 
@@ -2936,7 +3080,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     dispatch: dict[str, Callable[[CliContext, argparse.Namespace], int]] = {
-        "setup": _cmd_setup,
+        "setup": lambda ctx, args: __import__("engine.cli.commands.setup", fromlist=["run_setup"]).run_setup(ctx, args),
         "brain": _cmd_brain,
         "signal": _cmd_signal,
         "alerts": _cmd_alerts,
@@ -2949,6 +3093,7 @@ def main(argv: list[str] | None = None) -> int:
         "health": _cmd_health,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
+        "start": _cmd_start,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
         "status": _cmd_status,

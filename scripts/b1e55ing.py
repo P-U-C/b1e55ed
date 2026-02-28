@@ -54,7 +54,7 @@ log = logging.getLogger(__name__)
 
 REPO = "P-U-C/b1e55ed"
 ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
-GEMINI_MODEL = "gemini-2.0-flash-exp"
+GEMINI_MODEL = "gemini-2.0-flash"
 MAX_EGGS_PER_FILE = 2
 REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.md"
 
@@ -184,17 +184,21 @@ class LLMClient:
     def _call_gemini(self, system: str, user: str) -> str:
         """Google Gemini 2.0 Flash (free tier). API key from env."""
         try:
-            import google.generativeai as genai  # lazy — not required in agent mode
+            from google import genai  # lazy — not required in agent mode
+            from google.genai import types as genai_types
         except ImportError as exc:
-            raise RuntimeError("google-generativeai package not installed — run: pip install google-generativeai") from exc
+            raise RuntimeError("google-genai package not installed — run: pip install google-genai") from exc
 
         key = self.api_key or os.environ.get("GOOGLE_API_KEY", "")
         if not key:
             raise RuntimeError("GOOGLE_API_KEY is not set — cannot proceed in gemini mode")
 
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system)
-        resp = model.generate_content(user)
+        client = genai.Client(api_key=key)
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            config=genai_types.GenerateContentConfig(system_instruction=system),
+            contents=user,
+        )
         return str(resp.text)
 
 

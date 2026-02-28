@@ -256,6 +256,7 @@ api/main.py                  ⇒ api/routes/__init__.py, core/config.py
 ```
 engine/cli/commands/anchor.py  → core/database.py, integrations/eas.py
 engine/cli/commands/export.py  ⇒ core/database.py, execution/karma.py
+engine/cli/commands/setup.py   → scripts/setup-standalone.sh, scripts/setup-connected.sh
 engine/cli/main.py             ⇒ all commands, core/config.py
 engine/cli/__main__.py         → cli/main.py
 engine/cli_keys.py             → security/keystore.py
@@ -279,6 +280,14 @@ See `docs/security.md` for enforcement details.
 2. Add to LAYERS in `scripts/validate_code_deps.py`
 3. Add to this document under the correct layer section
 4. Run `python scripts/validate_code_deps.py` — must pass before merging
+
+---
+
+---
+
+---
+
+---
 
 ---
 

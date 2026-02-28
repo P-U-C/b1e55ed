@@ -1,0 +1,81 @@
+---
+title: "Symbol Packs"
+description: "Preset universes you can copy into config/user.yaml."
+---
+
+b1e55ed’s **universe** controls which symbols producers collect and the brain scores.
+
+Config key:
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
+
+---
+
+## Preset packs
+
+### Majors
+
+- BTC
+- ETH
+- SOL
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
+
+### Extended Majors
+
+- BTC, ETH, SOL
+- SUI, HYPE
+- AVAX, LINK, MATIC
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE", "AVAX", "LINK", "MATIC"]
+```
+
+### DeFi
+
+- UNI, AAVE, CRV, SNX, COMP, MKR
+
+```yaml
+universe:
+  symbols: ["UNI", "AAVE", "CRV", "SNX", "COMP", "MKR"]
+```
+
+### L1/L2
+
+- ETH, SOL, AVAX, NEAR, ATOM, DOT, SUI
+
+```yaml
+universe:
+  symbols: ["ETH", "SOL", "AVAX", "NEAR", "ATOM", "DOT", "SUI"]
+```
+
+### Memes
+
+- DOGE, SHIB, PEPE, WIF, BONK
+
+```yaml
+universe:
+  symbols: ["DOGE", "SHIB", "PEPE", "WIF", "BONK"]
+```
+
+---
+
+## Custom pack
+
+Define your own universe in `config/user.yaml`:
+
+```yaml
+universe:
+  symbols: ["BTC", "ETH", "SOL"]
+```
+
+<Tip>
+Start smaller than you think. A tight universe improves signal quality and reduces producer noise.
+</Tip>

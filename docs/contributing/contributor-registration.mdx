@@ -1,0 +1,155 @@
+---
+title: "Contributor Registration"
+description: "Register a contributor for attribution, scoring, and (optional) attestations."
+---
+
+## What is a contributor?
+
+In b1e55ed, a **contributor** is the attribution unit: a human operator or an automated agent process that submits signals or otherwise influences decisions.
+
+Roles:
+
+- `operator` — a human running the engine and injecting discretionary signals
+- `agent` — an automated process submitting signals/feedback
+- `tester` — validation, QA, and regression contributors
+- `curator` — a signal curator (may be distinct from the operator role)
+
+<Info>
+Contributor registration ties activity to a stable `node_id`, enabling:
+
+- signal attribution (`POST /api/v1/signals/submit`)
+- contributor scoring and leaderboard
+- provenance/oracle projections
+</Info>
+
+---
+
+## Identity model (two identities)
+
+b1e55ed uses two identities:
+
+1. **Local node identity (Ed25519)**
+   - stored at `~/.b1e55ed/identity.key`
+   - used by the engine security layer
+
+2. **Forged Ethereum identity ("The Forge")**
+   - stored at `~/.b1e55ed/identity.json`
+   - used for Ethereum-facing integrations (EAS) and network identity
+
+---
+
+## Register via CLI
+
+### List contributors
+
+```bash
+b1e55ed contributors list
+b1e55ed contributors list --json | jq
+```
+
+### Register (minimal)
+
+```bash
+b1e55ed contributors register --name "alice" --role operator
+```
+
+### Register with explicit node id
+
+```bash
+b1e55ed contributors register \
+  --name "alice" \
+  --role operator \
+  --node-id "b1e55ed-deadbeef"
+```
+
+### Register + create an EAS off-chain attestation (optional)
+
+```bash
+b1e55ed contributors register \
+  --name "alice" \
+  --role operator \
+  --attest
+```
+
+#### CLI flags
+
+| Flag | Required | Description |
+|---|---:|---|
+| `--name` | ✅ | Display name |
+| `--role` | ✅ | One of `operator`, `agent`, `tester`, `curator` |
+| `--node-id` |  | Override auto-detected node id |
+| `--attest` |  | Create/store an off-chain EAS attestation (requires EAS config) |
+
+### Remove a contributor
+
+```bash
+b1e55ed contributors remove --id <contributor_id>
+```
+
+---
+
+## Register via API
+
+### `POST /contributors/register`
+
+```bash
+export TOKEN="your-secret-token"
+
+curl \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_id":"b1e55ed-deadbeef",
+    "name":"alice",
+    "role":"operator",
+    "metadata": {}
+  }' \
+  http://localhost:5050/api/v1/contributors/register
+```
+
+List contributors:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/
+```
+
+---
+
+## Optional: GitHub auto-publish
+
+When configured, b1e55ed will open a **GitHub issue** in a designated repo when a contributor is registered. This creates a public record without requiring on-chain transactions.
+
+Configure in `config/user.yaml`:
+
+```yaml
+publish:
+  github:
+    owner: "your-org"
+    repo: "attestations"
+    token: "ghp_..."    # if empty, publishing is skipped with a WARN
+    labels:
+      - "attestation"
+      - "offchain"
+    mode: "issues"
+```
+
+<Note>
+If the token is empty, publishing is silently skipped (WARN only) and registration still succeeds.
+</Note>
+
+---
+
+## Optional: EAS attestations (`--attest`)
+
+If EAS is enabled, b1e55ed can create an off-chain attestation during registration and store:
+
+- `metadata.eas.uid`
+- `metadata.eas.attestation`
+
+Useful commands:
+
+```bash
+b1e55ed eas status
+b1e55ed eas verify --uid <uid>
+```

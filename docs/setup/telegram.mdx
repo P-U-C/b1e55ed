@@ -1,0 +1,87 @@
+---
+title: "Telegram Setup"
+description: "Create a Telegram bot and connect it to OpenClaw for alerts."
+---
+
+## 1) Create a Telegram bot
+
+<Steps>
+  <Step title="Open @BotFather">
+  In Telegram, search for **@BotFather**.
+  </Step>
+  <Step title="Create a bot">
+
+  Send:
+
+  ```text
+  /newbot
+  ```
+
+  Follow prompts and copy the **bot token**.
+
+  </Step>
+</Steps>
+
+<Note>
+Treat the bot token like a password.
+</Note>
+
+---
+
+## 2) Get your chat ID
+
+1. Send a message to your bot (e.g. `ping`).
+2. Fetch updates:
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+```
+
+Look for a block like:
+
+```json
+{"message":{"chat":{"id":123456789,...}}}
+```
+
+The `id` is your chat ID.
+
+---
+
+## 3) Configure OpenClaw
+
+Store the bot token and chat id:
+
+```bash
+openclaw config set telegram.bot_token <token>
+openclaw config set telegram.chat_id <id>
+```
+
+(You can verify with `openclaw config get ...`.)
+
+---
+
+## 4) Test
+
+Send:
+
+```text
+/ping
+```
+
+to your bot in Telegram.
+
+If OpenClaw is running and connected, it should respond.
+
+---
+
+## What alerts you’ll receive from b1e55ed
+
+Typical alert categories:
+
+- position alerts (open/close, threshold events)
+- kill switch events (level changes, `HTTP 423` blocks)
+- daily summaries (health + notable signal/position changes)
+
+<Tip>
+If alerts are noisy, tune your OpenClaw heartbeat checklist and only page on persistent failures.
+</Tip>

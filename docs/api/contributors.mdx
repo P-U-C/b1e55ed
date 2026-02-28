@@ -1,0 +1,147 @@
+---
+title: "Contributors API"
+description: "Register, list, score, and manage contributors."
+---
+
+<Info>
+Contributors are the attribution unit for b1e55ed. See also: `/contributing/contributor-registration`.
+</Info>
+
+## `GET /contributors/`
+
+Lists contributors.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/ | jq
+```
+
+---
+
+## `POST /contributors/register`
+
+Registers a contributor.
+
+### Request
+
+```json
+{
+  "node_id": "b1e55ed-deadbeef",
+  "name": "local-operator",
+  "role": "operator",
+  "metadata": {}
+}
+```
+
+### Example
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"node_id":"b1e55ed-deadbeef","name":"alice","role":"operator","metadata":{}}' \
+  http://localhost:5050/api/v1/contributors/register | jq
+```
+
+Errors:
+
+- `409 contributor.duplicate`
+
+---
+
+## `GET /contributors/{id}`
+
+Returns a contributor.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/contrib_abc123 | jq
+```
+
+Errors:
+
+- `404 contributor.not_found`
+
+---
+
+## `DELETE /contributors/{id}`
+
+Removes a contributor.
+
+```bash
+curl -s \
+  -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/contrib_abc123 | jq
+```
+
+Errors:
+
+- `404 contributor.not_found`
+
+---
+
+## `GET /contributors/{id}/score`
+
+Computes contributor score from attribution tables.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/contrib_abc123/score | jq
+```
+
+Errors:
+
+- `404 contributor.not_found`
+
+---
+
+## `GET /contributors/leaderboard`
+
+Returns top contributors.
+
+### Query parameters
+
+| Param | Type | Default |
+|---|---|---:|
+| `limit` | int | 20 |
+
+### Example
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5050/api/v1/contributors/leaderboard?limit=20" | jq
+```
+
+---
+
+## `GET /contributors/attestations`
+
+Lists contributors that have an EAS UID stored in metadata.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/attestations | jq
+```
+
+---
+
+## `GET /contributors/{id}/attestation`
+
+Returns the stored off-chain EAS attestation for a contributor.
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/contributors/contrib_abc123/attestation | jq
+```
+
+Errors:
+
+- `404 contributor.attestation_not_found`
+- `404 contributor.not_found`

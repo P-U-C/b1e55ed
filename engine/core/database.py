@@ -14,7 +14,13 @@ import threading
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from pathlib import Path
 from typing import Any
 
@@ -598,7 +604,7 @@ class Database:
                 """,
                 (
                     eid,
-                    str(event_type),
+                    getattr(event_type, "value", str(event_type)),
                     _dt_to_iso(now),
                     _dt_to_iso(observed_at),
                     source,
@@ -736,7 +742,7 @@ class Database:
         params: list[Any] = []
         if event_type is not None:
             q += " AND type = ?"
-            params.append(str(event_type))
+            params.append(getattr(event_type, "value", str(event_type)))
         if source is not None:
             q += " AND source = ?"
             params.append(source)
@@ -775,7 +781,7 @@ class Database:
             params.append(to_id)
         if event_type is not None:
             q += " AND type = ?"
-            params.append(str(event_type))
+            params.append(getattr(event_type, "value", str(event_type)))
         q += " ORDER BY created_at ASC, rowid ASC"
         rows = self.conn.execute(q, tuple(params)).fetchall()
         return [self._row_to_event(r) for r in rows]

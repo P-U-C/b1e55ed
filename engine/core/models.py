@@ -71,7 +71,7 @@ def compute_event_hash(
         prev_hash or "",
         ts.isoformat(),
         event_id,
-        str(event_type),
+        getattr(event_type, "value", str(event_type)),
         schema_version,
         source or "",
         trace_id or "",

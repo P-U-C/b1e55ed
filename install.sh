@@ -4,8 +4,7 @@
 # Or:    ./install.sh
 #
 # Test from a specific branch (e.g. develop):
-#   curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | BRANCH=develop bash
-#   NOTE: BRANCH=... must prefix 'bash', not 'curl' — env vars only apply to the command they prefix.
+#   BRANCH=develop curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
 #
 # Idempotent: safe to re-run.
 set -euo pipefail
@@ -64,7 +63,7 @@ if [ -z "$PYTHON_BIN" ]; then
             uv python install 3.13 || uv python install 3.12 || true
             # Re-probe standard candidates
             for candidate in python3.13 python3.12 python3.11; do
-                if command -v "$candidate" &>/dev/null 2>/dev/null; then
+                if command -v "$candidate" >/dev/null 2>&1; then
                     version=$("$candidate" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)
                     major=$(echo "$version" | cut -d. -f1)
                     minor=$(echo "$version" | cut -d. -f2)
@@ -173,14 +172,13 @@ info "Checking PATH for $LOCAL_BIN..."
 
 add_to_path() {
     local rc_file="$1"
+    # shellcheck disable=SC2016  # intentional: $HOME expands when user's shell sources the file
     local export_line='export PATH="$HOME/.local/bin:$PATH"'
     if [ -f "$rc_file" ]; then
         if grep -qF '.local/bin' "$rc_file" 2>/dev/null; then
             success "$rc_file already has ~/.local/bin in PATH"
         else
-            echo "" >> "$rc_file"
-            echo "# Added by b1e55ed installer" >> "$rc_file"
-            echo "$export_line" >> "$rc_file"
+            { echo ""; echo "# Added by b1e55ed installer"; echo "$export_line"; } >> "$rc_file"
             success "Added ~/.local/bin to PATH in $rc_file"
         fi
     fi
@@ -198,14 +196,13 @@ if [ -f "$HOME/.bash_profile" ]; then
 fi
 if [[ "$SHELL" == *"fish"* ]] || [ -f "$HOME/.config/fish/config.fish" ]; then
     FISH_CONFIG="$HOME/.config/fish/config.fish"
+    # shellcheck disable=SC2016  # intentional: $HOME expands when fish sources the file
     FISH_LINE='fish_add_path "$HOME/.local/bin"'
     if [ -f "$FISH_CONFIG" ]; then
         if grep -qF '.local/bin' "$FISH_CONFIG" 2>/dev/null; then
             success "$FISH_CONFIG already has ~/.local/bin in PATH"
         else
-            echo "" >> "$FISH_CONFIG"
-            echo "# Added by b1e55ed installer" >> "$FISH_CONFIG"
-            echo "$FISH_LINE" >> "$FISH_CONFIG"
+            { echo ""; echo "# Added by b1e55ed installer"; echo "$FISH_LINE"; } >> "$FISH_CONFIG"
             success "Added ~/.local/bin to fish PATH in $FISH_CONFIG"
         fi
     fi

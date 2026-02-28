@@ -1,0 +1,135 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "sequoia",
+  "name": "b1e55ed",
+  "colors": {
+    "primary": "#22C55E",
+    "light": "#4ADE80",
+    "dark": "#16A34A"
+  },
+  "background": {
+    "color": {
+      "dark": "#0a0a0a",
+      "light": "#fafaf9"
+    }
+  },
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "fonts": {
+    "heading": {
+      "family": "JetBrains Mono"
+    },
+    "body": {
+      "family": "JetBrains Mono"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/P-U-C/b1e55ed"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://docs.b1e55ed.permanentupperclass.com/quickstart"
+    }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "agents",
+          "quickstart",
+          "how-it-works"
+        ]
+      },
+      {
+        "group": "Setup",
+        "pages": [
+          "setup/standalone-install",
+          "setup/agent-install",
+          "setup/telegram",
+          "setup/tailscale",
+          "setup/oracle"
+        ]
+      },
+      {
+        "group": "Producers",
+        "pages": [
+          "producers/overview",
+          "producers/symbol-packs",
+          "producers/tuning-guide",
+          "producers/reference"
+        ]
+      },
+      {
+        "group": "Operations",
+        "pages": [
+          "operations/daily",
+          "operations/cli-reference",
+          "operations/config-reference",
+          "operations/troubleshooting"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/overview",
+          "api/brain",
+          "api/signals",
+          "api/positions",
+          "api/contributors",
+          "api/karma"
+        ]
+      },
+      {
+        "group": "Contributing",
+        "pages": [
+          "contributing/how-to-contribute",
+          "contributing/contributor-registration",
+          "contributing/karma-attribution"
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/P-U-C/b1e55ed",
+      "twitter": "https://twitter.com/zozDOTeth"
+    }
+  },
+  "contextual": {
+    "options": [
+      "mcp",
+      "cursor",
+      "vscode",
+      "claude",
+      "copy",
+      "view"
+    ]
+  },
+  "api": {
+    "mdx": {
+      "server": "https://oracle.b1e55ed.permanentupperclass.com",
+      "auth": {
+        "method": "bearer"
+      }
+    }
+  },
+  "description": "Open-source trading intelligence engine with a public provenance oracle. AI agents verify signal producers before acting. Operators run a sovereign trading OS.",
+  "seo": {
+    "metatags": {
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@zozDOTeth",
+      "og:image": "https://b1e55ed.permanentupperclass.com/og.svg"
+    },
+    "indexing": "navigable"
+  }
+}

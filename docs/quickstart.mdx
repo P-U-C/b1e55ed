@@ -1,0 +1,79 @@
+---
+title: "Quickstart"
+description: "Install b1e55ed in 5 minutes. One curl command, an interactive wizard, and your first signal running locally."
+---
+
+This is the shortest path to a running local brain and your first signal.
+
+<Steps>
+  <Step title="Install">
+
+  ```bash
+  curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash
+  ```
+
+  After install, `b1e55ed` should be available in your PATH.
+
+  </Step>
+  <Step title="Run the wizard">
+
+  ```bash
+  b1e55ed wizard
+  ```
+
+  <Tip>
+  Running from source? Use `./b1e55ed wizard` or `uv run b1e55ed wizard`.
+  </Tip>
+
+  After the wizard completes, choose your deployment mode:
+
+  - **Standalone** — `b1e55ed setup standalone` (self-contained, CLI + dashboard)
+  - **Connected** — `b1e55ed setup connected` (with OpenClaw + Telegram)
+
+  </Step>
+  <Step title="Start the brain">
+
+  ```bash
+  b1e55ed brain
+  ```
+
+  This initializes / opens your local append-only event store (SQLite by default).
+
+  </Step>
+  <Step title="Publish your first signal">
+
+  ```bash
+  b1e55ed signal "BTC breakout — confirmed on-chain" \
+    --symbols BTC \
+    --direction bullish \
+    --conviction 7
+  ```
+
+  </Step>
+</Steps>
+
+## (Optional) API + dashboard
+
+If you want a UI and HTTP API:
+
+```bash
+# Terminal 1
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
+b1e55ed api
+
+# Terminal 2
+b1e55ed dashboard
+```
+
+- Dashboard: `http://localhost:5051`
+- API health: `http://localhost:5050/api/v1/health`
+
+## Next steps
+
+- Setup & installs: **[Standalone Install](/setup/standalone-install)** / **[Agent Install](/setup/agent-install)**
+- Operations: **[CLI Reference](/operations/cli-reference)**
+- Concepts: **[How It Works](/how-it-works)**
+
+<Info>
+The repo also contains a longer local guide at `docs/getting-started.md`.
+</Info>

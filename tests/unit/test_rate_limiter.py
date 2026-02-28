@@ -1,6 +1,12 @@
 """Signal rate limiting and anti-spam (S2)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from pathlib import Path
 
 from engine.core.contributors import ContributorRegistry

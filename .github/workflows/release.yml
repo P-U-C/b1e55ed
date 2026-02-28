@@ -3,31 +3,31 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip tag/release creation, just show version)'
+        required: false
+        default: 'false'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write  # needed to dispatch forge workflow
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      
+
       - name: Get version from pyproject.toml
         id: version
         run: |
           VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
           echo "version=v${VERSION}" >> $GITHUB_OUTPUT
           echo "Version: v${VERSION}"
-      
+
       - name: Check if tag exists
         id: check_tag
         run: |
@@ -36,49 +36,56 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-      
+
+      - name: Install uv
+        if: steps.check_tag.outputs.exists == 'false'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
       - name: Build package
         if: steps.check_tag.outputs.exists == 'false'
         run: uv build
-      
-      - name: Generate changelog
+
+      - name: Extract changelog section for this version
         if: steps.check_tag.outputs.exists == 'false'
         id: changelog
         run: |
-          # Get commits since last tag (or all if no tags)
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
-          else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          fi
-          
-          # Write changelog to file
-          cat > CHANGELOG.md << EOF
-          ## Changes
-          
-          ${COMMITS}
-          
-          ## Installation
-          
-          \`\`\`bash
-          pip install dist/b1e55ed-*.whl
-          \`\`\`
-          
-          ## Documentation
-          
-          See [docs/getting-started.md](docs/getting-started.md) for setup instructions.
-          EOF
-          
-          echo "Changelog written"
-      
+          VERSION="${{ steps.version.outputs.version }}"
+          # Strip leading 'v' to match CHANGELOG headers like "## v1.0.0-beta.6"
+          # Extract the section between this version's header and the next "## " header
+          python3 - <<'PYEOF'
+          import re, os, sys
+          version = os.environ.get("RELEASE_VERSION", "")
+          try:
+              content = open("CHANGELOG.md").read()
+          except FileNotFoundError:
+              print("CHANGELOG.md not found")
+              sys.exit(0)
+
+          # Find the section for this version
+          pattern = rf"(## {re.escape(version)}.*?)(?=\n## |\Z)"
+          match = re.search(pattern, content, re.DOTALL)
+          if match:
+              section = match.group(1).strip()
+              with open("release_notes.md", "w") as f:
+                  f.write(section)
+              print(f"Extracted {len(section)} chars for {version}")
+          else:
+              # Fallback: just say what's in the release
+              with open("release_notes.md", "w") as f:
+                  f.write(f"## {version}\n\nSee [CHANGELOG.md](CHANGELOG.md) for details.")
+              print(f"No section found for {version} — using fallback")
+          PYEOF
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: ${{ steps.version.outputs.version }}
-          body_path: CHANGELOG.md
+          body_path: release_notes.md
           files: |
             dist/*.whl
             dist/*.tar.gz
@@ -86,3 +93,15 @@ jobs:
           prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger forge binary build
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          # GITHUB_TOKEN cascade prevention only applies to event-based triggers.
+          # workflow_dispatch via REST API fires even when called from GITHUB_TOKEN.
+          curl -fsSL -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/forge-release.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"tag_name\":\"${{ steps.version.outputs.version }}\"}}"
+          echo "Forge build dispatched for ${{ steps.version.outputs.version }}"

@@ -741,7 +741,7 @@ dashboard:
         print(f"  {dim('Create config/user.yaml manually.')}")
 
 
-_ORACLE_URL = "https://oracle.b1e55ed.xyz"
+_ORACLE_URL = "https://oracle.b1e55ed.permanentupperclass.com"
 
 
 def _step_register_contributor(repo_root: Path) -> None:
@@ -774,6 +774,9 @@ def _step_register_contributor(repo_root: Path) -> None:
     # Try oracle first — it holds the GitHub App key, creates the issue server-side
     issue_url: str | None = None
     registered = False
+    oracle_err: Exception | None = None
+    local_err: Exception | None = None
+
     try:
         payload = _json.dumps({"node_id": node_id, "name": address or node_id, "role": "contributor"}).encode()
         req = urllib.request.Request(
@@ -789,35 +792,29 @@ def _step_register_contributor(repo_root: Path) -> None:
     except urllib.error.HTTPError as e:
         if e.code == 409:
             registered = True  # already registered — fine
-    except Exception:  # noqa: BLE001
-        pass  # oracle unreachable — fall through to local
+        else:
+            oracle_err = e
+    except Exception as e:  # noqa: BLE001
+        oracle_err = e  # oracle unreachable — fall through to local
 
-    # Always register locally too (idempotent)
+    # Always register locally too (idempotent) — use Python API directly
     try:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "engine.cli",
-                "contributors",
-                "register",
-                "--node-id",
-                node_id,
-                "--name",
-                address or node_id,
-                "--role",
-                "contributor",
-            ],
-            cwd=str(repo_root),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
+        from engine.core.contributors import ContributorRegistry as _Registry
+        from engine.core.database import Database as _Database
+
+        _db_path = repo_root / "data" / "brain.db"
+        _db_path.parent.mkdir(parents=True, exist_ok=True)
+        _reg = _Registry(_Database(str(_db_path)))
+        _reg.register(
+            node_id=node_id,
+            name=address or node_id,
+            role="contributor",
         )
-        if proc.returncode == 0 or "already exists" in (proc.stderr or ""):
-            registered = True
-    except Exception:  # noqa: BLE001
-        pass
+        registered = True
+    except ValueError:
+        registered = True  # already registered — idempotent
+    except Exception as e:  # noqa: BLE001
+        local_err = e  # local DB unavailable — oracle registration is enough
 
     if registered:
         print(f"  {_ok('Registered as contributor')}")
@@ -825,6 +822,10 @@ def _step_register_contributor(repo_root: Path) -> None:
             print(f"  {_ok(f'Announced: {issue_url}')}")
     else:
         print(f"  {yellow('⚠')} Registration failed — run manually: b1e55ed contributors register")
+        if oracle_err is not None:
+            print(f"  {dim('Oracle error:')} {oracle_err!r}")
+        if local_err is not None:
+            print(f"  {dim('Local error:')}  {local_err!r}")
 
 
 def _step5_test_run(repo_root: Path) -> None:

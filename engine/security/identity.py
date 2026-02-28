@@ -23,7 +23,13 @@ import contextlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -51,36 +57,77 @@ _HKDF_INFO = b"b1e55ed-ed25519-signing-key-v1"
 # ---------------------------------------------------------------------------
 
 
-def _derive_key_v2(password: str, salt: bytes) -> bytes:
-    """Derive a 256-bit key using Argon2id."""
-    from argon2.low_level import Type, hash_secret_raw
+def _derive_key_v2(password: str, salt: bytes, *, kdf: str = "argon2id") -> bytes:
+    """Derive a 256-bit key for identity encryption.
 
-    return hash_secret_raw(
-        secret=password.encode("utf-8"),
-        salt=salt,
-        time_cost=_ARGON2_TIME_COST,
-        memory_cost=_ARGON2_MEMORY_COST,
-        parallelism=_ARGON2_PARALLELISM,
-        hash_len=_ARGON2_HASH_LEN,
-        type=Type.ID,
-    )
+    Preferred KDF is Argon2id (v2). In minimal environments where `argon2`
+    isn't installed, we fall back to stdlib `hashlib.scrypt`.
+    """
+
+    if kdf == "argon2id":
+        try:
+            from argon2.low_level import Type, hash_secret_raw
+
+            return hash_secret_raw(
+                secret=password.encode("utf-8"),
+                salt=salt,
+                time_cost=_ARGON2_TIME_COST,
+                memory_cost=_ARGON2_MEMORY_COST,
+                parallelism=_ARGON2_PARALLELISM,
+                hash_len=_ARGON2_HASH_LEN,
+                type=Type.ID,
+            )
+        except ImportError:
+            # Fall through to scrypt (keeps setup functional in stdlib-only envs)
+            kdf = "scrypt"
+
+    if kdf == "scrypt":
+        import hashlib
+
+        # Parameters chosen to be reasonably strong while still test-friendly.
+        return hashlib.scrypt(
+            password=password.encode("utf-8"),
+            salt=salt,
+            n=2**14,
+            r=8,
+            p=1,
+            dklen=_ARGON2_HASH_LEN,
+        )
+
+    raise ValueError(f"unsupported kdf: {kdf}")
 
 
 def _encrypt_v2(plaintext: bytes, password: str) -> dict:
-    """Encrypt with AES-256-GCM + Argon2id. Returns blob dict."""
+    """Encrypt with AES-256-GCM + (Argon2id|scrypt). Returns blob dict."""
     salt = os.urandom(16)
-    key = _derive_key_v2(password, salt)
+
+    # Prefer Argon2id; fall back to scrypt if argon2 isn't installed.
+    kdf_name = "argon2id"
+    try:
+        import argon2  # noqa: F401
+    except Exception:
+        kdf_name = "scrypt"
+
+    key = _derive_key_v2(password, salt, kdf=kdf_name)
     nonce = os.urandom(_GCM_NONCE_LEN)
     aesgcm = AESGCM(key)
     ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+
+    kdf_block: dict[str, object] = {
+        "name": kdf_name,
+        "salt_b64": base64.b64encode(salt).decode("ascii"),
+    }
+    if kdf_name == "argon2id":
+        kdf_block.update(
+            {
+                "time_cost": _ARGON2_TIME_COST,
+                "memory_cost": _ARGON2_MEMORY_COST,
+                "parallelism": _ARGON2_PARALLELISM,
+            }
+        )
+
     return {
-        "kdf": {
-            "name": "argon2id",
-            "time_cost": _ARGON2_TIME_COST,
-            "memory_cost": _ARGON2_MEMORY_COST,
-            "parallelism": _ARGON2_PARALLELISM,
-            "salt_b64": base64.b64encode(salt).decode("ascii"),
-        },
+        "kdf": kdf_block,
         "cipher": "aes-256-gcm",
         "nonce_b64": base64.b64encode(nonce).decode("ascii"),
         "ciphertext_b64": base64.b64encode(ciphertext).decode("ascii"),
@@ -88,10 +135,11 @@ def _encrypt_v2(plaintext: bytes, password: str) -> dict:
 
 
 def _decrypt_v2(blob: dict, password: str) -> bytes:
-    """Decrypt AES-256-GCM + Argon2id blob."""
+    """Decrypt AES-256-GCM blob with the recorded KDF (argon2id or scrypt)."""
     kdf_info = blob["kdf"]
+    kdf_name = str(kdf_info.get("name") or "argon2id")
     salt = base64.b64decode(kdf_info["salt_b64"])
-    key = _derive_key_v2(password, salt)
+    key = _derive_key_v2(password, salt, kdf=kdf_name)
     nonce = base64.b64decode(blob["nonce_b64"])
     ciphertext = base64.b64decode(blob["ciphertext_b64"])
     aesgcm = AESGCM(key)

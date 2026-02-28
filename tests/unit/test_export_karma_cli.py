@@ -192,7 +192,12 @@ class TestExportKarmaIncludeChain:
 
 class TestExportKarmaDateFilter:
     def test_export_karma_date_filter_from(self, tmp_path):
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")
@@ -217,7 +222,12 @@ class TestExportKarmaDateFilter:
         assert len(lines) == 0, "Future date filter should return zero records"
 
     def test_export_karma_date_filter_to(self, tmp_path):
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")
@@ -242,7 +252,12 @@ class TestExportKarmaDateFilter:
         assert len(lines) == 0, "Past --to date filter should return zero records"
 
     def test_export_karma_date_filter_all_today(self, tmp_path):
-        from datetime import UTC, datetime
+        from datetime import datetime
+
+        try:
+            from datetime import UTC  # py311+
+        except ImportError:  # pragma: no cover
+            UTC = UTC  # noqa: N806
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")

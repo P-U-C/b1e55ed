@@ -12,7 +12,25 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from enum import StrEnum
+
+try:
+    from enum import StrEnum  # py311+
+except ImportError:  # pragma: no cover
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # type: ignore[no-redef]  # noqa: UP042
+        """Backport of Python 3.11's enum.StrEnum for Python 3.10.
+
+        Key behavior: str(member) should equal member.value.
+        """
+
+        def __str__(self) -> str:  # pragma: no cover
+            return str(self.value)
+
+        def __format__(self, spec: str) -> str:  # pragma: no cover
+            return format(str(self), spec)
+
+
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter

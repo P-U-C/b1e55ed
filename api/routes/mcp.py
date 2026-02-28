@@ -12,7 +12,13 @@ from __future__ import annotations
 import hmac
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    UTC = UTC  # noqa: N806
+
 from typing import Any
 
 from fastapi import APIRouter, Header, Request

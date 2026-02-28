@@ -1,0 +1,111 @@
+---
+title: "API Overview"
+description: "Authentication, error format, and endpoint group quick reference."
+---
+
+## Base URL
+
+```text
+http://localhost:5050/api/v1/
+```
+
+---
+
+## Authentication
+
+All endpoints **except**:
+
+- `GET /health`
+- `GET /oracle/producers/{producer_id}/provenance`
+
+require a bearer token.
+
+b1e55ed refuses to start if `api.auth_token` is empty unless `B1E55ED_INSECURE_OK=1` is set.
+
+### Set the token (YAML)
+
+```yaml
+# config/user.yaml
+api:
+  auth_token: "your-secret-token"
+```
+
+### Set the token (environment)
+
+```bash
+export B1E55ED_API__AUTH_TOKEN="your-secret-token"
+```
+
+### Use the token
+
+```bash
+curl \
+  -H "Authorization: Bearer your-secret-token" \
+  http://localhost:5050/api/v1/brain/status
+```
+
+---
+
+## Error format
+
+Most b1e55ed API errors use a stable machine-readable structure:
+
+```json
+{
+  "error": {
+    "code": "auth.invalid_token",
+    "message": "Bearer token is invalid"
+  }
+}
+```
+
+Some endpoints may also return FastAPI default errors:
+
+```json
+{"detail": "..."}
+```
+
+---
+
+## Rate limiting
+
+Rate limiting is **not currently enforced** at the API layer.
+
+<Tip>
+Be reasonable anyway (especially for SSE reconnect loops and polling). Treat the API as if a soft limit exists.
+</Tip>
+
+---
+
+## Endpoint groups (quick reference)
+
+| Group | What it’s for | Key endpoints |
+|---|---|---|
+| Health | Liveness + basic DB size/uptime | `GET /health` |
+| Brain | Regime/kill-switch state + run cycles | `GET /brain/status`, `POST /brain/run` |
+| Signals | Read or submit signals | `GET /signals`, `POST /signals/submit` |
+| Events / SSE | Real-time stream of events | `GET /events/stream` |
+| Positions | Open positions view | `GET /positions`, `GET /positions/{id}` |
+| Producers | Producer registry + health | `GET /producers/`, `GET /producers/status`, `POST /producers/register` |
+| Contributors | Registry + scoring + attestations | `GET /contributors/`, `POST /contributors/register`, `GET /contributors/leaderboard` |
+| Karma / Treasury | Treasury state + settlement projections | `GET /treasury` (plus `/karma/*`) |
+| Oracle | Public provenance projection | `GET /oracle/producers/{producer_id}/provenance` |
+
+---
+
+## Quick curl examples
+
+### Health (no auth)
+
+```bash
+curl -s http://localhost:5050/api/v1/health | jq
+```
+
+### Brain status (auth)
+
+```bash
+export TOKEN="your-secret-token"
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5050/api/v1/brain/status | jq
+```

@@ -1,0 +1,96 @@
+---
+title: "Tailscale Setup"
+description: "Privately expose the API and dashboard over your tailnet."
+---
+
+Tailscale is the recommended way to access b1e55ed remotely without exposing ports publicly.
+
+- API default: `:5050`
+- Dashboard default: `:5051`
+
+---
+
+## Install
+
+On your VPS:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+```
+
+---
+
+## Authenticate
+
+```bash
+sudo tailscale up
+```
+
+Follow the login URL and approve the device.
+
+---
+
+## Get your node IP
+
+```bash
+tailscale ip -4
+```
+
+Example output:
+
+```text
+100.64.12.34
+```
+
+---
+
+## Bind b1e55ed to Tailscale
+
+### Option A (recommended): bind explicitly to the Tailscale IP
+
+Set `api.host` and `dashboard.host`:
+
+```yaml
+# config/user.yaml
+api:
+  host: "100.64.12.34"
+  port: 5050
+
+dashboard:
+  host: "100.64.12.34"
+  port: 5051
+```
+
+### Option B: bind to `0.0.0.0` and rely on ACLs/firewall
+
+```yaml
+api:
+  host: "0.0.0.0"
+
+dashboard:
+  host: "0.0.0.0"
+```
+
+<Note>
+Only use `0.0.0.0` if you understand your firewall and you’re confident ports are not exposed on the public interface.
+</Note>
+
+---
+
+## Firewall guidance
+
+- Only expose ports **5050/5051** on the **Tailscale interface**
+- Block access on the public interface
+- Prefer Tailscale ACLs for team access
+
+---
+
+## Access from your laptop
+
+Open:
+
+```text
+http://<tailscale-ip>:5051
+```
+
+No extra VPN configuration required—Tailscale handles routing.
