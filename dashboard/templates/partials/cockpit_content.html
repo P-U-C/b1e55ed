@@ -1,0 +1,153 @@
+{% set tc = state.get('top_call') if state else None %}
+{% set signals = state.get('producer_signals', []) if state else [] %}
+{% set benchmarks = state.get('benchmarks', []) if state else [] %}
+{% set sys = state.get('system', {}) if state else {} %}
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; min-height:calc(100vh - 6rem);">
+
+  <!-- TOP LEFT — THE CALL -->
+  <div class="panel" style="display:flex; flex-direction:column;">
+    <div class="panel-header">
+      <span class="panel-title">THE CALL</span>
+    </div>
+    {% if tc %}
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:1.5rem 0;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem;">
+        <span class="text-bright" style="font-size:2rem; font-weight:600;">{{ tc.symbol }}</span>
+        <span style="font-size:1.5rem; font-weight:500; color:{% if tc.direction == 'long' %}var(--green){% elif tc.direction == 'short' %}var(--red){% else %}var(--neutral){% endif %};">
+          {{ tc.direction | upper }}
+        </span>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <span style="color:var(--text-dim);">Confidence</span>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div style="flex:1; height:8px; background:var(--bg); border-radius:4px; overflow:hidden;">
+            <div style="width:{{ (tc.confidence * 100) | int }}%; height:100%; background:linear-gradient(90deg, #16a34a, #22c55e); border-radius:4px;"></div>
+          </div>
+          <span class="text-bright" style="font-weight:500;">{{ '%.2f' | format(tc.confidence) }}</span>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; color:var(--text-dim); font-size:0.85rem;">
+        <div>Horizon: <span class="text-bright">{{ tc.horizon or '—' }}</span></div>
+        <div>Magnitude: <span class="text-bright">{{ '%.1f' | format(tc.magnitude) }}</span></div>
+        <div>PCS: <span class="text-bright">{{ '%.1f' | format(tc.pcs_score) }}</span></div>
+        <div>CTS: <span class="text-bright">{{ '%.1f' | format(tc.cts_score) }}</span></div>
+      </div>
+    </div>
+    {% else %}
+    <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+      <span style="color:var(--text-dim);">Waiting for first brain cycle...</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- TOP RIGHT — PRODUCER BREAKDOWN -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">PRODUCER BREAKDOWN</span>
+    </div>
+    {% if signals %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+      <thead>
+        <tr style="color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="text-align:left; padding:0.3rem;">Producer</th>
+          <th style="text-align:left; padding:0.3rem;">Domain</th>
+          <th style="text-align:left; padding:0.3rem;">Dir</th>
+          <th style="text-align:right; padding:0.3rem;">Conf</th>
+          <th style="text-align:right; padding:0.3rem;">Karma</th>
+          <th style="text-align:center; padding:0.3rem;">Agrees</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in signals %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.3rem; color:var(--text-bright);">{{ s.producer_id }}</td>
+          <td style="padding:0.3rem;">{{ s.domain }}</td>
+          <td style="padding:0.3rem; color:{% if s.direction == 'long' %}var(--green){% elif s.direction == 'short' %}var(--red){% else %}var(--neutral){% endif %};">{{ s.direction }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(s.confidence) }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(s.karma_score) }}</td>
+          <td style="text-align:center; padding:0.3rem;">
+            {% if s.agrees %}<span style="color:var(--green);">✓</span>{% else %}<span style="color:var(--red);">✗</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">No producer signals in last 30m.</div>
+    {% endif %}
+  </div>
+
+  <!-- BOTTOM LEFT — BENCHMARK COMPARISON -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">BENCHMARKS</span>
+    </div>
+    {% if benchmarks %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+      <thead>
+        <tr style="color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="text-align:left; padding:0.3rem;">Source</th>
+          <th style="text-align:left; padding:0.3rem;">Dir</th>
+          <th style="text-align:right; padding:0.3rem;">7d P&amp;L</th>
+          <th style="text-align:right; padding:0.3rem;">Win Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in benchmarks %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.3rem; color:var(--text-bright);">{{ b.name }}</td>
+          <td style="padding:0.3rem;">{{ b.direction }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(b.pnl_7d) }}%</td>
+          <td style="text-align:right; padding:0.3rem;">{{ ('%.0f%%' | format(b.win_rate * 100)) if b.win_rate is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">No benchmark data yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- BOTTOM RIGHT — SYSTEM STATUS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">SYSTEM</span>
+    </div>
+    <div style="padding:0.5rem 0; font-size:0.85rem;">
+      {% set ks = sys.get('kill_switch_level', 'SAFE') %}
+      {% set ks_color = '#22C55E' if ks == 'SAFE' else '#EAB308' if ks == 'CAUTION' else '#F97316' if ks == 'DEFENSIVE' else '#EF4444' %}
+      <div style="margin-bottom:0.75rem;">
+        <span style="color:var(--text-dim);">Kill Switch:</span>
+        <span style="color:{{ ks_color }}; font-weight:600;">{{ ks }}</span>
+      </div>
+      <div style="margin-bottom:0.5rem;">
+        <span style="color:var(--text-dim);">Consecutive Losses:</span>
+        <span class="text-bright">{{ sys.get('consecutive_losses', 0) }} / 3</span>
+      </div>
+      <div style="margin-bottom:0.5rem;">
+        <span style="color:var(--text-dim);">Open Risk:</span>
+        <span class="text-bright">{{ '%.1f' | format(sys.get('open_risk_pct', 0.0)) }}% / 5.0%</span>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <span style="color:var(--text-dim);">Last Cycle:</span>
+        <span class="text-bright">{{ sys.get('last_cycle_ts', '—') }}</span>
+      </div>
+
+      {% set positions = sys.get('open_positions', []) %}
+      {% if positions %}
+      <div style="color:var(--text-dim); margin-bottom:0.3rem;">Open Positions:</div>
+      {% for p in positions %}
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:0.2rem 0; border-bottom:1px solid var(--border);">
+        <span class="text-bright">{{ p.symbol }} {{ p.direction | upper }}</span>
+        <span>Entry: {{ p.entry }}</span>
+        <span style="color:{% if p.unrealized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ '%.2f' | format(p.unrealized_pnl) }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div style="color:var(--text-dim);">No open positions.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
