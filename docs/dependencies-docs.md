@@ -474,3 +474,74 @@ These files are design references and sprint plans, not operator-facing guides.
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
 
 *Last updated: 2026-02-25*
+
+---
+
+## Mintlify site (docs/)
+
+The Mintlify documentation site lives in `docs/` and is defined by `docs/docs.json`.
+All pages below are registered in the nav and deployed to `docs.b1e55ed.permanentupperclass.com`.
+
+### Top-level
+
+```text
+docs/docs.json              ← nav/config (registers all MDX pages)
+docs/introduction.mdx       → quickstart.mdx, api/overview.mdx
+docs/quickstart.mdx         → setup/standalone-install.mdx, setup/agent-install.mdx, operations/cli-reference.mdx, how-it-works.mdx
+docs/how-it-works.mdx       → api/overview.mdx, producers/overview.mdx
+```
+
+### Setup
+
+```text
+docs/setup/standalone-install.mdx  → operator-standalone.md
+docs/setup/agent-install.mdx       → operator-agent.md
+docs/setup/oracle.mdx              → oracle.md
+docs/setup/telegram.mdx
+docs/setup/tailscale.mdx
+```
+
+### Operations
+
+```text
+docs/operations/cli-reference.mdx   → cli-reference.md
+docs/operations/config-reference.mdx → configuration.md
+docs/operations/daily.mdx
+docs/operations/troubleshooting.mdx
+```
+
+### API
+
+```text
+docs/api/overview.mdx       → api-reference.md
+docs/api/signals.mdx        → api-reference.md
+docs/api/contributors.mdx   → contributors.md
+docs/api/brain.mdx          → api-reference.md
+docs/api/positions.mdx      → api-reference.md
+docs/api/karma.mdx          → KARMA-SPEC.md
+```
+
+### Producers
+
+```text
+docs/producers/overview.mdx    → producers.md
+docs/producers/reference.mdx   → producers.md
+docs/producers/symbol-packs.mdx
+docs/producers/tuning-guide.mdx → configuration.md
+```
+
+### Contributing
+
+```text
+docs/contributing/contributor-registration.mdx → contributors.md
+docs/contributing/karma-attribution.mdx        → KARMA-SPEC.md
+docs/contributing/how-to-contribute.mdx
+```
+
+## Operator guides (docs/)
+
+```text
+docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
+docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
+docs/producers.md           → configuration.md, api-reference.md, producers/overview.mdx
+```
