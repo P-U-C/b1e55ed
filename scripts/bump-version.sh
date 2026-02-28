@@ -89,19 +89,36 @@ else:
     print("✓ CHANGELOG.md — stubbed section for ${TAG}")
 PYEOF
 
-# ── 4. Update b1e55ed-site fallback version ───────────────────────────────────
-# The site fetches the latest release from GitHub API dynamically,
-# but we keep a hardcoded fallback for offline/rate-limited loads.
-SITE_DIR="$(cd "$REPO_ROOT/../b1e55ed-site" 2>/dev/null && pwd)" || true
+# ── 4. Update b1e55ed-site version ───────────────────────────────────────────
+SEMVER="${TAG#v}"                          # 1.0.0-beta.7
+BETASHORT="${TAG##*v1\.0\.0-}"             # beta.7
 
+SITE_DIR="$(cd "$REPO_ROOT/../b1e55ed-site" 2>/dev/null && pwd)" || true
 if [[ -n "$SITE_DIR" && -f "$SITE_DIR/index.html" ]]; then
-  sed -i.bak "s/id=\"release-version\">[^<]*/id=\"release-version\">${TAG}/" "$SITE_DIR/index.html"
+  sed -i.bak \
+    -e "s|\"softwareVersion\": \"[^\"]*\"|\"softwareVersion\": \"${SEMVER}\"|" \
+    -e "s|id=\"nav-version\">[^<]*|id=\"nav-version\">${BETASHORT}|" \
+    "$SITE_DIR/index.html"
   rm -f "$SITE_DIR/index.html.bak"
-  echo "✓ b1e55ed-site/index.html fallback version updated"
+  echo "✓ b1e55ed-site/index.html version updated to ${SEMVER}"
   (cd "$SITE_DIR" && git add index.html && git commit -m "chore: bump version to ${TAG}" && git push) || \
     echo "⚠  b1e55ed-site commit/push failed — update manually"
 else
-  echo "ℹ  b1e55ed-site not found at ../b1e55ed-site — skipping site update"
+  echo "ℹ  b1e55ed-site not found at ../b1e55ed-site — skipping"
+fi
+
+# ── 4b. Update permanentupperclass.com release reference ─────────────────────
+PUC_DIR="$(cd "$REPO_ROOT/../permanentupperclass.com" 2>/dev/null && pwd)" || true
+if [[ -n "$PUC_DIR" && -f "$PUC_DIR/index.html" ]]; then
+  sed -i.bak \
+    -e "s|v[0-9]\+\.[0-9]\+\.[0-9]\+-beta\.[0-9]\+ released|${TAG} released|" \
+    "$PUC_DIR/index.html"
+  rm -f "$PUC_DIR/index.html.bak"
+  echo "✓ permanentupperclass.com/index.html release version updated to ${TAG}"
+  (cd "$PUC_DIR" && git add index.html && git commit -m "chore: bump b1e55ed version to ${TAG}" && git push) || \
+    echo "⚠  permanentupperclass.com commit/push failed — update manually"
+else
+  echo "ℹ  permanentupperclass.com not found at ../permanentupperclass.com — skipping"
 fi
 
 # ── 5. Commit ─────────────────────────────────────────────────────────────────
