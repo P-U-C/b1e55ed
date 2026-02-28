@@ -302,6 +302,18 @@ CREATE TABLE IF NOT EXISTS producer_scores (
 CREATE INDEX IF NOT EXISTS idx_producer_scores_producer ON producer_scores(producer);
 
 -- ============================================================
+-- Producer Karma (flywheel attribution)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_karma (
+    producer_id TEXT PRIMARY KEY,
+    karma_score REAL DEFAULT 1.0,
+    win_count INTEGER DEFAULT 0,
+    loss_count INTEGER DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
+    last_updated TEXT
+);
+
+-- ============================================================
 -- API Rate Limiting (SEC1)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS api_rate_limits (

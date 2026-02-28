@@ -158,6 +158,27 @@ class PnLTracker:
                     exc_info=True,
                 )
 
+            # Best-effort flywheel attribution — update producer karma scores.
+            try:
+                from engine.execution.karma import KarmaEngine
+                from engine.security.identity import ensure_identity
+
+                karma_attr = KarmaEngine(
+                    config=self._config,
+                    db=self.db,
+                    identity=ensure_identity().identity,
+                )
+                karma_attr.attribute_outcome(
+                    trade_id=str(position_id),
+                    realized_pnl_usd=float(realized),
+                )
+            except Exception:
+                _log.warning(
+                    "flywheel attribution failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
         return float(realized)
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
