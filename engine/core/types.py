@@ -42,6 +42,8 @@ class ConvictionScore:
     regime: str | None = None
     domains_used: list[str] = field(default_factory=list)
     confidence: float | None = None
+    horizon: str | None = None
+    invalidation: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +57,8 @@ class TradeIntent:
     rationale: str
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    horizon: str | None = None
+    invalidation: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
