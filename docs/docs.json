@@ -1,21 +1,28 @@
 {
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "prism",
   "name": "b1e55ed",
-  "logo": {
-    "dark": "/logo/dark.svg",
-    "light": "/logo/light.svg"
-  },
-  "favicon": "/favicon.svg",
   "colors": {
     "primary": "#10b981",
     "light": "#34d399",
     "dark": "#059669",
     "background": {
-      "dark": "#0a0a0a"
+      "dark": "#0a0a0a",
+      "light": "#fafaf9"
     },
     "anchors": {
       "from": "#10b981",
       "to": "#059669"
     }
+  },
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "font": {
+    "headings": { "family": "JetBrains Mono" },
+    "body": { "family": "JetBrains Mono" }
   },
   "topbarLinks": [
     {
@@ -30,11 +37,7 @@
   "navigation": [
     {
       "group": "Getting Started",
-      "pages": [
-        "introduction",
-        "quickstart",
-        "how-it-works"
-      ]
+      "pages": ["introduction", "quickstart", "how-it-works"]
     },
     {
       "group": "Setup",
