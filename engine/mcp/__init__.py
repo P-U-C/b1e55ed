@@ -9,3 +9,16 @@ Bidirectional MCP support for b1e55ed producers:
 External agents (Claude, oracle consumers, agent builders) connect to the MCP server
 to subscribe to live producer signals without REST API setup.
 """
+
+from engine.mcp.registry import MCPProducerRegistry, get_registry
+from engine.mcp.server import MCPServer
+from engine.mcp.types import MCPProducerManifest, MCPSignalBuffer, MCPSignalPayload
+
+__all__ = [
+    "MCPProducerRegistry",
+    "MCPServer",
+    "MCPProducerManifest",
+    "MCPSignalBuffer",
+    "MCPSignalPayload",
+    "get_registry",
+]

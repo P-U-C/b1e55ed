@@ -85,6 +85,29 @@ class BaseProducer(ABC):
 
     def __init__(self, ctx: ProducerContext) -> None:
         self.ctx = ctx
+        self._register_with_mcp()
+
+    def _register_with_mcp(self) -> None:
+        """Register this producer with the MCP registry. Never raises."""
+
+        try:
+            from datetime import UTC
+
+            from engine.mcp.registry import get_registry
+            from engine.mcp.types import MCPProducerManifest
+
+            manifest = MCPProducerManifest(
+                name=self.name,
+                domain=self.domain,
+                mcp_source_url=getattr(self, "mcp_source_url", None),
+                description=getattr(self, "__doc__", "") or "",
+                assets=getattr(self, "assets", []),
+                schedule=self.schedule,
+                registered_at=datetime.now(tz=UTC).isoformat(),
+            )
+            get_registry().register(manifest)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _collect_via_mcp(self) -> list[dict]:
         """Fetch raw data via MCP client. Returns [] on any failure."""
@@ -100,11 +123,30 @@ class BaseProducer(ABC):
             return []
 
     def _publish_to_mcp(self, events: list[Event]) -> None:
-        """Fire-and-forget: push events to MCP signal buffer. Never raises."""
+        """Push events to MCP registry. Fire-and-forget — never raises."""
 
-        # Populated in S2 when MCPProducerRegistry exists.
-        # Stub here so subclasses can call it safely.
-        del events
+        try:
+            from engine.mcp.registry import get_registry
+            from engine.mcp.types import MCPSignalPayload
+
+            registry = get_registry()
+            for ev in events:
+                payload = ev.payload if hasattr(ev, "payload") else {}
+                signal = MCPSignalPayload(
+                    producer=self.name,
+                    domain=self.domain,
+                    asset=payload.get("asset") or payload.get("symbol") or payload.get("ticker"),
+                    direction=payload.get("direction") or payload.get("signal"),
+                    confidence=payload.get("confidence") or payload.get("score"),
+                    horizon=payload.get("horizon"),
+                    reason=payload.get("reason") or payload.get("rationale") or ev.type,
+                    timestamp=ev.ts.isoformat() if hasattr(ev.ts, "isoformat") else str(ev.ts),
+                    raw_score=payload.get("raw_score") or payload.get("score"),
+                    metadata={"event_type": ev.type, "source": ev.source},
+                )
+                registry.push_signal(signal)
+        except Exception:  # noqa: BLE001
+            pass
 
     @abstractmethod
     def collect(self) -> list[dict]:
