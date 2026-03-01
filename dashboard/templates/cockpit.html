@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Cockpit — b1e55ed{% endblock %}
+
+{% block content %}
+<div id="cockpit-content"
+     hx-get="/partials/cockpit-content"
+     hx-trigger="every 30s"
+     hx-swap="innerHTML">
+  {% include "partials/cockpit_content.html" %}
+</div>
+{% endblock %}
