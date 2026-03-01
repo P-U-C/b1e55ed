@@ -589,12 +589,30 @@ engine/mcp/server.py
   (optional) mcp SDK import (FastMCP SSE transport)
 ```
 
+### `engine/mcp/auth.py`
+
+```text
+engine/mcp/auth.py
+  → hmac.compare_digest
+  → fastapi (Header, HTTPException)
+```
+
 ### `engine/mcp/client.py`
 
 ```text
 engine/mcp/client.py
   (optional) mcp SDK import
   → httpx (HTTP transport)
+```
+
+### `api/routes/mcp.py`
+
+```text
+api/routes/mcp.py
+  → api/deps.py (get_config, get_db)
+  → engine/mcp/auth.py
+  → engine/mcp/registry.py
+  → engine/core/database.py
 ```
 
 ### `engine/producers/financial_datasets.py`

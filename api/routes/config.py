@@ -23,10 +23,21 @@ _SENSITIVE_RE = re.compile(
 # Phil Zimmermann distributed PGP for free in 1991 because he believed
 # people should be able to keep secrets without asking permission.
 # This function exists for the same reason.
+def _redact_sensitive_value(value: Any) -> Any:
+    """Redact sensitive values while preserving list/dict container shapes."""
+
+    if isinstance(value, dict):
+        return {k: _redact_sensitive_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return ["***REDACTED***" for _ in value]
+    return "***REDACTED***"
+
+
 def _redact(obj: Any) -> Any:
     """Recursively walk a config dict and redact sensitive fields."""
+
     if isinstance(obj, dict):
-        return {k: ("***REDACTED***" if _SENSITIVE_RE.search(k) else _redact(v)) for k, v in obj.items()}
+        return {k: (_redact_sensitive_value(v) if _SENSITIVE_RE.search(k) else _redact(v)) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_redact(item) for item in obj]
     return obj
