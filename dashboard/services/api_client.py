@@ -41,6 +41,9 @@ class ApiClient:
 
     # ---- Brain / system -------------------------------------------------
 
+    def get_cockpit_state(self) -> ApiResult:
+        return self._get_json("/cockpit/state")
+
     def get_positions(self) -> ApiResult:
         return self._get_json("/positions")
 
