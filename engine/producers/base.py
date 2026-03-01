@@ -25,7 +25,7 @@ try:
 except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from engine.core.client import DataClient
 from engine.core.config import Config
@@ -77,8 +77,34 @@ class BaseProducer(ABC):
     domain: str
     schedule: str
 
+    # Class variable — override in subclasses that have an MCP source.
+    mcp_source_url: str | None = None
+
+    # Injected by registry after construction (set in S2).
+    _mcp_client: Any | None = None
+
     def __init__(self, ctx: ProducerContext) -> None:
         self.ctx = ctx
+
+    def _collect_via_mcp(self) -> list[dict]:
+        """Fetch raw data via MCP client. Returns [] on any failure."""
+
+        if self._mcp_client is None:
+            return []
+
+        try:
+            result = self._mcp_client.call_tool("get_signals", {"producer": self.name})
+            return result.data
+        except Exception:  # noqa: BLE001
+            self.ctx.logger.warning("mcp_collect_failed", extra={"producer": self.name})
+            return []
+
+    def _publish_to_mcp(self, events: list[Event]) -> None:
+        """Fire-and-forget: push events to MCP signal buffer. Never raises."""
+
+        # Populated in S2 when MCPProducerRegistry exists.
+        # Stub here so subclasses can call it safely.
+        del events
 
     @abstractmethod
     def collect(self) -> list[dict]:
@@ -108,6 +134,12 @@ class BaseProducer(ABC):
                 dedupe_key=ev.dedupe_key,
             )
             published += 1
+
+        try:
+            self._publish_to_mcp(events)
+        except Exception:  # noqa: BLE001
+            self.ctx.logger.warning("mcp_publish_failed", extra={"producer": self.name})
+
         return published
 
     def run(self) -> ProducerResult:
