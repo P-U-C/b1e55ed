@@ -637,3 +637,14 @@ engine/producers/financial_datasets.py
   → engine/core/events.py
   → engine/core/models.py
 ```
+
+### `engine/producers/polymarket.py`
+
+```text
+engine/producers/polymarket.py
+  → engine/producers/base.py
+  → engine/producers/registry.py
+  → engine/core/events.py
+  → engine/core/models.py
+  → httpx (Gamma API)
+```
