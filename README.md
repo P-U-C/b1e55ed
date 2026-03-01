@@ -45,6 +45,9 @@ Producers → Brain → Execution
 | Backtest engine | Walk-forward validation. FDR correction. Regime-conditioned results. |
 | Contributors | Signal provenance. Karma accounting. EAS attestations. |
 | Agent interfaces | SSE event stream. MCP server. Signal attribution. |
+| Flywheel | Signal → attribution → karma → weight closed loop. Compounds automatically. |
+| Cockpit | 4-quadrant "what do I trade today" dashboard with HTMX 30s refresh. |
+| Benchmarks | 4 benchmark producers (momentum, flat, equal-weight, discretionary). |
 | Oracle | Public provenance endpoint. No auth. Anti-Goodhart by design. |
 | CLI | Full operator control plane. |
 | REST API | Mounted at `/api/v1/`. Token auth. |
@@ -93,6 +96,7 @@ API + dashboard after setup:
 ```bash
 b1e55ed api        # http://localhost:5050/api/v1/health
 b1e55ed dashboard  # http://localhost:5051
+b1e55ed report --stratification  # confidence band analysis
 ```
 
 **Running from source?**

@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased — Flywheel Sprints (S0–S7)
+
+### Highlights
+
+Closed the signal → trade → outcome → attribution loop. The flywheel now compounds: every trade updates producer karma, which updates synthesis weights, which produces better signals.
+
+### Features
+
+- **Signal contract schema** (S0) — `FLYWHEEL_SPEC.md`, `SIGNAL_ACCEPTED_V1` and `ATTRIBUTION_OUTCOME_V1` event types, `POST /api/v1/signals/validate` endpoint
+- **Attribution layer** (S1) — `SIGNAL_ACCEPTED_V1` emitted on every synthesis acceptance, linking signals to trades
+- **Karma wiring** (S2) — Position close → `attribute_outcome()` → `producer_karma` table update (EMA α=0.05)
+- **Smart TradFi producer** (S3) — Self-contained Binance API calls, rule-based direction + confidence scoring
+- **Benchmark producers** (S4) — 4 benchmarks (momentum, flat, equal-weight, discretionary) + `POST /api/v1/benchmarks/discretionary`
+- **Kill switch conditions** (S5) — All 5 conditions wired: consecutive losses (3), single loss >2%, open risk >5%, data feed degradation, fill divergence >0.5%
+- **Cockpit dashboard** (S6) — `/cockpit` with 4-quadrant "what do I trade today" view, HTMX 30s auto-refresh, `GET /api/v1/cockpit/state`
+- **Auto-paper-trade** (S7) — Opens paper trades automatically on confidence ≥ 0.65; `StratificationTracker` for 30-day proof; `b1e55ed report --stratification` and `b1e55ed report --cockpit-summary` CLI commands
+
+### New database tables
+
+- `producer_karma` — per-producer karma scores
+- `signal_stratification` — confidence band outcome tracking
+- `discretionary_signals` — operator override signals
+- `system_state` — kill switch and cockpit state
+
+### New configuration
+
+- `brain.auto_paper_trade: bool` (default `true`) — auto-open paper trades on high confidence
+
+### Breaking changes
+
+None.
+
+---
+
 ## v1.0.0-beta.7 — 2026-02-28
 
 ### Highlights

@@ -380,6 +380,73 @@ Lists settlement receipts.
 
 ---
 
+## Cockpit
+
+### GET `/cockpit`
+
+Cockpit dashboard — 4-quadrant "what do I trade today" view. Returns HTML with HTMX 30-second auto-refresh. No authentication required.
+
+### GET `/cockpit/state`
+
+JSON state backing the cockpit dashboard.
+
+**Response** (`200`):
+```json
+{
+  "top_convictions": [],
+  "regime": "EARLY_BULL",
+  "kill_switch_level": 0,
+  "recent_pnl_usd": 142.50,
+  "open_positions": []
+}
+```
+
+---
+
+## Signal Validation
+
+### POST `/signals/validate`
+
+Validate a signal payload against the signal contract schema without persisting it.
+
+**Request body**: Same as `POST /signals/submit`.
+
+**Response** (`200`):
+```json
+{
+  "valid": true,
+  "errors": []
+}
+```
+
+---
+
+## Benchmarks
+
+### POST `/benchmarks/discretionary`
+
+Submit a discretionary signal (human operator override).
+
+**Request body**:
+```json
+{
+  "symbol": "BTC",
+  "direction": "bullish",
+  "confidence": 0.8,
+  "rationale": "Breakout above 70k resistance"
+}
+```
+
+**Response** (`201`):
+```json
+{
+  "signal_id": "...",
+  "accepted": true
+}
+```
+
+---
+
 ## Regime
 
 ### GET `/regime`
