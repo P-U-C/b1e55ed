@@ -570,3 +570,22 @@ engine/mcp/__init__.py
 engine/mcp/types.py
   (no internal deps — standalone type definitions)
 ```
+
+### `engine/mcp/client.py`
+
+```text
+engine/mcp/client.py
+  (optional) mcp SDK import
+  → httpx (HTTP transport)
+```
+
+### `engine/producers/financial_datasets.py`
+
+```text
+engine/producers/financial_datasets.py
+  → engine/mcp/client.py
+  → engine/producers/base.py
+  → engine/producers/registry.py
+  → engine/core/events.py
+  → engine/core/models.py
+```
