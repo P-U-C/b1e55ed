@@ -473,7 +473,7 @@ These files are design references and sprint plans, not operator-facing guides.
 | [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
 
-*Last updated: 2026-02-28*
+*Last updated: 2026-03-01*
 
 ---
 
@@ -561,6 +561,8 @@ engine/cli/commands/setup.py   → engine/cli/main.py (_cmd_setup), scripts/setu
 
 ```text
 engine/mcp/__init__.py
+  → engine/mcp/registry.py
+  → engine/mcp/server.py
   → engine/mcp/types.py
 ```
 
@@ -569,6 +571,22 @@ engine/mcp/__init__.py
 ```text
 engine/mcp/types.py
   (no internal deps — standalone type definitions)
+```
+
+### `engine/mcp/registry.py`
+
+```text
+engine/mcp/registry.py
+  → engine/mcp/types.py
+```
+
+### `engine/mcp/server.py`
+
+```text
+engine/mcp/server.py
+  → engine/mcp/registry.py
+  → dataclasses.asdict
+  (optional) mcp SDK import (FastMCP SSE transport)
 ```
 
 ### `engine/mcp/client.py`
