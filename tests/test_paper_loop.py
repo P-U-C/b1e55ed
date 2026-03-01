@@ -98,7 +98,9 @@ class TestAutoPaperTrade:
 
         identity = MagicMock(spec=NodeIdentity)
         identity.node_id = "test-node"
-        orch = BrainOrchestrator(config, db, identity)
+        mock_oms = MagicMock()
+        mock_oms.submit.return_value = MagicMock(status="filled")
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
 
         mock_conv_result = MagicMock()
         mock_conv_result.score.confidence = 0.75
@@ -116,9 +118,6 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
-            patch("engine.brain.orchestrator.OMS") as mock_oms_cls,
-            patch("engine.brain.orchestrator.default_sizer_from_config"),
-            patch("engine.brain.orchestrator.Preflight"),
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
@@ -135,12 +134,8 @@ class TestAutoPaperTrade:
             mock_regime_res.state.regime = "BULL"
             mock_regime.return_value = mock_regime_res
 
-            mock_oms_instance = MagicMock()
-            mock_oms_instance.submit.return_value = MagicMock(status="filled")
-            mock_oms_cls.return_value = mock_oms_instance
-
             orch.run_cycle(["BTC"])
-            mock_oms_instance.submit.assert_called_once()
+            mock_oms.submit.assert_called_once()
 
     def test_no_auto_trade_on_mid_confidence(self, db, config):
         """0.45-0.65 -> OMS not called."""
@@ -151,6 +146,8 @@ class TestAutoPaperTrade:
         orch = BrainOrchestrator(config, db, identity)
 
         mock_conv_result = MagicMock()
+        mock_oms_mid = MagicMock()
+        orch._oms = mock_oms_mid
         mock_conv_result.score.confidence = 0.55
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
@@ -164,7 +161,6 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
-            patch("engine.brain.orchestrator.OMS") as mock_oms_cls,
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
@@ -182,7 +178,7 @@ class TestAutoPaperTrade:
             mock_regime.return_value = mock_regime_res
 
             orch.run_cycle(["BTC"])
-            mock_oms_cls.assert_not_called()
+            mock_oms_mid.submit.assert_not_called()
 
     def test_no_auto_trade_on_low_confidence(self, db, config):
         """< 0.45 -> OMS not called."""
@@ -193,6 +189,8 @@ class TestAutoPaperTrade:
         orch = BrainOrchestrator(config, db, identity)
 
         mock_conv_result = MagicMock()
+        mock_oms_low = MagicMock()
+        orch._oms = mock_oms_low
         mock_conv_result.score.confidence = 0.30
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
@@ -206,7 +204,6 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
-            patch("engine.brain.orchestrator.OMS") as mock_oms_cls,
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
@@ -224,7 +221,7 @@ class TestAutoPaperTrade:
             mock_regime.return_value = mock_regime_res
 
             orch.run_cycle(["BTC"])
-            mock_oms_cls.assert_not_called()
+            mock_oms_low.submit.assert_not_called()
 
     def test_auto_trade_disabled_by_config(self, db, config):
         """auto_paper_trade=False -> no trade."""
@@ -236,6 +233,8 @@ class TestAutoPaperTrade:
         orch = BrainOrchestrator(config, db, identity)
 
         mock_conv_result = MagicMock()
+        mock_oms_cfg = MagicMock()
+        orch._oms = mock_oms_cfg
         mock_conv_result.score.confidence = 0.80
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
@@ -249,7 +248,6 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
-            patch("engine.brain.orchestrator.OMS") as mock_oms_cls,
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
@@ -267,7 +265,7 @@ class TestAutoPaperTrade:
             mock_regime.return_value = mock_regime_res
 
             orch.run_cycle(["BTC"])
-            mock_oms_cls.assert_not_called()
+            mock_oms_cfg.submit.assert_not_called()
 
     def test_auto_trade_nonblocking_on_oms_error(self, db, config):
         """OMS raises -> brain cycle continues."""
@@ -283,6 +281,9 @@ class TestAutoPaperTrade:
         mock_conv_result.score.symbol = "BTC"
         mock_conv_result.final_conviction = 85.0
 
+        mock_oms_err = MagicMock()
+        mock_oms_err.submit.side_effect = RuntimeError("OMS broken")
+        orch._oms = mock_oms_err
         with (
             patch.object(orch.data_quality, "evaluate") as mock_dq,
             patch.object(orch.synthesis, "synthesize") as mock_synth,
@@ -291,9 +292,6 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
-            patch("engine.brain.orchestrator.OMS", side_effect=RuntimeError("OMS broken")),
-            patch("engine.brain.orchestrator.default_sizer_from_config"),
-            patch("engine.brain.orchestrator.Preflight"),
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()

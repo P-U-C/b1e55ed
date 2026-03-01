@@ -52,7 +52,7 @@ def _compute_signal(
             return (
                 "short",
                 0.65,
-                f"basis unwound ({basis_ann:.1f}%) + negative funding \u2014 risk-off",
+                f"basis unwound ({basis_ann:.1f}%) + negative funding \u2014 risk_off",
             )
         if 3.0 <= basis_ann <= 6.0:
             if funding_ann is not None and 5.0 <= funding_ann <= 20.0:

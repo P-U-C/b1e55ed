@@ -554,3 +554,9 @@ docs/producers.md           → configuration.md, api-reference.md, producers/ov
 engine/cli/main.py             ⇒ engine/cli/commands/setup.py
 engine/cli/commands/setup.py   → engine/cli/main.py (_cmd_setup), scripts/setup-connected.sh
 ```
+
+## Flywheel
+
+```text
+docs/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
+```

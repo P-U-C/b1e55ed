@@ -180,3 +180,5 @@ Reference modules:
 - Oracle: `GET /api/v1/oracle/producers/{id}/provenance` (no auth).
 
 See: [api-reference.md](api-reference.md).
+
+For the full flywheel spec (attribution algorithm, kill switch conditions, Phase 0 success metric), see [FLYWHEEL_SPEC.md](FLYWHEEL_SPEC.md).

@@ -30,6 +30,9 @@ try:
 except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
 
+# TYPE_CHECKING guard keeps execution layer out of brain's runtime imports.
+from typing import TYPE_CHECKING
+
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
@@ -42,9 +45,10 @@ from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
 from engine.core.types import TradeIntent
-from engine.execution.oms import OMS, default_sizer_from_config
-from engine.execution.preflight import Preflight
 from engine.security.identity import NodeIdentity
+
+if TYPE_CHECKING:
+    from engine.execution.oms import OMS
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +64,17 @@ class CycleResult:
 
 
 class BrainOrchestrator:
-    def __init__(self, config: Config, db: Database, identity: NodeIdentity):
+    def __init__(
+        self,
+        config: Config,
+        db: Database,
+        identity: NodeIdentity,
+        oms: OMS | None = None,
+    ):
         self.config = config
         self.db = db
         self.identity = identity
+        self._oms = oms  # injected; avoids execution layer import at brain layer
 
         self.hooks = BrainHooks(config, db)
         self.data_quality = DataQualityMonitor(config, db)
@@ -229,10 +240,10 @@ class BrainOrchestrator:
                             stop_loss_pct=0.05,
                             take_profit_pct=0.10,
                         )
-                        preflight = Preflight(self.config, self.db)
-                        sizer = default_sizer_from_config(self.config)
-                        oms = OMS(config=self.config, db=self.db, preflight=preflight, sizer=sizer)
-                        oms_result = oms.submit(ti, mid_price=1.0, equity_usd=10000.0)
+                        if self._oms is None:
+                            _log.warning("auto-paper-trade skipped: no OMS injected")
+                            continue
+                        oms_result = self._oms.submit(ti, mid_price=1.0, equity_usd=10000.0)
                         _log.info("auto-paper-trade: %s %s -> %s", sym, direction, oms_result.status)
                     except Exception:
                         _log.exception("auto-paper-trade failed for %s -- brain cycle continues", sym)
