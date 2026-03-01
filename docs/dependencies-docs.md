@@ -554,3 +554,19 @@ docs/producers.md           → configuration.md, api-reference.md, producers/ov
 engine/cli/main.py             ⇒ engine/cli/commands/setup.py
 engine/cli/commands/setup.py   → engine/cli/main.py (_cmd_setup), scripts/setup-connected.sh
 ```
+
+## MCP integration layer
+
+### `engine/mcp/__init__.py`
+
+```text
+engine/mcp/__init__.py
+  → engine/mcp/types.py
+```
+
+### `engine/mcp/types.py`
+
+```text
+engine/mcp/types.py
+  (no internal deps — standalone type definitions)
+```
