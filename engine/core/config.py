@@ -64,6 +64,7 @@ class RiskConfig(BaseModel):
 
 class BrainConfig(BaseModel):
     cycle_interval_seconds: int = 1800
+    auto_paper_trade: bool = True
 
 
 class ExecutionConfig(BaseModel):
