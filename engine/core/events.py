@@ -57,6 +57,7 @@ class EventType(StrEnum):
     SIGNAL_ACI_V1 = "signal.aci.v1"
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
     SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
+    SIGNAL_BENCHMARK_V1 = "signal.benchmark.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -133,6 +134,11 @@ class TradFiSignalPayload(BaseModel):
     funding_annualized: float | None = None
     oi_change_pct: float | None = None
     meltup_score: float | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    horizon: str = "swing"
+    invalidation: float | None = None
+    signal_reason: str | None = None
 
 
 class SocialSignalPayload(BaseModel):
@@ -198,6 +204,16 @@ class PriceWSSignalPayload(BaseModel):
     bid: float | None = None
     ask: float | None = None
     venue: str | None = None
+
+
+class BenchmarkSignalPayload(BaseModel):
+    """Payload for benchmark signal producers."""
+
+    symbol: str
+    direction: Literal["long", "short", "flat"]
+    confidence: float
+    source: str
+    reasoning: str | None = None
 
 
 class CuratorSignalPayload(BaseModel):
@@ -321,6 +337,7 @@ PayloadModel = (
     | StablecoinSignalPayload
     | WhaleSignalPayload
     | OrderbookSignalPayload
+    | BenchmarkSignalPayload
     | CuratorSignalPayload
     | ACISignalPayload
     | ConvictionPayload
@@ -345,6 +362,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_STABLECOIN_V1: StablecoinSignalPayload,
     EventType.SIGNAL_WHALE_V1: WhaleSignalPayload,
     EventType.SIGNAL_ORDERBOOK_V1: OrderbookSignalPayload,
+    EventType.SIGNAL_BENCHMARK_V1: BenchmarkSignalPayload,
     EventType.SIGNAL_CURATOR_V1: CuratorSignalPayload,
     EventType.SIGNAL_ACI_V1: ACISignalPayload,
     # Brain

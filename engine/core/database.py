@@ -328,6 +328,15 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 CREATE INDEX IF NOT EXISTS idx_api_rate_limits_key ON api_rate_limits(key);
 
 -- ============================================================
+-- System State (key-value store for kill switch state etc.)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
 -- Risk Triggers (audit)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS risk_triggers (
@@ -425,6 +434,20 @@ CREATE TABLE IF NOT EXISTS signal_stratification (
 );
 
 CREATE INDEX IF NOT EXISTS idx_signal_strat_bucket ON signal_stratification(bucket);
+
+-- ============================================================
+-- Discretionary Signals (operator-injected benchmarks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS discretionary_signals (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    reasoning TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
 """
 
 
