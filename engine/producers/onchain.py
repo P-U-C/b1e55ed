@@ -44,6 +44,7 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
 @register("onchain-flows", domain="onchain")
 class OnchainFlowsProducer(BaseProducer):
     schedule = "*/30 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_ONCHAIN_FLOWS_URL") or os.getenv("ONCHAIN_FLOWS_URL")

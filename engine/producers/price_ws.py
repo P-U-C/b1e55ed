@@ -45,6 +45,7 @@ class PriceAlertsProducer(BaseProducer):
     """Polling producer that mimics a websocket price feed."""
 
     schedule = "*/1 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_PRICE_WS_URL") or os.getenv("PRICE_WS_URL")
