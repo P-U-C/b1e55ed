@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes import (
+    benchmarks,
     brain,
     cockpit,
     config,
@@ -27,6 +28,7 @@ def get_api_router() -> APIRouter:
     router = APIRouter()
 
     router.include_router(cockpit.router, tags=["cockpit"])
+    router.include_router(benchmarks.router, tags=["benchmarks"])
     router.include_router(health.router, tags=["health"])
     router.include_router(metrics.router, tags=["metrics"])
     router.include_router(brain.router, tags=["brain"])
