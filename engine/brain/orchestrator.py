@@ -30,8 +30,6 @@ try:
 except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
 
-# TYPE_CHECKING guard keeps execution layer out of brain's runtime imports.
-from typing import TYPE_CHECKING
 
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
@@ -46,9 +44,6 @@ from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
 from engine.core.types import TradeIntent
 from engine.security.identity import NodeIdentity
-
-if TYPE_CHECKING:
-    from engine.execution.oms import OMS
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +64,7 @@ class BrainOrchestrator:
         config: Config,
         db: Database,
         identity: NodeIdentity,
-        oms: OMS | None = None,
+        oms=None,  # OMS | None — injected to avoid execution→brain layer violation
     ):
         self.config = config
         self.db = db
