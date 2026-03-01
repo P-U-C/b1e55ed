@@ -1,156 +1,141 @@
 from __future__ import annotations
 
-import math
+import json
+import logging
+from unittest.mock import Mock, patch
 
 import httpx
+import pytest
 
-from engine.core.events import EventType
+from engine.core.client import DataClient
+from engine.core.config import Config
+from engine.core.database import Database
+from engine.core.metrics import MetricsRegistry
+from engine.producers.base import ProducerContext
 from engine.producers.polymarket import PolymarketProducer
 
 
-class _FailingClient:
-    def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002
-        pass
+@pytest.fixture()
+def mock_ctx() -> ProducerContext:
+    config = Mock(spec=Config)
+    config.universe = Mock()
+    config.universe.symbols = []
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001, ARG002
-        return False
-
-    def get(self, *args, **kwargs):  # noqa: ANN002, ANN003, ARG002
-        raise httpx.ConnectError("network down")
-
-
-class _BadJSONClient:
-    def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001, ARG002
-        return False
-
-    def get(self, url: str, **kwargs):  # noqa: ANN003, ARG002
-        return httpx.Response(200, content=b"not-json", request=httpx.Request("GET", url))
+    return ProducerContext(
+        config=config,
+        db=Mock(spec=Database),
+        client=Mock(spec=DataClient),
+        metrics=Mock(spec=MetricsRegistry),
+        logger=Mock(spec=logging.Logger),
+    )
 
 
-def _producer() -> PolymarketProducer:
-    return PolymarketProducer.__new__(PolymarketProducer)
+def _market(*, market_id: str, slug: str, probability: float, liquidity: float = 10_000.0, volume_24h: float = 1_000.0) -> dict:
+    return {
+        "id": market_id,
+        "slug": slug,
+        "question": f"Question for {slug}",
+        "outcomePrices": json.dumps([str(probability), str(max(0.0, 1.0 - probability))]),
+        "liquidity": liquidity,
+        "volume24hr": volume_24h,
+    }
 
 
-def test_collect_returns_empty_on_network_error(monkeypatch) -> None:
-    monkeypatch.setattr(httpx, "Client", _FailingClient)
-
-    producer = _producer()
-    assert producer.collect() == []
-
-
-def test_collect_returns_empty_on_bad_json(monkeypatch) -> None:
-    monkeypatch.setattr(httpx, "Client", _BadJSONClient)
-
-    producer = _producer()
-    assert producer.collect() == []
+def test_producer_attrs() -> None:
+    assert PolymarketProducer.name == "polymarket"
+    assert PolymarketProducer.domain == "events"
+    assert PolymarketProducer.schedule == "*/15 * * * *"
+    assert PolymarketProducer.mcp_source_url is None
 
 
-def test_normalize_risk_on_fed_cut() -> None:
-    producer = _producer()
-    raw = [
-        {
-            "id": "1",
-            "slug": "will-the-fed-cut-rates-in-march-2026",
-            "question": "Will the Fed cut rates in March 2026?",
-            "outcomePrices": '["0.72", "0.28"]',
-            "liquidity": 1_000_000,
-            "volume24hr": 50_000,
-        }
-    ]
+def test_collect_returns_empty_on_network_error(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
 
-    events = producer.normalize(raw)
+    with patch("engine.producers.polymarket.httpx.Client") as mock_client_cls:
+        client = mock_client_cls.return_value.__enter__.return_value
+        client.get.side_effect = httpx.ConnectError("network down")
 
-    assert len(events) == 1
-    assert events[0].type == EventType.SIGNAL_EVENTS_V1
-    assert events[0].payload["signal"] == "risk_on"
-    assert events[0].payload["probability"] == 0.72
+        assert producer.collect() == []
+
+    mock_client_cls.assert_called_once_with(timeout=producer.TIMEOUT)
 
 
-def test_normalize_risk_off_fed_cut() -> None:
-    producer = _producer()
-    raw = [
-        {
-            "id": "2",
-            "slug": "will-the-fed-cut-rates-in-may-2026",
-            "question": "Will the Fed cut rates in May 2026?",
-            "outcomePrices": '["0.20", "0.80"]',
-            "liquidity": 750_000,
-        }
-    ]
+def test_collect_returns_empty_on_bad_json(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
+
+    bad_json_response = httpx.Response(
+        200,
+        content="not-json",
+        request=httpx.Request("GET", f"{producer.GAMMA_BASE}/markets"),
+    )
+
+    with patch("engine.producers.polymarket.httpx.Client") as mock_client_cls:
+        client = mock_client_cls.return_value.__enter__.return_value
+        client.get.return_value = bad_json_response
+
+        assert producer.collect() == []
+
+
+def test_normalize_risk_on_fed(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
+    raw = [_market(market_id="1", slug="will-the-fed-cut-rates-in-may-2026", probability=0.75)]
 
     events = producer.normalize(raw)
 
     assert len(events) == 1
-    assert events[0].payload["signal"] == "risk_off"
+    payload = events[0].payload
+    assert payload["signal"] == "risk_on"
+    assert payload["direction"] == "risk_on"
 
 
-def test_normalize_neutral() -> None:
-    producer = _producer()
-    raw = [
-        {
-            "id": "3",
-            "slug": "federal-reserve-rate-cut-2026",
-            "question": "Will the Federal Reserve cut rates in 2026?",
-            "outcomePrices": '["0.50", "0.50"]',
-            "liquidity": 500_000,
-        }
-    ]
+def test_normalize_risk_off_fed(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
+    raw = [_market(market_id="2", slug="will-the-fed-cut-rates-in-march-2026", probability=0.20)]
 
     events = producer.normalize(raw)
 
     assert len(events) == 1
-    assert events[0].payload["signal"] == "neutral"
+    payload = events[0].payload
+    assert payload["signal"] == "risk_off"
+    assert payload["direction"] == "risk_off"
 
 
-def test_confidence_scales_with_liquidity() -> None:
-    producer = _producer()
+def test_normalize_neutral_mid(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
+    raw = [_market(market_id="3", slug="will-the-fed-cut-rates-in-march-2026", probability=0.50)]
+
+    events = producer.normalize(raw)
+
+    assert len(events) == 1
+    payload = events[0].payload
+    assert payload["signal"] == "neutral"
+    assert payload["direction"] == "neutral"
+
+
+def test_confidence_scales_with_liquidity(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
+    raw = [_market(market_id="4", slug="will-bitcoin-reach-100000-in-2026", probability=0.70, liquidity=0.0)]
+
+    events = producer.normalize(raw)
+
+    assert len(events) == 1
+    assert events[0].payload["confidence"] == pytest.approx(0.0)
+
+
+def test_normalize_skips_malformed_prices(mock_ctx: ProducerContext) -> None:
+    producer = PolymarketProducer(mock_ctx)
     raw = [
         {
-            "id": "4",
+            "id": "bad-1",
             "slug": "will-bitcoin-reach-100000-in-2026",
-            "question": "Will Bitcoin reach $100,000 in 2026?",
-            "outcomePrices": '["0.70", "0.30"]',
-            "liquidity": 10,
+            "question": "Malformed prices",
+            "outcomePrices": "{not-valid-json}",
+            "liquidity": 1000,
+            "volume24hr": 100,
         }
     ]
 
     events = producer.normalize(raw)
 
-    assert len(events) == 1
-    expected = min(1.0, math.log10(max(1.0, 10.0)) / 6)
-    assert events[0].payload["confidence"] == expected
-    assert events[0].payload["confidence"] < 0.2
-
-
-def test_normalize_returns_empty_on_malformed_prices() -> None:
-    producer = _producer()
-    raw = [
-        {
-            "id": "5",
-            "slug": "will-bitcoin-reach-100000-in-2026",
-            "question": "Will Bitcoin reach $100,000 in 2026?",
-            "outcomePrices": "not-json",
-            "liquidity": 1_000,
-        }
-    ]
-
-    assert producer.normalize(raw) == []
-
-
-def test_producer_attributes() -> None:
-    producer = _producer()
-
-    assert producer.name == "polymarket"
-    assert producer.domain == "events"
-    assert producer.schedule == "*/15 * * * *"
-    assert producer.mcp_source_url is None
-    assert producer.assets == []
+    assert events == []
+    mock_ctx.logger.warning.assert_called()

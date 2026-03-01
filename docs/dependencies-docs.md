@@ -642,9 +642,9 @@ engine/producers/financial_datasets.py
 
 ```text
 engine/producers/polymarket.py
+  → httpx (Gamma API transport)
   → engine/producers/base.py
   → engine/producers/registry.py
   → engine/core/events.py
   → engine/core/models.py
-  → httpx (Gamma API)
 ```

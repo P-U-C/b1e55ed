@@ -51,6 +51,7 @@ def discover() -> None:
             continue
         if modname.endswith(".financial_datasets") and not os.getenv("FINANCIAL_DATASETS_API_KEY"):
             continue
+        # Public/no-auth producers (e.g., polymarket) are discovered unconditionally.
         importlib.import_module(modname)
 
     _DISCOVERED = True
