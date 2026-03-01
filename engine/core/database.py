@@ -328,6 +328,15 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 CREATE INDEX IF NOT EXISTS idx_api_rate_limits_key ON api_rate_limits(key);
 
 -- ============================================================
+-- System State (key-value store for kill switch state etc.)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
 -- Risk Triggers (audit)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS risk_triggers (

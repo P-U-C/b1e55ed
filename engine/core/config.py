@@ -57,6 +57,9 @@ class RiskConfig(BaseModel):
     max_portfolio_heat_pct: float = 0.06
     daily_loss_limit_pct: float = 0.03
     max_drawdown_pct: float = 0.30
+    portfolio_value_usd: float = 10000.0
+    max_open_risk_pct: float = 0.05
+    max_single_loss_pct: float = 0.02
 
 
 class BrainConfig(BaseModel):

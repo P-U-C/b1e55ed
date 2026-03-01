@@ -97,6 +97,27 @@ class PnLTracker:
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
                 )
 
+            # KS-1: Consecutive loss tracking
+            try:
+                if realized < 0:
+                    row_cl = self.db.conn.execute("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'").fetchone()
+                    count = int(row_cl[0]) if row_cl else 0
+                    count += 1
+                    self.db.conn.execute(
+                        "INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', ?, datetime('now'))",
+                        (str(count),),
+                    )
+                    if count >= 3 and self._config is not None:
+                        from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
+
+                        ks = KillSwitch(self._config, self.db)
+                        ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
+                        _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
+                else:
+                    self.db.conn.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
+            except Exception:
+                _log.warning("KS-1 consecutive loss tracking failed", exc_info=True)
+
         # Best-effort outcome attribution — never block execution on failure.
         if self._config is not None:
             try:
@@ -180,6 +201,29 @@ class PnLTracker:
                 )
 
         return float(realized)
+
+    def check_auto_close(self, *, position_id: str, mark_price: float) -> bool:
+        """KS-2: Auto-close if unrealized loss > max_single_loss_pct of portfolio value."""
+        try:
+            if self._config is None:
+                return False
+            portfolio_value = float(self._config.risk.portfolio_value_usd)
+            threshold = portfolio_value * float(self._config.risk.max_single_loss_pct)
+            unrealized = self.unrealized_usd(position_id=position_id, mark_price=mark_price)
+            if unrealized < -threshold:
+                self.close_position(position_id=position_id, exit_price=mark_price, reason="ks2_auto_close")
+                from engine.core.events import EventType
+
+                self.db.append_event(
+                    event_type=EventType.AUDIT_V1,
+                    payload={"reason": "ks2_single_loss_auto_close", "position_id": position_id, "unrealized": unrealized, "threshold": -threshold},
+                    source="execution.pnl",
+                )
+                _log.warning("KS-2: Auto-closed position %s, unrealized %.2f exceeded threshold %.2f", position_id, unrealized, -threshold)
+                return True
+        except Exception:
+            _log.warning("KS-2 auto-close check failed for %s", position_id, exc_info=True)
+        return False
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0
