@@ -18,6 +18,7 @@ README.md
   → docs/configuration.md
   → docs/cli-reference.md
   → docs/api-reference.md
+  → docs/mcp.md
   → docs/contributors.md
   → docs/architecture.md
   → docs/agent-interfaces.md
@@ -73,6 +74,15 @@ api-reference.md
   → contributors.md
   → eas-integration.md
   → architecture.md
+```
+
+### `docs/mcp.md`
+
+```text
+mcp.md
+  → producers.md
+  → api-reference.md
+  → configuration.md
 ```
 
 ### `docs/contributors.md`
@@ -386,6 +396,7 @@ done
 - ✅ `docs/configuration.md`
 - ✅ `docs/deployment.md`
 - ✅ `docs/api-reference.md`
+- ✅ `docs/mcp.md`
 - ✅ `docs/architecture.md`
 - ✅ `docs/developers.md`
 - ✅ `docs/security.md`
@@ -472,6 +483,7 @@ These files are design references and sprint plans, not operator-facing guides.
 |----------|---------|
 | [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+| [MCP_SPRINT_PLAN.md](MCP_SPRINT_PLAN.md) | MCP sprint implementation plan (S1-S5) |
 
 *Last updated: 2026-03-01*
 
@@ -545,7 +557,7 @@ docs/contributing/how-to-contribute.mdx
 ```text
 docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
 docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
-docs/producers.md           → configuration.md, api-reference.md, producers/overview.mdx
+docs/producers.md           → configuration.md, api-reference.md, mcp.md, producers/overview.mdx
 ```
 
 ## CLI setup command modules
