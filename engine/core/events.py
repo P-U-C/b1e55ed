@@ -133,6 +133,11 @@ class TradFiSignalPayload(BaseModel):
     funding_annualized: float | None = None
     oi_change_pct: float | None = None
     meltup_score: float | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    horizon: str = "swing"
+    invalidation: float | None = None
+    signal_reason: str | None = None
 
 
 class SocialSignalPayload(BaseModel):
