@@ -128,6 +128,21 @@ b1e55ed backtest regime [--symbols BTC,ETH]
 
 See: [backtest.md](backtest.md).
 
+### `b1e55ed report`
+
+Generate flywheel reports.
+
+```text
+b1e55ed report --stratification [--json]
+b1e55ed report --cockpit-summary [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--stratification` | Confidence stratification report — compares high-confidence (≥0.65) vs low-confidence (<0.45) signal outcomes over 30 days |
+| `--cockpit-summary` | 7-day cockpit summary — top convictions, regime, kill switch state, recent P&L |
+| `--json` | Machine-readable JSON output |
+
 ---
 
 ## System

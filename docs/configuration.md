@@ -58,7 +58,10 @@ risk:
 ```yaml
 brain:
   cycle_interval_seconds: 1800
+  auto_paper_trade: true      # Auto-open paper trades when confidence ≥ 0.65
 ```
+
+When `auto_paper_trade` is enabled (default: `true`), the brain automatically opens paper trades for any conviction with confidence ≥ 0.65. Disable to require manual confirmation for all trades.
 
 ### `execution`
 
