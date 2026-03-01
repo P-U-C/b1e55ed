@@ -20,6 +20,7 @@ Pipeline:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,9 +29,6 @@ try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
     UTC = UTC  # noqa: N806
-
-
-import logging
 
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
@@ -75,11 +73,12 @@ class BrainOrchestrator:
         self.conviction = ConvictionEngine(config, db, node_id=identity.node_id)
         self.decision = DecisionEngine(config, db)
         self.stratification = StratificationTracker(db)
+        self._domain_miss_counts: dict[str, int] = {}
 
     def run_cycle(self, symbols: list[str]) -> CycleResult:
         # Abort immediately if kill switch is active.
         ks_level = self.kill_switch.level
-        if int(ks_level) > 0:
+        if int(ks_level) >= int(KillSwitchLevel.DEFENSIVE):
             logging.getLogger("b1e55ed.orchestrator").warning("Brain cycle aborted: kill switch level %s is active", ks_level)
             raise RuntimeError(f"Brain cycle blocked by kill switch (level={ks_level})")
 
@@ -90,7 +89,28 @@ class BrainOrchestrator:
 
         dq = self.data_quality.evaluate(as_of=now)
         # Use data quality to adjust weights (domain -> multiplier)
-        q_mult = dq.per_domain_quality
+        q_mult = dict(dq.per_domain_quality)  # mutable copy
+
+        # KS-4: Data feed degradation
+        try:
+            domains = list(q_mult.keys())
+            degraded_domains = []
+            for domain in domains:
+                quality = q_mult.get(domain, 1.0)
+                if quality <= 0.0:
+                    self._domain_miss_counts[domain] = self._domain_miss_counts.get(domain, 0) + 1
+                else:
+                    self._domain_miss_counts[domain] = 0
+                if self._domain_miss_counts.get(domain, 0) >= 2:
+                    degraded_domains.append(domain)
+
+            for domain in degraded_domains:
+                q_mult[domain] = 0.0
+
+            if degraded_domains and len(degraded_domains) >= len(domains) and len(domains) > 0:
+                self.kill_switch.evaluate(manual_level=KillSwitchLevel.CAUTION, reason="all_domains_degraded")
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").warning("KS-4 degradation check failed", exc_info=True)
 
         # Emit a cycle marker (useful for auditing)
         self.db.append_event(
