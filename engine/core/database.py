@@ -240,6 +240,8 @@ CREATE TABLE IF NOT EXISTS conviction_log (
     producer_name TEXT NOT NULL DEFAULT '',
     event_id TEXT NOT NULL DEFAULT '',
     contribution_weight REAL NOT NULL DEFAULT 1.0,
+    feature_key TEXT,
+    feature_value REAL,
     ts TEXT NOT NULL
 );
 
@@ -519,6 +521,8 @@ class Database:
         self._ensure_column("conviction_log", "producer_name", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("conviction_log", "event_id", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("conviction_log", "contribution_weight", "REAL NOT NULL DEFAULT 1.0")
+        self._ensure_column("conviction_log", "feature_key", "TEXT")
+        self._ensure_column("conviction_log", "feature_value", "REAL")
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:

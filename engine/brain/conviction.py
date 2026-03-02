@@ -28,7 +28,7 @@ from engine.brain.synthesis import SynthesisResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
-from engine.core.types import ConvictionScore
+from engine.core.types import ConvictionScore, FeatureSnapshot
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -61,6 +61,7 @@ class ConvictionResult:
     final_conviction: float
     domain_scores: dict[str, float] = field(default_factory=dict)
     weights_used: dict[str, float] = field(default_factory=dict)
+    snapshot: FeatureSnapshot | None = None
 
 
 # Kahneman's System 2: the slow, deliberate override that checks fast pattern recognition.
@@ -172,6 +173,7 @@ class ConvictionEngine:
             final_conviction=final,
             domain_scores=dict(synthesis.domain_scores),
             weights_used=dict(synthesis.weights_used),
+            snapshot=synthesis.snapshot,
         )
 
     def emit(
@@ -230,6 +232,15 @@ class ConvictionEngine:
             for domain, domain_score in result.domain_scores.items():
                 domain_weight = float(result.weights_used.get(domain, 0.0))
                 weighted_contribution = float(domain_score) * domain_weight * contribution
+
+                feature_key: str | None = None
+                feature_value: float | None = None
+                if result.snapshot is not None:
+                    domain_features = result.snapshot.features.get(domain, {})
+                    if domain_features:
+                        feature_key, feature_value = max(domain_features.items(), key=lambda kv: abs(kv[1]))
+                        feature_value = float(feature_value)
+
                 self.db.conn.execute(
                     """
                     INSERT INTO conviction_log (
@@ -242,8 +253,10 @@ class ConvictionEngine:
                         producer_name,
                         event_id,
                         contribution_weight,
+                        feature_key,
+                        feature_value,
                         ts
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         cycle_id,
@@ -255,6 +268,8 @@ class ConvictionEngine:
                         producer,
                         signal_event_id,
                         contribution,
+                        feature_key,
+                        feature_value,
                         result.score.ts.isoformat(),
                     ),
                 )
