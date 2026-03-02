@@ -62,6 +62,7 @@ class SynthesisResult:
     domain_scores: dict[str, float]  # 0..1 per domain (only domains with features)
     weights_used: dict[str, float]  # domain -> weight used this cycle (after quality adjustment)
     weighted_score: float  # 0..1 (domain_scores ⋅ weights_used)
+    regime_tag: str = "unknown"  # per-asset regime (populated by synthesize_with_regime)
 
 
 class FeatureExtractor:
@@ -419,4 +420,36 @@ class VectorSynthesis:
             domain_scores=domain_scores,
             weights_used=weights_used,
             weighted_score=_clamp01(weighted_score),
+        )
+
+    def synthesize_with_regime(
+        self,
+        *,
+        cycle_id: str,
+        symbol: str,
+        quality_adjustment: dict[str, float] | None,
+        regime_detector: Any,
+        as_of: datetime | None = None,
+        weights: dict[str, float] | None = None,
+    ) -> SynthesisResult:
+        """Run synthesis and attach a per-asset regime tag.
+
+        Existing callers can continue using ``synthesize()``; this method is an
+        additive convenience for pipelines that need symbol-local regime tags.
+        """
+        result = self.synthesize(
+            cycle_id=cycle_id,
+            symbol=symbol,
+            as_of=as_of,
+            weights=weights,
+            quality_adjustment=quality_adjustment,
+        )
+        regime_result = regime_detector.detect_for_asset(result.snapshot)
+
+        return SynthesisResult(
+            snapshot=result.snapshot,
+            domain_scores=result.domain_scores,
+            weights_used=result.weights_used,
+            weighted_score=result.weighted_score,
+            regime_tag=regime_result.state.regime,
         )
