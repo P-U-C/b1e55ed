@@ -30,6 +30,8 @@ from typing import Any, Protocol, runtime_checkable
 from engine.core.client import DataClient
 from engine.core.config import Config
 from engine.core.database import Database
+from engine.core.events import EventType, ForecastPayload
+from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.metrics import MetricsRegistry
 from engine.core.models import Event, compute_event_hash
 from engine.core.types import CANONICAL_DOMAINS, ProducerHealth, ProducerResult
@@ -79,6 +81,10 @@ class BaseProducer(ABC):
 
     # Class variable — override in subclasses that have an MCP source.
     mcp_source_url: str | None = None
+
+    #: Optional interpreter. Set to a NullInterpreter by default.
+    #: Override in subclasses that implement forecast-capable interpretation.
+    interpreter: Interpreter | NullInterpreter | None = None
 
     # Injected by registry after construction (set in S2).
     _mcp_client: Any | None = None
@@ -185,6 +191,47 @@ class BaseProducer(ABC):
             self.ctx.logger.warning("mcp_publish_failed", extra={"producer": self.name})
 
         return published
+
+    def emit_forecast(
+        self,
+        *,
+        asset: str,
+        horizon: str,
+        signals: list[dict] | None = None,
+        regime_tag: str = "unknown",
+        visible_signal_refs: list[str] | None = None,
+    ) -> ForecastPayload | None:
+        """Emit a FORECAST_V1 event via this producer's interpreter.
+
+        Returns None if no interpreter is configured.
+        Returns a ForecastPayload (including abstentions) if one is.
+
+        The event is published to the DB automatically.
+        """
+
+        if self.interpreter is None:
+            return None
+
+        # Ensure source is wired up
+        if hasattr(self.interpreter, "producer_name"):
+            self.interpreter.producer_name = self.name
+
+        forecast = self.interpreter.safe_interpret(
+            asset=asset,
+            horizon=horizon,
+            signals=signals or [],
+            regime_tag=regime_tag,
+            visible_signal_refs=visible_signal_refs,
+        )
+
+        # Publish FORECAST_V1 to DB
+        self.ctx.db.append_event(
+            event_type=EventType.FORECAST_V1,
+            payload=forecast.model_dump(),
+            source=self.name,
+        )
+
+        return forecast
 
     def run(self) -> ProducerResult:
         start = time.perf_counter()
