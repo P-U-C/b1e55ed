@@ -134,10 +134,19 @@ def test_apply_egg_invalid_python_is_skipped(tmp_path: Path) -> None:
 
 
 def test_main_apply_eggs_mode_applies_from_json(tmp_path: Path) -> None:
+    import subprocess as _sp
+
     repo_root = tmp_path / "repo"
     file_path = repo_root / "engine" / "core" / "events.py"
     file_path.parent.mkdir(parents=True)
     file_path.write_text("def handle_event():\n    return 1\n", encoding="utf-8")
+
+    # Initialise a real git repo so apply-eggs can commit after patching.
+    _sp.run(["git", "init"], cwd=repo_root, check=True, capture_output=True)
+    _sp.run(["git", "config", "user.email", "test@b1e55ed.test"], cwd=repo_root, check=True, capture_output=True)
+    _sp.run(["git", "config", "user.name", "b1e55ed-test"], cwd=repo_root, check=True, capture_output=True)
+    _sp.run(["git", "add", "-A"], cwd=repo_root, check=True, capture_output=True)
+    _sp.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, capture_output=True)
 
     payload = {
         "eggs": [
