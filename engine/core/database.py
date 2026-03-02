@@ -612,7 +612,6 @@ class Database:
         row = self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
             (table,),
-
         ).fetchone()
         if row is not None:
             return
