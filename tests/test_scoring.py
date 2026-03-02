@@ -203,3 +203,17 @@ def test_synthesis_basis_score_matches_hardcoded_at_defaults(db: Database, basis
     expected = max(0.0, min(1.0, 1.0 - abs(float(basis) - center) / scale))
     result = max(0.0, min(1.0, 1.0 - abs(float(basis) - 5.0) / 15.0))
     assert result == pytest.approx(expected)
+
+
+def test_basis_scale_default_matches_original_hardcoded_value(tmp_path: Path) -> None:
+    """Regression: basis_scale default must match the original hardcoded 8.0 in synthesis.py.
+    A different default silently changes live scoring on deploy (shadow_mode=1 initialises
+    value_live from value_default).
+    """
+    db = Database(tmp_path / "brain.db")
+    try:
+        ensure_defaults(db)
+        val = get_param(db, "tradfi.basis_scale")
+        assert val == pytest.approx(8.0), f"tradfi.basis_scale default must be 8.0 (original hardcoded value); got {val}"
+    finally:
+        db.close()
