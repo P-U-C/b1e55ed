@@ -19,6 +19,8 @@ from engine.core.events import AbstentionReason, ForecastPayload
 from engine.core.forecast import abstain
 
 
+# Shannon's channel capacity theorem: every noisy channel has a maximum reliable throughput.
+# Below the noise floor, transmission fails. interpret() is the channel. abstain() is that floor.
 class Interpreter(ABC):
     """Abstract base for producer-level forecast interpretation.
 
@@ -90,6 +92,8 @@ class Interpreter(ABC):
             )
 
 
+# Cromwell's Rule: never assign probability zero or one to any hypothesis.
+# NullInterpreter holds maximum uncertainty -- the correct prior when evidence is absent.
 class NullInterpreter(Interpreter):
     """Always abstains. Default for producers that have no interpretation logic yet.
 
