@@ -29,6 +29,8 @@ except ImportError:  # pragma: no cover
             return format(str(self), spec)
 
 
+# Linnaeus proposed six ranks -- kingdom, class, order, genus, species, variety.
+# Six domains. Exhaustive, non-overlapping. Any addition requires a new system.
 CANONICAL_DOMAINS: Final[frozenset[str]] = frozenset(
     {
         "technical",
@@ -49,6 +51,8 @@ Rules:
 """
 
 
+# Phil Karlton's two hard problems: cache invalidation and naming things.
+# This function is the second problem, resolved by constraint.
 def validate_domain(domain: str) -> str:
     """Validate a domain string against CANONICAL_DOMAINS. Returns domain if valid."""
     if domain not in CANONICAL_DOMAINS:
