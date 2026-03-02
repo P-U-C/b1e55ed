@@ -233,6 +233,30 @@ class BaseProducer(ABC):
             source=self.name,
         )
 
+        # P2.1 calibration tracking (best-effort, non-blocking)
+        try:
+            from engine.brain.calibration import register_forecast
+
+            direction_map = {
+                "long": "bullish",
+                "short": "bearish",
+                "flat": "neutral",
+                "no_forecast": "neutral",
+            }
+            register_forecast(
+                db=self.ctx.db,
+                forecast_id=forecast.forecast_id,
+                producer_name=self.name,
+                asset=asset,
+                regime=regime_tag or "unknown",
+                horizon=horizon,
+                direction=direction_map.get(forecast.action, "neutral"),
+                confidence=float(forecast.confidence),
+                emitted_at=datetime.now(tz=UTC).isoformat(),
+            )
+        except Exception as e:  # noqa: BLE001
+            self.ctx.logger.warning("calibration.register_forecast failed: %s", e)
+
         return forecast
 
     def run(self) -> ProducerResult:
