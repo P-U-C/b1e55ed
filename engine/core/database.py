@@ -524,6 +524,22 @@ CREATE TABLE IF NOT EXISTS forecast_calibration (
 );
 CREATE INDEX IF NOT EXISTS idx_fc_producer ON forecast_calibration(producer_name);
 CREATE INDEX IF NOT EXISTS idx_fc_unresolved ON forecast_calibration(resolved_at) WHERE resolved_at IS NULL;
+
+-- ============================================================
+-- Producer Calibration Curves (P2.2)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_calibration (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer_name TEXT NOT NULL,
+    asset TEXT NOT NULL DEFAULT 'ALL',
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    confidence_bucket TEXT NOT NULL,
+    observed_win_rate REAL,
+    mean_brier_score REAL,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(producer_name, asset, regime, confidence_bucket)
+);
 """
 
 
@@ -588,6 +604,8 @@ class Database:
         self._ensure_table_exists("forecast_calibration")
         # P2.4 — learnable scoring parameters
         self._ensure_table_exists("scoring_params")
+        # P2.2 — producer calibration curves
+        self._ensure_table_exists("producer_calibration")
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_table_exists(self, table: str) -> None:
