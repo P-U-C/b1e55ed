@@ -41,6 +41,15 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+# Regime-dependent hard caps on conviction magnitude (0-10 scale).
+_REGIME_CAPS: dict[str, float] = {
+    "BULL": 10.0,
+    "BEAR": 7.0,
+    "TRANSITION": 6.0,
+    "CRISIS": 4.0,
+}
+
+
 # Philip Brier proposed (confidence - outcome)^2 as the scoring rule in 1950.
 # Lower is better. This formula is the hypothesis. That score is the verdict.
 def _confidence_v1(*, pcs: float, cts: float, regime: str | None) -> float:
@@ -62,6 +71,8 @@ class ConvictionResult:
     domain_scores: dict[str, float] = field(default_factory=dict)
     weights_used: dict[str, float] = field(default_factory=dict)
     snapshot: FeatureSnapshot | None = None
+    capped_by_regime: bool = False
+    pre_cap_magnitude: float | None = None
 
 
 # Kahneman's System 2: the slow, deliberate override that checks fast pattern recognition.
@@ -96,9 +107,9 @@ class CounterThesis:
         if regime == "CRISIS":
             penalties.append(30.0)
 
-        # If PCS is high and we have any explicit contradictions, CTS ramps.
+        # If we have any explicit contradictions, CTS ramps.
         base = sum(penalties)
-        if pcs > 75.0 and base > 0:
+        if base > 0:
             base += 10.0
 
         return float(_clamp(base, 0.0, 100.0))
@@ -123,7 +134,7 @@ class ConvictionEngine:
 
         # PCS is 0..100
         pcs = float(_clamp(synthesis.weighted_score * 100.0, 0.0, 100.0))
-        cts = float(self.counter_thesis.compute(synthesis=synthesis, pcs=pcs, regime=regime) if pcs > 75.0 else 0.0)
+        cts = float(self.counter_thesis.compute(synthesis=synthesis, pcs=pcs, regime=regime))
 
         # Final conviction: penalize PCS by up to 50% (cts=100 => -50%)
         final = float(_clamp(pcs * (1.0 - cts / 200.0), 0.0, 100.0))
@@ -138,6 +149,12 @@ class ConvictionEngine:
             direction = "neutral"
 
         magnitude = float(_clamp(abs(final - 50.0) / 5.0, 0.0, 10.0))
+
+        regime_key = regime.upper() if regime else "TRANSITION"
+        cap = _REGIME_CAPS.get(regime_key, _REGIME_CAPS["TRANSITION"])
+        capped_by_regime = magnitude > cap
+        pre_cap_magnitude = magnitude if capped_by_regime else None
+        magnitude = min(magnitude, cap)
 
         payload_wo_commit = {
             "symbol": synthesis.snapshot.symbol,
@@ -174,6 +191,8 @@ class ConvictionEngine:
             domain_scores=dict(synthesis.domain_scores),
             weights_used=dict(synthesis.weights_used),
             snapshot=synthesis.snapshot,
+            capped_by_regime=capped_by_regime,
+            pre_cap_magnitude=pre_cap_magnitude,
         )
 
     def emit(
