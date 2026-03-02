@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Final
 
 try:
     from enum import StrEnum  # py311+
@@ -26,6 +27,33 @@ except ImportError:  # pragma: no cover
 
         def __format__(self, spec: str) -> str:  # pragma: no cover
             return format(str(self), spec)
+
+
+CANONICAL_DOMAINS: Final[frozenset[str]] = frozenset(
+    {
+        "technical",
+        "onchain",
+        "tradfi",
+        "social",
+        "events",
+        "curator",
+    }
+)
+"""Canonical 6 producer domains.
+
+Rules:
+- ``curator`` is a human-input/override channel — never rename to macro.
+- ``macro`` becomes the 7th domain only when a dedicated macro producer ships.
+- ACI → social. Stablecoin → onchain. Price alerts → technical.
+- Any producer with a domain not in this set will raise at initialisation.
+"""
+
+
+def validate_domain(domain: str) -> str:
+    """Validate a domain string against CANONICAL_DOMAINS. Returns domain if valid."""
+    if domain not in CANONICAL_DOMAINS:
+        raise ValueError(f"Invalid producer domain '{domain}'. Must be one of: {sorted(CANONICAL_DOMAINS)}")
+    return domain
 
 
 @dataclass(frozen=True, slots=True)
