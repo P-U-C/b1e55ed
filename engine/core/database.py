@@ -605,17 +605,6 @@ class Database:
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
-    def _ensure_table_exists(self, table_name: str) -> None:
-        """Idempotent guard: re-run SCHEMA if a table is missing."""
-        row = self.conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
-            (table_name,),
-        ).fetchone()
-        if row is not None:
-            return
-        with self.conn:
-            self.conn.executescript(SCHEMA)
-
     def _migrate_karma_intents_unique_trade_id(self) -> None:
         """Rebuild karma_intents with UNIQUE(trade_id) and contributor_id if not already present.
 
