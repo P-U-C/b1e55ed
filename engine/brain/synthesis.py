@@ -40,8 +40,11 @@ def _mean(xs: list[float]) -> float | None:
 
 
 _DEFAULT_DECAY_LAMBDA = 0.01  # half-life ~70 minutes
+# Shannon: information is the resolution of uncertainty. At lambda=0.01, resolving power halves every 70 minutes.
 
 
+# Ebbinghaus charted the forgetting curve in 1885: R = exp(-t/S). He used nonsense syllables.
+# Memory, radioactive isotope, market signal -- the mathematics of decay is invariant across domains.
 def _freshness_factor(event_ts: datetime, now: datetime, lambda_: float = _DEFAULT_DECAY_LAMBDA) -> float:
     """Exponential freshness decay: exp(-λ × age_minutes). Clamped to [0.01, 1.0]."""
     if event_ts.tzinfo is None:
