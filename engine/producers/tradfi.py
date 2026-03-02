@@ -24,7 +24,15 @@ from typing import Any
 
 import httpx
 
-from engine.core.events import EventType, TradFiSignalPayload
+from engine.core.events import (
+    AbstentionReason,
+    EventType,
+    ForecastLifecycleState,
+    ForecastPayload,
+    TradFiSignalPayload,
+)
+from engine.core.forecast import abstain, compute_reasoning_hash, make_forecast_id
+from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
@@ -186,12 +194,80 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
     return f"{EventType.SIGNAL_TRADFI_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
+class TradFiBasisInterpreter(Interpreter):
+    """Rule-based interpreter for TradFi basis/carry signals → FORECAST_V1."""
+
+    def interpret(
+        self,
+        *,
+        asset: str,
+        horizon: str,
+        signals: list[dict[str, Any]],
+        regime_tag: str = "unknown",
+        visible_signal_refs: list[str] | None = None,
+    ) -> ForecastPayload:
+        asset_signals = [s for s in signals if str(s.get("symbol", "")).upper() == asset.upper()]
+
+        if not asset_signals:
+            return abstain(
+                source=self.source,
+                asset=asset,
+                horizon=horizon,
+                reason=AbstentionReason.INSUFFICIENT_DATA,
+                regime_tag=regime_tag,
+                visible_signal_refs=visible_signal_refs or [],
+            )
+
+        sig = asset_signals[0]
+        direction = sig.get("direction", "flat")
+        raw_confidence = float(sig.get("confidence", 0.0))
+
+        if direction == "long" and raw_confidence >= 0.3:
+            action = "long"
+        elif direction == "short" and raw_confidence >= 0.3:
+            action = "short"
+        else:
+            action = "flat"
+
+        if raw_confidence < 0.3 or action == "flat":
+            return abstain(
+                source=self.source,
+                asset=asset,
+                horizon=horizon,
+                reason=AbstentionReason.INSUFFICIENT_DATA,
+                regime_tag=regime_tag,
+                visible_signal_refs=visible_signal_refs or [],
+            )
+
+        reasoning_hash = compute_reasoning_hash(
+            candidate={"action": action, "confidence": raw_confidence, "asset": asset},
+            critique="",
+            rationale=sig.get("signal_reason", ""),
+        )
+
+        return ForecastPayload(
+            forecast_id=make_forecast_id(),
+            asset=asset,
+            horizon=horizon,
+            action=action,
+            confidence=raw_confidence,
+            calibrated=False,
+            source=self.source,
+            regime_tag=regime_tag,
+            lifecycle_state=ForecastLifecycleState.NEW,
+            reasoning_hash=reasoning_hash,
+            visible_signal_refs=visible_signal_refs or [],
+            used_signal_refs=[r for r in (visible_signal_refs or []) if r],
+        )
+
+
 @register("tradfi-basis", domain="tradfi")
 class TradFiBasisProducer(BaseProducer):
     """Produce basis/carry signals for the configured universe."""
 
     schedule = "*/30 * * * *"
     mcp_source_url: str | None = None  # override with MCP server URL when available
+    interpreter: Interpreter | NullInterpreter | None = TradFiBasisInterpreter()
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_TRADFI_BASIS_URL") or os.getenv("TRADFI_BASIS_URL")
@@ -272,8 +348,18 @@ class TradFiBasisProducer(BaseProducer):
             raw = self.collect()
             if not raw:
                 health = ProducerHealth.DEGRADED
-            events = self.normalize(raw)
-            published = self.publish(events)
+            normalized_events = self.normalize(raw)
+            published = self.publish(normalized_events)
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            for symbol in symbols:
+                self.emit_forecast(
+                    asset=symbol,
+                    horizon="4h",
+                    signals=[e.payload for e in normalized_events],
+                    regime_tag="unknown",
+                    visible_signal_refs=[],
+                )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR
