@@ -14,7 +14,7 @@ but expressed in the v3 event + types contract.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
@@ -47,6 +47,8 @@ class ConvictionResult:
     pcs: float
     cts: float
     final_conviction: float
+    domain_scores: dict[str, float] = field(default_factory=dict)
+    weights_used: dict[str, float] = field(default_factory=dict)
 
 
 class CounterThesis:
@@ -149,9 +151,25 @@ class ConvictionEngine:
             confidence=float(_clamp((synthesis.snapshot.features and len(synthesis.snapshot.features) or 0) / 6.0, 0.0, 1.0)),
         )
 
-        return ConvictionResult(score=score, pcs=pcs, cts=cts, final_conviction=final)
+        return ConvictionResult(
+            score=score,
+            pcs=pcs,
+            cts=cts,
+            final_conviction=final,
+            domain_scores=dict(synthesis.domain_scores),
+            weights_used=dict(synthesis.weights_used),
+        )
 
-    def emit(self, result: ConvictionResult, *, cycle_id: str, source: str = "brain.conviction") -> None:
+    def emit(
+        self,
+        result: ConvictionResult,
+        *,
+        cycle_id: str,
+        source: str = "brain.conviction",
+        producer_name: str = "",
+        event_id: str = "",
+        contribution_weight: float = 1.0,
+    ) -> None:
         p = {
             "symbol": result.score.symbol,
             "direction": result.score.direction,
@@ -165,7 +183,11 @@ class ConvictionEngine:
         }
         self.db.append_event(event_type=EventType.CONVICTION_V1, payload=p, source=source, trace_id=cycle_id)
 
-        # Also persist to conviction_scores table for learning.
+        producer = producer_name or ""
+        signal_event_id = event_id or ""
+        contribution = float(contribution_weight)
+
+        # Also persist to conviction_scores + conviction_log tables for learning.
         with self.db.conn:
             self.db.conn.execute(
                 """
@@ -190,3 +212,35 @@ class ConvictionEngine:
                     result.score.confidence,
                 ),
             )
+
+            for domain, domain_score in result.domain_scores.items():
+                domain_weight = float(result.weights_used.get(domain, 0.0))
+                weighted_contribution = float(domain_score) * domain_weight * contribution
+                self.db.conn.execute(
+                    """
+                    INSERT INTO conviction_log (
+                        cycle_id,
+                        symbol,
+                        domain,
+                        domain_score,
+                        domain_weight,
+                        weighted_contribution,
+                        producer_name,
+                        event_id,
+                        contribution_weight,
+                        ts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cycle_id,
+                        result.score.symbol,
+                        domain,
+                        float(domain_score),
+                        domain_weight,
+                        weighted_contribution,
+                        producer,
+                        signal_event_id,
+                        contribution,
+                        result.score.ts.isoformat(),
+                    ),
+                )
