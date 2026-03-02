@@ -237,11 +237,27 @@ CREATE TABLE IF NOT EXISTS conviction_log (
     domain_score REAL NOT NULL,
     domain_weight REAL NOT NULL,
     weighted_contribution REAL NOT NULL,
+    producer_name TEXT NOT NULL DEFAULT '',
+    event_id TEXT NOT NULL DEFAULT '',
+    contribution_weight REAL NOT NULL DEFAULT 1.0,
     ts TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_conviction_log_cycle ON conviction_log(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_conviction_log_symbol ON conviction_log(symbol);
+
+CREATE TABLE IF NOT EXISTS forecast_attribution (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_id TEXT NOT NULL,
+    conviction_id TEXT NOT NULL,
+    position_id TEXT,
+    contribution_weight REAL NOT NULL,
+    disposition TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_attribution_forecast ON forecast_attribution(forecast_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_attribution_conviction ON forecast_attribution(conviction_id);
 
 -- ============================================================
 -- Producer Health
@@ -500,6 +516,9 @@ class Database:
         self._ensure_column("events", "contributor_id", "TEXT")
         self._ensure_column("events", "hash_version", "INT DEFAULT 1")
         self._ensure_column("karma_intents", "contributor_id", "TEXT")
+        self._ensure_column("conviction_log", "producer_name", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("conviction_log", "event_id", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("conviction_log", "contribution_weight", "REAL NOT NULL DEFAULT 1.0")
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
