@@ -19,8 +19,6 @@ import ast
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -95,34 +93,50 @@ def test_max_blessings_negative() -> None:
 
 
 # ---------------------------------------------------------------------------
-# LLMClient — agent mode (Anthropic)
+# LLMClient — agent mode (XAI)
 # ---------------------------------------------------------------------------
 
 
 def test_llm_client_agent_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """agent mode calls anthropic.Anthropic with the correct model."""
-    # Build a fake anthropic module
-    fake_content = SimpleNamespace(text="mock response")
-    fake_message = SimpleNamespace(content=[fake_content])
-    fake_create = MagicMock(return_value=fake_message)
-    fake_client_instance = MagicMock()
-    fake_client_instance.messages.create = fake_create
-    fake_anthropic_cls = MagicMock(return_value=fake_client_instance)
+    """agent mode calls XAI chat completions with the correct payload."""
 
-    fake_anthropic_module = MagicMock()
-    fake_anthropic_module.Anthropic = fake_anthropic_cls
+    called: dict[str, object] = {}
 
-    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic_module)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-agent")
+    class _FakeResp:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "mock response"}}]}
+
+    def _fake_post(url: str, *, headers: dict[str, str], json: dict[str, object], timeout: float) -> _FakeResp:
+        called["url"] = url
+        called["headers"] = headers
+        called["json"] = json
+        called["timeout"] = timeout
+        return _FakeResp()
+
+    monkeypatch.setenv("XAI_API_KEY", "test-key-agent")
+    monkeypatch.setattr(hook.httpx, "post", _fake_post)
 
     client = hook.LLMClient(mode="agent", api_key="test-key-agent")
-    result = client.complete("system", "user")
+    result = client.generate(system="system", user="user")
 
     assert result == "mock response"
-    fake_anthropic_cls.assert_called_once_with(api_key="test-key-agent")
-    call_kwargs = fake_create.call_args
-    assert call_kwargs.kwargs["model"] == hook.ANTHROPIC_MODEL
-    assert call_kwargs.kwargs["system"] == "system"
+    assert called["url"] == f"{hook.XAI_BASE_URL}/chat/completions"
+    assert called["timeout"] == 60.0
+
+    headers = called["headers"]
+    assert isinstance(headers, dict)
+    assert headers["Authorization"] == "Bearer test-key-agent"
+
+    payload = called["json"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == hook.XAI_MODEL
+    assert payload["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "user"},
+    ]
 
 
 def test_llm_client_unsupported_modes() -> None:

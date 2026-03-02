@@ -4,7 +4,7 @@ Analyzes PR diffs and adds brand-appropriate cultural references as
 comments/docstrings to changed Python files. Blessings scale logarithmically
 with PR size: small PRs get focused attention, large PRs get signal not noise.
 
-Agent usage (primary path — local, uses ANTHROPIC_API_KEY from env):
+Agent usage (primary path — local, uses XAI_API_KEY from env):
     python scripts/b1e55ing.py \\
         --pr-number 77 \\
         --github-token $GH_TOKEN \\
@@ -47,7 +47,8 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 REPO = "P-U-C/b1e55ed"
-ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
+XAI_MODEL = "grok-3-mini"
+XAI_BASE_URL = "https://api.x.ai/v1"
 MAX_EGGS_PER_FILE = 2
 REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.md"
 
@@ -130,46 +131,48 @@ def max_blessings(n_files: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# LLM abstraction — agent (Anthropic) only
+# LLM abstraction — agent (XAI) only
 # ---------------------------------------------------------------------------
 
 
 class LLMClient:
-    """Thin wrapper around the Anthropic Claude API.
+    """Thin wrapper around the XAI (Grok) chat completions API.
 
-    Lazy import — anthropic is not a hard dependency at import time.
-    If the agent is offline, b1e55ing-merge.yml posts an on-brand curse instead.
+    Uses the OpenAI-compatible endpoint at https://api.x.ai/v1.
+    httpx is already a dependency — no new imports needed.
     """
 
     def __init__(self, mode: str, api_key: str = "") -> None:
         if mode not in ("agent",):
             raise ValueError(f"Unknown mode: {mode!r} — only 'agent' is supported")
         self.mode = mode
-        self.api_key = api_key
+        self.api_key = api_key or os.environ.get("XAI_API_KEY", "")
+        if not self.api_key:
+            raise RuntimeError("XAI_API_KEY is not set — cannot proceed in agent mode")
 
-    def complete(self, system: str, user: str) -> str:
-        """Return LLM text completion given *system* and *user* prompts."""
-        return self._call_anthropic(system, user)
-
-    def _call_anthropic(self, system: str, user: str) -> str:
-        """Anthropic Claude via the official SDK. API key from env."""
-        try:
-            import anthropic  # lazy — not a hard dep at import time
-        except ImportError as exc:
-            raise RuntimeError("anthropic package not installed — run: pip install anthropic") from exc
-
-        key = self.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
-
-        client = anthropic.Anthropic(api_key=key)
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=2048,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+    def generate(self, *, system: str, user: str) -> str:
+        """Call XAI chat completions. Returns the assistant message text."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "model": XAI_MODEL,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 2048,
+        }
+        resp = httpx.post(
+            f"{XAI_BASE_URL}/chat/completions",
+            headers=headers,
+            json=body,
+            timeout=60.0,
         )
-        return str(message.content[0].text)  # type: ignore[union-attr]
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         "--mode",
         required=True,
         choices=["agent"],
-        help="LLM backend: 'agent' (Anthropic via heartbeat — only supported mode)",
+        help="LLM backend: 'agent' (Grok/XAI via heartbeat — only supported mode)",
     )
     parser.add_argument("--base-branch", default="", help="Base branch (informational, optional)")
     parser.add_argument("--dry-run", action="store_true", help="Print suggestions without writing files")
@@ -454,9 +457,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Resolve API key from environment
     if args.mode == "agent":
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        api_key = os.environ.get("XAI_API_KEY", "")
         if not api_key:
-            log.error("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
+            log.error("XAI_API_KEY is not set — cannot proceed in agent mode")
             return 1
 
     llm = LLMClient(mode=args.mode, api_key=api_key)
@@ -505,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
     user_prompt = build_user_prompt(pr_title, pr_body, file_contexts, reference_text, budget)
     log.info("calling %s (budget: %d)", args.mode, budget)
     try:
-        raw_response = llm.complete(SYSTEM_PROMPT, user_prompt)
+        raw_response = llm.generate(system=SYSTEM_PROMPT, user=user_prompt)
     except Exception as exc:  # noqa: BLE001
         exc_str = str(exc)
         if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str or "quota" in exc_str.lower():
