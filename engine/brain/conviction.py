@@ -43,6 +43,8 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
 
 # Regime-dependent hard caps on conviction magnitude (0-10 scale).
 _REGIME_CAPS: dict[str, float] = {
+    # Cromwell's Rule: in the bowels of Christ, think it possible you may be mistaken.
+    # In CRISIS, even a strong thesis can be wrong. The cap is epistemic humility expressed as arithmetic.
     "BULL": 10.0,
     "BEAR": 7.0,
     "TRANSITION": 6.0,
@@ -154,6 +156,7 @@ class ConvictionEngine:
         cap = _REGIME_CAPS.get(regime_key, _REGIME_CAPS["TRANSITION"])
         capped_by_regime = magnitude > cap
         pre_cap_magnitude = magnitude if capped_by_regime else None
+        # Kelly: optimal bet size shrinks as variance expands. In CRISIS, variance is the regime. The cap is the Kelly denominator responding.
         magnitude = min(magnitude, cap)
 
         payload_wo_commit = {
@@ -252,6 +255,7 @@ class ConvictionEngine:
                 domain_weight = float(result.weights_used.get(domain, 0.0))
                 weighted_contribution = float(domain_score) * domain_weight * contribution
 
+                # Hayek: the knowledge that matters is dispersed and particular. The primary feature is the local knowledge that drove this conviction.
                 feature_key: str | None = None
                 feature_value: float | None = None
                 if result.snapshot is not None:

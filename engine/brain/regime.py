@@ -128,6 +128,8 @@ class RegimeDetector:
 
         return RegimeResult(state=state, changed=changed, previous=prev)
 
+    # Ashby's Law of Requisite Variety: a controller needs at least as much variety as the system it controls.
+    # One global regime for n assets has less variety than the market. Per-asset is the correct resolution.
     def detect_for_asset(self, snapshot: FeatureSnapshot) -> RegimeResult:
         """Compute regime for a single asset using its own feature snapshot.
 
@@ -167,6 +169,7 @@ class RegimeDetector:
 
         prev = self._last_regime
 
+        # Von Foerster: the observer is part of the system. An asset's regime is local. The global frame is an approximation.
         # No usable indicators: carry forward last known global regime, else
         # default to TRANSITION for deterministic behavior.
         if not evidence:
