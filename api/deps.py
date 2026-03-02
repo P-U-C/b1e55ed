@@ -88,12 +88,17 @@ def get_publisher(request: Request) -> object | None:
     (publish.github.app_id + B1E55ED_GITHUB_APP_KEY env var).
     Fail-open — returns None on failure rather than raising.
     """
+    from engine.config.github_app_defaults import COMMUNITY_APP_ID
     from engine.integrations.github_publish import make_publisher
 
     cfg = get_config(request)
     pub_cfg = cfg.publish.github
     has_token = bool(pub_cfg.token)
     has_app = int(pub_cfg.app_id or 0) > 0
+
+    # Fall back to baked-in community app constants if config has app_id: 0
+    if not has_app and COMMUNITY_APP_ID > 0:
+        has_app = True
 
     if not has_token and not has_app:
         return None
@@ -104,8 +109,13 @@ def get_publisher(request: Request) -> object | None:
             from engine.integrations.github_app import GitHubAppAuth
 
             app_auth = GitHubAppAuth.from_env()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).warning("get_publisher: GitHubAppAuth.from_env() failed: %s", e)
+            # If app auth fails and no token, bail
+            if not has_token:
+                return None
 
     return make_publisher(
         owner=pub_cfg.owner,
