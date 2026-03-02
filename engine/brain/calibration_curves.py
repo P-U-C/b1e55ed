@@ -65,7 +65,7 @@ def update_calibration_curves(
                 continue
 
             sample_count = len(rows)
-            win_rate = sum(1 for r in rows if float(r[0]) == 1.0) / sample_count
+            win_rate = sum(1 for r in rows if r[0] is not None and float(r[0]) == 1.0) / sample_count
             brier_values = [float(r[1]) for r in rows if r[1] is not None]
             mean_brier = sum(brier_values) / len(brier_values) if brier_values else 0.0
 

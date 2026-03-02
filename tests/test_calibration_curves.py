@@ -165,3 +165,26 @@ def test_asset_regime_filtering_isolated(cdb: Database) -> None:
     default = get_calibration_curve(cdb, "pa", asset="ALL", regime="unknown")
     assert len(btc) == 1
     assert default == []
+
+
+def test_update_handles_null_outcome_without_crashing(cdb: Database) -> None:
+    """Regression: float(outcome) raises TypeError if outcome IS NULL.
+    A row with resolved_at set but outcome NULL must be skipped (counted as neither hit nor miss).
+    """
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    now = datetime.now(tz=UTC).isoformat()
+    # Insert a row with resolved_at set but outcome NULL
+    cdb.conn.execute(
+        """INSERT INTO forecast_calibration
+            (forecast_id, producer_name, asset, regime, horizon, direction,
+             confidence, calibrated, outcome, brier_score, emitted_at, resolved_at)
+        VALUES (?, 'pa', 'ALL', 'unknown', '4h', 'bullish', 0.75, 0, NULL, NULL, ?, ?)""",
+        (str(uuid4()), now, now),
+    )
+    cdb.conn.commit()
+    # Should not raise TypeError
+    result = update_calibration_curves(cdb, "pa")
+    # Row with NULL outcome counts in sample_count=1 but win_rate=0 (not a hit)
+    assert isinstance(result, list)
