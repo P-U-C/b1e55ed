@@ -32,7 +32,7 @@ from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.metrics import MetricsRegistry
 from engine.core.models import Event, compute_event_hash
-from engine.core.types import ProducerHealth, ProducerResult
+from engine.core.types import CANONICAL_DOMAINS, ProducerHealth, ProducerResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +85,8 @@ class BaseProducer(ABC):
 
     def __init__(self, ctx: ProducerContext) -> None:
         self.ctx = ctx
+        if self.domain not in CANONICAL_DOMAINS:
+            raise ValueError(f"Producer '{self.name}' has invalid domain '{self.domain}'. Must be one of: {sorted(CANONICAL_DOMAINS)}")
         self._register_with_mcp()
 
     def _register_with_mcp(self) -> None:

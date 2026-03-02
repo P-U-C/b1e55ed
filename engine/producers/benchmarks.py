@@ -35,7 +35,7 @@ def _ema(prices: list[float], period: int) -> float:
     return ema
 
 
-@register("benchmark.momentum", domain="benchmark")
+@register("benchmark.momentum", domain="events")
 class BenchmarkMomentumProducer(BaseProducer):
     """Naive EMA-20 crossover. Fixed confidence 0.50."""
 
@@ -99,7 +99,7 @@ class BenchmarkMomentumProducer(BaseProducer):
         return out
 
 
-@register("benchmark.flat", domain="benchmark")
+@register("benchmark.flat", domain="events")
 class BenchmarkFlatProducer(BaseProducer):
     """Always-flat baseline. Catches overtrading."""
 
@@ -131,7 +131,7 @@ class BenchmarkFlatProducer(BaseProducer):
         return out
 
 
-@register("benchmark.equal_weight", domain="benchmark")
+@register("benchmark.equal_weight", domain="events")
 class BenchmarkEqualWeightProducer(BaseProducer):
     """Equal-weight vote across all recent signals from real producers."""
 
@@ -209,7 +209,7 @@ class BenchmarkEqualWeightProducer(BaseProducer):
         return out
 
 
-@register("benchmark.discretionary", domain="benchmark")
+@register("benchmark.discretionary", domain="events")
 class BenchmarkDiscretionaryProducer(BaseProducer):
     """Reads operator-injected signals from the discretionary_signals table."""
 

@@ -25,7 +25,7 @@ from typing import Any, Final
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType
-from engine.core.types import FeatureSnapshot
+from engine.core.types import CANONICAL_DOMAINS, FeatureSnapshot
 
 
 def _clamp01(x: float) -> float:
@@ -169,7 +169,7 @@ class FeatureExtractor:
 class VectorSynthesis:
     """v2 synthesis engine: builds feature snapshots + computes a weighted score."""
 
-    DOMAINS: Final[list[str]] = ["curator", "onchain", "tradfi", "social", "technical", "events"]
+    DOMAINS: Final[list[str]] = sorted(CANONICAL_DOMAINS)
 
     def __init__(self, config: Config, db: Database):
         self.config = config
