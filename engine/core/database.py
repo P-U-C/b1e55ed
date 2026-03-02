@@ -500,6 +500,30 @@ CREATE TABLE IF NOT EXISTS producer_correlation (
     UNIQUE(producer_a, producer_b, asset, regime)
 );
 CREATE INDEX IF NOT EXISTS idx_pc_pair ON producer_correlation(producer_a, producer_b);
+
+-- ============================================================
+-- Forecast Calibration (P2.1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forecast_calibration (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_id TEXT NOT NULL UNIQUE,
+    producer_name TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    horizon TEXT NOT NULL,
+    direction TEXT NOT NULL,           -- 'bullish' | 'bearish' | 'neutral'
+    confidence REAL NOT NULL,
+    calibrated INTEGER NOT NULL DEFAULT 0,  -- 0 = raw, 1 = isotonic-adjusted
+    outcome REAL,                      -- 1.0 (hit) | 0.0 (miss) | NULL (unresolved)
+    brier_score REAL,                  -- computed on resolution: (confidence - outcome)^2
+    price_at_emit REAL,                -- price when forecast was emitted (if available)
+    price_at_resolve REAL,             -- price when resolved
+    emitted_at TEXT NOT NULL,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fc_producer ON forecast_calibration(producer_name);
+CREATE INDEX IF NOT EXISTS idx_fc_unresolved ON forecast_calibration(resolved_at) WHERE resolved_at IS NULL;
 """
 
 
@@ -560,6 +584,8 @@ class Database:
         self._ensure_column("conviction_log", "feature_value", "REAL")
         # P2.3 — producer correlation matrix
         self._ensure_table_exists("producer_correlation")
+        # P2.1 — forecast calibration
+        self._ensure_table_exists("forecast_calibration")
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_table_exists(self, table: str) -> None:
@@ -578,6 +604,17 @@ class Database:
             return
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+    def _ensure_table_exists(self, table_name: str) -> None:
+        """Idempotent guard: re-run SCHEMA if a table is missing."""
+        row = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        if row is not None:
+            return
+        with self.conn:
+            self.conn.executescript(SCHEMA)
 
     def _migrate_karma_intents_unique_trade_id(self) -> None:
         """Rebuild karma_intents with UNIQUE(trade_id) and contributor_id if not already present.
