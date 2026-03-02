@@ -44,8 +44,8 @@ DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
     "tradfi.basis_scale": {
         "producer_name": "tradfi_basis",
         "param_type": "scale",
-        "value_default": 15.0,
-        "notes": "Basis deviation scale factor. Hardcoded was 15.0.",
+        "value_default": 8.0,
+        "notes": "Basis deviation scale factor. Hardcoded was 8.0.",
     },
 }
 

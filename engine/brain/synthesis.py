@@ -314,7 +314,7 @@ class VectorSynthesis:
                     _bc = _gp2(self.db, "tradfi.basis_optimal_center")
                     _bs = _gp2(self.db, "tradfi.basis_scale")
                 except Exception:
-                    _bc, _bs = 5.0, 15.0
+                    _bc, _bs = 5.0, 8.0
                 scores.append(_clamp01(1.0 - abs(float(basis) - _bc) / _bs))
             oi = f.get("oi_change_pct")
             if oi is not None:
