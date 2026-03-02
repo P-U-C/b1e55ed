@@ -586,6 +586,8 @@ class Database:
         self._ensure_table_exists("producer_correlation")
         # P2.1 — forecast calibration
         self._ensure_table_exists("forecast_calibration")
+        # P2.4 — learnable scoring parameters
+        self._ensure_table_exists("scoring_params")
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_table_exists(self, table: str) -> None:
