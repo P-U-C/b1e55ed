@@ -466,6 +466,40 @@ CREATE TABLE IF NOT EXISTS discretionary_signals (
     expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
+
+-- ============================================================
+-- Learnable Scoring Parameters (P2.4)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scoring_params (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    param_key TEXT NOT NULL UNIQUE,
+    producer_name TEXT NOT NULL,
+    param_type TEXT NOT NULL,
+    value_default REAL NOT NULL,
+    value_shadow REAL NOT NULL,
+    value_live REAL NOT NULL,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sp_producer ON scoring_params(producer_name);
+
+-- ============================================================
+-- Producer Correlation Matrix (P2.3)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_correlation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer_a TEXT NOT NULL,
+    producer_b TEXT NOT NULL,
+    asset TEXT NOT NULL DEFAULT 'ALL',
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    pearson_r REAL,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    window_days INTEGER NOT NULL DEFAULT 30,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(producer_a, producer_b, asset, regime)
+);
+CREATE INDEX IF NOT EXISTS idx_pc_pair ON producer_correlation(producer_a, producer_b);
 """
 
 
@@ -524,7 +558,19 @@ class Database:
         # Popper: a conviction that cannot be traced to evidence is not a conviction -- it is a preference. feature_key is the evidence.
         self._ensure_column("conviction_log", "feature_key", "TEXT")
         self._ensure_column("conviction_log", "feature_value", "REAL")
+        # P2.3 — producer correlation matrix
+        self._ensure_table_exists("producer_correlation")
         self._migrate_karma_intents_unique_trade_id()
+
+    def _ensure_table_exists(self, table: str) -> None:
+        row = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+            (table,),
+        ).fetchone()
+        if row is not None:
+            return
+        with self.conn:
+            self.conn.executescript(SCHEMA)
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
         cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
