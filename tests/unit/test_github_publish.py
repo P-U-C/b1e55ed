@@ -9,6 +9,8 @@ import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from engine.config.github_app_defaults import COMMUNITY_APP_ID, COMMUNITY_INSTALLATION_ID
+from engine.integrations.github_app import GitHubAppAuth
 from engine.integrations.github_publish import publish_attestation_to_github
 
 FAKE_ATTESTATION: dict[str, Any] = {
@@ -235,3 +237,14 @@ class TestPublishTokenSafety:
 
         assert result is None
         mock_client.post.assert_not_called()
+
+
+def test_from_env_uses_baked_in_defaults_when_env_vars_missing(monkeypatch) -> None:
+    monkeypatch.delenv("B1E55ED_GITHUB_APP_ID", raising=False)
+    monkeypatch.delenv("B1E55ED_GITHUB_INSTALLATION_ID", raising=False)
+    monkeypatch.setenv("B1E55ED_GITHUB_APP_KEY", "dummy-private-key")
+
+    auth = GitHubAppAuth.from_env()
+
+    assert auth._app_id == COMMUNITY_APP_ID
+    assert auth._installation_id == COMMUNITY_INSTALLATION_ID
