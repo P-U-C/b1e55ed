@@ -24,6 +24,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from time import perf_counter
 
 try:
     from datetime import UTC  # py311+
@@ -89,7 +90,10 @@ class BrainOrchestrator:
             raise RuntimeError(f"Brain cycle blocked by kill switch (level={ks_level})")
 
         cycle_id = str(uuid.uuid4())
-        now = datetime.now(tz=UTC)
+        cycle_started_at = datetime.now(tz=UTC)
+        cycle_started_perf = perf_counter()
+        now = cycle_started_at
+        symbols_upper = [s.upper() for s in symbols]
 
         self.hooks.pre_cycle(PreCycleContext(config=self.config, db=self.db, cycle_id=cycle_id))
 
@@ -118,24 +122,42 @@ class BrainOrchestrator:
         except Exception:
             logging.getLogger("b1e55ed.orchestrator").warning("KS-4 degradation check failed", exc_info=True)
 
-        # Emit a cycle marker (useful for auditing)
-        self.db.append_event(
-            event_type=EventType.BRAIN_CYCLE_V1,
-            payload={"cycle_id": cycle_id, "symbols": [s.upper() for s in symbols]},
-            source="brain.orchestrator",
-            trace_id=cycle_id,
-        )
-
         synth_results: dict[str, SynthesisResult] = {}
+        synthesize_with_regime = getattr(self.synthesis, "synthesize_with_regime", None)
+
         for sym in symbols:
-            synth_results[sym.upper()] = self.synthesis.synthesize(
-                cycle_id=cycle_id,
-                symbol=sym,
-                as_of=now,
-                quality_adjustment=q_mult,
-            )
+            sym_upper = sym.upper()
+            if callable(synthesize_with_regime):
+                try:
+                    synth_results[sym_upper] = synthesize_with_regime(
+                        cycle_id=cycle_id,
+                        symbol=sym,
+                        as_of=now,
+                        quality_adjustment=q_mult,
+                        regime_detector=self.regime,
+                    )
+                except Exception:
+                    logging.getLogger("b1e55ed.orchestrator").warning(
+                        "synthesize_with_regime failed for %s; falling back to synthesize()",
+                        sym_upper,
+                        exc_info=True,
+                    )
+                    synth_results[sym_upper] = self.synthesis.synthesize(
+                        cycle_id=cycle_id,
+                        symbol=sym,
+                        as_of=now,
+                        quality_adjustment=q_mult,
+                    )
+            else:
+                synth_results[sym_upper] = self.synthesis.synthesize(
+                    cycle_id=cycle_id,
+                    symbol=sym,
+                    as_of=now,
+                    quality_adjustment=q_mult,
+                )
+
             # Persist feature snapshot row (reproducibility)
-            snap = synth_results[sym.upper()].snapshot
+            snap = synth_results[sym_upper].snapshot
             with self.db.conn:
                 self.db.conn.execute(
                     """
@@ -246,6 +268,74 @@ class BrainOrchestrator:
                     _log.info("watch: %s confidence=%.2f", sym, confidence)
                 elif confidence < 0.45:
                     _log.debug("low conviction: %s confidence=%.2f", sym, confidence)
+
+        domain_scores_payload: dict[str, dict[str, float]] = {}
+        regime_payload: dict[str, str] = {}
+        feature_vectors_payload: dict[str, dict[str, dict[str, float]]] = {}
+
+        for sym in symbols_upper:
+            synth = synth_results.get(sym)
+            if synth is None:
+                domain_scores_payload[sym] = {}
+                regime_payload[sym] = "unknown"
+                feature_vectors_payload[sym] = {}
+                continue
+
+            domain_scores_payload[sym] = {domain: float(score) for domain, score in synth.domain_scores.items()}
+            regime_payload[sym] = str(getattr(synth, "regime_tag", "") or "unknown")
+            feature_vectors_payload[sym] = {
+                domain: {key: float(value) for key, value in feature_map.items()} for domain, feature_map in synth.snapshot.features.items()
+            }
+
+        conviction_payload: dict[str, dict[str, float | str | bool | None]] = {}
+        for sym, conv in convictions.items():
+            conviction_payload[sym] = {
+                "pcs": float(conv.pcs),
+                "magnitude": float(conv.score.magnitude),
+                "direction": str(conv.score.direction),
+                "capped_by_regime": bool(conv.capped_by_regime),
+                "pre_cap_magnitude": float(conv.pre_cap_magnitude) if conv.pre_cap_magnitude is not None else None,
+            }
+
+        cycle_emitted_at = datetime.now(tz=UTC)
+        forecast_ids_payload: dict[str, list[str]] = {sym: [] for sym in symbols_upper}
+        try:
+            forecast_events = self.db.get_events(
+                event_type=EventType.FORECAST_V1,
+                since=cycle_started_at,
+                until=cycle_emitted_at,
+                limit=5000,
+            )
+            for ev in reversed(forecast_events):
+                payload = ev.payload if isinstance(ev.payload, dict) else {}
+                forecast_symbol = str(payload.get("asset") or payload.get("symbol") or "").upper()
+                if forecast_symbol in forecast_ids_payload:
+                    forecast_ids_payload[forecast_symbol].append(ev.id)
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").warning(
+                "Failed to collect FORECAST_V1 ids for cycle %s",
+                cycle_id,
+                exc_info=True,
+            )
+
+        cycle_duration_ms = max(0, int((perf_counter() - cycle_started_perf) * 1000))
+
+        self.db.append_event(
+            event_type=EventType.BRAIN_CYCLE_V1,
+            payload={
+                "cycle_id": cycle_id,
+                "symbols": symbols_upper,
+                "domain_scores": domain_scores_payload,
+                "regime": regime_payload,
+                "conviction": conviction_payload,
+                "forecast_ids": forecast_ids_payload,
+                "feature_vectors": feature_vectors_payload,
+                "cycle_duration_ms": cycle_duration_ms,
+                "ts": cycle_emitted_at.isoformat(),
+            },
+            source="brain.orchestrator",
+            trace_id=cycle_id,
+        )
 
         result = CycleResult(
             cycle_id=cycle_id,
