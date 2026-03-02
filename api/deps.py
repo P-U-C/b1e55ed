@@ -88,7 +88,7 @@ def get_publisher(request: Request) -> object | None:
     (publish.github.app_id + B1E55ED_GITHUB_APP_KEY env var).
     Fail-open — returns None on failure rather than raising.
     """
-    from engine.config.github_app_defaults import COMMUNITY_APP_ID
+    from engine.config.github_app_defaults import COMMUNITY_APP_ID, COMMUNITY_REPO
     from engine.integrations.github_publish import make_publisher
 
     cfg = get_config(request)
@@ -119,7 +119,7 @@ def get_publisher(request: Request) -> object | None:
 
     return make_publisher(
         owner=pub_cfg.owner,
-        repo=pub_cfg.repo,
+        repo=pub_cfg.repo or COMMUNITY_REPO,
         token=str(pub_cfg.token or ""),
         labels=pub_cfg.labels,
         app_auth=app_auth,
