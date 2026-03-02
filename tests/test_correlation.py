@@ -106,8 +106,7 @@ def test_update_pair_computes_and_stores(db: Database) -> None:
     assert r == pytest.approx(1.0)
 
     row = db.conn.execute(
-        "SELECT producer_a, producer_b, asset, regime, pearson_r, sample_count, window_days "
-        "FROM producer_correlation WHERE producer_a = ? AND producer_b = ?",
+        "SELECT producer_a, producer_b, asset, regime, pearson_r, sample_count, window_days FROM producer_correlation WHERE producer_a = ? AND producer_b = ?",
         ("pa", "pb"),
     ).fetchone()
     assert row is not None
@@ -132,8 +131,7 @@ def test_update_pair_idempotent_upsert(db: Database) -> None:
 
     count = int(
         db.conn.execute(
-            "SELECT COUNT(*) FROM producer_correlation "
-            "WHERE producer_a = ? AND producer_b = ? AND asset = ? AND regime = ?",
+            "SELECT COUNT(*) FROM producer_correlation WHERE producer_a = ? AND producer_b = ? AND asset = ? AND regime = ?",
             ("pa", "pb", "BTC", "unknown"),
         ).fetchone()[0]
     )

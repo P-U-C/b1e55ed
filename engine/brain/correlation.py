@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _has_column(db: Any, table: str, column: str) -> bool:
     return any(str(r[1]) == column for r in rows)
 
 
-def _pearson(xs: list[float], ys: list[float]) -> Optional[float]:
+def _pearson(xs: list[float], ys: list[float]) -> float | None:
     """Pearson correlation coefficient. Returns None if std dev is 0."""
     if len(xs) != len(ys):
         return None
@@ -68,7 +68,7 @@ def update_correlation_pair(
     asset: str = "ALL",
     regime: str = "unknown",
     window_days: int = 30,
-) -> Optional[float]:
+) -> float | None:
     """Compute and store rolling N-day Pearson correlation between two producers.
 
     Scores are derived from hourly buckets of ``conviction_log.weighted_contribution``.
@@ -98,16 +98,8 @@ def update_correlation_pair(
     """
 
     window_param = f"-{window_days}"
-    rows_a = {
-        str(r[0]): float(r[1])
-        for r in conn.execute(query, (producer_a, asset, asset, window_param)).fetchall()
-        if r[0] is not None and r[1] is not None
-    }
-    rows_b = {
-        str(r[0]): float(r[1])
-        for r in conn.execute(query, (producer_b, asset, asset, window_param)).fetchall()
-        if r[0] is not None and r[1] is not None
-    }
+    rows_a = {str(r[0]): float(r[1]) for r in conn.execute(query, (producer_a, asset, asset, window_param)).fetchall() if r[0] is not None and r[1] is not None}
+    rows_b = {str(r[0]): float(r[1]) for r in conn.execute(query, (producer_b, asset, asset, window_param)).fetchall() if r[0] is not None and r[1] is not None}
 
     common_hours = sorted(set(rows_a.keys()) & set(rows_b.keys()))
     if len(common_hours) < 3:
@@ -142,7 +134,7 @@ def update_all_pairs(
     asset: str = "ALL",
     regime: str = "unknown",
     window_days: int = 30,
-) -> dict[tuple[str, str], Optional[float]]:
+) -> dict[tuple[str, str], float | None]:
     """Compute correlation for every producer pair found in conviction_log."""
     conn = _conn(db)
 
@@ -164,7 +156,7 @@ def update_all_pairs(
         ).fetchall()
     ]
 
-    results: dict[tuple[str, str], Optional[float]] = {}
+    results: dict[tuple[str, str], float | None] = {}
     for i, a in enumerate(producers):
         for b in producers[i + 1 :]:
             results[(a, b)] = update_correlation_pair(db, a, b, asset, regime, window_days)
