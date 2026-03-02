@@ -1,18 +1,17 @@
 """a b1e55ing — Easter egg injection hook for b1e55ed PRs.
 
-Analyzes PR diffs and adds brand-appropriate cultural references as
-comments/docstrings to changed Python files. Blessings scale logarithmically
-with PR size: small PRs get focused attention, large PRs get signal not noise.
+Usage:
 
-Agent usage (primary path — local, uses ANTHROPIC_API_KEY from env):
-    python scripts/b1e55ing.py \\
-        --pr-number 77 \\
-        --github-token $GH_TOKEN \\
-        --mode agent
+  # Step 1 — dump context for AI session to read:
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode dump-context > /tmp/ctx.json
 
-Dry-run (inspect suggestions without writing files):
-    python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN \\
-        --mode agent --dry-run
+  # Step 2 — AI session reads ctx.json, generates eggs, writes to /tmp/eggs.json
+
+  # Step 3 — apply the eggs:
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode apply-eggs --eggs-file /tmp/eggs.json
+
+  # Dry-run (inspect without writing):
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode dry-run --eggs-file /tmp/eggs.json
 
 # 0xb1e55ed = "blessed" — the name is the first egg.
 """
@@ -23,9 +22,7 @@ import argparse
 import ast
 import json
 import logging
-import os
 import sys
-import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -47,59 +44,13 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 REPO = "P-U-C/b1e55ed"
-ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
-MAX_EGGS_PER_FILE = 2
 REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.md"
-
-# Brand-filter phrases that must appear in the system prompt.
-BRAND_FILTER_PHRASES = [
-    "Timeless over trendy",
-    "Conviction over consensus",
-    "Builders over tourists",
-]
-
-SYSTEM_PROMPT = textwrap.dedent("""
-    You are a cultural reference curator for the b1e55ed codebase. Your job is to add
-    meaningful Easter eggs — comments, docstrings, constants — to Python files changed
-    in a PR. You have deep knowledge of the intellectual traditions described in the
-    reference document.
-
-    Rules:
-    - Only add comments, docstrings, or named constants. Never modify logic.
-    - Prefer obscure over obvious — rewards people who read the code.
-    - Every egg must pass the brand filter:
-      Timeless over trendy. Conviction over consensus. Builders over tourists.
-    - No crypto-twitter vernacular. No exclamation marks. Precision carries the energy.
-    - Wit is understated. Humor from precision, not performance.
-    - Maximum 2 eggs per file. Quality over quantity.
-    - If no egg fits naturally, return empty for that file — forced eggs are worse
-      than none.
-
-    Return ONLY valid JSON — no markdown fences, no prose. Schema:
-    {
-      "eggs": [
-        {
-          "file": "<relative path>",
-          "anchor": "<exact string to locate in file>",
-          "placement": "<module_docstring|after_class|before_function|inline_comment|constant>",
-          "content": "<text to insert>",
-          "tradition": "<intellectual_tradition_slug>",
-          "mode": "<obscure|obvious>",
-          "rationale": "<one sentence>"
-        }
-      ],
-      "skipped": ["<file>"],
-      "skip_reasons": {"<file>": "<reason>"}
-    }
-""").strip()
-
+MAX_EGGS_PER_FILE = 2
 
 # ---------------------------------------------------------------------------
 # Scaling — blessings proportional to PR size, with diminishing returns
 # ---------------------------------------------------------------------------
 
-# Explicit tiers so the boundary is unambiguous and readable.
-# Mirrors the docstring table exactly.
 _BUDGET_TIERS: list[tuple[int, int]] = [
     (1, 1),  # 1 file       → 1
     (4, 2),  # 2–4 files    → 2
@@ -130,49 +81,6 @@ def max_blessings(n_files: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# LLM abstraction — agent (Anthropic) only
-# ---------------------------------------------------------------------------
-
-
-class LLMClient:
-    """Thin wrapper around the Anthropic Claude API.
-
-    Lazy import — anthropic is not a hard dependency at import time.
-    If the agent is offline, b1e55ing-merge.yml posts an on-brand curse instead.
-    """
-
-    def __init__(self, mode: str, api_key: str = "") -> None:
-        if mode not in ("agent",):
-            raise ValueError(f"Unknown mode: {mode!r} — only 'agent' is supported")
-        self.mode = mode
-        self.api_key = api_key
-
-    def complete(self, system: str, user: str) -> str:
-        """Return LLM text completion given *system* and *user* prompts."""
-        return self._call_anthropic(system, user)
-
-    def _call_anthropic(self, system: str, user: str) -> str:
-        """Anthropic Claude via the official SDK. API key from env."""
-        try:
-            import anthropic  # lazy — not a hard dep at import time
-        except ImportError as exc:
-            raise RuntimeError("anthropic package not installed — run: pip install anthropic") from exc
-
-        key = self.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
-
-        client = anthropic.Anthropic(api_key=key)
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=2048,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return str(message.content[0].text)  # type: ignore[union-attr]
-
-
-# ---------------------------------------------------------------------------
 # GitHub helpers
 # ---------------------------------------------------------------------------
 
@@ -191,8 +99,8 @@ def fetch_pr_files(pr_number: int, github_token: str) -> list[dict[str, Any]]:
         return resp.json()  # type: ignore[return-value]
 
 
-def fetch_pr_meta(pr_number: int, github_token: str) -> dict[str, Any]:
-    """Return PR title and body."""
+def fetch_pr(pr_number: int, github_token: str) -> dict[str, Any]:
+    """Return PR metadata from the GitHub PR API."""
     url = f"https://api.github.com/repos/{REPO}/pulls/{pr_number}"
     headers = {
         "Authorization": f"Bearer {github_token}",
@@ -205,107 +113,38 @@ def fetch_pr_meta(pr_number: int, github_token: str) -> dict[str, Any]:
         return resp.json()  # type: ignore[return-value]
 
 
-# ---------------------------------------------------------------------------
-# Prompt assembly
-# ---------------------------------------------------------------------------
+def dump_context(pr_number: int, github_token: str) -> dict[str, Any]:
+    """Fetch PR metadata, files, and diffs. Return structured context for AI session."""
+    pr_meta = fetch_pr(pr_number, github_token)
+    files = fetch_pr_files(pr_number, github_token)
+    python_files = [f for f in files if f.get("filename", "").endswith(".py") and f.get("status") != "removed"]
 
-_BLESSING_BUDGET_TABLE = textwrap.dedent("""
-    Blessing budget (logarithmic — quality over quantity):
-      1 file   → 1 blessing total
-      2–4      → 2 blessings total
-      5–10     → 3 blessings total
-      11–20    → 4 blessings total
-      21–50    → 5 blessings total
-      51+      → 6 blessings total (hard cap)
+    reference = ""
+    ref_path = REFERENCE_PATH
+    if ref_path.exists():
+        reference = ref_path.read_text(encoding="utf-8")
 
-    A 50-file PR should feel MORE curated than a 1-file PR, not more cluttered.
-    Allocate your budget to the files where a blessing will land best.
-    Forced eggs are worse than none.
-""").strip()
+    file_contexts: list[dict[str, str]] = []
+    for f in python_files:
+        rel_path = f.get("filename", "")
+        path = Path(rel_path)
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        file_contexts.append(
+            {
+                "path": rel_path,
+                "content": content,
+                "patch": f.get("patch", ""),
+            }
+        )
 
-
-def build_user_prompt(
-    pr_title: str,
-    pr_body: str,
-    file_contexts: list[dict[str, str]],
-    reference_text: str,
-    total_budget: int,
-) -> str:
-    """Assemble the user-facing LLM prompt."""
-    parts: list[str] = [
-        f"PR Title: {pr_title}",
-        f"PR Description: {pr_body or '(none)'}",
-        "",
-        f"You have a total budget of {total_budget} blessing(s) for this PR.",
-        _BLESSING_BUDGET_TABLE,
-        "",
-        "=== EASTER EGG REFERENCE ===",
-        reference_text,
-        "",
-        "=== FILES CHANGED IN THIS PR ===",
-    ]
-
-    for fc in file_contexts:
-        parts.append(f"\n--- {fc['filename']} ---")
-        parts.append("DIFF HUNKS:")
-        parts.append(fc["patch"])
-        parts.append("CURRENT FILE CONTENT (first 100 lines):")
-        parts.append(fc["content_preview"])
-
-    parts.append("")
-    parts.append(
-        f"Analyze the files above. Return JSON with at most {total_budget} egg(s) total, "
-        f"max {MAX_EGGS_PER_FILE} per file. Skipped files must be listed in 'skipped'."
-    )
-    return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Response parsing
-# ---------------------------------------------------------------------------
-
-
-def parse_llm_response(raw: str, total_budget: int | None = None) -> dict[str, Any]:
-    """Parse and validate the JSON response from the LLM.
-
-    Enforces:
-    - Per-file cap of MAX_EGGS_PER_FILE
-    - Global cap of *total_budget* eggs (if provided)
-    Treats malformed JSON as empty.
-    """
-    text = raw.strip()
-    # Strip markdown fences if the model ignores the instruction
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-
-    try:
-        data: dict[str, Any] = json.loads(text)
-    except json.JSONDecodeError as exc:
-        log.warning("LLM returned non-JSON (%s) — treating as no eggs", exc)
-        return {"eggs": [], "skipped": [], "skip_reasons": {}}
-
-    eggs: list[dict[str, Any]] = data.get("eggs", [])
-
-    # Enforce per-file cap
-    file_counts: dict[str, int] = {}
-    capped: list[dict[str, Any]] = []
-    for egg in eggs:
-        fname = egg.get("file", "")
-        count = file_counts.get(fname, 0)
-        if count < MAX_EGGS_PER_FILE:
-            capped.append(egg)
-            file_counts[fname] = count + 1
-        else:
-            log.warning("Capping eggs for %s at %d — extra egg dropped", fname, MAX_EGGS_PER_FILE)
-
-    # Enforce global budget cap
-    if total_budget is not None and len(capped) > total_budget:
-        log.warning("Total eggs (%d) exceeds budget (%d) — trimming", len(capped), total_budget)
-        capped = capped[:total_budget]
-
-    data["eggs"] = capped
-    return data
+    return {
+        "pr_number": pr_number,
+        "pr_title": pr_meta.get("title", ""),
+        "pr_body": pr_meta.get("body", ""),
+        "budget": max_blessings(len(python_files)),
+        "reference": reference,
+        "files": file_contexts,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +269,29 @@ def print_dry_run(eggs: list[dict[str, Any]], skipped: list[str], skip_reasons: 
     print("--- end dry run ---")
 
 
+def _load_eggs_payload(eggs_file: Path) -> dict[str, Any]:
+    """Read and normalize eggs payload from disk."""
+    payload = json.loads(eggs_file.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("eggs file must contain a JSON object")
+
+    eggs = payload.get("eggs", [])
+    skipped = payload.get("skipped", [])
+    skip_reasons = payload.get("skip_reasons", {})
+
+    if not isinstance(eggs, list):
+        eggs = []
+    if not isinstance(skipped, list):
+        skipped = []
+    if not isinstance(skip_reasons, dict):
+        skip_reasons = {}
+
+    payload["eggs"] = eggs
+    payload["skipped"] = skipped
+    payload["skip_reasons"] = skip_reasons
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -442,97 +304,54 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["agent"],
-        help="LLM backend: 'agent' (Anthropic via heartbeat — only supported mode)",
+        choices=["dump-context", "apply-eggs", "dry-run"],
+        help="Operation mode",
     )
+    parser.add_argument("--eggs-file", default="", help="Path to JSON file containing egg suggestions")
     parser.add_argument("--base-branch", default="", help="Base branch (informational, optional)")
-    parser.add_argument("--dry-run", action="store_true", help="Print suggestions without writing files")
     parser.add_argument("--repo-root", default=".", help="Path to repo root (default: cwd)")
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()
 
-    # Resolve API key from environment
-    if args.mode == "agent":
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            log.error("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
-            return 1
+    if args.mode == "dump-context":
+        context = dump_context(args.pr_number, args.github_token)
+        print(json.dumps(context, ensure_ascii=False))
+        return 0
 
-    llm = LLMClient(mode=args.mode, api_key=api_key)
-
-    # Load reference document
-    if not REFERENCE_PATH.exists():
-        log.error("Easter egg reference not found at %s", REFERENCE_PATH)
+    if not args.eggs_file:
+        log.error("--eggs-file is required for %s mode", args.mode)
         return 1
-    reference_text = REFERENCE_PATH.read_text(encoding="utf-8")
 
-    # Fetch PR metadata
-    log.info("fetching PR #%d metadata", args.pr_number)
-    pr_meta = fetch_pr_meta(args.pr_number, args.github_token)
-    pr_title: str = pr_meta.get("title", "")
-    pr_body: str = pr_meta.get("body", "") or ""
+    eggs_path = Path(args.eggs_file).resolve()
+    if not eggs_path.exists():
+        log.error("eggs file not found: %s", eggs_path)
+        return 1
 
-    # Fetch changed files
-    log.info("fetching PR #%d file list", args.pr_number)
-    pr_files = fetch_pr_files(args.pr_number, args.github_token)
-
-    # Filter to Python files that are added or modified
-    python_files = [f for f in pr_files if f.get("filename", "").endswith(".py") and f.get("status") in ("added", "modified")]
-
-    if not python_files:
-        log.info("no Python files changed — nothing to do")
-        return 0
-
-    n_files = len(python_files)
-    budget = max_blessings(n_files)
-    log.info("%d Python file(s) in scope — blessing budget: %d (mode: %s)", n_files, budget, args.mode)
-
-    # Build per-file context
-    file_contexts: list[dict[str, str]] = []
-    for pf in python_files:
-        fname = pf.get("filename", "")
-        patch = pf.get("patch", "")
-        abs_path = repo_root / fname
-        if abs_path.exists():
-            content_lines = abs_path.read_text(encoding="utf-8").splitlines()
-            content_preview = "\n".join(content_lines[:100])
-        else:
-            content_preview = "(file not available on disk)"
-        file_contexts.append({"filename": fname, "patch": patch, "content_preview": content_preview})
-
-    # Build prompt and call LLM
-    user_prompt = build_user_prompt(pr_title, pr_body, file_contexts, reference_text, budget)
-    log.info("calling %s (budget: %d)", args.mode, budget)
     try:
-        raw_response = llm.complete(SYSTEM_PROMPT, user_prompt)
-    except Exception as exc:  # noqa: BLE001
-        exc_str = str(exc)
-        if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str or "quota" in exc_str.lower():
-            log.warning("LLM quota exhausted — skipping blessing for this PR (not a failure): %s", exc_str[:120])
-            return 0
-        raise
+        payload = _load_eggs_payload(eggs_path)
+    except (json.JSONDecodeError, ValueError) as exc:
+        log.error("invalid eggs payload: %s", exc)
+        return 1
 
-    # Parse response — enforce both per-file and global caps
-    result = parse_llm_response(raw_response, total_budget=budget)
-    eggs: list[dict[str, Any]] = result.get("eggs", [])
-    skipped: list[str] = result.get("skipped", [])
-    skip_reasons: dict[str, str] = result.get("skip_reasons", {})
+    eggs: list[dict[str, Any]] = payload.get("eggs", [])
+    skipped: list[str] = payload.get("skipped", [])
+    skip_reasons: dict[str, str] = payload.get("skip_reasons", {})
 
-    if not eggs:
-        log.info("no eggs suggested for this PR")
-        return 0
-
-    log.info("%d egg(s) suggested across %d file(s)", len(eggs), len({e.get("file") for e in eggs}))
-
-    if args.dry_run:
+    if args.mode == "dry-run":
         print_dry_run(eggs, skipped, skip_reasons)
+        would_apply = 0
+        for egg in eggs:
+            rel_path = str(egg.get("file", ""))
+            abs_path = repo_root / rel_path
+            if apply_egg(abs_path, egg, dry_run=True):
+                would_apply += 1
+        log.info("(dry run) %d egg(s) would apply", would_apply)
         return 0
 
-    # Apply patches
     applied = 0
     for egg in eggs:
-        rel_path = egg.get("file", "")
+        rel_path = str(egg.get("file", ""))
         abs_path = repo_root / rel_path
         if apply_egg(abs_path, egg, dry_run=False):
             applied += 1
