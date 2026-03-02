@@ -56,7 +56,7 @@ def test_get_param_returns_default_value_in_shadow_mode(db: Database) -> None:
     assert get_param(db, "tradfi.funding_optimal_center") == pytest.approx(10.0)
     assert get_param(db, "tradfi.funding_scale") == pytest.approx(30.0)
     assert get_param(db, "tradfi.basis_optimal_center") == pytest.approx(5.0)
-    assert get_param(db, "tradfi.basis_scale") == pytest.approx(15.0)
+    assert get_param(db, "tradfi.basis_scale") == pytest.approx(8.0)
 
 
 def test_get_param_returns_updated_value_after_promote_to_live(db: Database) -> None:
@@ -201,7 +201,7 @@ def test_synthesis_basis_score_matches_hardcoded_at_defaults(db: Database, basis
     center = get_param(db, "tradfi.basis_optimal_center")
     scale = get_param(db, "tradfi.basis_scale")
     expected = max(0.0, min(1.0, 1.0 - abs(float(basis) - center) / scale))
-    result = max(0.0, min(1.0, 1.0 - abs(float(basis) - 5.0) / 15.0))
+    result = max(0.0, min(1.0, 1.0 - abs(float(basis) - 5.0) / 8.0))
     assert result == pytest.approx(expected)
 
 
