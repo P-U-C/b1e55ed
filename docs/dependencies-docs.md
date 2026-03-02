@@ -654,3 +654,13 @@ engine/producers/polymarket.py
 ```text
 docs/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
 ```
+
+## Interpreter seam
+
+### `engine/core/interpreter.py`
+
+```text
+engine/core/interpreter.py
+  → engine/core/events.py (ForecastPayload, AbstentionReason)
+  → engine/core/forecast.py (abstain)
+```
