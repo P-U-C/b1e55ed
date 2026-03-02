@@ -89,6 +89,8 @@ class BaseProducer(ABC):
     # Injected by registry after construction (set in S2).
     _mcp_client: Any | None = None
 
+    # Bertrand Meyer's precondition: enforce contracts at the boundary, not downstream.
+    # A producer with an invalid domain fails at construction. Wrong names cost nothing to reject early.
     def __init__(self, ctx: ProducerContext) -> None:
         self.ctx = ctx
         if self.domain not in CANONICAL_DOMAINS:
