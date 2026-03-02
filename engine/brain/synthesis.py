@@ -297,11 +297,25 @@ class VectorSynthesis:
         elif dom == "tradfi":
             fund = f.get("funding_annualized")
             if fund is not None:
-                # ideal ~10, punish extremes
-                scores.append(_clamp01(1.0 - abs(float(fund) - 10.0) / 30.0))
+                # Parameterized via scoring_params (P2.4). Shadow-safe defaults.
+                try:
+                    from engine.brain.scoring import get_param as _gp
+
+                    _fc = _gp(self.db, "tradfi.funding_optimal_center")
+                    _fs = _gp(self.db, "tradfi.funding_scale")
+                except Exception:
+                    _fc, _fs = 10.0, 30.0
+                scores.append(_clamp01(1.0 - abs(float(fund) - _fc) / _fs))
             basis = f.get("basis_annualized")
             if basis is not None:
-                scores.append(_clamp01(1.0 - abs(float(basis) - 5.0) / 8.0))
+                try:
+                    from engine.brain.scoring import get_param as _gp2
+
+                    _bc = _gp2(self.db, "tradfi.basis_optimal_center")
+                    _bs = _gp2(self.db, "tradfi.basis_scale")
+                except Exception:
+                    _bc, _bs = 5.0, 15.0
+                scores.append(_clamp01(1.0 - abs(float(basis) - _bc) / _bs))
             oi = f.get("oi_change_pct")
             if oi is not None:
                 scores.append(_clamp01(0.5 + float(oi) / 40.0))

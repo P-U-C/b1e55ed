@@ -468,6 +468,23 @@ CREATE TABLE IF NOT EXISTS discretionary_signals (
 CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
 
 -- ============================================================
+-- Learnable Scoring Parameters (P2.4)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scoring_params (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    param_key TEXT NOT NULL UNIQUE,
+    producer_name TEXT NOT NULL,
+    param_type TEXT NOT NULL,
+    value_default REAL NOT NULL,
+    value_shadow REAL NOT NULL,
+    value_live REAL NOT NULL,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sp_producer ON scoring_params(producer_name);
+
+-- ============================================================
 -- Producer Correlation Matrix (P2.3)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS producer_correlation (
@@ -546,6 +563,7 @@ class Database:
 
     def migrate(self) -> None:
         self._ensure_table_exists("producer_correlation")
+        self._ensure_table_exists("scoring_params")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(
