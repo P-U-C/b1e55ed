@@ -47,6 +47,7 @@ class MarketSentimentProducer(BaseProducer):
     """Produce market sentiment signals for the configured universe."""
 
     schedule = "0 */1 * * *"  # hourly
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_SENTIMENT_URL") or os.getenv("SENTIMENT_URL")

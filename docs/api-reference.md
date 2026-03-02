@@ -493,3 +493,65 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
 ```
 
 See: [oracle.md](oracle.md).
+
+---
+
+## MCP
+
+### GET `/api/v1/mcp/producers`
+
+```http
+GET /api/v1/mcp/producers
+Authorization: Bearer <token>
+```
+
+Response:
+
+```json
+{
+  "producers": [
+    {
+      "name": "tradfi_basis",
+      "domain": "tradfi",
+      "mcp_source_url": null,
+      "description": "...",
+      "assets": ["BTC", "ETH", "SOL"],
+      "schedule": "*/15 * * * *",
+      "registered_at": "2026-03-01T05:00:00Z",
+      "latest_signal": {
+        "producer": "tradfi_basis",
+        "domain": "tradfi",
+        "asset": "BTC",
+        "direction": "long",
+        "confidence": 0.72,
+        "horizon": "4h",
+        "reason": "Basis unwound to 1.8%, funding 0.9% — re-leveraging setup",
+        "timestamp": "2026-03-01T05:00:00Z",
+        "raw_score": 7.2,
+        "metadata": {}
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+### GET `/api/v1/mcp/status`
+
+```http
+GET /api/v1/mcp/status
+Authorization: Bearer <token>
+```
+
+Response:
+
+```json
+{
+  "enabled": true,
+  "producer_count": 13,
+  "total_signals_buffered": 847,
+  "registry_ok": true
+}
+```
+
+If `mcp.require_auth=true`, include `X-MCP-Key: <key>` in addition to bearer auth.

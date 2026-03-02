@@ -10,6 +10,7 @@ from api.routes import (
     health,
     karma,
     kill_switch,
+    mcp,
     metrics,
     oracle,
     positions,
@@ -41,5 +42,6 @@ def get_api_router() -> APIRouter:
 
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
+    router.include_router(mcp.router, tags=["mcp"])
 
     return router

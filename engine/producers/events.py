@@ -45,6 +45,7 @@ def _dedupe_key(*, producer: str, payload: dict[str, Any]) -> str:
 @register("market-events", domain="events")
 class MarketEventsProducer(BaseProducer):
     schedule = "*/30 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_EVENTS_URL") or os.getenv("EVENTS_URL")

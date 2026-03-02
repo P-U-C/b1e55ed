@@ -6,11 +6,17 @@ Tests for the MCP JSON-RPC 2.0 server at POST /mcp.
 from __future__ import annotations
 
 import json
+import threading
+from types import SimpleNamespace
 
 import pytest
 
 from api.main import create_app
 from engine.core.database import Database
+from engine.mcp.registry import MCPProducerRegistry
+from engine.mcp.server import MCPServer
+from engine.mcp.types import MCPProducerManifest, MCPSignalPayload
+from engine.producers.base import BaseProducer
 from tests.unit._api_test_client import make_client
 
 # ---------------------------------------------------------------------------
@@ -414,3 +420,169 @@ async def test_mcp_invalid_jsonrpc_version(_app_and_db):
     body = r.json()
     assert "error" in body
     assert body["error"]["code"] == -32600  # INVALID_REQUEST
+
+
+# ---------------------------------------------------------------------------
+# Outbound MCP registry + server (S2)
+# ---------------------------------------------------------------------------
+
+
+def _manifest(name: str = "demo", domain: str = "tradfi") -> MCPProducerManifest:
+    return MCPProducerManifest(
+        name=name,
+        domain=domain,
+        mcp_source_url=None,
+        description=f"{name} producer",
+        assets=[],
+        schedule="* * * * *",
+        registered_at="2026-03-01T00:00:00+00:00",
+    )
+
+
+def _signal(producer: str, i: int) -> MCPSignalPayload:
+    return MCPSignalPayload(
+        producer=producer,
+        domain="tradfi",
+        asset="BTC",
+        direction="long",
+        confidence=0.5,
+        horizon="1h",
+        reason=f"reason-{i}",
+        timestamp=f"2026-03-01T00:00:{i:02d}+00:00",
+        raw_score=float(i),
+        metadata={"i": i},
+    )
+
+
+def test_registry_register():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+
+    producers = registry.list_producers()
+    assert len(producers) == 1
+    assert producers[0].name == "alpha"
+
+
+def test_registry_push_signal():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+    registry.push_signal(_signal("alpha", 1))
+
+    latest = registry.get_latest("alpha")
+    assert latest is not None
+    assert latest.reason == "reason-1"
+
+
+def test_registry_ring_buffer():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+
+    for i in range(110):
+        registry.push_signal(_signal("alpha", i))
+
+    recent = registry.get_recent("alpha", n=200)
+    assert len(recent) == 100
+    assert recent[0].reason == "reason-10"
+    assert recent[-1].reason == "reason-109"
+
+
+def test_registry_get_recent():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+
+    for i in range(7):
+        registry.push_signal(_signal("alpha", i))
+
+    recent = registry.get_recent("alpha", n=3)
+    assert [s.reason for s in recent] == ["reason-4", "reason-5", "reason-6"]
+
+
+def test_registry_stats():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+    registry.register(_manifest("beta", domain="technical"))
+    registry.push_signal(_signal("alpha", 1))
+
+    stats = registry.stats()
+    assert stats["producer_count"] == 2
+    assert stats["total_signals_buffered"] == 1
+
+
+def test_registry_thread_safety():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+
+    errors: list[Exception] = []
+
+    def _worker(tid: int) -> None:
+        try:
+            for idx in range(100):
+                registry.push_signal(_signal("alpha", tid * 100 + idx))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker, args=(tid,)) for tid in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    recent = registry.get_recent("alpha", n=200)
+    assert len(recent) == 100
+    assert all(signal.producer == "alpha" for signal in recent)
+
+
+def test_server_tool_list_producers():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+    registry.register(_manifest("beta"))
+
+    server = MCPServer(enabled=False)
+    server._registry = registry
+
+    producers = server.tool_list_producers()
+    assert [p["name"] for p in producers] == ["alpha", "beta"]
+
+
+def test_server_tool_get_latest():
+    registry = MCPProducerRegistry()
+    registry.register(_manifest("alpha"))
+
+    server = MCPServer(enabled=False)
+    server._registry = registry
+
+    assert server.tool_get_latest_signal("alpha") is None
+
+    registry.push_signal(_signal("alpha", 42))
+    latest = server.tool_get_latest_signal("alpha")
+    assert latest is not None
+    assert latest["reason"] == "reason-42"
+
+
+def test_server_not_running_by_default():
+    server = MCPServer(enabled=False)
+    assert server.is_running() is False
+
+
+def test_base_producer_registers_on_init(monkeypatch):
+    import engine.mcp.registry as registry_module
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", None)
+
+    class MockProducer(BaseProducer):
+        name = "mock_producer"
+        domain = "technical"
+        schedule = "continuous"
+        assets = ["BTC"]
+
+        def collect(self) -> list[dict]:
+            return []
+
+        def normalize(self, raw: list[dict]):
+            return []
+
+    _ = MockProducer(SimpleNamespace())
+
+    names = [manifest.name for manifest in registry_module.get_registry().list_producers()]
+    assert "mock_producer" in names

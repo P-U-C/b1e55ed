@@ -46,6 +46,9 @@ social = [
 exchange = [
     "hyperliquid-python-sdk>=0.7",
 ]
+mcp = [
+    "mcp[cli]>=1.0",
+]
 
 [project.scripts]
 b1e55ed = "engine.cli:main"
