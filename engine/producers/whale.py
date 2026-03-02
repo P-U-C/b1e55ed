@@ -39,6 +39,7 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
 @register("whale-tracking", domain="onchain")
 class WhaleTrackingProducer(BaseProducer):
     schedule = "*/30 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_WHALE_TRACKING_URL") or os.getenv("WHALE_TRACKING_URL")

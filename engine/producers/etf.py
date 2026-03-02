@@ -46,6 +46,7 @@ class ETFFlowsProducer(BaseProducer):
     """Produce ETF flow signals for the configured universe."""
 
     schedule = "0 */1 * * *"  # hourly
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_ETF_FLOWS_URL") or os.getenv("ETF_FLOWS_URL")

@@ -685,7 +685,7 @@ def _step4_configuration(repo_root: Path) -> None:
     # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
     token: ""        # fallback PAT (used if app_id is 0)
     owner: "P-U-C"
-    repo: "b1e55ed"
+    repo: "offchain-attestations"
     labels: ["b1e55ed-attestation"]
 """
     else:
@@ -697,7 +697,7 @@ def _step4_configuration(repo_root: Path) -> None:
     # Set B1E55ED_GITHUB_APP_KEY env var to your app's private key PEM
     token: "{github_token_value}"        # fallback PAT (used if app_id is 0)
     owner: "P-U-C"
-    repo: "b1e55ed"
+    repo: "offchain-attestations"
     labels: ["b1e55ed-attestation"]
 """
 

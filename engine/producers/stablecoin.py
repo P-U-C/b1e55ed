@@ -38,6 +38,7 @@ def _dedupe_key(*, producer: str, stablecoin: str, ts: datetime) -> str:
 @register("stablecoin-supply", domain="onchain")
 class StablecoinSupplyProducer(BaseProducer):
     schedule = "0 */2 * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_STABLECOIN_SUPPLY_URL") or os.getenv("STABLECOIN_SUPPLY_URL")

@@ -13,6 +13,7 @@ Discovery is intentionally simple. The contract lives in events; this is just pl
 from __future__ import annotations
 
 import importlib
+import os
 import pkgutil
 from collections.abc import Callable
 from typing import Any
@@ -47,6 +48,8 @@ def discover() -> None:
     for m in pkgutil.iter_modules(pkg.__path__, prefix=f"{pkg_name}."):
         modname = m.name
         if modname.endswith(".base") or modname.endswith(".registry"):
+            continue
+        if modname.endswith(".financial_datasets") and not os.getenv("FINANCIAL_DATASETS_API_KEY"):
             continue
         importlib.import_module(modname)
 

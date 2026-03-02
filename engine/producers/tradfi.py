@@ -191,6 +191,7 @@ class TradFiBasisProducer(BaseProducer):
     """Produce basis/carry signals for the configured universe."""
 
     schedule = "*/30 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_TRADFI_BASIS_URL") or os.getenv("TRADFI_BASIS_URL")

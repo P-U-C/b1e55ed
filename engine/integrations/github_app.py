@@ -203,20 +203,24 @@ class GitHubAppAuth:
         """Construct a GitHubAppAuth from environment variables.
 
         Required env vars:
+          B1E55ED_GITHUB_APP_KEY         — PEM private key (raw or path to .pem file)
+
+        Optional env vars (fall back to baked-in community defaults):
           B1E55ED_GITHUB_APP_ID          — numeric App ID
           B1E55ED_GITHUB_INSTALLATION_ID — numeric Installation ID
-          B1E55ED_GITHUB_APP_KEY         — PEM private key (raw or path to .pem file)
 
         Raises:
             RuntimeError: If any required env var is missing or invalid.
         """
+        from engine.config.github_app_defaults import COMMUNITY_APP_ID, COMMUNITY_INSTALLATION_ID
+
         missing: list[str] = []
 
-        app_id_raw = os.environ.get("B1E55ED_GITHUB_APP_ID", "")
+        app_id_raw = os.environ.get("B1E55ED_GITHUB_APP_ID", "") or (str(COMMUNITY_APP_ID) if COMMUNITY_APP_ID else "")
         if not app_id_raw:
             missing.append("B1E55ED_GITHUB_APP_ID")
 
-        installation_id_raw = os.environ.get("B1E55ED_GITHUB_INSTALLATION_ID", "")
+        installation_id_raw = os.environ.get("B1E55ED_GITHUB_INSTALLATION_ID", "") or (str(COMMUNITY_INSTALLATION_ID) if COMMUNITY_INSTALLATION_ID else "")
         if not installation_id_raw:
             missing.append("B1E55ED_GITHUB_INSTALLATION_ID")
 

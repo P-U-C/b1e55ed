@@ -120,6 +120,13 @@ class DashboardConfig(BaseModel):
     auth_token: str = ""
 
 
+class MCPConfig(BaseModel):
+    enabled: bool = True
+    port: int = 7337
+    require_auth: bool = False  # set True in production if port is public
+    api_keys: list[str] = Field(default_factory=list)
+
+
 class EASConfig(BaseModel):
     enabled: bool = True  # off-chain attestations work without rpc_url; on-chain needs rpc_url
     rpc_url: str = "https://eth.llamarpc.com"  # Free public RPC
@@ -167,6 +174,7 @@ class Config(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
     publish: PublishConfig = Field(default_factory=PublishConfig)
     github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)

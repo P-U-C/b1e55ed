@@ -313,6 +313,10 @@ See `docs/security.md` for enforcement details.
 
 ---
 
+---
+
+---
+
 ## Undocumented (auto-detected)
 
 > Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description.

@@ -121,6 +121,7 @@ cd b1e55ed && uv sync
 | [Configuration](docs/configuration.md) | All config keys |
 | [CLI reference](docs/cli-reference.md) | Full command reference |
 | [API reference](docs/api-reference.md) | REST endpoints |
+| [MCP integration](docs/mcp.md) | Connect Claude/external agents to live producer signals |
 | [Agent interfaces](docs/agent-interfaces.md) | SSE, MCP, signal attribution |
 | [Oracle](docs/oracle.md) | Producer provenance for agents |
 | [Curator pipeline](docs/curator.md) | Ingest operator intel |
