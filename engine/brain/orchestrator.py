@@ -269,6 +269,8 @@ class BrainOrchestrator:
                 elif confidence < 0.45:
                     _log.debug("low conviction: %s confidence=%.2f", sym, confidence)
 
+        # Fowler's event sourcing invariant: state is the function of events, not the inverse.
+        # This cycle event now carries enough state to reconstruct the moment entirely.
         domain_scores_payload: dict[str, dict[str, float]] = {}
         regime_payload: dict[str, str] = {}
         feature_vectors_payload: dict[str, dict[str, dict[str, float]]] = {}
@@ -318,6 +320,7 @@ class BrainOrchestrator:
                 exc_info=True,
             )
 
+        # Heraclitus: you cannot step into the same cycle twice. The duration is proof it happened. The snapshot is proof of what it was.
         cycle_duration_ms = max(0, int((perf_counter() - cycle_started_perf) * 1000))
 
         self.db.append_event(
