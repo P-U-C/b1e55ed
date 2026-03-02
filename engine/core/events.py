@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 
 class EventType(StrEnum):
@@ -92,11 +92,31 @@ class EventType(StrEnum):
 
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+
+    # Forecast events (producers → brain)
+    FORECAST_V1 = "forecast.v1"
+
     ATTRIBUTION_OUTCOME_V1 = "attribution.outcome.v1"
 
     # System
     BALANCE_UPDATED_V1 = "system.balance_updated.v1"
     AUDIT_V1 = "system.audit.v1"
+
+
+class AbstentionReason(StrEnum):
+    """Why a producer issued no_forecast this cycle."""
+
+    INSUFFICIENT_DATA = "insufficient_data"
+    REGIME_MISMATCH = "regime_mismatch"
+    CONFLICT_UNRESOLVED = "conflict_unresolved"
+    THESIS_UNCHANGED = "thesis_unchanged"
+
+
+class ForecastLifecycleState(StrEnum):
+    NEW = "new"
+    SUPERSEDE = "supersede"
+    REAFFIRM = "reaffirm"
+    REVOKE = "revoke"
 
 
 # -----------------
@@ -326,6 +346,38 @@ class AttributionOutcomePayload(BaseModel):
     producers: list[ProducerOutcome]
 
 
+class ForecastPayload(BaseModel):
+    """Payload for FORECAST_V1 — the producer's probabilistic call.
+
+    Immutable after emission. Lifecycle changes (supersede/revoke/reaffirm)
+    are new events, not updates to existing ones.
+    """
+
+    forecast_id: str  # uuid4 — immutable after emission
+    protocol_version: str = "1.0"
+    asset: str  # BTC | ETH | SOL | etc.
+    horizon: str  # "1h" | "4h" | "24h"
+    action: Literal["long", "short", "flat", "no_forecast"]
+    confidence: float = Field(ge=0.0, le=1.0)  # P(positive EV | regime, net fees); 0.0–1.0
+    calibrated: bool = False  # True only after 50+ resolved forecasts
+    invalidation: float | None = None  # price that kills thesis; None when no_forecast
+    regime_tag: str = "unknown"  # risk-on | risk-off | chop | unknown
+    crisis_state: bool = False  # execution override, separate from regime_tag
+    reasoning_hash: str | None = None  # sha256(candidate_forecast + llm_critique + rationale)
+    source: str  # producer_name@version
+    lifecycle_state: ForecastLifecycleState = ForecastLifecycleState.NEW
+    supersedes_forecast_id: str | None = None  # populated when lifecycle=supersede|revoke
+    visible_signal_refs: list[str] = Field(default_factory=list)  # ALL event_ids in lookback window
+    used_signal_refs: list[str] = Field(default_factory=list)  # event_ids that materially informed call
+    abstention_reason: AbstentionReason | None = None  # set when action=no_forecast
+
+    @model_validator(mode="after")
+    def validate_no_forecast_abstention(self) -> ForecastPayload:
+        if self.action == "no_forecast" and self.abstention_reason is None:
+            raise ValueError("abstention_reason is required when action='no_forecast'")
+        return self
+
+
 PayloadModel = (
     TASignalPayload
     | OnchainSignalPayload
@@ -348,6 +400,7 @@ PayloadModel = (
     | WeightAdjustmentPayload
     | SignalAcceptedPayload
     | AttributionOutcomePayload
+    | ForecastPayload
 )
 
 
@@ -377,6 +430,8 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.LEARNING_WEIGHT_ADJ_V1: WeightAdjustmentPayload,
     # Attribution
     EventType.SIGNAL_ACCEPTED_V1: SignalAcceptedPayload,
+    # Forecast
+    EventType.FORECAST_V1: ForecastPayload,
     EventType.ATTRIBUTION_OUTCOME_V1: AttributionOutcomePayload,
 }
 
