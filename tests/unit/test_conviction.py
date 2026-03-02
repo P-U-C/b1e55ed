@@ -16,6 +16,35 @@ from engine.core.types import FeatureSnapshot
 from engine.security.identity import generate_node_identity
 
 
+def _build_engine(test_config, temp_dir, monkeypatch) -> ConvictionEngine:
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "test")
+    ident = generate_node_identity()
+    db = Database(temp_dir / "brain.db")
+    return ConvictionEngine(test_config, db, node_id=ident.node_id)
+
+
+def _build_synthesis(*, weighted_score: float, features: dict[str, dict[str, float]]):
+    snap = FeatureSnapshot(
+        cycle_id="c",
+        symbol="BTC",
+        ts=datetime.now(tz=UTC),
+        features=features,
+        source_event_ids=[],
+        regime=None,
+        version="v2",
+    )
+
+    class _Synth:
+        pass
+
+    synth = _Synth()
+    synth.snapshot = snap
+    synth.domain_scores = {domain: 1.0 for domain in features}
+    synth.weights_used = {domain: (1.0 / len(features) if features else 0.0) for domain in features}
+    synth.weighted_score = weighted_score
+    return synth
+
+
 def test_pcs_calculation_and_cts_auto_trigger_at_pcs_gt_75(test_config, temp_dir, monkeypatch):
     # Identity requires password env; set for test.
     monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "test")
@@ -45,6 +74,87 @@ def test_pcs_calculation_and_cts_auto_trigger_at_pcs_gt_75(test_config, temp_dir
     assert res.pcs > 75.0
     assert res.cts > 0.0  # auto-triggered
     assert 0.0 <= res.final_conviction <= 100.0
+
+
+def test_counter_thesis_fires_below_pcs_75(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=0.60,
+        features={"technical": {"rsi_14": 75.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="BULL", as_of=datetime.now(tz=UTC))
+
+    assert res.pcs < 75.0
+    assert res.cts > 0.0
+
+
+def test_counter_thesis_fires_above_pcs_75(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=0.80,
+        features={"technical": {"rsi_14": 75.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="BULL", as_of=datetime.now(tz=UTC))
+
+    assert res.pcs > 75.0
+    assert res.cts > 0.0
+
+
+def test_regime_cap_bear(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=1.0,
+        features={"technical": {"rsi_14": 50.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="BEAR", as_of=datetime.now(tz=UTC))
+
+    assert res.score.magnitude == pytest.approx(7.0)
+    assert res.capped_by_regime is True
+    assert res.pre_cap_magnitude == pytest.approx(10.0)
+
+
+def test_regime_cap_crisis(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=1.0,
+        features={"technical": {"rsi_14": 50.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="CRISIS", as_of=datetime.now(tz=UTC))
+
+    assert res.score.magnitude == pytest.approx(4.0)
+    assert res.capped_by_regime is True
+
+
+def test_regime_cap_bull_no_cap(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=1.0,
+        features={"technical": {"rsi_14": 50.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="BULL", as_of=datetime.now(tz=UTC))
+
+    assert res.score.magnitude == pytest.approx(10.0)
+    assert res.capped_by_regime is False
+    assert res.pre_cap_magnitude is None
+
+
+def test_capped_by_regime_flag_set(test_config, temp_dir, monkeypatch) -> None:
+    eng = _build_engine(test_config, temp_dir, monkeypatch)
+    synth = _build_synthesis(
+        weighted_score=0.95,
+        features={"technical": {"rsi_14": 50.0}},
+    )
+
+    res = eng.compute(synthesis=synth, regime="TRANSITION", as_of=datetime.now(tz=UTC))
+
+    assert res.capped_by_regime is True
+    assert res.pre_cap_magnitude is not None
+    assert res.pre_cap_magnitude > res.score.magnitude
 
 
 def test_confidence_bull_high_pcs() -> None:
