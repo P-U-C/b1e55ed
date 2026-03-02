@@ -112,6 +112,8 @@ def _normalize_manifest_eggs(raw_eggs: Any) -> list[dict[str, Any]]:
     return [egg for egg in raw_eggs if isinstance(egg, dict)]
 
 
+# Audubon catalogued 435 species before photography existed. Every specimen placed, every placement recorded.
+# This is the field guide.
 def _load_manifest(repo_root: Path, *, create_if_missing: bool) -> dict[str, Any]:
     path = _manifest_path(repo_root)
     if not path.exists():
@@ -141,6 +143,8 @@ def _write_manifest(repo_root: Path, manifest: dict[str, Any]) -> None:
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+# Abstract algebra: an idempotent element satisfies f(f(x)) = f(x).
+# A blessed file, re-blessed, remains blessed. The mathematics demands it.
 def _manifest_has_tradition(manifest_eggs: list[dict[str, Any]], file: str, tradition: str) -> bool:
     return any(entry.get("file") == file and entry.get("tradition") == tradition for entry in manifest_eggs)
 

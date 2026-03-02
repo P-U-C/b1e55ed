@@ -1,1 +1,45 @@
-{"version":"1","eggs":[]}
+{
+  "version": "1",
+  "eggs": [
+    {
+      "id": "egg_5883c2f0",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "domain_scores_payload: dict[str, dict[str, float]] = {}",
+      "tradition": "event-sourcing-fowler",
+      "content": "# Fowler's event sourcing invariant: state is the function of events, not the inverse.\n# This cycle event now carries enough state to reconstruct the moment entirely.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_3e453a26",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "cycle_duration_ms = max(0, int((perf_counter() - cycle_started_perf) * 1000))",
+      "tradition": "heraclitus-river",
+      "content": "# Heraclitus: you cannot step into the same cycle twice. The duration is proof it happened. The snapshot is proof of what it was.",
+      "placement": "inline_comment",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_7b7ab207",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def _manifest_has_tradition(manifest_eggs: list[dict[str, Any]], file: str, tradition: str) -> bool:",
+      "tradition": "idempotent-ring",
+      "content": "# Abstract algebra: an idempotent element satisfies f(f(x)) = f(x).\n# A blessed file, re-blessed, remains blessed. The mathematics demands it.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_59ac0040",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def _load_manifest(repo_root: Path, *, create_if_missing: bool) -> dict[str, Any]:",
+      "tradition": "audubon-field-guide",
+      "content": "# Audubon catalogued 435 species before photography existed. Every specimen placed, every placement recorded.\n# This is the field guide.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    }
+  ]
+}
