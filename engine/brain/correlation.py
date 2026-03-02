@@ -22,6 +22,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Sentinel used when correlation is computed across all assets rather than
+# a specific symbol.  Stored as-is in ``producer_correlation.asset`` so rows
+# with ``asset=ALL_ASSETS`` mean "cross-asset aggregate".  The SQL pattern
+#   ``(? = 'ALL' OR symbol = ?)``
+# accepts the sentinel on the first bind and skips the index on
+# ``conviction_log.symbol``; this is intentional and safe at current scale.
+ALL_ASSETS: str = "ALL"
+
 
 def _conn(db: Any) -> sqlite3.Connection:
     return db.conn if hasattr(db, "conn") else db
@@ -65,7 +73,7 @@ def update_correlation_pair(
     db: Any,
     producer_a: str,
     producer_b: str,
-    asset: str = "ALL",
+    asset: str = ALL_ASSETS,
     regime: str = "unknown",
     window_days: int = 30,
 ) -> float | None:
@@ -131,7 +139,7 @@ def update_correlation_pair(
 
 def update_all_pairs(
     db: Any,
-    asset: str = "ALL",
+    asset: str = ALL_ASSETS,
     regime: str = "unknown",
     window_days: int = 30,
 ) -> dict[tuple[str, str], float | None]:
