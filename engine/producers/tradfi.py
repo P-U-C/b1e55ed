@@ -194,6 +194,8 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
     return f"{EventType.SIGNAL_TRADFI_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
+# The basis -- spot minus futures -- is the oldest arbitrage signal in financial markets.
+# Cash-and-carry predates electronic trading. What changed is who is on the other side.
 class TradFiBasisInterpreter(Interpreter):
     """Rule-based interpreter for TradFi basis/carry signals → FORECAST_V1."""
 

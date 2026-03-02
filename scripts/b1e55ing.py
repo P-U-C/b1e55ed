@@ -51,6 +51,8 @@ MAX_EGGS_PER_FILE = 2
 # Scaling — blessings proportional to PR size, with diminishing returns
 # ---------------------------------------------------------------------------
 
+# The Talmud is commentary layered onto Torah, then commentary onto commentary.
+# A codebase accumulates cultural strata the same way. This script is the ritual.
 _BUDGET_TIERS: list[tuple[int, int]] = [
     (1, 1),  # 1 file       → 1
     (4, 2),  # 2–4 files    → 2

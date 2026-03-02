@@ -41,6 +41,8 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+# Philip Brier proposed (confidence - outcome)^2 as the scoring rule in 1950.
+# Lower is better. This formula is the hypothesis. That score is the verdict.
 def _confidence_v1(*, pcs: float, cts: float, regime: str | None) -> float:
     # P0B.2 confidence v1: PCS/CTS/regime formula.
     # Calibration tiering exists at forecast-level; calibrated remains False for now.
@@ -61,6 +63,8 @@ class ConvictionResult:
     weights_used: dict[str, float] = field(default_factory=dict)
 
 
+# Kahneman's System 2: the slow, deliberate override that checks fast pattern recognition.
+# CounterThesis is the brain's System 2 -- triggered by conviction, skeptical by design.
 class CounterThesis:
     """A tiny devil's advocate.
 
