@@ -146,6 +146,7 @@ def resolve_forecast(
                 UPDATE forecast_calibration
                 SET outcome = ?, brier_score = ?, price_at_resolve = ?, resolved_at = ?
                 WHERE forecast_id = ?
+                  AND resolved_at IS NULL
                 """,
                 (float(outcome), brier, price_at_resolve, now, forecast_id),
             )

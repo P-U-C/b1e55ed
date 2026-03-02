@@ -264,3 +264,22 @@ def test_brier_summary_handles_empty_gracefully(temp_dir: Path) -> None:
         assert summary["regime_breakdown"] == {}
     finally:
         db.close()
+
+
+def test_resolve_forecast_is_idempotent_first_outcome_wins(temp_dir: Path) -> None:
+    """resolve_forecast called twice — first outcome must be preserved (AND resolved_at IS NULL guard)."""
+    db = _mkdb(temp_dir)
+    try:
+        _register(db, forecast_id="idem-001", confidence=0.8)
+        resolve_forecast(db=db, forecast_id="idem-001", outcome=1.0)  # hit
+
+        # Attempt to overwrite with a miss — should be silently ignored
+        resolve_forecast(db=db, forecast_id="idem-001", outcome=0.0)
+
+        conn = db.conn
+        row = conn.execute("SELECT outcome, brier_score FROM forecast_calibration WHERE forecast_id = 'idem-001'").fetchone()
+        assert row is not None
+        assert row[0] == pytest.approx(1.0), "First outcome (hit) must be preserved"
+        assert row[1] == pytest.approx((0.8 - 1.0) ** 2), "Brier score must match first resolution"
+    finally:
+        db.close()
