@@ -356,7 +356,34 @@ def main(argv: list[str] | None = None) -> int:
         if apply_egg(abs_path, egg, dry_run=False):
             applied += 1
 
-    log.info("%d egg(s) applied — commit message: 'chore: a b1e55ing [skip ci]'", applied)
+    if applied == 0:
+        log.info("no eggs applied — nothing to commit")
+        return 0
+
+    log.info("%d egg(s) applied — committing", applied)
+    import subprocess  # noqa: PLC0415
+
+    result = subprocess.run(
+        ["git", "add", "-A"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        log.error("git add failed: %s", result.stderr)
+        return 1
+
+    result = subprocess.run(
+        ["git", "commit", "-m", "chore: a b1e55ing [skip ci]"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        log.error("git commit failed: %s", result.stderr)
+        return 1
+
+    log.info("committed: %s", result.stdout.strip())
     return 0
 
 
