@@ -12,6 +12,7 @@ This module ports the *v2* synthesis philosophy from the legacy system:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -36,6 +37,21 @@ def _mean(xs: list[float]) -> float | None:
     if not xs:
         return None
     return float(sum(xs) / len(xs))
+
+
+_DEFAULT_DECAY_LAMBDA = 0.01  # half-life ~70 minutes
+
+
+def _freshness_factor(event_ts: datetime, now: datetime, lambda_: float = _DEFAULT_DECAY_LAMBDA) -> float:
+    """Exponential freshness decay: exp(-λ × age_minutes). Clamped to [0.01, 1.0]."""
+    if event_ts.tzinfo is None:
+        event_ts = event_ts.replace(tzinfo=UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+
+    age_minutes = max(0.0, (now - event_ts).total_seconds() / 60.0)
+    factor = math.exp(-lambda_ * age_minutes)
+    return max(0.01, min(1.0, factor))
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,7 +226,11 @@ class VectorSynthesis:
             vec = self.extractor.extract_domain_features(event_type=et, payload=chosen.payload)
             if not vec:
                 continue
-            feats[dom].update(vec)
+
+            factor = _freshness_factor(chosen.ts, now)
+            decayed_vec = {k: float(v) * factor for k, v in vec.items()}
+
+            feats[dom].update(decayed_vec)
             source_event_ids.append(chosen.id)
 
         # Drop empty domains to keep snapshot compact.
