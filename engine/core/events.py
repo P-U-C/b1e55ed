@@ -57,6 +57,7 @@ class EventType(StrEnum):
     SIGNAL_ACI_V1 = "signal.aci.v1"
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
     SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
+    SIGNAL_BENCHMARK_V1 = "signal.benchmark.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -91,6 +92,7 @@ class EventType(StrEnum):
 
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+    ATTRIBUTION_OUTCOME_V1 = "attribution.outcome.v1"
 
     # System
     BALANCE_UPDATED_V1 = "system.balance_updated.v1"
@@ -132,6 +134,11 @@ class TradFiSignalPayload(BaseModel):
     funding_annualized: float | None = None
     oi_change_pct: float | None = None
     meltup_score: float | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    horizon: str = "swing"
+    invalidation: float | None = None
+    signal_reason: str | None = None
 
 
 class SocialSignalPayload(BaseModel):
@@ -197,6 +204,16 @@ class PriceWSSignalPayload(BaseModel):
     bid: float | None = None
     ask: float | None = None
     venue: str | None = None
+
+
+class BenchmarkSignalPayload(BaseModel):
+    """Payload for benchmark signal producers."""
+
+    symbol: str
+    direction: Literal["long", "short", "flat"]
+    confidence: float
+    source: str
+    reasoning: str | None = None
 
 
 class CuratorSignalPayload(BaseModel):
@@ -276,6 +293,39 @@ class WeightAdjustmentPayload(BaseModel):
     approved: bool = False
 
 
+class SignalAcceptedPayload(BaseModel):
+    """Payload for SIGNAL_ACCEPTED_V1 — links a trade to a contributing signal."""
+
+    trade_id: str
+    producer_id: str
+    domain: str
+    signal_event_id: str
+    contribution_weight: float = 1.0
+    direction: str
+    confidence: float
+    horizon: str | None = None
+    invalidation: float | None = None
+
+
+class ProducerOutcome(BaseModel):
+    """Single producer's outcome within an attribution event."""
+
+    producer_id: str
+    domain: str
+    contribution_weight: float
+    outcome: float  # +1.0 win, -1.0 loss, 0.0 neutral
+    karma_delta: float
+
+
+class AttributionOutcomePayload(BaseModel):
+    """Payload for ATTRIBUTION_OUTCOME_V1 — emitted when position closes."""
+
+    trade_id: str
+    realized_pnl_usd: float
+    confidence_bucket: Literal["high", "mid", "low"]
+    producers: list[ProducerOutcome]
+
+
 PayloadModel = (
     TASignalPayload
     | OnchainSignalPayload
@@ -287,6 +337,7 @@ PayloadModel = (
     | StablecoinSignalPayload
     | WhaleSignalPayload
     | OrderbookSignalPayload
+    | BenchmarkSignalPayload
     | CuratorSignalPayload
     | ACISignalPayload
     | ConvictionPayload
@@ -295,6 +346,8 @@ PayloadModel = (
     | KillSwitchPayload
     | LearningOutcomePayload
     | WeightAdjustmentPayload
+    | SignalAcceptedPayload
+    | AttributionOutcomePayload
 )
 
 
@@ -309,6 +362,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_STABLECOIN_V1: StablecoinSignalPayload,
     EventType.SIGNAL_WHALE_V1: WhaleSignalPayload,
     EventType.SIGNAL_ORDERBOOK_V1: OrderbookSignalPayload,
+    EventType.SIGNAL_BENCHMARK_V1: BenchmarkSignalPayload,
     EventType.SIGNAL_CURATOR_V1: CuratorSignalPayload,
     EventType.SIGNAL_ACI_V1: ACISignalPayload,
     # Brain
@@ -321,6 +375,9 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     # Learning
     EventType.LEARNING_OUTCOME_V1: LearningOutcomePayload,
     EventType.LEARNING_WEIGHT_ADJ_V1: WeightAdjustmentPayload,
+    # Attribution
+    EventType.SIGNAL_ACCEPTED_V1: SignalAcceptedPayload,
+    EventType.ATTRIBUTION_OUTCOME_V1: AttributionOutcomePayload,
 }
 
 

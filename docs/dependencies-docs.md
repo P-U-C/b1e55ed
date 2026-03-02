@@ -648,3 +648,9 @@ engine/producers/polymarket.py
   → engine/core/models.py
   → httpx (Gamma + CLOB API calls)
 ```
+
+## Flywheel
+
+```text
+docs/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
+```

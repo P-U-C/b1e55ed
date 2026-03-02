@@ -209,6 +209,161 @@ class KarmaEngine:
             # Non-blocking guarantee: never break execution for karma.
             return None
 
+    # ------------------------------------------------------------------
+    # Flywheel attribution (S2): producer karma based on trade outcomes
+    # ------------------------------------------------------------------
+
+    def attribute_outcome(self, *, trade_id: str, realized_pnl_usd: float) -> dict:
+        """Look up SIGNAL_ACCEPTED_V1 events for trade_id, update producer karma, emit ATTRIBUTION_OUTCOME_V1.
+
+        Non-blocking contract: wraps entire body in try/except, logs errors, never raises.
+        """
+        import logging
+
+        _log = logging.getLogger("b1e55ed.execution.karma")
+
+        try:
+            pnl = float(realized_pnl_usd)
+
+            # 1. Query SIGNAL_ACCEPTED_V1 events for this trade
+            rows = self._db.conn.execute(
+                "SELECT id, payload FROM events WHERE type = ? AND payload LIKE ?",
+                (str(EventType.SIGNAL_ACCEPTED_V1), f'%"trade_id":"{trade_id}"%'),
+            ).fetchall()
+
+            # Also try alternate JSON formatting (spaces after colon)
+            if not rows:
+                rows = self._db.conn.execute(
+                    "SELECT id, payload FROM events WHERE type = ? AND payload LIKE ?",
+                    (str(EventType.SIGNAL_ACCEPTED_V1), f'%"trade_id": "{trade_id}"%'),
+                ).fetchall()
+
+            if not rows:
+                _log.warning("attribute_outcome: no SIGNAL_ACCEPTED_V1 events for trade_id=%s", trade_id)
+                return {}
+
+            # 2. Compute outcome
+            if abs(pnl) < 0.01:
+                outcome = 0.0
+            elif pnl > 0:
+                outcome = 1.0
+            else:
+                outcome = -1.0
+
+            # 3. Determine confidence bucket for the event payload
+            if abs(pnl) > 100:
+                confidence_bucket = "high"
+            elif abs(pnl) > 10:
+                confidence_bucket = "mid"
+            else:
+                confidence_bucket = "low"
+
+            producers: list[dict] = []
+            now_iso = _utc_now_iso(self._now_fn)
+
+            for row in rows:
+                payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+                producer_id = str(payload.get("producer_id", "unknown"))
+                domain = str(payload.get("domain", "unknown"))
+                contribution_weight = float(payload.get("contribution_weight", 1.0))
+
+                # 4. EMA update
+                karma_delta = 0.0
+                with self._db.conn:
+                    existing = self._db.conn.execute(
+                        "SELECT karma_score, win_count, loss_count, total_trades FROM producer_karma WHERE producer_id = ?",
+                        (producer_id,),
+                    ).fetchone()
+
+                    if existing:
+                        old_karma = float(existing[0])
+                        win_count = int(existing[1])
+                        loss_count = int(existing[2])
+                        total_trades = int(existing[3])
+                    else:
+                        old_karma = 1.0
+                        win_count = 0
+                        loss_count = 0
+                        total_trades = 0
+
+                    total_trades += 1
+
+                    if outcome > 0:
+                        # Phase 0: positive outcomes update karma EMA
+                        new_karma = old_karma * 0.95 + outcome * 0.05
+                        karma_delta = new_karma - old_karma
+                        win_count += 1
+                    elif outcome < 0:
+                        # Phase 0: losses tracked but NOT applied to karma_score
+                        new_karma = old_karma
+                        loss_count += 1
+                    else:
+                        new_karma = old_karma
+
+                    self._db.conn.execute(
+                        """INSERT INTO producer_karma (producer_id, karma_score, win_count, loss_count, total_trades, last_updated)
+                           VALUES (?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(producer_id) DO UPDATE SET
+                             karma_score = excluded.karma_score,
+                             win_count = excluded.win_count,
+                             loss_count = excluded.loss_count,
+                             total_trades = excluded.total_trades,
+                             last_updated = excluded.last_updated""",
+                        (producer_id, new_karma, win_count, loss_count, total_trades, now_iso),
+                    )
+
+                producers.append(
+                    {
+                        "producer_id": producer_id,
+                        "domain": domain,
+                        "contribution_weight": contribution_weight,
+                        "outcome": outcome,
+                        "karma_delta": karma_delta,
+                    }
+                )
+
+            # 5. Emit ATTRIBUTION_OUTCOME_V1
+            from engine.core.events import AttributionOutcomePayload, ProducerOutcome
+
+            producer_outcomes = [
+                ProducerOutcome(
+                    producer_id=p["producer_id"],
+                    domain=p["domain"],
+                    contribution_weight=p["contribution_weight"],
+                    outcome=p["outcome"],
+                    karma_delta=p["karma_delta"],
+                )
+                for p in producers
+            ]
+
+            attribution_payload = AttributionOutcomePayload(
+                trade_id=str(trade_id),
+                realized_pnl_usd=pnl,
+                confidence_bucket=confidence_bucket,
+                producers=producer_outcomes,
+            ).model_dump(mode="json")
+
+            self._db.append_event(
+                event_type=EventType.ATTRIBUTION_OUTCOME_V1,
+                payload=attribution_payload,
+                source="karma.attribution",
+                dedupe_key=f"attribution.outcome:{trade_id}",
+            )
+
+            summary = {
+                "trade_id": trade_id,
+                "realized_pnl_usd": pnl,
+                "outcome": outcome,
+                "producers_updated": len(producers),
+                "producers": producers,
+            }
+            _log.info("attribute_outcome complete: %s", summary)
+            return summary
+
+        except Exception:
+            _log.warning("attribute_outcome failed for trade_id=%s", trade_id, exc_info=True)
+            return {}
+
     def get_pending_intents(self, *, limit: int = 500, offset: int = 0) -> list[KarmaIntent]:
         rows = self._db.conn.execute(
             """

@@ -72,6 +72,24 @@ scoring summary based on staleness and error rate.
 Constraints
 - No adjustments until at least 20 observations.
 
+### 3b) Producer karma (flywheel)
+
+**Goal**: close the attribution loop with per-producer outcome tracking.
+
+When a position closes:
+
+1. `attribute_outcome()` retrieves all `SIGNAL_ACCEPTED_V1` events linked to the trade
+2. Each contributing producer receives an EMA karma update (α = 0.05):
+   `karma_new = karma_old × 0.95 + outcome × 0.05`
+3. Results stored in `producer_karma` table
+4. `ATTRIBUTION_OUTCOME_V1` event emitted
+
+Phase 0: equal weights across contributing producers. Positive outcomes applied immediately; negative outcomes tracked but dampened.
+
+Karma starts at 1.0 for all new producers.
+
+**Files**: `engine/execution/karma.py`, `engine/integration/outcome_writer.py`
+
 ### 4) Corpus feedback
 
 **Goal**: update patterns and skills based on realized outcomes.

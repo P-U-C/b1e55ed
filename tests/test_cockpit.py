@@ -1,0 +1,185 @@
+"""Tests for the cockpit dashboard — Sprint S6."""
+
+from __future__ import annotations
+
+import os
+from datetime import UTC, datetime
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.routes.cockpit import router as cockpit_router
+from engine.core.database import Database
+from engine.core.events import EventType
+
+
+@pytest.fixture()
+def db(tmp_path):
+    return Database(db_path=tmp_path / "test.db")
+
+
+def _make_api_client(db):
+    app = FastAPI()
+    app.state.db = db
+    app.include_router(cockpit_router)
+    return TestClient(app)
+
+
+# ---- API tests ----
+
+
+def test_cockpit_state_no_data_returns_null_call(db):
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["top_call"] is None
+    assert data["producer_signals"] == []
+    assert isinstance(data["system"], dict)
+    assert data["system"]["kill_switch_level"] == "SAFE"
+
+
+def test_cockpit_state_with_conviction_returns_top_call(db):
+    db.conn.execute(
+        """INSERT INTO conviction_scores
+           (cycle_id, node_id, symbol, direction, magnitude, timeframe, ts,
+            commitment_hash, pcs_score, cts_score, regime, domains_used, confidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "cycle-1",
+            "node-1",
+            "BTC",
+            "long",
+            7.5,
+            "4h",
+            datetime.now(tz=UTC).isoformat(),
+            "abc123",
+            75.0,
+            10.0,
+            "RISK_ON",
+            '["ta","tradfi"]',
+            0.68,
+        ),
+    )
+    db.conn.commit()
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["top_call"] is not None
+    assert data["top_call"]["symbol"] == "BTC"
+    assert data["top_call"]["direction"] == "long"
+    assert data["top_call"]["confidence"] == 0.68
+
+
+def test_cockpit_state_producer_breakdown_sorted_by_confidence(db):
+    now = datetime.now(tz=UTC)
+    for pid, conf in [("producer-a", 0.8), ("producer-b", 0.5)]:
+        payload = {
+            "trade_id": f"t-{pid}",
+            "producer_id": pid,
+            "domain": "ta",
+            "signal_event_id": "evt-1",
+            "direction": "long",
+            "confidence": conf,
+        }
+        db.append_event(
+            event_type=EventType.SIGNAL_ACCEPTED_V1,
+            payload=payload,
+            source="test",
+            ts=now,
+        )
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    data = resp.json()
+    signals = data["producer_signals"]
+    assert len(signals) >= 2
+    confs = [s["confidence"] for s in signals]
+    assert confs == sorted(confs, reverse=True)
+
+
+def test_cockpit_state_system_status_includes_kill_switch(db):
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    data = resp.json()
+    sys = data["system"]
+    assert "kill_switch_level" in sys
+    assert "consecutive_losses" in sys
+    assert "open_risk_pct" in sys
+    assert "open_positions" in sys
+    assert "last_cycle_ts" in sys
+
+
+class _Res:
+    def __init__(self, data, ok):
+        self.data = data
+        self.ok = ok
+
+
+class _DummyApiClient:
+    def get_cockpit_state(self):
+        return _Res({}, False)
+
+    def get_positions(self):
+        return _Res([], False)
+
+    def get_signals(self, domain=None):
+        return _Res({"items": [], "total": 0}, False)
+
+    def get_producers_status(self):
+        return _Res({"producers": {}}, False)
+
+    def get_regime(self):
+        return _Res({"regime": None}, False)
+
+    def get_kill_switch(self):
+        return _Res({"kill_switch_level": 0}, False)
+
+    def get_karma_summary(self):
+        return _Res({}, False)
+
+    def get_karma_intents(self):
+        return _Res({"items": []}, False)
+
+    def get_karma_receipts(self):
+        return _Res({"items": []}, False)
+
+    def get_social_sentiment(self):
+        return _Res({"items": []}, False)
+
+    def get_social_alerts(self):
+        return _Res({"items": []}, False)
+
+    def get_social_narratives(self):
+        return _Res({"items": []}, False)
+
+    def get_social_sources(self):
+        return _Res({"items": []}, False)
+
+    def get_curator_feed(self):
+        return _Res({"items": []}, False)
+
+
+def _make_dashboard_client():
+    os.environ["B1E55ED_DEV_MODE"] = "1"
+    from dashboard.app import app
+
+    client = TestClient(app)
+    client.app.state.api_client = _DummyApiClient()
+    return client
+
+
+def test_cockpit_page_returns_200():
+    client = _make_dashboard_client()
+    resp = client.get("/cockpit")
+    assert resp.status_code == 200
+    assert "cockpit" in resp.text.lower()
+
+
+def test_cockpit_htmx_refresh_endpoint():
+    client = _make_dashboard_client()
+    resp = client.get("/partials/cockpit-content")
+    assert resp.status_code == 200

@@ -302,6 +302,18 @@ CREATE TABLE IF NOT EXISTS producer_scores (
 CREATE INDEX IF NOT EXISTS idx_producer_scores_producer ON producer_scores(producer);
 
 -- ============================================================
+-- Producer Karma (flywheel attribution)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_karma (
+    producer_id TEXT PRIMARY KEY,
+    karma_score REAL DEFAULT 1.0,
+    win_count INTEGER DEFAULT 0,
+    loss_count INTEGER DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
+    last_updated TEXT
+);
+
+-- ============================================================
 -- API Rate Limiting (SEC1)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS api_rate_limits (
@@ -314,6 +326,15 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_rate_limits_key ON api_rate_limits(key);
+
+-- ============================================================
+-- System State (key-value store for kill switch state etc.)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
 
 -- ============================================================
 -- Risk Triggers (audit)
@@ -397,6 +418,36 @@ CREATE TABLE IF NOT EXISTS contributor_signals (
 
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_contributor ON contributor_signals(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_asset ON contributor_signals(signal_asset);
+
+-- ============================================================
+-- Signal Stratification (flywheel S7)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS signal_stratification (
+    signal_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    bucket TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    outcome_pnl_usd REAL,
+    attributed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_strat_bucket ON signal_stratification(bucket);
+
+-- ============================================================
+-- Discretionary Signals (operator-injected benchmarks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS discretionary_signals (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    reasoning TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
 """
 
 

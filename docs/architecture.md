@@ -50,6 +50,39 @@ Reference modules:
 - `engine/core/contributors.py`
 - `engine/core/scoring.py`
 
+## Flywheel: Signal → Attribution → Karma → Weight
+
+The flywheel is the closed loop that makes b1e55ed compound:
+
+```text
+Producer signal → Synthesis → Trade → Position close
+       ↑                                      ↓
+       │                              attribute_outcome()
+       │                                      ↓
+       └─── weight update ← producer_karma table
+```
+
+**Attribution layer** (S1): When synthesis consumes a domain signal into a conviction, a `SIGNAL_ACCEPTED_V1` event is emitted linking the signal to the trade.
+
+**Karma wiring** (S2): When a position closes, `attribute_outcome()` traces the trade back to contributing producers and updates the `producer_karma` table via EMA (α = 0.05).
+
+**Kill switches** (S5): 5 conditions gated: consecutive losses (3), single loss >2%, open risk >5%, data feed degradation, fill divergence >0.5%.
+
+**Cockpit** (S6): `/cockpit` dashboard — 4-quadrant "what do I trade today" view with HTMX 30s refresh.
+
+**Stratification** (S7): `StratificationTracker` tags signals by confidence band (high ≥ 0.65, low < 0.45) and tracks whether high-confidence signals outperform after fees.
+
+### New database tables
+
+| Table | Purpose |
+|-------|---------|
+| `producer_karma` | Per-producer karma scores (EMA-updated on each trade close) |
+| `signal_stratification` | Confidence band tagging and outcome tracking |
+| `discretionary_signals` | Human operator override signals |
+| `system_state` | Kill switch state, cockpit state |
+
+---
+
 ## Curator Pipeline
 
 Operator intel enters the system through the curator pipeline.
@@ -147,3 +180,5 @@ Reference modules:
 - Oracle: `GET /api/v1/oracle/producers/{id}/provenance` (no auth).
 
 See: [api-reference.md](api-reference.md).
+
+For the full flywheel spec (attribution algorithm, kill switch conditions, Phase 0 success metric), see [FLYWHEEL_SPEC.md](FLYWHEEL_SPEC.md).

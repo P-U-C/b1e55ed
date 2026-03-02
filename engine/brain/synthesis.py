@@ -308,6 +308,51 @@ class VectorSynthesis:
 
         return _mean(scores)
 
+    def _load_karma_multipliers(self) -> dict[str, float]:
+        """Load average karma_score per domain from producer_karma table.
+
+        Returns a dict of domain -> average karma_score for producers in that domain.
+        If table is empty or doesn't exist, returns empty dict (Phase 0 neutral).
+        """
+        try:
+            # producer_karma has producer_id (which maps to source/producer_id in SIGNAL_ACCEPTED_V1)
+            # We need to map producer_id -> domain. Query the latest SIGNAL_ACCEPTED_V1 events
+            # to build producer -> domain mapping, then average karma per domain.
+            rows = self.db.conn.execute("SELECT producer_id, karma_score FROM producer_karma").fetchall()
+            if not rows:
+                return {}
+
+            import json as _json
+
+            # Build producer -> domain mapping from recent accepted signals
+            producer_domains: dict[str, str] = {}
+            sig_rows = self.db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
+                (str(EventType.SIGNAL_ACCEPTED_V1),),
+            ).fetchall()
+            for sr in sig_rows:
+                p = _json.loads(sr[0]) if isinstance(sr[0], str) else sr[0]
+                pid = str(p.get("producer_id", ""))
+                dom = str(p.get("domain", ""))
+                if pid and dom and pid not in producer_domains:
+                    producer_domains[pid] = dom
+
+            # Average karma per domain
+            domain_scores: dict[str, list[float]] = {}
+            for row in rows:
+                pid = str(row[0])
+                ks = float(row[1])
+                dom = producer_domains.get(pid)
+                if dom:
+                    domain_scores.setdefault(dom, []).append(ks)
+
+            if not domain_scores:
+                return {}
+
+            return {dom: sum(scores) / len(scores) for dom, scores in domain_scores.items()}
+        except Exception:
+            return {}
+
     def synthesize(
         self,
         *,
@@ -327,6 +372,17 @@ class VectorSynthesis:
             weights_used = {k: (v / total if total > 0 else 0.0) for k, v in adjusted.items()}
         else:
             weights_used = dict(base_weights)
+
+        # Flywheel: apply producer karma as weight multiplier
+        karma_multipliers = self._load_karma_multipliers()
+        if karma_multipliers:
+            for dom in list(weights_used.keys()):
+                mult = karma_multipliers.get(dom, 1.0)
+                weights_used[dom] = float(weights_used[dom]) * float(mult)
+            # Re-normalize
+            total_w = sum(weights_used.values())
+            if total_w > 0:
+                weights_used = {k: v / total_w for k, v in weights_used.items()}
 
         domain_scores: dict[str, float] = {}
         for dom, feats in snapshot.features.items():

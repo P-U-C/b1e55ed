@@ -12,7 +12,7 @@ This module ports the legacy decision matrix concept but adapts it to v3:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from engine.brain.kill_switch import KillSwitchLevel
@@ -28,6 +28,7 @@ class DecisionContext:
     pcs: float
     regime: str
     kill_level: KillSwitchLevel
+    source_event_ids: list[str] = field(default_factory=list)
 
 
 @runtime_checkable
@@ -83,6 +84,7 @@ class DefaultDecisionPolicy:
             rationale=rationale,
             stop_loss_pct=0.05,
             take_profit_pct=0.10,
+            source_event_ids=list(ctx.source_event_ids),
         )
 
 
@@ -107,8 +109,15 @@ class DecisionEngine:
         kill_level: KillSwitchLevel,
         source: str = "brain.decision",
         trace_id: str | None = None,
+        source_event_ids: list[str] | None = None,
     ) -> TradeIntent | None:
-        ctx = DecisionContext(symbol=str(symbol).upper(), pcs=float(pcs), regime=str(regime), kill_level=kill_level)
+        ctx = DecisionContext(
+            symbol=str(symbol).upper(),
+            pcs=float(pcs),
+            regime=str(regime),
+            kill_level=kill_level,
+            source_event_ids=list(source_event_ids or []),
+        )
         intent = self.policy.decide(ctx)
         if intent is None:
             return None
