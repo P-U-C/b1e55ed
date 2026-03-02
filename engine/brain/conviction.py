@@ -41,6 +41,16 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+def _confidence_v1(*, pcs: float, cts: float, regime: str | None) -> float:
+    # P0B.2 confidence v1: PCS/CTS/regime formula.
+    # Calibration tiering exists at forecast-level; calibrated remains False for now.
+    _regime = (regime or "TRANSITION").upper()
+    _regime_factor = {"BULL": 1.0, "BEAR": 0.85, "CHOP": 0.7, "TRANSITION": 0.8}.get(_regime, 0.8)
+    _pcs_component = (pcs - 50.0) / 50.0
+    _cts_penalty = cts / 200.0
+    return float(_clamp(0.5 + (_pcs_component * 0.5 * _regime_factor) - _cts_penalty, 0.1, 0.95))
+
+
 @dataclass(frozen=True, slots=True)
 class ConvictionResult:
     score: ConvictionScore
@@ -146,7 +156,7 @@ class ConvictionEngine:
             cts_score=cts,
             regime=regime,
             domains_used=sorted(list(synthesis.domain_scores.keys())),
-            confidence=float(_clamp((synthesis.snapshot.features and len(synthesis.snapshot.features) or 0) / 6.0, 0.0, 1.0)),
+            confidence=_confidence_v1(pcs=pcs, cts=cts, regime=synthesis.snapshot.regime),
         )
 
         return ConvictionResult(score=score, pcs=pcs, cts=cts, final_conviction=final)
