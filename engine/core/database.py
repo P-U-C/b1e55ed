@@ -558,12 +558,9 @@ class Database:
         # Popper: a conviction that cannot be traced to evidence is not a conviction -- it is a preference. feature_key is the evidence.
         self._ensure_column("conviction_log", "feature_key", "TEXT")
         self._ensure_column("conviction_log", "feature_value", "REAL")
-        self.migrate()
-        self._migrate_karma_intents_unique_trade_id()
-
-    def migrate(self) -> None:
+        # P2.3 — producer correlation matrix
         self._ensure_table_exists("producer_correlation")
-        self._ensure_table_exists("scoring_params")
+        self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(

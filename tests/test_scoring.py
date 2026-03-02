@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from engine.brain.scoring import (
     DEFAULT_PARAMS,
     ensure_defaults,
@@ -13,7 +14,6 @@ from engine.brain.scoring import (
     promote_to_live,
     propose_shadow_update,
 )
-
 from engine.core.database import Database
 
 
