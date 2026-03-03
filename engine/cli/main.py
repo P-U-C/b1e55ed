@@ -656,7 +656,9 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         def _parse_iso(ts: str | None) -> datetime | None:
             if not ts:
@@ -1115,7 +1117,9 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     try:
         from datetime import UTC  # py311+
     except ImportError:  # pragma: no cover
-        UTC = UTC  # noqa: N806
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
 
     from engine.core.database import Database
 
@@ -1837,7 +1841,9 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()

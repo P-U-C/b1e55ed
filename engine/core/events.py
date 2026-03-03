@@ -107,6 +107,7 @@ class AbstentionReason(StrEnum):
     """Why a producer issued no_forecast this cycle."""
 
     INSUFFICIENT_DATA = "insufficient_data"
+    LOW_CONFIDENCE = "low_confidence"
     REGIME_MISMATCH = "regime_mismatch"
     CONFLICT_UNRESOLVED = "conflict_unresolved"
     THESIS_UNCHANGED = "thesis_unchanged"

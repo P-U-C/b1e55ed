@@ -19,7 +19,14 @@ import asyncio
 import os
 import re
 import time
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 from typing import Any
 
 import httpx

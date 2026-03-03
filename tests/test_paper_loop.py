@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from engine.brain.learning import StratificationTracker
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.security.identity import NodeIdentity
-
-UTC = UTC
 
 
 @pytest.fixture

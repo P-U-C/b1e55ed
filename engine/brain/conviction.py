@@ -20,7 +20,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
@@ -28,6 +30,7 @@ from engine.brain.synthesis import SynthesisResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
+from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
 from engine.core.types import ConvictionScore, FeatureSnapshot
 
 
@@ -39,17 +42,6 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
     # Commitment is over the full payload excluding commitment_hash itself.
     data = canonical_json(payload)
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
-
-
-# Regime-dependent hard caps on conviction magnitude (0-10 scale).
-_REGIME_CAPS: dict[str, float] = {
-    # Cromwell's Rule: in the bowels of Christ, think it possible you may be mistaken.
-    # In CRISIS, even a strong thesis can be wrong. The cap is epistemic humility expressed as arithmetic.
-    "BULL": 10.0,
-    "BEAR": 7.0,
-    "TRANSITION": 6.0,
-    "CRISIS": 4.0,
-}
 
 
 # Philip Brier proposed (confidence - outcome)^2 as the scoring rule in 1950.

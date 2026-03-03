@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
