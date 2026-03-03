@@ -32,6 +32,7 @@ from typing import Any
 import httpx
 
 from engine.core.events import EventType, SentimentSignalPayload
+from engine.core.horizons import SENTIMENT_HORIZONS
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
@@ -151,6 +152,17 @@ class MarketSentimentProducer(BaseProducer):
                 health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            signal_payloads = [e.payload for e in events]
+            for symbol in symbols:
+                self.emit_forecasts_multi_horizon(
+                    asset=symbol,
+                    signals=signal_payloads,
+                    regime_tag="unknown",
+                    visible_signal_refs=[],
+                    horizon_configs=SENTIMENT_HORIZONS,
+                )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR

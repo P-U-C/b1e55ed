@@ -155,10 +155,10 @@ def test_tradfi_dual_write_emits_both_events(monkeypatch, tmp_path) -> None:
 
     assert pr.events_published == 1
     assert len(signal_events) == 1
-    assert len(forecast_events) == 2
-    assert {event.payload["asset"] for event in forecast_events} == {"BTC", "ETH"}
-    assert any(event.payload["action"] == "long" for event in forecast_events)
-    assert any(event.payload["action"] == "no_forecast" for event in forecast_events)
+    assert len(forecast_events) == 3
+    assert {event.payload["asset"] for event in forecast_events} == {"BTC"}
+    assert {event.payload["horizon"] for event in forecast_events} == {"4h", "24h", "3d"}
+    assert all(event.payload["action"] == "long" for event in forecast_events)
 
 
 def test_tradfi_basis_producer_handles_401(monkeypatch, tmp_path) -> None:

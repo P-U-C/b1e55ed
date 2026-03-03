@@ -38,6 +38,7 @@ from engine.core.events import (
     TASignalPayload,
 )
 from engine.core.forecast import abstain, compute_reasoning_hash, make_forecast_id
+from engine.core.horizons import TECHNICAL_HORIZONS
 from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.models import Event
 from engine.core.regime import RegimeConfig, RegimeMatrix
@@ -255,6 +256,17 @@ class TechnicalAnalysisProducer(BaseProducer):
                 health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            signal_payloads = [e.payload for e in events]
+            for symbol in symbols:
+                self.emit_forecasts_multi_horizon(
+                    asset=symbol,
+                    signals=signal_payloads,
+                    regime_tag="unknown",
+                    visible_signal_refs=[],
+                    horizon_configs=TECHNICAL_HORIZONS,
+                )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR

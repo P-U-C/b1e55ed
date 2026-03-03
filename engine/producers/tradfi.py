@@ -39,6 +39,7 @@ from engine.core.events import (
     TradFiSignalPayload,
 )
 from engine.core.forecast import abstain, compute_reasoning_hash, make_forecast_id
+from engine.core.horizons import TRADFI_HORIZONS
 from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.models import Event
 from engine.core.regime import RegimeConfig, RegimeMatrix
@@ -540,13 +541,14 @@ class TradFiBasisProducer(BaseProducer):
             published = self.publish(normalized_events)
 
             symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            signal_payloads = [e.payload for e in normalized_events]
             for symbol in symbols:
-                self.emit_forecast(
+                self.emit_forecasts_multi_horizon(
                     asset=symbol,
-                    horizon="4h",
-                    signals=[e.payload for e in normalized_events],
+                    signals=signal_payloads,
                     regime_tag="unknown",
                     visible_signal_refs=[],
+                    horizon_configs=TRADFI_HORIZONS,
                 )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
