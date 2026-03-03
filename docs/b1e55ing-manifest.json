@@ -40,6 +40,86 @@
       "placement": "before_function",
       "pr_number": 233,
       "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_a1b2c3d4",
+      "file": "engine/brain/calibration.py",
+      "anchor": "Glenn W. Brier, 1950.",
+      "tradition": "brier-score-1950",
+      "content": "Glenn W. Brier, 1950. \"Verification of Forecasts Expressed in Terms of Probability.\"\nMonthly Weather Review, 78(1): 1-3. Three pages. The scoring rule that outlasted\nevery forecaster who ignored it.",
+      "placement": "module_docstring",
+      "pr_number": 239,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_e5f6a7b8",
+      "file": "engine/brain/calibration.py",
+      "anchor": "# Popper: a theory that cannot be tested is not a theory. It is a belief.",
+      "tradition": "popper-falsifiability",
+      "content": "# Popper: a theory that cannot be tested is not a theory. It is a belief.\n# Resolution is the test. The score is the record.",
+      "placement": "inline_comment",
+      "pr_number": 239,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_c9d0e1f2",
+      "file": "engine/brain/calibration_curves.py",
+      "anchor": "Allan Murphy, 1977.",
+      "tradition": "murphy-reliability-1977",
+      "content": "Allan Murphy, 1977. \"The value of climatological, categorical, and\nprobabilistic forecasts in the cost-loss ratio situation.\"\nThe reliability diagram appeared here before anyone called it that.\nA perfectly calibrated forecaster lies on the diagonal y = x.\nNo forecaster lies on the diagonal y = x.",
+      "placement": "module_docstring",
+      "pr_number": 241,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_03041526",
+      "file": "engine/brain/calibration_curves.py",
+      "anchor": "# Shannon: information is the resolution of uncertainty.",
+      "tradition": "shannon-information",
+      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative — just not in the direction claimed.",
+      "placement": "inline_comment",
+      "pr_number": 241,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_37485960",
+      "file": "engine/brain/correlation.py",
+      "anchor": "# Karl Pearson, 1895. \"Notes on regression and inheritance in the case of two parents.\"",
+      "tradition": "pearson-correlation-1895",
+      "content": "# Karl Pearson, 1895. \"Notes on regression and inheritance in the case of two parents.\"\n# One of the most cited statistics in existence. Almost always misinterpreted.",
+      "placement": "inline_comment",
+      "pr_number": 238,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_71829304",
+      "file": "engine/brain/correlation.py",
+      "anchor": "# In a gamelan ensemble, no single player has the complete melody.",
+      "tradition": "gamelan-ensemble",
+      "content": "# In a gamelan ensemble, no single player has the complete melody.\n# The music emerges from interlocking patterns across the full ensemble.\n# No single producer has the complete signal. The matrix is the product.",
+      "placement": "inline_comment",
+      "pr_number": 238,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_a5b6c7d8",
+      "file": "engine/brain/scoring.py",
+      "anchor": "# Von Foerster, second-order cybernetics: the observer is part of the system.",
+      "tradition": "von-foerster-second-order",
+      "content": "# Von Foerster, second-order cybernetics: the observer is part of the system.\n# These defaults are not neutral. They encode assumptions about what markets reward.\n# Shadow mode exists so the system can question its own priors before acting on them.",
+      "placement": "inline_comment",
+      "pr_number": 240,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_e9f0a1b2",
+      "file": "engine/brain/scoring.py",
+      "anchor": "# Bhagavad Gita 2.47: you have a right to perform your duties,",
+      "tradition": "bhagavad-gita-karma",
+      "content": "# Bhagavad Gita 2.47: you have a right to perform your duties,\n# but you are not entitled to the fruits of your actions.\n# The shadow runs the experiment. This function collects the result.",
+      "placement": "inline_comment",
+      "pr_number": 240,
+      "applied_at": "2026-03-03T00:05:48Z"
     }
   ]
 }
