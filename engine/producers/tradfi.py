@@ -41,6 +41,7 @@ from engine.core.events import (
 from engine.core.forecast import abstain, compute_reasoning_hash, make_forecast_id
 from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.models import Event
+from engine.core.regime import RegimeConfig, RegimeMatrix
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
@@ -205,6 +206,19 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
 # Cash-and-carry predates electronic trading. What changed is who is on the other side.
 class TradFiBasisInterpreter(Interpreter):
     """Rule-based interpreter for TradFi basis/carry signals → FORECAST_V1."""
+
+    regime_matrix = RegimeMatrix(
+        configs={
+            # Bull: basis trade works well, slight confidence boost.
+            "BULL": RegimeConfig(confidence_multiplier=1.1),
+            # Bear: basis signals less reliable, require higher conviction.
+            "BEAR": RegimeConfig(confidence_multiplier=0.8, min_confidence=0.45),
+            # Crisis: basis unwinds chaotically — do not trade.
+            "CRISIS": RegimeConfig(abstain=True),
+            # Transition: moderate suppression.
+            "TRANSITION": RegimeConfig(confidence_multiplier=0.9),
+        }
+    )
 
     def interpret(
         self,

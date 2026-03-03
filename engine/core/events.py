@@ -109,6 +109,7 @@ class AbstentionReason(StrEnum):
     INSUFFICIENT_DATA = "insufficient_data"
     LOW_CONFIDENCE = "low_confidence"
     REGIME_MISMATCH = "regime_mismatch"
+    REGIME_FILTERED = "regime_filtered"
     CONFLICT_UNRESOLVED = "conflict_unresolved"
     THESIS_UNCHANGED = "thesis_unchanged"
 
