@@ -1,6 +1,12 @@
 """
 Per-producer calibration curves.
 
+Allan Murphy, 1977. "The value of climatological, categorical, and
+probabilistic forecasts in the cost-loss ratio situation."
+The reliability diagram appeared here before anyone called it that.
+A perfectly calibrated forecaster lies on the diagonal y = x.
+No forecaster lies on the diagonal y = x.
+
 Aggregates resolved Brier scores from forecast_calibration into
 bucketed calibration rows in producer_calibration.
 
@@ -18,6 +24,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Shannon: information is the resolution of uncertainty.
+# A bucket that is always right reduces uncertainty completely.
+# A bucket that is always wrong is also informative — just not in the direction claimed.
 CONFIDENCE_BUCKETS = [
     ("0.5-0.6", 0.5, 0.6),
     ("0.6-0.7", 0.6, 0.7),

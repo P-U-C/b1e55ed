@@ -51,6 +51,8 @@ def _has_column(db: Any, table: str, column: str) -> bool:
 
 
 def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    # Karl Pearson, 1895. "Notes on regression and inheritance in the case of two parents."
+    # One of the most cited statistics in existence. Almost always misinterpreted.
     """Pearson correlation coefficient. Returns None if std dev is 0."""
     if len(xs) != len(ys):
         return None
@@ -143,6 +145,9 @@ def update_all_pairs(
     regime: str = "unknown",
     window_days: int = 30,
 ) -> dict[tuple[str, str], float | None]:
+    # In a gamelan ensemble, no single player has the complete melody.
+    # The music emerges from interlocking patterns across the full ensemble.
+    # No single producer has the complete signal. The matrix is the product.
     """Compute correlation for every producer pair found in conviction_log."""
     conn = _conn(db)
 
