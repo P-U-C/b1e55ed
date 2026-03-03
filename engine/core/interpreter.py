@@ -21,6 +21,7 @@ from engine.core.events import AbstentionReason, ForecastPayload
 from engine.core.forecast import abstain, compute_reasoning_hash
 from engine.core.llm_critic import LLMCritic
 from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
+from engine.core.regime import RegimeMatrix
 from engine.core.utils import clamp
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,78 @@ class Interpreter(ABC):
     @property
     def source(self) -> str:
         return f"{self.producer_name}@{self.producer_version}"
+
+    # Declare a RegimeMatrix on a subclass to enable regime-conditioned output.
+    # None means "pass interpret() output through unchanged".
+    regime_matrix: RegimeMatrix | None = None
+
+    # Default minimum confidence for non-abstention.
+    # Overridden by RegimeConfig.min_confidence.
+    min_confidence: float = 0.1
+
+    def apply_regime_conditioning(
+        self,
+        forecast: ForecastPayload,
+        regime_tag: str,
+    ) -> ForecastPayload:
+        """Apply regime matrix to a candidate forecast.
+
+        Called automatically by safe_interpret(). Subclasses should NOT call
+        this themselves — it is applied once at the seam.
+
+        Returns the forecast unchanged if:
+        - no regime_matrix is set
+        - forecast.action == "no_forecast"
+        - RegimeConfig has no-op values (multiplier=1.0, abstain=False)
+        """
+        from engine.core.utils import clamp  # local import to avoid circular at module load
+
+        if self.regime_matrix is None or forecast.action == "no_forecast":
+            return forecast
+
+        cfg = self.regime_matrix.get(regime_tag)
+
+        # Hard abstain for this regime
+        if cfg.abstain:
+            return abstain(
+                source=forecast.source,
+                asset=forecast.asset,
+                horizon=forecast.horizon,
+                reason=AbstentionReason.REGIME_FILTERED,
+                regime_tag=regime_tag,
+                visible_signal_refs=forecast.visible_signal_refs,
+            )
+
+        # active_rules=frozenset() means no rules run — implicit abstain
+        if cfg.active_rules is not None and len(cfg.active_rules) == 0:
+            return abstain(
+                source=forecast.source,
+                asset=forecast.asset,
+                horizon=forecast.horizon,
+                reason=AbstentionReason.REGIME_FILTERED,
+                regime_tag=regime_tag,
+                visible_signal_refs=forecast.visible_signal_refs,
+            )
+
+        # Apply confidence multiplier
+        new_confidence = clamp(forecast.confidence * cfg.confidence_multiplier, 0.0, 1.0)
+
+        # Apply min_confidence (regime-specific override, else use class default)
+        effective_min = cfg.min_confidence if cfg.min_confidence is not None else self.min_confidence
+        if new_confidence < effective_min:
+            return abstain(
+                source=forecast.source,
+                asset=forecast.asset,
+                horizon=forecast.horizon,
+                reason=AbstentionReason.LOW_CONFIDENCE,
+                regime_tag=regime_tag,
+                visible_signal_refs=forecast.visible_signal_refs,
+            )
+
+        if new_confidence == forecast.confidence:
+            return forecast  # no change, avoid unnecessary copy
+
+        return forecast.model_copy(update={"confidence": new_confidence})
 
     @abstractmethod
     def interpret(
@@ -81,13 +154,14 @@ class Interpreter(ABC):
     ) -> ForecastPayload:
         """Call interpret() and fall back to abstention on any exception."""
         try:
-            return self.interpret(
+            result = self.interpret(
                 asset=asset,
                 horizon=horizon,
                 signals=signals,
                 regime_tag=regime_tag,
                 visible_signal_refs=visible_signal_refs,
             )
+            return self.apply_regime_conditioning(result, regime_tag)
         except Exception:  # noqa: BLE001
             return abstain(
                 source=self.source,
