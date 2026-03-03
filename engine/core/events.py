@@ -95,6 +95,7 @@ class EventType(StrEnum):
 
     # Forecast events (producers → brain)
     FORECAST_V1 = "forecast.v1"
+    FORECAST_OUTCOME_V1 = "forecast.outcome.v1"
 
     ATTRIBUTION_OUTCOME_V1 = "attribution.outcome.v1"
 
@@ -112,6 +113,7 @@ class AbstentionReason(StrEnum):
     REGIME_FILTERED = "regime_filtered"
     CONFLICT_UNRESOLVED = "conflict_unresolved"
     THESIS_UNCHANGED = "thesis_unchanged"
+    SHADOW_MODE = "shadow_mode"
 
 
 class ForecastLifecycleState(StrEnum):
@@ -398,6 +400,24 @@ class ForecastPayload(BaseModel):
         return self
 
 
+class ForecastOutcomePayload(BaseModel):
+    """Payload for FORECAST_OUTCOME_V1 — resolved forecast outcome."""
+
+    forecast_event_id: str
+    producer_id: str
+    asset: str
+    horizon: str
+    forecast_action: Literal["long", "short", "flat"]
+    forecast_confidence: float = Field(ge=0.0, le=1.0)
+    forecast_price: float
+    actual_price: float
+    return_actual_pct: float
+    direction_correct: bool
+    brier_score: float
+    regime_at_forecast: str = "unknown"
+    resolved_at: float
+
+
 PayloadModel = (
     TASignalPayload
     | OnchainSignalPayload
@@ -421,6 +441,7 @@ PayloadModel = (
     | SignalAcceptedPayload
     | AttributionOutcomePayload
     | ForecastPayload
+    | ForecastOutcomePayload
 )
 
 
@@ -452,6 +473,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_ACCEPTED_V1: SignalAcceptedPayload,
     # Forecast
     EventType.FORECAST_V1: ForecastPayload,
+    EventType.FORECAST_OUTCOME_V1: ForecastOutcomePayload,
     EventType.ATTRIBUTION_OUTCOME_V1: AttributionOutcomePayload,
 }
 

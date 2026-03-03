@@ -375,6 +375,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON (default).",
     )
 
+    p_resolve = sub.add_parser("resolve-outcomes", help="Resolve elapsed FORECAST_V1 events into FORECAST_OUTCOME_V1")
+    p_resolve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_keys = sub.add_parser("keys", help="Manage API keys")
     keys_sub = p_keys.add_subparsers(dest="keys_cmd")
 
@@ -1753,6 +1756,36 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Resolve eligible forecasts into FORECAST_OUTCOME_V1 events.
+
+    Exit code is always 0 (cron/monitoring friendly).
+    """
+
+    from engine.brain.outcome_resolver import OutcomeResolver
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    resolved = 0
+    skipped = 0
+    try:
+        resolver = OutcomeResolver(db)
+        resolved = int(resolver.resolve_pending())
+        skipped = int(getattr(resolver, "last_skipped_missing_price", 0))
+    except Exception:
+        # Never fail this command; resolver itself is best-effort.
+        resolved = 0
+        skipped = 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"resolved": resolved, "skipped_missing_price": skipped}))
+    else:
+        print(f"resolved {resolved} forecasts, skipped {skipped} (missing price data)")
+    return 0
+
+
 def _cmd_keys(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli_keys import cmd_keys_list, cmd_keys_remove, cmd_keys_set, cmd_keys_test
     from engine.security.keystore import Keystore
@@ -3102,6 +3135,7 @@ def main(argv: list[str] | None = None) -> int:
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
+        "resolve-outcomes": _cmd_resolve_outcomes,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
         "start": _cmd_start,
