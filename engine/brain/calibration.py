@@ -1,6 +1,10 @@
 """
 Brier score tracking and forecast resolution.
 
+Glenn W. Brier, 1950. "Verification of Forecasts Expressed in Terms of Probability."
+Monthly Weather Review, 78(1): 1-3. Three pages. The scoring rule that outlasted
+every forecaster who ignored it.
+
 Resolution logic: when a forecast's horizon expires, compare the
 emitted direction (bullish/bearish) to actual price movement.
 Outcome = 1.0 if direction was correct, 0.0 if wrong.
@@ -121,6 +125,8 @@ def resolve_forecast(
     outcome: float,
     price_at_resolve: float | None = None,
 ) -> None:
+    # Popper: a theory that cannot be tested is not a theory. It is a belief.
+    # Resolution is the test. The score is the record.
     """
     Record the outcome of a forecast and compute its Brier score.
     outcome: 1.0 = direction was correct, 0.0 = wrong.

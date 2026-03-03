@@ -20,6 +20,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# Von Foerster, second-order cybernetics: the observer is part of the system.
+# These defaults are not neutral. They encode assumptions about what markets reward.
+# Shadow mode exists so the system can question its own priors before acting on them.
 # Default parameters for known scoring functions.
 # These values mirror the current hardcoded scoring behavior.
 DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
@@ -139,6 +142,9 @@ def propose_shadow_update(db: Any, param_key: str, new_value: float, reason: str
 
 
 def promote_to_live(db: Any, param_key: str) -> bool:
+    # Bhagavad Gita 2.47: you have a right to perform your duties,
+    # but you are not entitled to the fruits of your actions.
+    # The shadow runs the experiment. This function collects the result.
     """Promote ``value_shadow`` to ``value_live`` and disable shadow mode."""
     conn = _resolve_conn(db)
     row = conn.execute(
