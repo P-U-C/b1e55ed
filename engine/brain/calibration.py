@@ -61,6 +61,30 @@ def _connection(db: Any) -> Any:
     return getattr(db, "conn", db)
 
 
+def _ensure_llm_shadow_log_table(db: Any) -> None:
+    conn = _connection(db)
+    with conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_shadow_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                producer TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                horizon TEXT NOT NULL,
+                regime TEXT NOT NULL,
+                rule_confidence REAL NOT NULL,
+                llm_confidence_delta REAL NOT NULL,
+                llm_suppressed INTEGER NOT NULL DEFAULT 0,
+                llm_rationale TEXT,
+                llm_error TEXT,
+                shadow_mode INTEGER NOT NULL DEFAULT 1,
+                ts REAL NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_llm_shadow_producer_ts ON llm_shadow_log(producer, ts)")
+
+
 def _parse_iso_utc(value: str | None) -> datetime | None:
     if value is None:
         return None
@@ -282,4 +306,126 @@ def brier_summary(db: Any, producer_name: str, window_days: int = 30) -> dict[st
         "mean_confidence": round(mean_conf_val, 4),
         "resolution_rate": round(resolution_rate, 3),
         "regime_breakdown": regime_breakdown,
+    }
+
+
+def log_shadow_critique(
+    db: Any,
+    *,
+    producer: str,
+    asset: str,
+    horizon: str,
+    regime: str,
+    rule_confidence: float,
+    llm_confidence_delta: float,
+    llm_suppressed: bool,
+    llm_rationale: str,
+    llm_error: str | None,
+    shadow_mode: bool,
+) -> None:
+    """Persist one LLM critic shadow/live observation for later analysis."""
+    conn = _connection(db)
+    _ensure_llm_shadow_log_table(conn)
+
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO llm_shadow_log
+                    (producer, asset, horizon, regime, rule_confidence, llm_confidence_delta,
+                     llm_suppressed, llm_rationale, llm_error, shadow_mode, ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    producer,
+                    asset,
+                    horizon,
+                    regime,
+                    float(rule_confidence),
+                    float(llm_confidence_delta),
+                    int(bool(llm_suppressed)),
+                    llm_rationale,
+                    llm_error,
+                    int(bool(shadow_mode)),
+                    float(datetime.now(tz=UTC).timestamp()),
+                ),
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.error("log_shadow_critique failed for producer=%s asset=%s: %s", producer, asset, e)
+
+
+def get_shadow_comparison(db: Any, producer: str, days: int = 30) -> dict[str, Any]:
+    """Return comparison stats: rule vs LLM-adjusted confidence, suppression rate, error rate."""
+    conn = _connection(db)
+    _ensure_llm_shadow_log_table(conn)
+
+    window_days = max(int(days), 1)
+    since_ts = float(datetime.now(tz=UTC).timestamp()) - float(window_days * 86400)
+
+    rows = conn.execute(
+        """
+        SELECT rule_confidence, llm_confidence_delta, llm_suppressed, llm_error, shadow_mode
+        FROM llm_shadow_log
+        WHERE producer = ?
+          AND ts >= ?
+        ORDER BY ts ASC
+        """,
+        (producer, since_ts),
+    ).fetchall()
+
+    if not rows:
+        return {
+            "producer": producer,
+            "days": window_days,
+            "count": 0,
+            "mean_rule_confidence": 0.0,
+            "mean_llm_adjusted_confidence": 0.0,
+            "mean_llm_delta": 0.0,
+            "suppression_rate": 0.0,
+            "error_rate": 0.0,
+            "shadow_count": 0,
+            "live_count": 0,
+        }
+
+    total = len(rows)
+    rule_sum = 0.0
+    adjusted_sum = 0.0
+    delta_sum = 0.0
+    suppressed_count = 0
+    error_count = 0
+    shadow_count = 0
+
+    for row in rows:
+        rule_conf = float(row[0] or 0.0)
+        delta = float(row[1] or 0.0)
+        suppressed = bool(int(row[2] or 0))
+        llm_error = str(row[3] or "").strip()
+        is_shadow = bool(int(row[4] or 0))
+
+        rule_sum += rule_conf
+        delta_sum += delta
+
+        adjusted = 0.0 if suppressed else max(0.0, min(1.0, rule_conf + delta))
+        adjusted_sum += adjusted
+
+        if suppressed:
+            suppressed_count += 1
+        if llm_error:
+            error_count += 1
+        if is_shadow:
+            shadow_count += 1
+
+    live_count = total - shadow_count
+
+    return {
+        "producer": producer,
+        "days": window_days,
+        "count": total,
+        "mean_rule_confidence": round(rule_sum / total, 4),
+        "mean_llm_adjusted_confidence": round(adjusted_sum / total, 4),
+        "mean_llm_delta": round(delta_sum / total, 4),
+        "suppression_rate": round(suppressed_count / total, 4),
+        "error_rate": round(error_count / total, 4),
+        "shadow_count": shadow_count,
+        "live_count": live_count,
     }

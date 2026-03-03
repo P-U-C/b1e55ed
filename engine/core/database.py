@@ -540,6 +540,25 @@ CREATE TABLE IF NOT EXISTS producer_calibration (
     last_updated TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(producer_name, asset, regime, confidence_bucket)
 );
+
+-- ============================================================
+-- LLM Critic Shadow Log (P3.1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_shadow_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    horizon TEXT NOT NULL,
+    regime TEXT NOT NULL,
+    rule_confidence REAL NOT NULL,
+    llm_confidence_delta REAL NOT NULL,
+    llm_suppressed INTEGER NOT NULL DEFAULT 0,
+    llm_rationale TEXT,
+    llm_error TEXT,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_llm_shadow_producer_ts ON llm_shadow_log(producer, ts);
 """
 
 
@@ -606,6 +625,8 @@ class Database:
         self._ensure_table_exists("scoring_params")
         # P2.2 — producer calibration curves
         self._ensure_table_exists("producer_calibration")
+        # P3.1 — LLM critic shadow logging
+        self._ensure_table_exists("llm_shadow_log")
         # P2.5 — isotonic calibration uses forecast_calibration (P2.1); no new table
         self._migrate_karma_intents_unique_trade_id()
 
