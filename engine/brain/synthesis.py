@@ -13,7 +13,7 @@ This module ports the *v2* synthesis philosophy from the legacy system:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover
 
 from typing import Any, Final
 
+from engine.brain.hierarchy import HierarchyEngine, HierarchyResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType
@@ -67,6 +68,7 @@ class SynthesisResult:
     domain_scores: dict[str, float]  # 0..1 per domain (only domains with features)
     weights_used: dict[str, float]  # domain -> weight used this cycle (after quality adjustment)
     weighted_score: float  # 0..1 (domain_scores ⋅ weights_used)
+    hierarchy_factors: dict[str, float] = field(default_factory=dict)  # domain -> final hierarchy multiplier
     regime_tag: str = "unknown"  # per-asset regime (populated by synthesize_with_regime)
 
 
@@ -362,20 +364,9 @@ class VectorSynthesis:
             if not rows:
                 return {}
 
-            import json as _json
-
-            # Build producer -> domain mapping from recent accepted signals
-            producer_domains: dict[str, str] = {}
-            sig_rows = self.db.conn.execute(
-                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
-                (str(EventType.SIGNAL_ACCEPTED_V1),),
-            ).fetchall()
-            for sr in sig_rows:
-                p = _json.loads(sr[0]) if isinstance(sr[0], str) else sr[0]
-                pid = str(p.get("producer_id", ""))
-                dom = str(p.get("domain", ""))
-                if pid and dom and pid not in producer_domains:
-                    producer_domains[pid] = dom
+            producer_domains = self._build_producer_domain_map()
+            if not producer_domains:
+                return {}
 
             # Average karma per domain
             domain_scores: dict[str, list[float]] = {}
@@ -393,6 +384,26 @@ class VectorSynthesis:
         except Exception:
             return {}
 
+    def _build_producer_domain_map(self) -> dict[str, str]:
+        """Build producer_name -> domain map from recent SIGNAL_ACCEPTED_V1 events."""
+        import json as _json
+
+        try:
+            rows = self.db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
+                (str(EventType.SIGNAL_ACCEPTED_V1),),
+            ).fetchall()
+            mapping: dict[str, str] = {}
+            for row in rows:
+                payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                producer_id = str(payload.get("producer_id", "")).strip()
+                domain = str(payload.get("domain", "")).strip().lower()
+                if producer_id and domain and producer_id not in mapping:
+                    mapping[producer_id] = domain
+            return mapping
+        except Exception:
+            return {}
+
     def synthesize(
         self,
         *,
@@ -403,6 +414,7 @@ class VectorSynthesis:
         quality_adjustment: dict[str, float] | None = None,
     ) -> SynthesisResult:
         snapshot = self.build_snapshot(cycle_id=cycle_id, symbol=symbol, as_of=as_of)
+        hier_result: HierarchyResult | None = None
 
         base_weights = weights or self.config.weights.model_dump()
         # quality_adjustment: domain -> 0..1 multiplier (already computed by DataQualityMonitor)
@@ -424,6 +436,27 @@ class VectorSynthesis:
             if total_w > 0:
                 weights_used = {k: v / total_w for k, v in weights_used.items()}
 
+        # P4.1: Hierarchical weighting — best-effort modulation of domain priors.
+        try:
+            producer_domain_map = self._build_producer_domain_map()
+            if producer_domain_map:
+                hierarchy = HierarchyEngine(self.db)
+                regime_tag = getattr(snapshot, "regime", None) or "unknown"
+                hier_result = hierarchy.compute(
+                    symbol=symbol,
+                    regime=str(regime_tag),
+                    producer_domain_map=producer_domain_map,
+                )
+                for dom in list(weights_used.keys()):
+                    mult = hier_result.multipliers.get(dom, 1.0)
+                    weights_used[dom] = float(weights_used[dom]) * float(mult)
+                # Re-normalize
+                total_w = sum(weights_used.values())
+                if total_w > 0:
+                    weights_used = {k: v / total_w for k, v in weights_used.items()}
+        except Exception:
+            pass  # hierarchy is best-effort; never break synthesis
+
         domain_scores: dict[str, float] = {}
         for dom, feats in snapshot.features.items():
             s = self.domain_score(dom, feats)
@@ -439,6 +472,7 @@ class VectorSynthesis:
             domain_scores=domain_scores,
             weights_used=weights_used,
             weighted_score=_clamp01(weighted_score),
+            hierarchy_factors=(dict(hier_result.multipliers) if hier_result is not None else {}),
         )
 
     def synthesize_with_regime(
@@ -470,5 +504,6 @@ class VectorSynthesis:
             domain_scores=result.domain_scores,
             weights_used=result.weights_used,
             weighted_score=result.weighted_score,
+            hierarchy_factors=result.hierarchy_factors,
             regime_tag=regime_result.state.regime,
         )
