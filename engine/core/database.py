@@ -606,6 +606,7 @@ class Database:
         self._ensure_table_exists("scoring_params")
         # P2.2 — producer calibration curves
         self._ensure_table_exists("producer_calibration")
+        # P2.5 — isotonic calibration uses forecast_calibration (P2.1); no new table
         self._migrate_karma_intents_unique_trade_id()
 
     def _ensure_table_exists(self, table: str) -> None:
