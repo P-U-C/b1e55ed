@@ -201,6 +201,32 @@ def test_llm_critic_interpreter_live_mode_applies_regime_cap() -> None:
     assert out.confidence == pytest.approx(0.7)
 
 
+def test_llm_critic_interpreter_live_mode_respects_configurable_min_confidence_floor() -> None:
+    candidate = _mk_payload(action="long", confidence=0.6)
+    inner = _StaticInterpreter(candidate)
+    critic = _StubCritic(CritiqueResult(confidence_delta=-0.15, suppress=False, rationale="trim", raw_response='{"confidence_delta":-0.15}'))
+
+    wrapped = LLMCriticInterpreter(inner=inner, critic=critic, shadow=False, min_live_confidence=0.5)
+    out = wrapped.interpret(asset="BTC", horizon="4h", signals=[], regime_tag="BULL")
+
+    assert out.action == "no_forecast"
+    assert out.abstention_reason == AbstentionReason.LOW_CONFIDENCE
+
+
+def test_llm_critic_interpreter_live_mode_forces_shadow_when_trailing_brier_is_poor() -> None:
+    candidate = _mk_payload(action="long", confidence=0.6, reasoning_hash=None)
+    inner = _StaticInterpreter(candidate)
+    critic = _StubCritic(CritiqueResult(confidence_delta=0.2, suppress=False, rationale="up", raw_response='{"confidence_delta":0.2}'))
+
+    wrapped = LLMCriticInterpreter(inner=inner, critic=critic, shadow=False, trailing_brier_fn=lambda _producer: 0.4)
+    out = wrapped.interpret(asset="BTC", horizon="4h", signals=[], regime_tag="BULL")
+
+    assert out.action == "long"
+    assert out.confidence == pytest.approx(0.6)
+    assert out.reasoning_hash is not None
+    assert critic.called == 1
+
+
 def test_llm_critic_interpreter_no_forecast_passes_through_without_critique_call() -> None:
     candidate = _mk_payload(action="no_forecast")
     inner = _StaticInterpreter(candidate)

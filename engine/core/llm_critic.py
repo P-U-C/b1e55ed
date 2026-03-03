@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from engine.core.events import ForecastPayload
-from engine.core.utils import _clamp
+from engine.core.utils import clamp
 
 _SYSTEM_PROMPT = (
     "You are a critic reviewing a trading forecast produced by a rule-based system.\n"
@@ -207,7 +207,7 @@ class LLMCritic:
             raw_response = self._extract_content(data)
             parsed = self._parse_json(raw_response)
 
-            delta = _clamp(float(parsed.get("confidence_delta", 0.0)), -0.3, 0.3)
+            delta = clamp(float(parsed.get("confidence_delta", 0.0)), -0.3, 0.3)
             suppress = bool(parsed.get("suppress", False))
             rationale = str(parsed.get("rationale", "")).strip()
 
