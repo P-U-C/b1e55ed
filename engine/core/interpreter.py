@@ -17,9 +17,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
+from engine.brain.conviction_state import ConvictionStateReader
 from engine.core.events import AbstentionReason, ForecastPayload
 from engine.core.forecast import abstain, compute_reasoning_hash
 from engine.core.llm_critic import LLMCritic
+from engine.core.novelty import NOVELTY_MIN_CONFIDENCE, NoveltyResult, compute_novelty_penalty
 from engine.core.prosecutor import ProsecutionResult, Prosecutor
 from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
 from engine.core.regime import RegimeMatrix
@@ -578,3 +580,96 @@ class ProsecutorInterpreter(Interpreter):
                 return candidate.model_copy(update={"confidence": round(new_confidence, 4)})
 
         return candidate
+
+
+class NoveltyInterpreter(Interpreter):
+    """Wraps an Interpreter and applies a novelty penalty from aggregate conviction.
+
+    The producer sees only one number per asset: aggregate signed conviction.
+    No producer identities, no domain breakdown.
+
+    - High agreement with strong conviction -> suppress confidence (low novelty)
+    - Contrarian signal -> slight confidence boost
+    - shadow=True (default): observe only, do not mutate
+    - db=None: pass-through
+
+    Position in stack: last gate (after Prosecutor) or standalone.
+    """
+
+    def __init__(
+        self,
+        inner: Interpreter,
+        db: Any | None = None,
+        shadow: bool = True,
+        lookback_minutes: int = 120,
+    ) -> None:
+        self.inner = inner
+        self.shadow = shadow
+        self._reader = ConvictionStateReader(db, lookback_minutes=lookback_minutes) if db is not None else None
+
+        # Mirror identity at init; producer wiring may update self.* later.
+        self.producer_name = inner.producer_name
+        self.producer_version = inner.producer_version
+
+    def interpret(
+        self,
+        *,
+        asset: str,
+        horizon: str,
+        signals: list[dict[str, Any]],
+        regime_tag: str = "unknown",
+        visible_signal_refs: list[str] | None = None,
+    ) -> ForecastPayload:
+        # Keep source identity aligned with BaseProducer.emit_forecast() wiring.
+        self.inner.producer_name = self.producer_name
+        self.inner.producer_version = self.producer_version
+
+        candidate = self.inner.safe_interpret(
+            asset=asset,
+            horizon=horizon,
+            signals=signals,
+            regime_tag=regime_tag,
+            visible_signal_refs=visible_signal_refs,
+        )
+
+        if candidate.action == "no_forecast" or self._reader is None:
+            return candidate
+
+        state = self._reader.get(asset)
+        result: NoveltyResult = compute_novelty_penalty(
+            candidate_action=candidate.action,
+            candidate_confidence=float(candidate.confidence),
+            brain_conviction=float(state.conviction),
+        )
+
+        logger.info(
+            "novelty_result: producer=%s asset=%s action=%s confidence=%.4f "
+            "brain_conviction=%.4f forecast_count=%d agreement=%.4f delta=%+.4f applied=%s shadow=%s reason=%s",
+            self.producer_name,
+            asset,
+            candidate.action,
+            float(candidate.confidence),
+            float(state.conviction),
+            int(state.forecast_count),
+            float(result.agreement),
+            float(result.confidence_delta),
+            result.applied,
+            self.shadow,
+            result.reason,
+        )
+
+        if self.shadow or not result.applied:
+            return candidate
+
+        new_confidence = clamp(float(candidate.confidence) + float(result.confidence_delta), NOVELTY_MIN_CONFIDENCE, 1.0)
+        if new_confidence < 0.15:
+            return abstain(
+                source=candidate.source,
+                asset=asset,
+                horizon=horizon,
+                reason=AbstentionReason.LOW_CONFIDENCE,
+                regime_tag=regime_tag,
+                visible_signal_refs=candidate.visible_signal_refs,
+            )
+
+        return candidate.model_copy(update={"confidence": round(new_confidence, 4)})
