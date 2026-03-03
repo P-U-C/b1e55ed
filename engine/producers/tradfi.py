@@ -197,6 +197,152 @@ async def _fetch_binance(client: httpx.AsyncClient, universe: list[str]) -> list
     return results
 
 
+async def _fetch_hl_liquidations(client: httpx.AsyncClient, symbols: list[str]) -> dict[str, dict[str, float]]:
+    """Fetch Hyperliquid liquidation-cluster proxy data.
+
+    Returns:
+        dict[symbol -> {liquidation_cluster_long, liquidation_cluster_short, liq_asymmetry}]
+
+    Fails silently and returns {} on any error.
+    """
+
+    try:
+        resp = await client.post(
+            "https://api.hyperliquid.xyz/info",
+            json={"type": "metaAndAssetCtxs"},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not isinstance(data, list) or len(data) < 2:
+            return {}
+
+        meta = data[0] if isinstance(data[0], dict) else {}
+        asset_ctxs = data[1] if isinstance(data[1], list) else []
+        universe = meta.get("universe", []) if isinstance(meta, dict) else []
+
+        symbol_set = {s.upper() for s in symbols}
+        result: dict[str, dict[str, float]] = {}
+
+        for idx, asset_info in enumerate(universe):
+            if not isinstance(asset_info, dict):
+                continue
+            name = str(asset_info.get("name", "")).upper()
+            if name not in symbol_set or idx >= len(asset_ctxs):
+                continue
+
+            ctx = asset_ctxs[idx] if isinstance(asset_ctxs[idx], dict) else {}
+            mark_px = float(ctx.get("markPx", 0) or 0)
+            oi = float(ctx.get("openInterest", 0) or 0)
+            funding = float(ctx.get("funding", 0) or 0)
+
+            # Heuristic split: positive funding implies longer crowding.
+            crowding_bias = max(-0.4, min(0.4, funding * 100))
+            long_frac = max(0.1, min(0.9, 0.5 + crowding_bias))
+            short_frac = 1.0 - long_frac
+
+            long_cluster = oi * mark_px * long_frac * 0.15
+            short_cluster = oi * mark_px * short_frac * 0.15
+            total = long_cluster + short_cluster
+            liq_asymmetry = long_cluster / total if total > 0 else 0.5
+
+            result[name] = {
+                "liquidation_cluster_long": round(long_cluster, 0),
+                "liquidation_cluster_short": round(short_cluster, 0),
+                "liq_asymmetry": round(liq_asymmetry, 3),
+            }
+
+        return result
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+async def _fetch_nansen_smart_money(
+    client: httpx.AsyncClient,
+    symbols: list[str],
+    *,
+    api_key: str | None,
+) -> dict[str, float]:
+    """Best-effort smart-money netflow fetch.
+
+    Env-gated by NANSEN_API_KEY. Returns {} on any error.
+    """
+
+    if not api_key:
+        return {}
+
+    try:
+        resp = await client.post(
+            "https://api.nansen.ai/api/v1/smart-money/netflow",
+            headers={
+                "apiKey": api_key,
+                "User-Agent": "b1e55ed-tradfi-producer/1.0",
+            },
+            json={"symbols": symbols},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        rows: Any
+        if isinstance(data, dict):
+            rows = data.get("data", data.get("results", []))
+        else:
+            rows = data
+
+        if not isinstance(rows, list):
+            return {}
+
+        result: dict[str, float] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            sym = str(row.get("symbol") or row.get("asset") or "").upper().strip()
+            if not sym:
+                continue
+
+            val = row.get("netflow_usd")
+            if val is None:
+                val = row.get("netflow")
+            if val is None:
+                val = row.get("smart_money_delta")
+            if val is None:
+                continue
+
+            try:
+                result[sym] = float(val)
+            except (TypeError, ValueError):
+                continue
+
+        return result
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+async def _collect_direct(universe: list[str]) -> list[dict[str, Any]]:
+    """Collect TradFi basis rows and enrich with optional differentiated inputs."""
+
+    async with httpx.AsyncClient() as client:
+        base_rows = await _fetch_binance(client, universe)
+        liq_by_symbol = await _fetch_hl_liquidations(client, universe)
+        smart_money = await _fetch_nansen_smart_money(
+            client,
+            universe,
+            api_key=os.getenv("NANSEN_API_KEY"),
+        )
+
+    for row in base_rows:
+        sym = str(row.get("symbol", "")).upper().strip()
+        if not sym:
+            continue
+
+        row.update(liq_by_symbol.get(sym, {}))
+        row["smart_money_delta"] = smart_money.get(sym)
+
+    return base_rows
+
+
 def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
     """Symbol + timestamp (+ producer) dedupe key."""
     return f"{EventType.SIGNAL_TRADFI_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
@@ -251,6 +397,21 @@ class TradFiBasisInterpreter(Interpreter):
             action = "short"
         else:
             action = "flat"
+
+        # P3.3: differentiated confidence adjustments
+        liq_asym = float(sig.get("liq_asymmetry") or 0.5)
+        smart_delta: float | None
+        try:
+            smart_delta = float(sig.get("smart_money_delta")) if sig.get("smart_money_delta") is not None else None
+        except (TypeError, ValueError):
+            smart_delta = None
+
+        if action == "long" and liq_asym > 0.65:
+            raw_confidence *= 0.85
+        if action == "long" and smart_delta is not None and smart_delta > 0:
+            raw_confidence = min(raw_confidence * 1.1, 0.95)
+        if action == "long" and smart_delta is not None and smart_delta < -1_000_000:
+            raw_confidence *= 0.75
 
         if raw_confidence < 0.3 or action == "flat":
             return abstain(
@@ -315,7 +476,7 @@ class TradFiBasisProducer(BaseProducer):
             return []
 
         try:
-            return asyncio.run(_fetch_binance(httpx.AsyncClient(), universe))
+            return asyncio.run(_collect_direct(universe))
         except Exception:
             self.ctx.logger.exception("tradfi_binance_fetch_failed")
             return []
@@ -344,6 +505,10 @@ class TradFiBasisProducer(BaseProducer):
                 direction=direction,
                 confidence=confidence,
                 signal_reason=reason,
+                smart_money_delta=row.get("smart_money_delta"),
+                liquidation_cluster_long=row.get("liquidation_cluster_long"),
+                liquidation_cluster_short=row.get("liquidation_cluster_short"),
+                liq_asymmetry=row.get("liq_asymmetry"),
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(

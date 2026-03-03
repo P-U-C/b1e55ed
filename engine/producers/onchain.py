@@ -74,12 +74,31 @@ class OnchainFlowsProducer(BaseProducer):
             if not sym:
                 continue
 
+            exchange_flow = row.get("exchange_flow")
+            flow_direction: str | None = None
+            flow_magnitude: float | None = None
+            if exchange_flow is not None:
+                try:
+                    ef = float(exchange_flow)
+                except (TypeError, ValueError):
+                    ef = 0.0
+                if ef > 1_000_000:
+                    flow_direction = "inflow"
+                elif ef < -1_000_000:
+                    flow_direction = "outflow"
+                else:
+                    flow_direction = "neutral"
+                flow_magnitude = round(min(abs(ef) / 50_000_000, 1.0), 3)
+
             payload_obj = OnchainSignalPayload(
                 symbol=sym,
                 whale_netflow=row.get("whale_netflow"),
-                exchange_flow=row.get("exchange_flow"),
+                exchange_flow=exchange_flow,
                 active_addresses_change=row.get("active_addresses_change"),
                 price_momentum_24h=row.get("price_momentum_24h"),
+                flow_direction=flow_direction,
+                flow_magnitude=flow_magnitude,
+                entity_type=row.get("entity_type"),
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(

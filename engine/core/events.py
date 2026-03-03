@@ -140,6 +140,11 @@ class TASignalPayload(BaseModel):
     trend_strength: float | None = None
     support_distance: float | None = None
     resistance_distance: float | None = None
+    # P3.3: volatility + breakout enrichment
+    bb_width: float | None = None
+    atr_14: float | None = None
+    volatility_compression: bool = False
+    breakout_failure: bool = False
 
 
 class OnchainSignalPayload(BaseModel):
@@ -148,6 +153,10 @@ class OnchainSignalPayload(BaseModel):
     exchange_flow: float | None = None
     active_addresses_change: float | None = None
     price_momentum_24h: float | None = None
+    # P3.3: directional flow enrichment
+    flow_direction: Literal["inflow", "outflow", "neutral"] | None = None
+    flow_magnitude: float | None = None
+    entity_type: str | None = None
 
 
 class TradFiSignalPayload(BaseModel):
@@ -161,6 +170,11 @@ class TradFiSignalPayload(BaseModel):
     horizon: str = "swing"
     invalidation: float | None = None
     signal_reason: str | None = None
+    # P3.3: smart money + liquidation enrichment
+    smart_money_delta: float | None = None
+    liquidation_cluster_long: float | None = None
+    liquidation_cluster_short: float | None = None
+    liq_asymmetry: float | None = None
 
 
 class SocialSignalPayload(BaseModel):
@@ -177,6 +191,10 @@ class SentimentSignalPayload(BaseModel):
     fear_greed: float | None = None
     fear_greed_change_7d: float | None = None
     ct_sentiment: str | None = None
+    # P3.3: positioning extremes
+    long_short_ratio: float | None = None
+    funding_extreme: bool = False
+    positioning_signal: Literal["extreme_long", "extreme_short", "neutral"] | None = None
 
 
 class EventsSignalPayload(BaseModel):
