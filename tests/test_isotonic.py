@@ -187,6 +187,9 @@ def test_edge_case_all_wins_returns_full_confidence(idb: Database) -> None:
     assert get_calibrated_confidence(0.62, calibrator) == pytest.approx(1.0)
 
 
+# Knowing that you know nothing is not the same as knowing nothing.
+# A calibrator trained entirely on misses returns floor confidence.
+# This is the epistemically correct result. Popper would approve.
 def test_edge_case_all_losses_returns_floor_after_clamp(idb: Database) -> None:
     for i in range(20):
         _seed(idb, f"loss-{i}", "p-loss", 0.5 + (i * 0.02), 0.0, regime="allloss")

@@ -120,6 +120,26 @@
       "placement": "inline_comment",
       "pr_number": 240,
       "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_b2c3d4e5",
+      "file": "engine/brain/isotonic.py",
+      "anchor": "def _fit_isotonic_fallback",
+      "tradition": "zadrozny-elkan-2002",
+      "content": "# Pool Adjacent Violators — Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
+      "placement": "before_function",
+      "pr_number": 245,
+      "applied_at": "2026-03-03T01:16:00Z"
+    },
+    {
+      "id": "egg_f6a7b8c9",
+      "file": "tests/test_isotonic.py",
+      "anchor": "def test_edge_case_all_losses_returns_floor_after_clamp",
+      "tradition": "popper-falsifiability",
+      "content": "# Knowing that you know nothing is not the same as knowing nothing.\n# A calibrator trained entirely on misses returns floor confidence.\n# This is the epistemically correct result. Popper would approve.",
+      "placement": "before_function",
+      "pr_number": 245,
+      "applied_at": "2026-03-03T01:16:00Z"
     }
   ]
 }
