@@ -36,6 +36,10 @@ def _clamp_confidence(value: float) -> float:
     return max(0.5, min(1.0, float(value)))
 
 
+# Pool Adjacent Violators — Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).
+# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling
+# when the calibration data is not well-described by a logistic function.
+# The market is not logistic. O(n) is fast enough for the truth.
 def _fit_isotonic_fallback(confidences: list[float], outcomes: list[float]) -> tuple[list[float], list[float]]:
     """Minimal weighted PAV isotonic fit used only when sklearn is unavailable."""
     ordered = sorted(zip(confidences, outcomes, strict=False), key=lambda item: item[0])
