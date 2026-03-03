@@ -17,16 +17,13 @@ from typing import Any
 import httpx
 
 from engine.core.events import ForecastPayload
+from engine.core.utils import _clamp
 
 _SYSTEM_PROMPT = (
     "You are a critic reviewing a trading forecast produced by a rule-based system.\n"
     "Your job: identify if the confidence is mis-calibrated or if the signal should be suppressed.\n"
     "Be brief. Respond ONLY in JSON."
 )
-
-
-def _clamp(value: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, float(value)))
 
 
 def _as_bool(raw: str | None, default: bool) -> bool:

@@ -11,7 +11,9 @@ from datetime import datetime, timedelta
 try:
     from datetime import UTC
 except ImportError:
-    UTC = UTC
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 

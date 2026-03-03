@@ -17,16 +17,27 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-from engine.brain.conviction import _REGIME_CAPS
 from engine.core.events import AbstentionReason, ForecastPayload
 from engine.core.forecast import abstain, compute_reasoning_hash
 from engine.core.llm_critic import LLMCritic
+from engine.core.utils import _clamp
 
 logger = logging.getLogger(__name__)
 
+# Default regime caps (0-10 conviction scale) — mirrors engine.brain.conviction._REGIME_CAPS.
+# Kept here so engine.core never imports from engine.brain (dependency direction: core ← brain).
+# Pass a custom dict via LLMCriticInterpreter(regime_caps=...) if caps diverge.
+_DEFAULT_REGIME_CAPS: dict[str, float] = {
+    "BULL": 10.0,
+    "BEAR": 7.0,
+    "TRANSITION": 6.0,
+    "CRISIS": 4.0,
+}
 
-def _clamp(value: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, float(value)))
+# Brier score above which the LLM critic's confidence delta is dampened.
+# A miscalibrated producer should not benefit from full LLM nudges.
+_BRIER_DAMPEN_THRESHOLD: float = 0.25
+_BRIER_DAMPEN_FACTOR: float = 0.5
 
 
 # Shannon's channel capacity theorem: every noisy channel has a maximum reliable throughput.
@@ -151,6 +162,8 @@ class LLMCriticInterpreter(Interpreter):
         db: Any | None = None,
         trailing_brier_fn: Callable[[str], float | None] | None = None,
         aggregate_conviction_fn: Callable[[str], float | None] | None = None,
+        regime_caps: dict[str, float] | None = None,
+        min_live_confidence: float = 0.3,
     ) -> None:
         self.inner = inner
         self.critic = critic
@@ -158,6 +171,8 @@ class LLMCriticInterpreter(Interpreter):
         self.db = db
         self.trailing_brier_fn = trailing_brier_fn
         self.aggregate_conviction_fn = aggregate_conviction_fn
+        self._regime_caps: dict[str, float] = regime_caps if regime_caps is not None else _DEFAULT_REGIME_CAPS
+        self.min_live_confidence = min_live_confidence
 
     @staticmethod
     def _with_reasoning_hash(payload: ForecastPayload, *, critique: str, rationale: str) -> ForecastPayload:
@@ -269,6 +284,13 @@ class LLMCriticInterpreter(Interpreter):
 
         bounded_delta = _clamp(result.confidence_delta, -0.3, 0.3)
 
+        # M2 meta-guardrail: dampen LLM influence for miscalibrated producers.
+        # If the producer's trailing Brier score is above the dampen threshold, the
+        # LLM's confidence delta is scaled down — a miscalibrated forecaster should
+        # not fully benefit from LLM nudges in either direction.
+        if trailing_brier is not None and trailing_brier > _BRIER_DAMPEN_THRESHOLD:
+            bounded_delta *= _BRIER_DAMPEN_FACTOR
+
         if self.shadow:
             self._log_shadow(
                 candidate=candidate,
@@ -291,10 +313,10 @@ class LLMCriticInterpreter(Interpreter):
             )
 
         new_confidence = _clamp(float(candidate.confidence) + bounded_delta, 0.0, 1.0)
-        regime_cap = _clamp(float(_REGIME_CAPS.get(regime_tag.upper(), 10.0)) / 10.0, 0.0, 1.0)
+        regime_cap = _clamp(float(self._regime_caps.get(regime_tag.upper(), 10.0)) / 10.0, 0.0, 1.0)
         new_confidence = min(new_confidence, regime_cap)
 
-        if new_confidence < 0.3:
+        if new_confidence < self.min_live_confidence:
             return abstain(
                 source=candidate.source,
                 asset=asset,
