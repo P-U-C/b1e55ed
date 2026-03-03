@@ -77,11 +77,51 @@ class MarketSentimentProducer(BaseProducer):
             if not sym:
                 continue
 
+            fear_greed = row.get("fear_greed")
+            long_short_ratio = row.get("long_short_ratio")
+            funding_annualized = row.get("funding_annualized")
+
+            funding_extreme = False
+            positioning_signal: str | None = None
+
+            if funding_annualized is not None:
+                try:
+                    fa = float(funding_annualized)
+                    funding_extreme = fa > 30.0 or fa < -10.0
+                except (TypeError, ValueError):
+                    funding_extreme = False
+
+            if long_short_ratio is not None:
+                try:
+                    lsr = float(long_short_ratio)
+                except (TypeError, ValueError):
+                    lsr = 1.0
+                if lsr > 2.0:
+                    positioning_signal = "extreme_long"
+                elif lsr < 0.5:
+                    positioning_signal = "extreme_short"
+                else:
+                    positioning_signal = "neutral"
+            elif fear_greed is not None:
+                try:
+                    fg = float(fear_greed)
+                except (TypeError, ValueError):
+                    fg = 50.0
+                if fg >= 80:
+                    positioning_signal = "extreme_long"
+                elif fg <= 20:
+                    positioning_signal = "extreme_short"
+                else:
+                    positioning_signal = "neutral"
+
             payload_obj = SentimentSignalPayload(
                 symbol=sym,
-                fear_greed=row.get("fear_greed"),
+                fear_greed=fear_greed,
                 fear_greed_change_7d=row.get("fear_greed_change_7d"),
                 ct_sentiment=row.get("ct_sentiment"),
+                long_short_ratio=long_short_ratio,
+                funding_extreme=funding_extreme,
+                positioning_signal=positioning_signal,
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(
