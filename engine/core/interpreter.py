@@ -20,6 +20,7 @@ from typing import Any
 from engine.core.events import AbstentionReason, ForecastPayload
 from engine.core.forecast import abstain, compute_reasoning_hash
 from engine.core.llm_critic import LLMCritic
+from engine.core.prosecutor import ProsecutionResult, Prosecutor
 from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
 from engine.core.regime import RegimeMatrix
 from engine.core.self_memory import SelfMemory, SelfMemoryConfig
@@ -475,3 +476,105 @@ class SelfMemoryInterpreter(Interpreter):
         )
 
         return candidate.model_copy(update={"confidence": round(new_confidence, 4)})
+
+
+class ProsecutorInterpreter(Interpreter):
+    """Wrap an Interpreter and run an adversarial prosecutor pass post-emit.
+
+    The prosecutor constructs the strongest counter-case against a candidate.
+    - suppress=True (and not shadow): abstain
+    - confidence_boost>0 (and not shadow): apply bounded confidence boost
+    - shadow=True (default): log only, never mutates candidate
+
+    Position in stack: last gate before emission.
+    """
+
+    def __init__(
+        self,
+        inner: Interpreter,
+        prosecutor: Prosecutor | None = None,
+        shadow: bool = True,
+        regime_caps: dict[str, float] | None = None,
+    ) -> None:
+        self.inner = inner
+        self.prosecutor = prosecutor
+        self.shadow = shadow
+        self._regime_caps: dict[str, float] = regime_caps if regime_caps is not None else _REGIME_CAPS
+
+        # Mirror identity at init; producer wiring may update self.* later.
+        self.producer_name = inner.producer_name
+        self.producer_version = inner.producer_version
+
+    def interpret(
+        self,
+        *,
+        asset: str,
+        horizon: str,
+        signals: list[dict[str, Any]],
+        regime_tag: str = "unknown",
+        visible_signal_refs: list[str] | None = None,
+    ) -> ForecastPayload:
+        # Keep source identity aligned with BaseProducer.emit_forecast() wiring.
+        self.inner.producer_name = self.producer_name
+        self.inner.producer_version = self.producer_version
+
+        candidate = self.inner.safe_interpret(
+            asset=asset,
+            horizon=horizon,
+            signals=signals,
+            regime_tag=regime_tag,
+            visible_signal_refs=visible_signal_refs,
+        )
+
+        # Pass through abstentions or when prosecutor is unconfigured.
+        if candidate.action == "no_forecast" or self.prosecutor is None:
+            return candidate
+
+        result: ProsecutionResult = self.prosecutor.prosecute(
+            candidate=candidate,
+            signals=signals,
+            regime_tag=regime_tag,
+        )
+
+        if result.error:
+            logger.warning("prosecutor_failed: %s", result.error)
+            return candidate
+
+        effective_shadow = self.shadow or self.prosecutor.config.shadow
+
+        logger.info(
+            "prosecutor_result: producer=%s asset=%s action=%s confidence=%.4f "
+            "bear_strength=%.4f bull_strength=%.4f suppress=%s confidence_boost=%.4f shadow=%s rationale=%s",
+            self.producer_name,
+            asset,
+            candidate.action,
+            float(candidate.confidence),
+            float(result.bear_strength),
+            float(result.bull_strength),
+            result.suppress,
+            float(result.confidence_boost),
+            effective_shadow,
+            result.rationale,
+        )
+
+        if effective_shadow:
+            return candidate
+
+        if result.suppress:
+            return abstain(
+                source=candidate.source,
+                asset=asset,
+                horizon=horizon,
+                reason=AbstentionReason.LOW_CONFIDENCE,
+                regime_tag=regime_tag,
+                visible_signal_refs=candidate.visible_signal_refs,
+            )
+
+        if result.confidence_boost > 0:
+            new_confidence = clamp(float(candidate.confidence) + float(result.confidence_boost), 0.0, 1.0)
+            regime_cap = clamp(float(self._regime_caps.get(regime_tag.upper(), 10.0)) / 10.0, 0.0, 1.0)
+            new_confidence = min(new_confidence, regime_cap)
+            if new_confidence != candidate.confidence:
+                return candidate.model_copy(update={"confidence": round(new_confidence, 4)})
+
+        return candidate
