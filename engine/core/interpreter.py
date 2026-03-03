@@ -22,6 +22,7 @@ from engine.core.forecast import abstain, compute_reasoning_hash
 from engine.core.llm_critic import LLMCritic
 from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
 from engine.core.regime import RegimeMatrix
+from engine.core.self_memory import SelfMemory, SelfMemoryConfig
 from engine.core.utils import clamp
 
 logger = logging.getLogger(__name__)
@@ -393,3 +394,84 @@ class LLMCriticInterpreter(Interpreter):
 
         updated = candidate.model_copy(update={"confidence": new_confidence})
         return self._with_reasoning_hash(updated, critique=result.raw_response, rationale=result.rationale)
+
+
+class SelfMemoryInterpreter(Interpreter):
+    """Wrap an Interpreter and apply producer self-memory confidence deltas.
+
+    Self-memory is a bounded, pre-emit confidence modulation based on the
+    producer's own resolved forecast history.
+
+    Guardrails:
+    - no-op when DB is unavailable
+    - no-op when insufficient resolved samples
+    - confidence delta clamped by SelfMemoryConfig.max_delta
+    - action never changes (confidence only)
+    """
+
+    def __init__(
+        self,
+        inner: Interpreter,
+        db: Any | None = None,
+        config: SelfMemoryConfig | None = None,
+    ) -> None:
+        self.inner = inner
+        self.db = db
+        self._self_memory = SelfMemory(db, config) if db is not None else None
+
+        # Mirror identity at init; producer wiring may update self.* later.
+        self.producer_name = inner.producer_name
+        self.producer_version = inner.producer_version
+
+    def interpret(
+        self,
+        *,
+        asset: str,
+        horizon: str,
+        signals: list[dict[str, Any]],
+        regime_tag: str = "unknown",
+        visible_signal_refs: list[str] | None = None,
+    ) -> ForecastPayload:
+        # Keep source identity aligned with BaseProducer.emit_forecast() wiring.
+        self.inner.producer_name = self.producer_name
+        self.inner.producer_version = self.producer_version
+
+        candidate = self.inner.safe_interpret(
+            asset=asset,
+            horizon=horizon,
+            signals=signals,
+            regime_tag=regime_tag,
+            visible_signal_refs=visible_signal_refs,
+        )
+
+        if candidate.action == "no_forecast" or self._self_memory is None:
+            return candidate
+
+        result = self._self_memory.query(
+            producer_name=self.producer_name,
+            asset=asset,
+            regime=regime_tag,
+        )
+
+        if not result.applied:
+            logger.debug(
+                "self_memory_skipped: producer=%s reason=%s",
+                self.producer_name,
+                result.skip_reason or result.reason,
+            )
+            return candidate
+
+        new_confidence = clamp(float(candidate.confidence) + float(result.confidence_delta), 0.0, 1.0)
+
+        logger.info(
+            "self_memory_applied: producer=%s asset=%s original=%.4f delta=%+.4f new=%.4f long_brier=%s recent_brier=%s",
+            self.producer_name,
+            asset,
+            float(candidate.confidence),
+            float(result.confidence_delta),
+            float(new_confidence),
+            result.long_term_brier,
+            result.recent_brier,
+        )
+
+        return candidate.model_copy(update={"confidence": round(new_confidence, 4)})
