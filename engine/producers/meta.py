@@ -26,7 +26,6 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
-from engine.brain.performance_aggregator import PerformanceAggregator
 from engine.core.database import Database
 from engine.core.events import AbstentionReason, EventType, ForecastLifecycleState, ForecastPayload
 from engine.core.forecast import abstain
@@ -73,7 +72,8 @@ class MetaProducer(BaseProducer):
             self.db = ctx_or_db
             self._log = logger
 
-        self._aggregator = PerformanceAggregator(self.db)
+        # PerformanceAggregator runs in the brain cycle (layer 4).
+        # MetaProducer reads pre-computed producer_performance tables directly.
 
     def collect(self) -> list[dict]:
         # MetaProducer does not ingest raw external feeds.
@@ -251,12 +251,6 @@ class MetaProducer(BaseProducer):
 
     def produce(self, asset: str, horizon: str = "24h") -> ForecastPayload:
         """Main entry point."""
-
-        # Keep rolling tables fresh each cycle (best-effort).
-        try:
-            self._aggregator.compute(window_days=90)
-        except Exception:  # noqa: BLE001
-            logger.debug("meta_producer_aggregator_compute_failed", exc_info=True)
 
         if not self._is_active():
             return abstain(

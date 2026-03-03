@@ -411,3 +411,13 @@ Set the kill switch level (0 = off, 1–4 = escalating restriction).
 ```text
 b1e55ed kill-switch set <level 0-4> [--json]
 ```
+
+### `b1e55ed resolve-outcomes`
+
+Resolve elapsed `FORECAST_V1` events against actual prices. Writes `FORECAST_OUTCOME_V1` events (immutable). Idempotent — safe to run every 30 minutes via cron.
+
+```text
+b1e55ed resolve-outcomes
+```
+
+Returns: count of forecasts resolved in this run. Exit 0 always.
