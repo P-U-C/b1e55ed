@@ -316,6 +316,7 @@ Entry Points (no dependencies)
 
 Tier 1: Getting Started
   ├─ getting-started.md
+  ├─ setup.md
   ├─ DOCKER.md
   └─ configuration.md
 
@@ -376,6 +377,7 @@ done
 
 # Example cycle detection:
 docs/getting-started.md → docs/configuration.md
+docs/setup.md → getting-started.md, configuration.md, cli-reference.md, openclaw-integration.md
 docs/configuration.md → docs/deployment.md
 docs/deployment.md → docs/getting-started.md  # CYCLE!
 ```
