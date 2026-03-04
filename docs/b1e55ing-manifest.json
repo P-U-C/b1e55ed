@@ -250,6 +250,26 @@
       "placement": "before_function",
       "pr_number": 278,
       "applied_at": "2026-03-04T13:17:23Z"
+    },
+    {
+      "id": "egg_de2045fa",
+      "file": "docs/whitepaper-technical.md",
+      "anchor": "**Current architecture**: append-only, hash-linked, application-layer enforcement.",
+      "tradition": "Wittgenstein",
+      "content": "<!-- Wovon man nicht sprechen kann, darüber muss man schweigen. — Tractatus 7 -->",
+      "placement": "after_anchor",
+      "pr_number": 282,
+      "applied_at": "2026-03-04T20:44:05Z"
+    },
+    {
+      "id": "egg_ad9cc521",
+      "file": "docs/whitepaper-summary.md",
+      "anchor": "a lightweight directional EMA tracker",
+      "tradition": "Strunk & White",
+      "content": "<!-- Vigorous writing is concise. — Strunk & White, III.17 -->",
+      "placement": "after_anchor",
+      "pr_number": 282,
+      "applied_at": "2026-03-04T20:44:05Z"
     }
   ]
 }

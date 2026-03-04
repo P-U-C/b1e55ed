@@ -85,6 +85,8 @@ When a position closes:
 
 This is the core karma mechanism: a lightweight directional EMA tracker with α = 0.05. A producer who has been consistently correct will have high karma. A producer who has been consistently wrong will have low karma. A producer who has been random will drift toward neutral.
 
+<!-- Vigorous writing is concise. — Strunk & White, III.17 -->
+
 Karma and Brier score serve different purposes. Brier score measures calibration quality — whether stated probabilities match realized frequencies. Karma is an operational weighting signal — it determines how much a producer's current forecasts influence synthesis. Both metrics must be healthy for a producer to be trusted.
 
 ### 3.4 The Sharpness Incentive

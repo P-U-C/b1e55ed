@@ -94,6 +94,8 @@ The event store enforces append-only writes at the application layer. Each event
 
 **Current architecture**: append-only, hash-linked, application-layer enforcement.
 
+<!-- Wovon man nicht sprechen kann, darüber muss man schweigen. — Tractatus 7 -->
+
 **Audit roadmap**: cryptographic anchoring to an external chain (EAS or equivalent) for operator-independent verification. Until that ships, the hash chain provides auditability within the trust boundary of the operator.
 
 ### 2.2 The Producer Layer (13 Base Producers)
