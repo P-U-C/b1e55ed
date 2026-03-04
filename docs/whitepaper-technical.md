@@ -484,6 +484,31 @@ This rewards bold correct forecasts disproportionately. A producer who issues co
 
 Requires a calibration quality gate to prevent overconfidence gaming. The sharpness mechanism addresses the resolution component of Brier decomposition — ensuring that forecasters cannot game the system by clustering predictions near the base rate.
 
+#### Difficulty-Adjusted Sharpness
+
+*Status: research design*
+
+The basic sharpness formula rewards resolution but does not account for prediction difficulty. A producer who confidently predicts BTC will rise during a strong uptrend is making an easy call — the base rate already favors that direction. The difficulty-adjusted sharpness formula conditions the resolution multiplier on implied probability from market state:
+
+```
+base_rate = regime_directional_bias(asset, regime)  # e.g., 0.65 for BULL
+difficulty = 1 - |base_rate - 0.5| × 2              # harder when base_rate ≈ 0.5
+sharpness = |confidence - 0.5| × 2
+adjusted_sharpness = sharpness × difficulty
+
+karma_new = karma_old × 0.95 + outcome × adjusted_sharpness × 0.05
+```
+
+**Interpretation:**
+- `difficulty = 1.0` when `base_rate = 0.5` (maximum uncertainty, hardest to predict)
+- `difficulty = 0.0` when `base_rate = 0.0` or `1.0` (deterministic, trivial to predict)
+- A bold correct forecast in a 50/50 regime earns full sharpness credit
+- A bold correct forecast in a trending regime earns discounted sharpness credit
+
+This addresses the **bold-on-easy gaming vector**: a producer cannot farm karma by confidently calling direction during obvious trends. The regime detector provides the base rate estimate; the difficulty adjustment ensures that karma accumulation reflects genuine forecasting skill, not regime tailwinds.
+
+**Calibration requirement:** The `base_rate` estimate must itself be calibrated. If the regime detector systematically misjudges directional bias, the difficulty adjustment will misattribute skill. Initial implementation uses a 20-period rolling directional accuracy as the base rate proxy.
+
 ### 4.4 Calibration and Isotonic Regression
 
 The `forecast_calibration` table tracks per-producer, per-asset, per-horizon, per-regime Brier scores. This enables:
@@ -853,6 +878,34 @@ b1e55ed as infrastructure + oracle = a verifiable signal marketplace.
 | Brier score penalty | Confident-but-wrong signals hurt |
 | Acceptance rate gate | < 10% acceptance → score = 0 |
 | Sharpness weighting *(roadmap)* | Timid hedging doesn't accumulate karma |
+| Difficulty-adjusted sharpness *(research)* | Bold-on-easy gaming doesn't accumulate karma |
+
+### 6.9 Adversarial Model: Attack Vectors and Mitigations
+
+The system assumes adversarial producers. The following attack vectors have been identified and addressed:
+
+| Attack Vector | Description | Mitigation | Status |
+|---------------|-------------|------------|--------|
+| **Sybil farming** | Register multiple identities, run parallel strategies, promote the lucky one | Cold-start friction (new producers carry no weight), correlation detection (P4.3 penalizes aligned forecasts), planned: Forge proof-of-work registration | Partial |
+| **Bold-on-easy** | Issue high-confidence forecasts only during obvious trends to farm sharpness karma | Difficulty-adjusted sharpness (§4.3) conditions karma on regime base rate | Research |
+| **Timid hedging** | Cluster all forecasts near 0.5 to minimize Brier volatility while adding no resolution | Basic sharpness weighting rewards `\|confidence - 0.5\|` | Roadmap |
+| **Timing gaming** | Submit forecasts just before horizon close when direction is nearly determined | Minimum horizon enforcement; forecasts within 10% of horizon expiry are rejected | Implemented |
+| **Selective resolution** | Avoid resolution on losing forecasts to inflate hit rate | Hit rate computed only from resolved outcomes; unresolved forecasts contribute 0 | Implemented |
+| **Spam flooding** | Submit high volume of low-quality signals to dominate by quantity | Volume component uses accepted signals only; acceptance rate gate (< 10% → score 0) | Implemented |
+| **Streak manipulation** | Submit one signal per day to build consistency score without quality | Streak counts accepted-signal days only | Implemented |
+| **Correlation amplification** | Multiple producers emit identical signals to amplify weight | NoveltyInterpreter (P4.3) penalizes forecasts aligned with existing conviction | Shadow mode |
+| **Regime front-running** | Accumulate karma in one regime, carry inflated weight into transition | Regime-conditional karma tables; accelerated decay (α → 0.15) during transitions | Research |
+| **Oracle Goodhart** | Optimize against exposed oracle metrics rather than genuine forecasting | Anti-Goodhart header; metrics may change without notice; drift detection planned | Partial |
+
+**Unmitigated vectors (acknowledged risks):**
+
+| Vector | Risk | Planned Mitigation |
+|--------|------|-------------------|
+| **Collusion** | Multiple producers coordinate to game ensemble patterns | Economic stake requirement; on-chain registration cost |
+| **Model theft** | Adversary reverse-engineers successful producer strategies from oracle data | Delay on oracle data freshness; aggregated rather than per-forecast exposure |
+| **Sophisticated Sybil** | Adversary runs diverse uncorrelated strategies across Sybil identities | No current mitigation; requires proof-of-humanity or significant stake |
+
+The adversarial model is not complete. New attack vectors will emerge as the system scales. The design philosophy is defense-in-depth: multiple overlapping mitigations, shadow-mode testing before deployment, and explicit acknowledgment of unmitigated risks.
 
 ---
 

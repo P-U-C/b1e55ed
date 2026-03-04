@@ -41,9 +41,9 @@ Producers → Brain → Execution
 |-------|-|
 | Event core | Append-only database with hash chain. Auditable by construction. |
 | Brain | Multi-domain synthesis. Regime-conditioned conviction scoring. |
-| Execution | Dynamic Kelly sizing. Kill switch gating. |
+| Execution | Confidence-sensitive position sizing. Kill switch gating. |
 | Backtest engine | Walk-forward validation. FDR correction. Regime-conditioned results. |
-| Contributors | Signal provenance. Karma accounting. EAS attestations. |
+| Contributors | Signal provenance. Karma accounting. EAS attestations (roadmap). |
 | Agent interfaces | SSE event stream. MCP server. Signal attribution. |
 | Flywheel | Signal → attribution → karma → weight closed loop. Compounds automatically. |
 | Cockpit | 4-quadrant "what do I trade today" dashboard with HTMX 30s refresh. |
@@ -81,6 +81,15 @@ curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/scripts/setup-con
 New here? Start with the [standalone guide](docs/operator-standalone.md).
 
 ---
+
+## Whitepapers
+
+| Document | Audience | Length |
+|----------|----------|--------|
+| [Technical Whitepaper](docs/whitepaper-technical.md) | Engineers, researchers | 7,400 words |
+| [Summary Whitepaper](docs/whitepaper-summary.md) | Informed generalists | 2,400 words |
+| [Capital Allocator Brief](docs/whitepaper-onepager.md) | Investors, signal buyers | 600 words |
+
 
 ## Start
 

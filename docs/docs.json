@@ -96,6 +96,14 @@
           "contributing/contributor-registration",
           "contributing/karma-attribution"
         ]
+      },
+      {
+        "group": "Whitepapers",
+        "pages": [
+          "whitepaper-technical",
+          "whitepaper-summary",
+          "whitepaper-onepager"
+        ]
       }
     ]
   },
