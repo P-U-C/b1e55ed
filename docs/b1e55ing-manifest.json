@@ -210,6 +210,16 @@
       "placement": "inline_comment",
       "pr_number": 258,
       "applied_at": "2026-03-04T00:08:31Z"
+    },
+    {
+      "id": "egg_eaf76cfd",
+      "file": "engine/core/horizons.py",
+      "anchor": "HORIZONS = [\"1h\", \"4h\", \"24h\", \"3d\", \"7d\"]",
+      "tradition": "mandelbrot-fat-tails",
+      "content": "# Mandelbrot's tails care deeply about horizon choice, even when dashboards do not.",
+      "placement": "inline_comment",
+      "pr_number": 260,
+      "applied_at": "2026-03-04T00:08:33Z"
     }
   ]
 }

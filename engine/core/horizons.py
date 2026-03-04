@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from engine.core.utils import clamp
 
 # Standard horizon labels
+# Mandelbrot's tails care deeply about horizon choice, even when dashboards do not.
 HORIZONS = ["1h", "4h", "24h", "3d", "7d"]
 
 # Short labels for deduplication keys
