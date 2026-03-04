@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 
-from engine.brain.synthesis import VectorSynthesis
+from engine.brain.synthesis import VectorSynthesis, _freshness_factor
 from engine.core.database import Database
 from engine.core.events import EventType
 
@@ -94,3 +98,45 @@ def test_synthesis_missing_domain_degrades_gracefully(test_config, temp_dir):
     assert set(res.snapshot.features) == {"technical"}
     assert "technical" in res.domain_scores
     assert res.weighted_score == res.domain_scores["technical"]
+
+
+def test_freshness_factor_at_zero_age():
+    now = datetime.now(tz=UTC)
+    assert _freshness_factor(now, now) == 1.0
+
+
+def test_freshness_factor_at_70_min():
+    now = datetime.now(tz=UTC)
+    event_ts = now - timedelta(minutes=70)
+    assert _freshness_factor(event_ts, now) == pytest.approx(0.5, abs=0.01)
+
+
+def test_freshness_factor_at_large_age():
+    now = datetime.now(tz=UTC)
+    event_ts = now - timedelta(minutes=1000)
+    assert _freshness_factor(event_ts, now) == 0.01
+
+
+def test_synthesis_applies_decay_to_stale_events(test_config, temp_dir):
+    now = datetime.now(tz=UTC)
+
+    fresh_db = Database(temp_dir / "fresh.db")
+    stale_db = Database(temp_dir / "stale.db")
+
+    payload = {"symbol": "BTC", "direction": "neutral", "conviction": 10.0, "rationale": ""}
+
+    fresh_db.append_event(
+        event_type=EventType.SIGNAL_CURATOR_V1,
+        payload=payload,
+        ts=now,
+    )
+    stale_db.append_event(
+        event_type=EventType.SIGNAL_CURATOR_V1,
+        payload=payload,
+        ts=now - timedelta(hours=3),
+    )
+
+    fresh_res = VectorSynthesis(test_config, fresh_db).synthesize(cycle_id="fresh", symbol="BTC", as_of=now)
+    stale_res = VectorSynthesis(test_config, stale_db).synthesize(cycle_id="stale", symbol="BTC", as_of=now)
+
+    assert stale_res.domain_scores["curator"] < fresh_res.domain_scores["curator"]

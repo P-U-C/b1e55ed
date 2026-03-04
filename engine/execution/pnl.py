@@ -19,7 +19,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 
 from engine.core.config import Config
@@ -97,6 +99,27 @@ class PnLTracker:
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
                 )
 
+            # KS-1: Consecutive loss tracking
+            try:
+                if realized < 0:
+                    row_cl = self.db.conn.execute("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'").fetchone()
+                    count = int(row_cl[0]) if row_cl else 0
+                    count += 1
+                    self.db.conn.execute(
+                        "INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', ?, datetime('now'))",
+                        (str(count),),
+                    )
+                    if count >= 3 and self._config is not None:
+                        from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
+
+                        ks = KillSwitch(self._config, self.db)
+                        ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
+                        _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
+                else:
+                    self.db.conn.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
+            except Exception:
+                _log.warning("KS-1 consecutive loss tracking failed", exc_info=True)
+
         # Best-effort outcome attribution — never block execution on failure.
         if self._config is not None:
             try:
@@ -158,7 +181,75 @@ class PnLTracker:
                     exc_info=True,
                 )
 
+            # Best-effort flywheel attribution — update producer karma scores.
+            try:
+                from engine.execution.karma import KarmaEngine
+                from engine.security.identity import ensure_identity
+
+                karma_attr = KarmaEngine(
+                    config=self._config,
+                    db=self.db,
+                    identity=ensure_identity().identity,
+                )
+                karma_attr.attribute_outcome(
+                    trade_id=str(position_id),
+                    realized_pnl_usd=float(realized),
+                )
+            except Exception:
+                _log.warning(
+                    "flywheel attribution failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
+            # S7: Record outcome for stratification tracking
+            try:
+                from engine.brain.learning import StratificationTracker
+
+                strat = StratificationTracker(self.db)
+                pos_row2 = self.db.conn.execute(
+                    "SELECT conviction_id FROM positions WHERE id = ?",
+                    (str(position_id),),
+                ).fetchone()
+                if pos_row2 and pos_row2["conviction_id"] is not None:
+                    cs_row = self.db.conn.execute(
+                        "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
+                        (pos_row2["conviction_id"],),
+                    ).fetchone()
+                    if cs_row and cs_row["cycle_id"] and cs_row["symbol"]:
+                        sig_id = f"{cs_row['cycle_id']}:{cs_row['symbol']}"
+                        strat.record_outcome(sig_id, float(realized), _utc_now())
+            except Exception:
+                _log.warning(
+                    "stratification outcome recording failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
         return float(realized)
+
+    def check_auto_close(self, *, position_id: str, mark_price: float) -> bool:
+        """KS-2: Auto-close if unrealized loss > max_single_loss_pct of portfolio value."""
+        try:
+            if self._config is None:
+                return False
+            portfolio_value = float(self._config.risk.portfolio_value_usd)
+            threshold = portfolio_value * float(self._config.risk.max_single_loss_pct)
+            unrealized = self.unrealized_usd(position_id=position_id, mark_price=mark_price)
+            if unrealized < -threshold:
+                self.close_position(position_id=position_id, exit_price=mark_price, reason="ks2_auto_close")
+                from engine.core.events import EventType
+
+                self.db.append_event(
+                    event_type=EventType.AUDIT_V1,
+                    payload={"reason": "ks2_single_loss_auto_close", "position_id": position_id, "unrealized": unrealized, "threshold": -threshold},
+                    source="execution.pnl",
+                )
+                _log.warning("KS-2: Auto-closed position %s, unrealized %.2f exceeded threshold %.2f", position_id, unrealized, -threshold)
+                return True
+        except Exception:
+            _log.warning("KS-2 auto-close check failed for %s", position_id, exc_info=True)
+        return False
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0

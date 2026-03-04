@@ -1,24 +1,17 @@
 """a b1e55ing — Easter egg injection hook for b1e55ed PRs.
 
-Analyzes PR diffs and adds brand-appropriate cultural references as
-comments/docstrings to changed Python files. Blessings scale logarithmically
-with PR size: small PRs get focused attention, large PRs get signal not noise.
+Usage:
 
-Agent usage (primary path — local, uses ANTHROPIC_API_KEY from env):
-    python scripts/b1e55ing.py \\
-        --pr-number 77 \\
-        --github-token $GH_TOKEN \\
-        --mode agent
+  # Step 1 — dump context for AI session to read:
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode dump-context > /tmp/ctx.json
 
-Gemini fallback (CI — uses GOOGLE_API_KEY from env):
-    python scripts/b1e55ing.py \\
-        --pr-number 77 \\
-        --github-token $GH_TOKEN \\
-        --mode gemini
+  # Step 2 — AI session reads ctx.json, generates eggs, writes to /tmp/eggs.json
 
-Dry-run (inspect suggestions without writing files):
-    python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN \\
-        --mode agent --dry-run
+  # Step 3 — apply the eggs:
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode apply-eggs --eggs-file /tmp/eggs.json
+
+  # Dry-run (inspect without writing):
+  python scripts/b1e55ing.py --pr-number 77 --github-token $GH_TOKEN --mode dry-run --eggs-file /tmp/eggs.json
 
 # 0xb1e55ed = "blessed" — the name is the first egg.
 """
@@ -27,11 +20,19 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import logging
-import os
+import subprocess
 import sys
-import textwrap
+from datetime import datetime
+
+try:
+    from datetime import UTC  # py311+
+except ImportError:  # pragma: no cover
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 from pathlib import Path
 from typing import Any
 
@@ -53,60 +54,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 REPO = "P-U-C/b1e55ed"
-ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
-GEMINI_MODEL = "gemini-2.0-flash"
-MAX_EGGS_PER_FILE = 2
 REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.md"
-
-# Brand-filter phrases that must appear in the system prompt.
-BRAND_FILTER_PHRASES = [
-    "Timeless over trendy",
-    "Conviction over consensus",
-    "Builders over tourists",
-]
-
-SYSTEM_PROMPT = textwrap.dedent("""
-    You are a cultural reference curator for the b1e55ed codebase. Your job is to add
-    meaningful Easter eggs — comments, docstrings, constants — to Python files changed
-    in a PR. You have deep knowledge of the intellectual traditions described in the
-    reference document.
-
-    Rules:
-    - Only add comments, docstrings, or named constants. Never modify logic.
-    - Prefer obscure over obvious — rewards people who read the code.
-    - Every egg must pass the brand filter:
-      Timeless over trendy. Conviction over consensus. Builders over tourists.
-    - No crypto-twitter vernacular. No exclamation marks. Precision carries the energy.
-    - Wit is understated. Humor from precision, not performance.
-    - Maximum 2 eggs per file. Quality over quantity.
-    - If no egg fits naturally, return empty for that file — forced eggs are worse
-      than none.
-
-    Return ONLY valid JSON — no markdown fences, no prose. Schema:
-    {
-      "eggs": [
-        {
-          "file": "<relative path>",
-          "anchor": "<exact string to locate in file>",
-          "placement": "<module_docstring|after_class|before_function|inline_comment|constant>",
-          "content": "<text to insert>",
-          "tradition": "<intellectual_tradition_slug>",
-          "mode": "<obscure|obvious>",
-          "rationale": "<one sentence>"
-        }
-      ],
-      "skipped": ["<file>"],
-      "skip_reasons": {"<file>": "<reason>"}
-    }
-""").strip()
-
+MANIFEST_REL_PATH = Path("docs") / "b1e55ing-manifest.json"
+MANIFEST_VERSION = "1"
+MAX_EGGS_PER_FILE = 2
 
 # ---------------------------------------------------------------------------
 # Scaling — blessings proportional to PR size, with diminishing returns
 # ---------------------------------------------------------------------------
 
-# Explicit tiers so the boundary is unambiguous and readable.
-# Mirrors the docstring table exactly.
+# The Talmud is commentary layered onto Torah, then commentary onto commentary.
+# A codebase accumulates cultural strata the same way. This script is the ritual.
+# Audubon kept a ledger for every specimen; this manifest keeps one for every blessing.
 _BUDGET_TIERS: list[tuple[int, int]] = [
     (1, 1),  # 1 file       → 1
     (4, 2),  # 2–4 files    → 2
@@ -137,69 +96,94 @@ def max_blessings(n_files: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# LLM abstraction — agent (Anthropic) and gemini (Google) paths
+# Manifest helpers
 # ---------------------------------------------------------------------------
 
 
-class LLMClient:
-    """Thin wrapper that routes completions to the right backend.
+def manifest_entry_id(file: str, anchor: str, tradition: str) -> str:
+    """Stable manifest id for dedupe/audit tracking."""
+    seed = f"{file}{anchor}{tradition}".encode()
+    return f"egg_{hashlib.sha256(seed).hexdigest()[:8]}"
 
-    Both backends use lazy imports — neither is a hard dependency at import time.
-    The fallback path (gemini) is invisible: the blessing looks the same
-    regardless of which path ran.
-    """
 
-    def __init__(self, mode: str, api_key: str = "") -> None:
-        if mode not in ("agent", "gemini"):
-            raise ValueError(f"Unknown mode: {mode!r} — use 'agent' or 'gemini'")
-        self.mode = mode
-        self.api_key = api_key
+def _empty_manifest() -> dict[str, Any]:
+    return {"version": MANIFEST_VERSION, "eggs": []}
 
-    def complete(self, system: str, user: str) -> str:
-        """Return LLM text completion given *system* and *user* prompts."""
-        if self.mode == "agent":
-            return self._call_anthropic(system, user)
-        return self._call_gemini(system, user)
 
-    def _call_anthropic(self, system: str, user: str) -> str:
-        """Anthropic Claude via the official SDK. API key from env."""
-        try:
-            import anthropic  # lazy — not required in gemini mode
-        except ImportError as exc:
-            raise RuntimeError("anthropic package not installed — run: pip install anthropic") from exc
+def _manifest_path(repo_root: Path) -> Path:
+    return repo_root / MANIFEST_REL_PATH
 
-        key = self.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
 
-        client = anthropic.Anthropic(api_key=key)
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=2048,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return str(message.content[0].text)  # type: ignore[union-attr]
+def _normalize_manifest_eggs(raw_eggs: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_eggs, list):
+        return []
+    return [egg for egg in raw_eggs if isinstance(egg, dict)]
 
-    def _call_gemini(self, system: str, user: str) -> str:
-        """Google Gemini 2.0 Flash (free tier). API key from env."""
-        try:
-            from google import genai  # lazy — not required in agent mode
-            from google.genai import types as genai_types
-        except ImportError as exc:
-            raise RuntimeError("google-genai package not installed — run: pip install google-genai") from exc
 
-        key = self.api_key or os.environ.get("GOOGLE_API_KEY", "")
-        if not key:
-            raise RuntimeError("GOOGLE_API_KEY is not set — cannot proceed in gemini mode")
+# Audubon catalogued 435 species before photography existed. Every specimen placed, every placement recorded.
+# This is the field guide.
+def _load_manifest(repo_root: Path, *, create_if_missing: bool) -> dict[str, Any]:
+    path = _manifest_path(repo_root)
+    if not path.exists():
+        manifest = _empty_manifest()
+        if create_if_missing:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        return manifest
 
-        client = genai.Client(api_key=key)
-        resp = client.models.generate_content(
-            model=GEMINI_MODEL,
-            config=genai_types.GenerateContentConfig(system_instruction=system),
-            contents=user,
-        )
-        return str(resp.text)
+    try:
+        raw_manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        log.warning("invalid manifest JSON at %s — using empty manifest", path)
+        raw_manifest = _empty_manifest()
+
+    if not isinstance(raw_manifest, dict):
+        raw_manifest = _empty_manifest()
+
+    eggs = _normalize_manifest_eggs(raw_manifest.get("eggs", []))
+    version = str(raw_manifest.get("version", MANIFEST_VERSION))
+    return {"version": version, "eggs": eggs}
+
+
+def _write_manifest(repo_root: Path, manifest: dict[str, Any]) -> None:
+    path = _manifest_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# Abstract algebra: an idempotent element satisfies f(f(x)) = f(x).
+# A blessed file, re-blessed, remains blessed. The mathematics demands it.
+def _manifest_has_tradition(manifest_eggs: list[dict[str, Any]], file: str, tradition: str) -> bool:
+    return any(entry.get("file") == file and entry.get("tradition") == tradition for entry in manifest_eggs)
+
+
+def _manifest_entry_matches_removal(entry: dict[str, Any], removal: dict[str, Any]) -> bool:
+    if entry.get("file") != removal.get("file"):
+        return False
+
+    tradition = removal.get("tradition")
+    if tradition and entry.get("tradition") != tradition:
+        return False
+
+    content = removal.get("content")
+    return not (content and entry.get("content") != content)
+
+
+def _build_manifest_entry(egg: dict[str, Any], pr_number: int) -> dict[str, Any]:
+    file = str(egg.get("file", ""))
+    anchor = str(egg.get("anchor", ""))
+    tradition = str(egg.get("tradition", ""))
+    applied_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return {
+        "id": manifest_entry_id(file, anchor, tradition),
+        "file": file,
+        "anchor": anchor,
+        "tradition": tradition,
+        "content": str(egg.get("content", "")),
+        "placement": str(egg.get("placement", "")),
+        "pr_number": pr_number,
+        "applied_at": applied_at,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -221,8 +205,8 @@ def fetch_pr_files(pr_number: int, github_token: str) -> list[dict[str, Any]]:
         return resp.json()  # type: ignore[return-value]
 
 
-def fetch_pr_meta(pr_number: int, github_token: str) -> dict[str, Any]:
-    """Return PR title and body."""
+def fetch_pr(pr_number: int, github_token: str) -> dict[str, Any]:
+    """Return PR metadata from the GitHub PR API."""
     url = f"https://api.github.com/repos/{REPO}/pulls/{pr_number}"
     headers = {
         "Authorization": f"Bearer {github_token}",
@@ -235,107 +219,50 @@ def fetch_pr_meta(pr_number: int, github_token: str) -> dict[str, Any]:
         return resp.json()  # type: ignore[return-value]
 
 
-# ---------------------------------------------------------------------------
-# Prompt assembly
-# ---------------------------------------------------------------------------
+def dump_context(pr_number: int, github_token: str, repo_root: Path | None = None) -> dict[str, Any]:
+    """Fetch PR metadata, files, and diffs. Return structured context for AI session."""
+    root = repo_root or Path.cwd()
+    pr_meta = fetch_pr(pr_number, github_token)
+    files = fetch_pr_files(pr_number, github_token)
+    python_files = [f for f in files if f.get("filename", "").endswith(".py") and f.get("status") != "removed"]
+    changed_files = [f for f in files if f.get("status") != "removed"]
 
-_BLESSING_BUDGET_TABLE = textwrap.dedent("""
-    Blessing budget (logarithmic — quality over quantity):
-      1 file   → 1 blessing total
-      2–4      → 2 blessings total
-      5–10     → 3 blessings total
-      11–20    → 4 blessings total
-      21–50    → 5 blessings total
-      51+      → 6 blessings total (hard cap)
+    reference = ""
+    ref_path = REFERENCE_PATH
+    if ref_path.exists():
+        reference = ref_path.read_text(encoding="utf-8")
 
-    A 50-file PR should feel MORE curated than a 1-file PR, not more cluttered.
-    Allocate your budget to the files where a blessing will land best.
-    Forced eggs are worse than none.
-""").strip()
+    file_contexts: list[dict[str, str]] = []
+    for f in python_files:
+        rel_path = str(f.get("filename", ""))
+        path = root / rel_path
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        file_contexts.append(
+            {
+                "path": rel_path,
+                "content": content,
+                "patch": str(f.get("patch", "")),
+            }
+        )
 
+    manifest = _load_manifest(root, create_if_missing=False)
+    manifest_eggs = _normalize_manifest_eggs(manifest.get("eggs", []))
+    existing_eggs: dict[str, list[dict[str, Any]]] = {}
+    for changed in changed_files:
+        changed_file = str(changed.get("filename", ""))
+        if not changed_file:
+            continue
+        existing_eggs[changed_file] = [entry for entry in manifest_eggs if entry.get("file") == changed_file]
 
-def build_user_prompt(
-    pr_title: str,
-    pr_body: str,
-    file_contexts: list[dict[str, str]],
-    reference_text: str,
-    total_budget: int,
-) -> str:
-    """Assemble the user-facing LLM prompt."""
-    parts: list[str] = [
-        f"PR Title: {pr_title}",
-        f"PR Description: {pr_body or '(none)'}",
-        "",
-        f"You have a total budget of {total_budget} blessing(s) for this PR.",
-        _BLESSING_BUDGET_TABLE,
-        "",
-        "=== EASTER EGG REFERENCE ===",
-        reference_text,
-        "",
-        "=== FILES CHANGED IN THIS PR ===",
-    ]
-
-    for fc in file_contexts:
-        parts.append(f"\n--- {fc['filename']} ---")
-        parts.append("DIFF HUNKS:")
-        parts.append(fc["patch"])
-        parts.append("CURRENT FILE CONTENT (first 100 lines):")
-        parts.append(fc["content_preview"])
-
-    parts.append("")
-    parts.append(
-        f"Analyze the files above. Return JSON with at most {total_budget} egg(s) total, "
-        f"max {MAX_EGGS_PER_FILE} per file. Skipped files must be listed in 'skipped'."
-    )
-    return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Response parsing
-# ---------------------------------------------------------------------------
-
-
-def parse_llm_response(raw: str, total_budget: int | None = None) -> dict[str, Any]:
-    """Parse and validate the JSON response from the LLM.
-
-    Enforces:
-    - Per-file cap of MAX_EGGS_PER_FILE
-    - Global cap of *total_budget* eggs (if provided)
-    Treats malformed JSON as empty.
-    """
-    text = raw.strip()
-    # Strip markdown fences if the model ignores the instruction
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-
-    try:
-        data: dict[str, Any] = json.loads(text)
-    except json.JSONDecodeError as exc:
-        log.warning("LLM returned non-JSON (%s) — treating as no eggs", exc)
-        return {"eggs": [], "skipped": [], "skip_reasons": {}}
-
-    eggs: list[dict[str, Any]] = data.get("eggs", [])
-
-    # Enforce per-file cap
-    file_counts: dict[str, int] = {}
-    capped: list[dict[str, Any]] = []
-    for egg in eggs:
-        fname = egg.get("file", "")
-        count = file_counts.get(fname, 0)
-        if count < MAX_EGGS_PER_FILE:
-            capped.append(egg)
-            file_counts[fname] = count + 1
-        else:
-            log.warning("Capping eggs for %s at %d — extra egg dropped", fname, MAX_EGGS_PER_FILE)
-
-    # Enforce global budget cap
-    if total_budget is not None and len(capped) > total_budget:
-        log.warning("Total eggs (%d) exceeds budget (%d) — trimming", len(capped), total_budget)
-        capped = capped[:total_budget]
-
-    data["eggs"] = capped
-    return data
+    return {
+        "pr_number": pr_number,
+        "pr_title": pr_meta.get("title", ""),
+        "pr_body": pr_meta.get("body", ""),
+        "budget": max_blessings(len(python_files)),
+        "reference": reference,
+        "files": file_contexts,
+        "existing_eggs": existing_eggs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +362,71 @@ def apply_egg(file_path: Path, egg: dict[str, Any], *, dry_run: bool = False) ->
     return True
 
 
+def _remove_egg_content(original: str, content: str) -> tuple[str, bool]:
+    """Remove egg content from source text.
+
+    Handles full standalone comment lines and inline comment snippets.
+    """
+    target = content.strip("\n")
+    if not target:
+        return original, False
+
+    # Standalone/multiline exact match first.
+    block_with_newline = f"{target}\n"
+    if block_with_newline in original:
+        return original.replace(block_with_newline, "", 1), True
+    if "\n" in target and target in original:
+        return original.replace(target, "", 1), True
+
+    # Fall back to line-based removal for inline comments.
+    lines = original.splitlines(keepends=True)
+    for idx, line in enumerate(lines):
+        stripped_line = line.rstrip("\n")
+        if stripped_line.strip() == target.strip():
+            del lines[idx]
+            return "".join(lines), True
+
+        if target in line:
+            updated = line.replace(target, "", 1)
+            if updated.endswith("\n"):
+                body = updated[:-1].rstrip()
+                updated = f"{body}\n" if body else "\n"
+            else:
+                updated = updated.rstrip()
+            lines[idx] = updated
+            return "".join(lines), True
+
+    return original, False
+
+
+def apply_removal(file_path: Path, removal: dict[str, Any], *, dry_run: bool = False) -> bool:
+    """Remove a previously placed egg by exact content match."""
+    if not file_path.exists():
+        log.warning("File not found, skipping removal: %s", file_path)
+        return False
+
+    original = file_path.read_text(encoding="utf-8")
+    content = str(removal.get("content", ""))
+    patched, removed = _remove_egg_content(original, content)
+    if not removed:
+        log.warning("Removal content not found in %s — skipped", file_path)
+        return False
+
+    try:
+        ast.parse(patched)
+    except SyntaxError as exc:
+        log.warning("Removal on %s fails ast.parse (%s) — skipped", file_path, exc)
+        return False
+
+    if dry_run:
+        log.info("(dry run) would remove egg in %s [%s]", file_path, removal.get("tradition"))
+        return True
+
+    file_path.write_text(patched, encoding="utf-8")
+    log.info("removed egg from %s [%s]", file_path, removal.get("tradition"))
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Dry-run display
 # ---------------------------------------------------------------------------
@@ -460,6 +452,33 @@ def print_dry_run(eggs: list[dict[str, Any]], skipped: list[str], skip_reasons: 
     print("--- end dry run ---")
 
 
+def _load_eggs_payload(eggs_file: Path) -> dict[str, Any]:
+    """Read and normalize eggs payload from disk."""
+    payload = json.loads(eggs_file.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("eggs file must contain a JSON object")
+
+    eggs = payload.get("eggs", [])
+    removals = payload.get("removals", [])
+    skipped = payload.get("skipped", [])
+    skip_reasons = payload.get("skip_reasons", {})
+
+    if not isinstance(eggs, list):
+        eggs = []
+    if not isinstance(removals, list):
+        removals = []
+    if not isinstance(skipped, list):
+        skipped = []
+    if not isinstance(skip_reasons, dict):
+        skip_reasons = {}
+
+    payload["eggs"] = eggs
+    payload["removals"] = removals
+    payload["skipped"] = skipped
+    payload["skip_reasons"] = skip_reasons
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -472,100 +491,146 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["agent", "gemini"],
-        help="LLM backend: 'agent' (Anthropic, primary) or 'gemini' (Google, CI fallback)",
+        choices=["dump-context", "apply-eggs", "dry-run"],
+        help="Operation mode",
     )
+    parser.add_argument("--eggs-file", default="", help="Path to JSON file containing egg suggestions")
     parser.add_argument("--base-branch", default="", help="Base branch (informational, optional)")
-    parser.add_argument("--dry-run", action="store_true", help="Print suggestions without writing files")
     parser.add_argument("--repo-root", default=".", help="Path to repo root (default: cwd)")
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()
 
-    # Resolve API key from environment
-    if args.mode == "agent":
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            log.error("ANTHROPIC_API_KEY is not set — cannot proceed in agent mode")
-            return 1
-    else:
-        api_key = os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            log.error("GOOGLE_API_KEY is not set — cannot proceed in gemini mode")
-            return 1
+    if args.mode == "dump-context":
+        context = dump_context(args.pr_number, args.github_token, repo_root)
+        print(json.dumps(context, ensure_ascii=False))
+        return 0
 
-    llm = LLMClient(mode=args.mode, api_key=api_key)
-
-    # Load reference document
-    if not REFERENCE_PATH.exists():
-        log.error("Easter egg reference not found at %s", REFERENCE_PATH)
+    if not args.eggs_file:
+        log.error("--eggs-file is required for %s mode", args.mode)
         return 1
-    reference_text = REFERENCE_PATH.read_text(encoding="utf-8")
 
-    # Fetch PR metadata
-    log.info("fetching PR #%d metadata", args.pr_number)
-    pr_meta = fetch_pr_meta(args.pr_number, args.github_token)
-    pr_title: str = pr_meta.get("title", "")
-    pr_body: str = pr_meta.get("body", "") or ""
+    eggs_path = Path(args.eggs_file).resolve()
+    if not eggs_path.exists():
+        log.error("eggs file not found: %s", eggs_path)
+        return 1
 
-    # Fetch changed files
-    log.info("fetching PR #%d file list", args.pr_number)
-    pr_files = fetch_pr_files(args.pr_number, args.github_token)
+    try:
+        payload = _load_eggs_payload(eggs_path)
+    except (json.JSONDecodeError, ValueError) as exc:
+        log.error("invalid eggs payload: %s", exc)
+        return 1
 
-    # Filter to Python files that are added or modified
-    python_files = [f for f in pr_files if f.get("filename", "").endswith(".py") and f.get("status") in ("added", "modified")]
+    eggs: list[dict[str, Any]] = payload.get("eggs", [])
+    removals: list[dict[str, Any]] = payload.get("removals", [])
+    skipped: list[str] = payload.get("skipped", [])
+    skip_reasons: dict[str, str] = payload.get("skip_reasons", {})
 
-    if not python_files:
-        log.info("no Python files changed — nothing to do")
-        return 0
+    manifest_path = _manifest_path(repo_root)
+    manifest_existed = manifest_path.exists()
+    manifest = _load_manifest(repo_root, create_if_missing=args.mode == "apply-eggs")
+    manifest_eggs = _normalize_manifest_eggs(manifest.get("eggs", []))
+    manifest_changed = not manifest_existed and args.mode == "apply-eggs"
 
-    n_files = len(python_files)
-    budget = max_blessings(n_files)
-    log.info("%d Python file(s) in scope — blessing budget: %d (mode: %s)", n_files, budget, args.mode)
-
-    # Build per-file context
-    file_contexts: list[dict[str, str]] = []
-    for pf in python_files:
-        fname = pf.get("filename", "")
-        patch = pf.get("patch", "")
-        abs_path = repo_root / fname
-        if abs_path.exists():
-            content_lines = abs_path.read_text(encoding="utf-8").splitlines()
-            content_preview = "\n".join(content_lines[:100])
-        else:
-            content_preview = "(file not available on disk)"
-        file_contexts.append({"filename": fname, "patch": patch, "content_preview": content_preview})
-
-    # Build prompt and call LLM
-    user_prompt = build_user_prompt(pr_title, pr_body, file_contexts, reference_text, budget)
-    log.info("calling %s (budget: %d)", args.mode, budget)
-    raw_response = llm.complete(SYSTEM_PROMPT, user_prompt)
-
-    # Parse response — enforce both per-file and global caps
-    result = parse_llm_response(raw_response, total_budget=budget)
-    eggs: list[dict[str, Any]] = result.get("eggs", [])
-    skipped: list[str] = result.get("skipped", [])
-    skip_reasons: dict[str, str] = result.get("skip_reasons", {})
-
-    if not eggs:
-        log.info("no eggs suggested for this PR")
-        return 0
-
-    log.info("%d egg(s) suggested across %d file(s)", len(eggs), len({e.get("file") for e in eggs}))
-
-    if args.dry_run:
+    if args.mode == "dry-run":
         print_dry_run(eggs, skipped, skip_reasons)
+
+        would_remove = 0
+        for removal in removals:
+            rel_path = str(removal.get("file", ""))
+            abs_path = repo_root / rel_path
+            if apply_removal(abs_path, removal, dry_run=True):
+                would_remove += 1
+
+        would_apply = 0
+        for egg in eggs:
+            rel_path = str(egg.get("file", ""))
+            tradition = str(egg.get("tradition", ""))
+            if _manifest_has_tradition(manifest_eggs, rel_path, tradition):
+                log.info("skipping %s in %s — already blessed", tradition, rel_path)
+                continue
+
+            abs_path = repo_root / rel_path
+            if apply_egg(abs_path, egg, dry_run=True):
+                would_apply += 1
+
+        log.info("(dry run) %d removal(s) and %d egg(s) would apply", would_remove, would_apply)
         return 0
 
-    # Apply patches
+    removed = 0
+    for removal in removals:
+        rel_path = str(removal.get("file", ""))
+        abs_path = repo_root / rel_path
+        if apply_removal(abs_path, removal, dry_run=False):
+            removed += 1
+
+        before = len(manifest_eggs)
+        manifest_eggs = [entry for entry in manifest_eggs if not _manifest_entry_matches_removal(entry, removal)]
+        if len(manifest_eggs) != before:
+            manifest_changed = True
+
     applied = 0
     for egg in eggs:
-        rel_path = egg.get("file", "")
+        rel_path = str(egg.get("file", ""))
+        tradition = str(egg.get("tradition", ""))
+
+        if _manifest_has_tradition(manifest_eggs, rel_path, tradition):
+            log.info("skipping %s in %s — already blessed", tradition, rel_path)
+            continue
+
         abs_path = repo_root / rel_path
         if apply_egg(abs_path, egg, dry_run=False):
             applied += 1
+            entry = _build_manifest_entry(egg, args.pr_number)
+            entry_id = entry.get("id")
+            manifest_eggs = [existing for existing in manifest_eggs if existing.get("id") != entry_id]
+            manifest_eggs.append(entry)
+            manifest_changed = True
 
-    log.info("%d egg(s) applied — commit message: 'chore: a b1e55ing [skip ci]'", applied)
+    if manifest_changed:
+        manifest["eggs"] = manifest_eggs
+        _write_manifest(repo_root, manifest)
+
+    if applied == 0 and removed == 0 and not manifest_changed:
+        log.info("no eggs applied — nothing to commit")
+        return 0
+
+    log.info("%d removal(s), %d egg(s) applied — committing", removed, applied)
+
+    result = subprocess.run(
+        ["git", "add", "-A"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        log.error("git add failed: %s", result.stderr)
+        return 1
+
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        log.info("no staged changes — nothing to commit")
+        return 0
+    if result.returncode not in (0, 1):
+        log.error("git diff --cached failed: %s", result.stderr)
+        return 1
+
+    result = subprocess.run(
+        ["git", "commit", "-m", "chore: a b1e55ing [skip ci]"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        log.error("git commit failed: %s", result.stderr)
+        return 1
+
+    log.info("committed: %s", result.stdout.strip())
     return 0
 
 

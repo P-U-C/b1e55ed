@@ -128,6 +128,21 @@ b1e55ed backtest regime [--symbols BTC,ETH]
 
 See: [backtest.md](backtest.md).
 
+### `b1e55ed report`
+
+Generate flywheel reports.
+
+```text
+b1e55ed report --stratification [--json]
+b1e55ed report --cockpit-summary [--json]
+```
+
+| Flag | Description |
+|---|---|
+| `--stratification` | Confidence stratification report — compares high-confidence (≥0.65) vs low-confidence (<0.45) signal outcomes over 30 days |
+| `--cockpit-summary` | 7-day cockpit summary — top convictions, regime, kill switch state, recent P&L |
+| `--json` | Machine-readable JSON output |
+
 ---
 
 ## System
@@ -396,3 +411,13 @@ Set the kill switch level (0 = off, 1–4 = escalating restriction).
 ```text
 b1e55ed kill-switch set <level 0-4> [--json]
 ```
+
+### `b1e55ed resolve-outcomes`
+
+Resolve elapsed `FORECAST_V1` events against actual prices. Writes `FORECAST_OUTCOME_V1` events (immutable). Idempotent — safe to run every 30 minutes via cron.
+
+```text
+b1e55ed resolve-outcomes
+```
+
+Returns: count of forecasts resolved in this run. Exit 0 always.

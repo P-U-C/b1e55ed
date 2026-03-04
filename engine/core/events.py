@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 
 class EventType(StrEnum):
@@ -57,6 +57,7 @@ class EventType(StrEnum):
     SIGNAL_ACI_V1 = "signal.aci.v1"
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
     SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
+    SIGNAL_BENCHMARK_V1 = "signal.benchmark.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -92,9 +93,34 @@ class EventType(StrEnum):
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
 
+    # Forecast events (producers → brain)
+    FORECAST_V1 = "forecast.v1"
+    FORECAST_OUTCOME_V1 = "forecast.outcome.v1"
+
+    ATTRIBUTION_OUTCOME_V1 = "attribution.outcome.v1"
+
     # System
     BALANCE_UPDATED_V1 = "system.balance_updated.v1"
     AUDIT_V1 = "system.audit.v1"
+
+
+class AbstentionReason(StrEnum):
+    """Why a producer issued no_forecast this cycle."""
+
+    INSUFFICIENT_DATA = "insufficient_data"
+    LOW_CONFIDENCE = "low_confidence"
+    REGIME_MISMATCH = "regime_mismatch"
+    REGIME_FILTERED = "regime_filtered"
+    CONFLICT_UNRESOLVED = "conflict_unresolved"
+    THESIS_UNCHANGED = "thesis_unchanged"
+    SHADOW_MODE = "shadow_mode"
+
+
+class ForecastLifecycleState(StrEnum):
+    NEW = "new"
+    SUPERSEDE = "supersede"
+    REAFFIRM = "reaffirm"
+    REVOKE = "revoke"
 
 
 # -----------------
@@ -116,6 +142,11 @@ class TASignalPayload(BaseModel):
     trend_strength: float | None = None
     support_distance: float | None = None
     resistance_distance: float | None = None
+    # P3.3: volatility + breakout enrichment
+    bb_width: float | None = None
+    atr_14: float | None = None
+    volatility_compression: bool = False
+    breakout_failure: bool = False
 
 
 class OnchainSignalPayload(BaseModel):
@@ -124,6 +155,10 @@ class OnchainSignalPayload(BaseModel):
     exchange_flow: float | None = None
     active_addresses_change: float | None = None
     price_momentum_24h: float | None = None
+    # P3.3: directional flow enrichment
+    flow_direction: Literal["inflow", "outflow", "neutral"] | None = None
+    flow_magnitude: float | None = None
+    entity_type: str | None = None
 
 
 class TradFiSignalPayload(BaseModel):
@@ -132,6 +167,16 @@ class TradFiSignalPayload(BaseModel):
     funding_annualized: float | None = None
     oi_change_pct: float | None = None
     meltup_score: float | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    horizon: str = "swing"
+    invalidation: float | None = None
+    signal_reason: str | None = None
+    # P3.3: smart money + liquidation enrichment
+    smart_money_delta: float | None = None
+    liquidation_cluster_long: float | None = None
+    liquidation_cluster_short: float | None = None
+    liq_asymmetry: float | None = None
 
 
 class SocialSignalPayload(BaseModel):
@@ -148,6 +193,10 @@ class SentimentSignalPayload(BaseModel):
     fear_greed: float | None = None
     fear_greed_change_7d: float | None = None
     ct_sentiment: str | None = None
+    # P3.3: positioning extremes
+    long_short_ratio: float | None = None
+    funding_extreme: bool = False
+    positioning_signal: Literal["extreme_long", "extreme_short", "neutral"] | None = None
 
 
 class EventsSignalPayload(BaseModel):
@@ -197,6 +246,16 @@ class PriceWSSignalPayload(BaseModel):
     bid: float | None = None
     ask: float | None = None
     venue: str | None = None
+
+
+class BenchmarkSignalPayload(BaseModel):
+    """Payload for benchmark signal producers."""
+
+    symbol: str
+    direction: Literal["long", "short", "flat"]
+    confidence: float
+    source: str
+    reasoning: str | None = None
 
 
 class CuratorSignalPayload(BaseModel):
@@ -276,6 +335,89 @@ class WeightAdjustmentPayload(BaseModel):
     approved: bool = False
 
 
+class SignalAcceptedPayload(BaseModel):
+    """Payload for SIGNAL_ACCEPTED_V1 — links a trade to a contributing signal."""
+
+    trade_id: str
+    producer_id: str
+    domain: str
+    signal_event_id: str
+    contribution_weight: float = 1.0
+    direction: str
+    confidence: float
+    horizon: str | None = None
+    invalidation: float | None = None
+
+
+class ProducerOutcome(BaseModel):
+    """Single producer's outcome within an attribution event."""
+
+    producer_id: str
+    domain: str
+    contribution_weight: float
+    outcome: float  # +1.0 win, -1.0 loss, 0.0 neutral
+    karma_delta: float
+
+
+class AttributionOutcomePayload(BaseModel):
+    """Payload for ATTRIBUTION_OUTCOME_V1 — emitted when position closes."""
+
+    trade_id: str
+    realized_pnl_usd: float
+    confidence_bucket: Literal["high", "mid", "low"]
+    producers: list[ProducerOutcome]
+
+
+class ForecastPayload(BaseModel):
+    """Payload for FORECAST_V1 — the producer's probabilistic call.
+
+    Immutable after emission. Lifecycle changes (supersede/revoke/reaffirm)
+    are new events, not updates to existing ones.
+    """
+
+    forecast_id: str  # uuid4 — immutable after emission
+    protocol_version: str = "1.0"
+    asset: str  # BTC | ETH | SOL | etc.
+    horizon: str  # "1h" | "4h" | "24h"
+    action: Literal["long", "short", "flat", "no_forecast"]
+    confidence: float = Field(ge=0.0, le=1.0)  # P(positive EV | regime, net fees); 0.0–1.0
+    calibrated: bool = False  # True only after 50+ resolved forecasts
+    invalidation: float | None = None  # price that kills thesis; None when no_forecast
+    regime_tag: str = "unknown"  # risk-on | risk-off | chop | unknown
+    crisis_state: bool = False  # execution override, separate from regime_tag
+    reasoning_hash: str | None = None  # sha256(candidate_forecast + llm_critique + rationale)
+    source: str  # producer_name@version
+    lifecycle_state: ForecastLifecycleState = ForecastLifecycleState.NEW
+    supersedes_forecast_id: str | None = None  # populated when lifecycle=supersede|revoke
+    visible_signal_refs: list[str] = Field(default_factory=list)  # ALL event_ids in lookback window
+    used_signal_refs: list[str] = Field(default_factory=list)  # event_ids that materially informed call
+    abstention_reason: AbstentionReason | None = None  # set when action=no_forecast
+
+    @model_validator(mode="after")
+    def validate_no_forecast_abstention(self) -> ForecastPayload:
+        if self.action == "no_forecast" and self.abstention_reason is None:
+            raise ValueError("abstention_reason is required when action='no_forecast'")
+        return self
+
+
+class ForecastOutcomePayload(BaseModel):
+    """Payload for FORECAST_OUTCOME_V1 — resolved forecast outcome."""
+
+    forecast_event_id: str
+    producer_id: str
+    asset: str
+    horizon: str
+    forecast_action: Literal["long", "short", "flat"]
+    forecast_confidence: float = Field(ge=0.0, le=1.0)
+    forecast_price: float
+    actual_price: float
+    return_actual_pct: float
+    direction_correct: bool
+    brier_score: float
+    regime_at_forecast: str = "unknown"
+    resolved_at: float
+
+
 PayloadModel = (
     TASignalPayload
     | OnchainSignalPayload
@@ -287,6 +429,7 @@ PayloadModel = (
     | StablecoinSignalPayload
     | WhaleSignalPayload
     | OrderbookSignalPayload
+    | BenchmarkSignalPayload
     | CuratorSignalPayload
     | ACISignalPayload
     | ConvictionPayload
@@ -295,6 +438,10 @@ PayloadModel = (
     | KillSwitchPayload
     | LearningOutcomePayload
     | WeightAdjustmentPayload
+    | SignalAcceptedPayload
+    | AttributionOutcomePayload
+    | ForecastPayload
+    | ForecastOutcomePayload
 )
 
 
@@ -309,6 +456,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_STABLECOIN_V1: StablecoinSignalPayload,
     EventType.SIGNAL_WHALE_V1: WhaleSignalPayload,
     EventType.SIGNAL_ORDERBOOK_V1: OrderbookSignalPayload,
+    EventType.SIGNAL_BENCHMARK_V1: BenchmarkSignalPayload,
     EventType.SIGNAL_CURATOR_V1: CuratorSignalPayload,
     EventType.SIGNAL_ACI_V1: ACISignalPayload,
     # Brain
@@ -321,6 +469,12 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     # Learning
     EventType.LEARNING_OUTCOME_V1: LearningOutcomePayload,
     EventType.LEARNING_WEIGHT_ADJ_V1: WeightAdjustmentPayload,
+    # Attribution
+    EventType.SIGNAL_ACCEPTED_V1: SignalAcceptedPayload,
+    # Forecast
+    EventType.FORECAST_V1: ForecastPayload,
+    EventType.FORECAST_OUTCOME_V1: ForecastOutcomePayload,
+    EventType.ATTRIBUTION_OUTCOME_V1: AttributionOutcomePayload,
 }
 
 

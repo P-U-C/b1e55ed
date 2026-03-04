@@ -18,6 +18,7 @@ README.md
   → docs/configuration.md
   → docs/cli-reference.md
   → docs/api-reference.md
+  → docs/mcp.md
   → docs/contributors.md
   → docs/architecture.md
   → docs/agent-interfaces.md
@@ -75,6 +76,15 @@ api-reference.md
   → architecture.md
 ```
 
+### `docs/mcp.md`
+
+```text
+mcp.md
+  → producers.md
+  → api-reference.md
+  → configuration.md
+```
+
 ### `docs/contributors.md`
 
 ```text
@@ -100,6 +110,7 @@ architecture.md
   → contributors.md
   → eas-integration.md
   → dependencies-code.md
+  → producer-intelligence.md
 ```
 
 ### `docs/eas-integration.md`
@@ -163,12 +174,28 @@ internal/DASHBOARD_DESIGN_SPEC.md
 
 ---
 
+### `docs/producer-intelligence.md`
+
+**References:**
+```
+producer-intelligence.md
+  (no outgoing references — self-contained specification)
+```
+
+**Referenced by:**
+- docs/producers.md
+- docs/learning-loop.md
+- docs/architecture.md
+
+---
+
 ### `docs/learning-loop.md`
 
 **References:**
 ```
 learning-loop.md
   └→ ROADMAP.md               (Karma system design)
+  └→ producer-intelligence.md  (P4 intelligence layer)
 ```
 
 **Referenced by:**
@@ -295,6 +322,7 @@ Tier 1: Getting Started
 Tier 2: Architecture & Development
   ├─ architecture.md
   ├─ developers.md
+  ├─ producer-intelligence.md
   ├─ dependencies-code.md
   └─ dependencies-docs.md (this file)
 
@@ -386,6 +414,7 @@ done
 - ✅ `docs/configuration.md`
 - ✅ `docs/deployment.md`
 - ✅ `docs/api-reference.md`
+- ✅ `docs/mcp.md`
 - ✅ `docs/architecture.md`
 - ✅ `docs/developers.md`
 - ✅ `docs/security.md`
@@ -472,8 +501,9 @@ These files are design references and sprint plans, not operator-facing guides.
 |----------|---------|
 | [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
+| [MCP_SPRINT_PLAN.md](MCP_SPRINT_PLAN.md) | MCP sprint implementation plan (S1-S5) |
 
-*Last updated: 2026-02-28*
+*Last updated: 2026-03-01*
 
 ---
 
@@ -545,7 +575,7 @@ docs/contributing/how-to-contribute.mdx
 ```text
 docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
 docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
-docs/producers.md           → configuration.md, api-reference.md, producers/overview.mdx
+docs/producers.md           → configuration.md, api-reference.md, mcp.md, producers/overview.mdx, producer-intelligence.md
 ```
 
 ## CLI setup command modules
@@ -553,4 +583,102 @@ docs/producers.md           → configuration.md, api-reference.md, producers/ov
 ```text
 engine/cli/main.py             ⇒ engine/cli/commands/setup.py
 engine/cli/commands/setup.py   → engine/cli/main.py (_cmd_setup), scripts/setup-connected.sh
+```
+
+## MCP integration layer
+
+### `engine/mcp/__init__.py`
+
+```text
+engine/mcp/__init__.py
+  → engine/mcp/registry.py
+  → engine/mcp/server.py
+  → engine/mcp/types.py
+```
+
+### `engine/mcp/types.py`
+
+```text
+engine/mcp/types.py
+  (no internal deps — standalone type definitions)
+```
+
+### `engine/mcp/registry.py`
+
+```text
+engine/mcp/registry.py
+  → engine/mcp/types.py
+```
+
+### `engine/mcp/server.py`
+
+```text
+engine/mcp/server.py
+  → engine/mcp/registry.py
+  → dataclasses.asdict
+  (optional) mcp SDK import (FastMCP SSE transport)
+```
+
+### `engine/mcp/auth.py`
+
+```text
+engine/mcp/auth.py
+  → hmac.compare_digest
+  → fastapi (Header, HTTPException)
+```
+
+### `engine/mcp/client.py`
+
+```text
+engine/mcp/client.py
+  (optional) mcp SDK import
+  → httpx (HTTP transport)
+```
+
+### `api/routes/mcp.py`
+
+```text
+api/routes/mcp.py
+  → api/deps.py (get_config, get_db)
+  → engine/mcp/auth.py
+  → engine/mcp/registry.py
+  → engine/core/database.py
+```
+
+### `engine/producers/financial_datasets.py`
+
+```text
+engine/producers/financial_datasets.py
+  → engine/mcp/client.py
+  → engine/producers/base.py
+  → engine/producers/registry.py
+  → engine/core/events.py
+  → engine/core/models.py
+```
+
+### `engine/producers/polymarket.py`
+
+```text
+engine/producers/polymarket.py
+  → engine/producers/base.py
+  → engine/producers/registry.py
+  → engine/core/events.py
+  → engine/core/models.py
+  → httpx (Gamma + CLOB API calls)
+```
+
+## Flywheel
+
+```text
+docs/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
+```
+
+## Interpreter seam
+
+### `engine/core/interpreter.py`
+
+```text
+engine/core/interpreter.py
+  → engine/core/events.py (ForecastPayload, AbstentionReason)
+  → engine/core/forecast.py (abstain)
 ```

@@ -156,3 +156,12 @@ Agent C (Social)   → Curator API ──┘
 ```
 
 Multiple agents feeding signals. One operator with kill switch authority. The compound learning loop benefits from every participant.
+
+
+## Operator Workspace
+
+If you're running a b1e55ed instance with OpenClaw, use the operator template:
+
+- **GitHub template**: [P-U-C/b1e55ed-operator-template](https://github.com/P-U-C/b1e55ed-operator-template) — fork and fill in 3 files
+- **ClawHub skill**: `clawhub install b1e55ed-operator` — auto-installs to your workspace
+- **Skills repo**: [P-U-C/openclaw-skills](https://github.com/P-U-C/openclaw-skills)

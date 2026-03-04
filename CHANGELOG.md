@@ -1,5 +1,122 @@
 # Changelog
 
+## v1.0.0-beta.8 — 2026-03-04
+
+This release completes the full producer intelligence sprint (P0–P4), building a 7-layer interpreter stack on top of the base producer framework. The meta-producer's 90-day data clock starts on first deploy.
+
+### P4 — System-Level Intelligence (new in this release)
+
+- **P4.1 — Hierarchical Weighting** (#258): Domain weight multipliers computed from 4 factors: domain prior reliability, per-asset fit, regime fit, cross-domain correlation. Applied in `VectorSynthesis.synthesize()` after karma multipliers.
+- **P4.2 — Multi-Horizon Forecasts** (#260): Producers emit forecasts across domain-specific horizon sets (TradFi: 4h/24h/3d; Technical: 4h/24h; OnChain/Sentiment: 4h/24h/3d). Horizon-specific confidence scaling and caps per domain.
+- **P4.3 — Cross-Producer Awareness** (#262): `ConvictionStateReader` aggregates recent FORECAST_V1 into a single signed conviction float per asset. `NoveltyInterpreter` applies a novelty penalty when a producer's call agrees with strong existing brain conviction — suppresses redundant signal, rewards contrarian information. shadow=True default.
+- **P4.4 — The Meta-Producer** (#265): Three-component system:
+  - `OutcomeResolver`: resolves FORECAST_V1 against actual prices (Binance fallback) → writes immutable FORECAST_OUTCOME_V1. Run every 30min via `b1e55ed resolve-outcomes`. Idempotent.
+  - `PerformanceAggregator`: rolling per-producer stats (win_rate, Brier, confidence_reliability) and cross-producer correlation matrix.
+  - `MetaProducer`: reads performance tables only (no market data). Pattern-matches current ensemble state against historical episodes. Activates at 500 resolved outcomes (~3-4 weeks). shadow=True until data matures.
+
+### P3 — Per-Signal Adaptations (new in this release)
+
+- **P3.1 — LLM Critic** (#249): `LLMCriticInterpreter` wraps any interpreter. Calls configurable LLM endpoint to review signal before emit. shadow=True default. Brier > 0.35 forces shadow regardless of config.
+- **P3.2 — Regime Matrix** (#250): `RegimeInterpreter` applies per-regime confidence caps and direction weights via `RegimeMatrix`. Global caps: BULL 0.85, BEAR 0.85, CRISIS 0.60, TRANSITION 0.70.
+- **P3.3 — Differentiated Inputs** (#252): Domain producers receive signals unavailable to other domains: liquidation clusters and flow direction (onchain), basis/funding/OI (tradfi), volatility compression and positioning extremes (technical), narrative velocity (sentiment).
+- **P3.4 — Producer Self-Memory** (#254): `SelfMemoryInterpreter` reads producer's karma history and adjusts confidence proportionally. Guardrails: max delta ±0.30, min 5 resolved forecasts required, streak weight 0.35. shadow=True default.
+- **P3.5 — Adversarial Prosecutor** (#256): `ProsecutorInterpreter` constructs the strongest counter-case against every forecast. Abstains if bear_strength > configured threshold. shadow=True default. Last gate before emit.
+
+### P2 — Calibration & Learning (prior sprint, included in this release)
+
+- **P2.1 — Brier Score Tracking** (#239): `forecast_calibration` table + resolution logic. Foundation for all calibration-based features.
+- **P2.2 — Calibration Curves** (#241): Per-producer calibration curve storage and visualization.
+- **P2.3 — Correlation Tracking** (#238): `producer_correlation` table, Pearson r matrix across producer pairs.
+- **P2.4 — Learnable Scoring** (#240): `scoring_params` table, shadow/live param promotion workflow.
+- **P2.5 — Isotonic Calibration** (#245): Per-producer confidence calibration via sklearn IsotonicRegression. Applied at synthesis time.
+
+### P1 — Brain Improvements (prior sprint, included in this release)
+
+- **P1.1 — Signal Age Decay** (#226): Exponential freshness factor `exp(-λ × age_minutes)` in synthesis.
+- **P1.2 — Per-Asset Regime Detection** (#227): Each asset gets an independent regime tag (vs. global regime).
+- **P1.3 — Counter-Thesis Caps** (#229): Counter-thesis fires at all PCS levels + regime conviction caps.
+- **P1.4 — Feature Introspection** (#228): `feature_key`/`feature_value` in conviction_log for primary feature visibility.
+- **P1.5 — Brain Cycle Snapshot** (#233): `BRAIN_CYCLE_V1` full-state event — single-event reconstructability.
+
+### P0 — Foundation (prior sprint, included in this release)
+
+- **P0a — Interpreter base** (#217): `Interpreter` base class, forecast seam wired into `BaseProducer`.
+- **P0b — Confidence v1** (#222): PCS/CTS/regime formula replaces `len(features)/6.0`. Per-producer attribution in conviction_log. TradFiBasisInterpreter + dual-write SIGNAL_TRADFI_V1 + FORECAST_V1.
+
+### Infrastructure
+
+- **Review Council** (#237): Multi-persona PR review workflow. Labels: review/pass, review/concern, review/block, review/human-required.
+- **b1e55ing Manifest** (#234): Egg tracking with idempotency — audit trail for placed easter eggs.
+- **CLI** — New command: `b1e55ed resolve-outcomes` (outcome resolver entry point, exit 0 always).
+
+### New DB Tables
+
+`forecast_resolution_state`, `producer_performance`, `producer_correlation` (P4.4); `forecast_calibration` (P2.1); `scoring_params` (P2.4); `producer_correlation` (P2.3); `forecast_attribution` (P0b).
+
+### Docs
+
+- New: `docs/producer-intelligence.md` — 583-line reference for the full P3/P4 interpreter stack
+- New: `docs/producer-intelligence.md` — interpreter stack architecture, shadow mode guide, cron setup, data activation timeline
+- Updated: `docs/architecture.md`, `docs/learning-loop.md`, `docs/producers.md`, `docs/openclaw-integration.md`
+
+### Operator Tooling
+
+- New repo: [`P-U-C/b1e55ed-operator-template`](https://github.com/P-U-C/b1e55ed-operator-template) — GitHub template for OpenClaw operator workspace
+- New repo: [`P-U-C/openclaw-skills`](https://github.com/P-U-C/openclaw-skills) — `b1e55ed-operator` ClawHub skill
+
+### New Engine Files
+
+`engine/core/llm_critic.py`, `engine/core/regime.py`, `engine/core/prosecutor.py`, `engine/core/novelty.py`, `engine/core/horizons.py`, `engine/core/self_memory.py`, `engine/core/utils.py`, `engine/brain/hierarchy.py`, `engine/brain/conviction_state.py`, `engine/brain/outcome_resolver.py`, `engine/brain/performance_aggregator.py`, `engine/producers/meta.py`
+## Unreleased — Flywheel Sprints (S0–S7)
+
+### Highlights
+
+Closed the signal → trade → outcome → attribution loop. The flywheel now compounds: every trade updates producer karma, which updates synthesis weights, which produces better signals.
+
+### Features
+
+- **Signal contract schema** (S0) — `FLYWHEEL_SPEC.md`, `SIGNAL_ACCEPTED_V1` and `ATTRIBUTION_OUTCOME_V1` event types, `POST /api/v1/signals/validate` endpoint
+- **Attribution layer** (S1) — `SIGNAL_ACCEPTED_V1` emitted on every synthesis acceptance, linking signals to trades
+- **Karma wiring** (S2) — Position close → `attribute_outcome()` → `producer_karma` table update (EMA α=0.05)
+- **Smart TradFi producer** (S3) — Self-contained Binance API calls, rule-based direction + confidence scoring
+- **Benchmark producers** (S4) — 4 benchmarks (momentum, flat, equal-weight, discretionary) + `POST /api/v1/benchmarks/discretionary`
+- **Kill switch conditions** (S5) — All 5 conditions wired: consecutive losses (3), single loss >2%, open risk >5%, data feed degradation, fill divergence >0.5%
+- **Cockpit dashboard** (S6) — `/cockpit` with 4-quadrant "what do I trade today" view, HTMX 30s auto-refresh, `GET /api/v1/cockpit/state`
+- **Auto-paper-trade** (S7) — Opens paper trades automatically on confidence ≥ 0.65; `StratificationTracker` for 30-day proof; `b1e55ed report --stratification` and `b1e55ed report --cockpit-summary` CLI commands
+
+### New database tables
+
+- `producer_karma` — per-producer karma scores
+- `signal_stratification` — confidence band outcome tracking
+- `discretionary_signals` — operator override signals
+- `system_state` — kill switch and cockpit state
+
+### New configuration
+
+- `brain.auto_paper_trade: bool` (default `true`) — auto-open paper trades on high confidence
+
+### Breaking changes
+
+None.
+
+---
+
+### Bug Fixes & Reliability
+
+- **Security**: Redact all config secrets from `GET /config` response; fix rate limiter TOCTOU race condition; add global exception handler + request_id middleware (#acb14ef)
+- **Karma**: Add UNIQUE constraint on trade_id (prevents double-spend); fix contributor attribution; wire profitable field; crash recovery (#e12329f)
+- **b1e55ing**: Migrate from deprecated `google.generativeai` → `google.genai` SDK; fix YAML syntax; session-driven blessing (no external API key); apply-eggs now commits (#133, #134, #214, #216)
+- **Oracle**: Fix GitHub App auth fallback to baked-in community constants; update oracle URL to `oracle.b1e55ed.permanentupperclass.com` (#125, #197)
+- **Release workflow**: Add `workflow_dispatch` fallback for squash-merge `[skip ci]` body inheritance; squash body warning in bump-version.sh (#135)
+- **Contributor registration**: Show actual error in wizard; fix fallback logic (#119)
+- **Dashboard**: Fix 500 error; fix `b1e55ed start` command; fix `repo_root` when installed as uv tool (#108, #115)
+- **Config**: Fix packaging; fix `slots __dict__` error; start command robustness (#117)
+- **Versioning**: Single-source versioning via bump-version.sh + release workflow; forge auto-build wired (#114)
+- **Docs (Mintlify)**: `mint.json` → `docs.json` for Mintlify v4 schema; branding update (#126)
+- **CI**: Add CLI doc coverage check — fails if commands added without `docs/cli-reference.md` entry; fix GITHUB_OUTPUT assertion
+- **Backtest**: Fix prior-close vol returns, equity calculation, periods_per_year propagation (#e2bde77)
+
+
 ## v1.0.0-beta.7 — 2026-02-28
 
 ### Highlights
@@ -28,7 +145,6 @@ Two explicit operator deployment modes with guided setup. Full documentation sit
 - **Contributor registration wizard** — now shows the actual error on failure instead of a silent generic fallback; fallback logic correctly handles partial success. (#119)
 - **Forge timing display** — elapsed time shown during identity forge is now accurate (real seconds, not the previous hardcoded "~2 seconds"). (#107)
 - **Oracle setup documentation** — removed incorrect instruction for operators to set `B1E55ED_GITHUB_APP_KEY`. That key is held exclusively by the managed oracle server operator (PUC). Operators need zero extra configuration — oracle routes activate automatically when b1e55ed starts. (#131)
-- **`bless_on_merge` workflow** — migrated from deprecated `google.generativeai` to `google.genai` SDK; model updated from removed `gemini-2.0-flash-exp` to `gemini-2.0-flash`. YAML syntax error in `b1e55ing.yml` fixed. (#134)
 
 ---
 
@@ -61,7 +177,6 @@ If running as a systemd service:
 sudo systemctl restart b1e55ed.service
 ```
 
-
 ## v1.0.0-beta.6 — 2026-02-27
 
 macOS install fixes: stale uv git cache, shell env var scoping bug, EAS on by default, API root info page, dashboard identity path when installed as a uv tool. 589 tests passing.
@@ -81,6 +196,7 @@ macOS install fixes: stale uv git cache, shell env var scoping bug, EAS on by de
 ### 🔧 CI / Workflow
 
 - **Branch guard added** — `.github/workflows/branch-guard.yml` blocks PRs to `main` from any branch except `develop` or `release/*`; enforces the develop → main release flow
+
 
 ## v1.0.0-beta.5 — 2026-02-26
 

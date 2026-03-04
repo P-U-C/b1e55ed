@@ -23,13 +23,16 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
 import httpx
 
 from engine.core.events import EventType, SentimentSignalPayload
+from engine.core.horizons import SENTIMENT_HORIZONS
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
@@ -42,11 +45,13 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
     return f"{EventType.SIGNAL_SENTIMENT_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
+# Gamelan logic: each section holds a fragment, and synthesis is the full melody.
 @register("market-sentiment", domain="social")
 class MarketSentimentProducer(BaseProducer):
     """Produce market sentiment signals for the configured universe."""
 
     schedule = "0 */1 * * *"  # hourly
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_SENTIMENT_URL") or os.getenv("SENTIMENT_URL")
@@ -74,11 +79,51 @@ class MarketSentimentProducer(BaseProducer):
             if not sym:
                 continue
 
+            fear_greed = row.get("fear_greed")
+            long_short_ratio = row.get("long_short_ratio")
+            funding_annualized = row.get("funding_annualized")
+
+            funding_extreme = False
+            positioning_signal: str | None = None
+
+            if funding_annualized is not None:
+                try:
+                    fa = float(funding_annualized)
+                    funding_extreme = fa > 30.0 or fa < -10.0
+                except (TypeError, ValueError):
+                    funding_extreme = False
+
+            if long_short_ratio is not None:
+                try:
+                    lsr = float(long_short_ratio)
+                except (TypeError, ValueError):
+                    lsr = 1.0
+                if lsr > 2.0:
+                    positioning_signal = "extreme_long"
+                elif lsr < 0.5:
+                    positioning_signal = "extreme_short"
+                else:
+                    positioning_signal = "neutral"
+            elif fear_greed is not None:
+                try:
+                    fg = float(fear_greed)
+                except (TypeError, ValueError):
+                    fg = 50.0
+                if fg >= 80:
+                    positioning_signal = "extreme_long"
+                elif fg <= 20:
+                    positioning_signal = "extreme_short"
+                else:
+                    positioning_signal = "neutral"
+
             payload_obj = SentimentSignalPayload(
                 symbol=sym,
-                fear_greed=row.get("fear_greed"),
+                fear_greed=fear_greed,
                 fear_greed_change_7d=row.get("fear_greed_change_7d"),
                 ct_sentiment=row.get("ct_sentiment"),
+                long_short_ratio=long_short_ratio,
+                funding_extreme=funding_extreme,
+                positioning_signal=positioning_signal,
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(
@@ -108,6 +153,17 @@ class MarketSentimentProducer(BaseProducer):
                 health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            signal_payloads = [e.payload for e in events]
+            for symbol in symbols:
+                self.emit_forecasts_multi_horizon(
+                    asset=symbol,
+                    signals=signal_payloads,
+                    regime_tag="unknown",
+                    visible_signal_refs=[],
+                    horizon_configs=SENTIMENT_HORIZONS,
+                )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR

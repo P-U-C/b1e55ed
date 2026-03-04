@@ -20,7 +20,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
@@ -41,6 +43,7 @@ def _dedupe_key(*, producer: str, payload: dict[str, Any]) -> str:
 @register("social-intel", domain="social")
 class SocialIntelProducer(BaseProducer):
     schedule = "*/15 * * * *"  # 15m
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def collect(self) -> list[dict[str, Any]]:
         rows = pipeline.run(ctx=self.ctx)

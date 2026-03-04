@@ -19,7 +19,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from pathlib import Path
 from typing import Any
@@ -237,11 +239,29 @@ CREATE TABLE IF NOT EXISTS conviction_log (
     domain_score REAL NOT NULL,
     domain_weight REAL NOT NULL,
     weighted_contribution REAL NOT NULL,
+    producer_name TEXT NOT NULL DEFAULT '',
+    event_id TEXT NOT NULL DEFAULT '',
+    contribution_weight REAL NOT NULL DEFAULT 1.0,
+    feature_key TEXT,
+    feature_value REAL,
     ts TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_conviction_log_cycle ON conviction_log(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_conviction_log_symbol ON conviction_log(symbol);
+
+CREATE TABLE IF NOT EXISTS forecast_attribution (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_id TEXT NOT NULL,
+    conviction_id TEXT NOT NULL,
+    position_id TEXT,
+    contribution_weight REAL NOT NULL,
+    disposition TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_attribution_forecast ON forecast_attribution(forecast_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_attribution_conviction ON forecast_attribution(conviction_id);
 
 -- ============================================================
 -- Producer Health
@@ -302,6 +322,18 @@ CREATE TABLE IF NOT EXISTS producer_scores (
 CREATE INDEX IF NOT EXISTS idx_producer_scores_producer ON producer_scores(producer);
 
 -- ============================================================
+-- Producer Karma (flywheel attribution)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_karma (
+    producer_id TEXT PRIMARY KEY,
+    karma_score REAL DEFAULT 1.0,
+    win_count INTEGER DEFAULT 0,
+    loss_count INTEGER DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
+    last_updated TEXT
+);
+
+-- ============================================================
 -- API Rate Limiting (SEC1)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS api_rate_limits (
@@ -314,6 +346,15 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_rate_limits_key ON api_rate_limits(key);
+
+-- ============================================================
+-- System State (key-value store for kill switch state etc.)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
 
 -- ============================================================
 -- Risk Triggers (audit)
@@ -397,6 +438,159 @@ CREATE TABLE IF NOT EXISTS contributor_signals (
 
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_contributor ON contributor_signals(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_contrib_signals_asset ON contributor_signals(signal_asset);
+
+-- ============================================================
+-- Signal Stratification (flywheel S7)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS signal_stratification (
+    signal_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    bucket TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    outcome_pnl_usd REAL,
+    attributed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_strat_bucket ON signal_stratification(bucket);
+
+-- ============================================================
+-- Discretionary Signals (operator-injected benchmarks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS discretionary_signals (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    reasoning TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_discretionary_symbol ON discretionary_signals(symbol);
+
+-- ============================================================
+-- Learnable Scoring Parameters (P2.4)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scoring_params (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    param_key TEXT NOT NULL UNIQUE,
+    producer_name TEXT NOT NULL,
+    param_type TEXT NOT NULL,
+    value_default REAL NOT NULL,
+    value_shadow REAL NOT NULL,
+    value_live REAL NOT NULL,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sp_producer ON scoring_params(producer_name);
+
+-- ============================================================
+-- Producer Correlation Matrix (P2.3)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_correlation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    computed_at REAL,
+    producer_a TEXT NOT NULL,
+    producer_b TEXT NOT NULL,
+    asset TEXT NOT NULL DEFAULT 'ALL',
+    horizon TEXT NOT NULL DEFAULT '24h',
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    pearson_r REAL,
+    agreement_rate REAL,
+    agreement_win_rate REAL,
+    disagreement_win_rate_a REAL,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    window_days INTEGER NOT NULL DEFAULT 30,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(producer_a, producer_b, asset, regime)
+);
+CREATE INDEX IF NOT EXISTS idx_pc_pair ON producer_correlation(producer_a, producer_b);
+
+-- ============================================================
+-- Forecast Resolution + Meta Producer Performance (P4.4)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forecast_resolution_state (
+    forecast_event_id TEXT PRIMARY KEY,
+    resolved_at REAL,
+    outcome_event_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS producer_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    computed_at REAL NOT NULL,
+    producer_id TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    horizon TEXT NOT NULL,
+    regime TEXT NOT NULL DEFAULT 'all',
+    window_days INTEGER NOT NULL,
+    forecast_count INTEGER NOT NULL,
+    win_rate REAL,
+    avg_brier REAL,
+    avg_confidence REAL,
+    confidence_reliability REAL
+);
+CREATE INDEX IF NOT EXISTS idx_pp_lookup ON producer_performance(producer_id, asset, horizon, regime, computed_at DESC);
+
+-- ============================================================
+-- Forecast Calibration (P2.1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forecast_calibration (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_id TEXT NOT NULL UNIQUE,
+    producer_name TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    horizon TEXT NOT NULL,
+    direction TEXT NOT NULL,           -- 'bullish' | 'bearish' | 'neutral'
+    confidence REAL NOT NULL,
+    calibrated INTEGER NOT NULL DEFAULT 0,  -- 0 = raw, 1 = isotonic-adjusted
+    outcome REAL,                      -- 1.0 (hit) | 0.0 (miss) | NULL (unresolved)
+    brier_score REAL,                  -- computed on resolution: (confidence - outcome)^2
+    price_at_emit REAL,                -- price when forecast was emitted (if available)
+    price_at_resolve REAL,             -- price when resolved
+    emitted_at TEXT NOT NULL,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fc_producer ON forecast_calibration(producer_name);
+CREATE INDEX IF NOT EXISTS idx_fc_unresolved ON forecast_calibration(resolved_at) WHERE resolved_at IS NULL;
+
+-- ============================================================
+-- Producer Calibration Curves (P2.2)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_calibration (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer_name TEXT NOT NULL,
+    asset TEXT NOT NULL DEFAULT 'ALL',
+    regime TEXT NOT NULL DEFAULT 'unknown',
+    confidence_bucket TEXT NOT NULL,
+    observed_win_rate REAL,
+    mean_brier_score REAL,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(producer_name, asset, regime, confidence_bucket)
+);
+
+-- ============================================================
+-- LLM Critic Shadow Log (P3.1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_shadow_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    horizon TEXT NOT NULL,
+    regime TEXT NOT NULL,
+    rule_confidence REAL NOT NULL,
+    llm_confidence_delta REAL NOT NULL,
+    llm_suppressed INTEGER NOT NULL DEFAULT 0,
+    llm_rationale TEXT,
+    llm_error TEXT,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_llm_shadow_producer_ts ON llm_shadow_log(producer, ts);
 """
 
 
@@ -449,7 +643,36 @@ class Database:
         self._ensure_column("events", "contributor_id", "TEXT")
         self._ensure_column("events", "hash_version", "INT DEFAULT 1")
         self._ensure_column("karma_intents", "contributor_id", "TEXT")
+        self._ensure_column("conviction_log", "producer_name", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("conviction_log", "event_id", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("conviction_log", "contribution_weight", "REAL NOT NULL DEFAULT 1.0")
+        # Popper: a conviction that cannot be traced to evidence is not a conviction -- it is a preference. feature_key is the evidence.
+        self._ensure_column("conviction_log", "feature_key", "TEXT")
+        self._ensure_column("conviction_log", "feature_value", "REAL")
+        # P2.3 — producer correlation matrix
+        self._ensure_table_exists("producer_correlation")
+        # P2.1 — forecast calibration
+        self._ensure_table_exists("forecast_calibration")
+        # P2.4 — learnable scoring parameters
+        self._ensure_table_exists("scoring_params")
+        # P2.2 — producer calibration curves
+        self._ensure_table_exists("producer_calibration")
+        # P3.1 — LLM critic shadow logging
+        self._ensure_table_exists("llm_shadow_log")
+        # P4.4 — outcome resolution + meta-producer performance tables
+        self._ensure_resolution_tables()
+        # P2.5 — isotonic calibration uses forecast_calibration (P2.1); no new table
         self._migrate_karma_intents_unique_trade_id()
+
+    def _ensure_table_exists(self, table: str) -> None:
+        row = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+            (table,),
+        ).fetchone()
+        if row is not None:
+            return
+        with self.conn:
+            self.conn.executescript(SCHEMA)
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
         cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -457,6 +680,21 @@ class Database:
             return
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+    def _ensure_resolution_tables(self) -> None:
+        """Ensure additive tables/columns needed for forecast outcome resolution exist."""
+
+        self._ensure_table_exists("forecast_resolution_state")
+        self._ensure_table_exists("producer_performance")
+        self._ensure_table_exists("producer_correlation")
+
+        # producer_correlation existed before P4.4; add additive columns for the
+        # new agreement-style matrix while preserving backwards compatibility.
+        self._ensure_column("producer_correlation", "computed_at", "REAL")
+        self._ensure_column("producer_correlation", "horizon", "TEXT NOT NULL DEFAULT '24h'")
+        self._ensure_column("producer_correlation", "agreement_rate", "REAL")
+        self._ensure_column("producer_correlation", "agreement_win_rate", "REAL")
+        self._ensure_column("producer_correlation", "disagreement_win_rate_a", "REAL")
 
     def _migrate_karma_intents_unique_trade_id(self) -> None:
         """Rebuild karma_intents with UNIQUE(trade_id) and contributor_id if not already present.

@@ -1,0 +1,235 @@
+{
+  "version": "1",
+  "eggs": [
+    {
+      "id": "egg_5883c2f0",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "domain_scores_payload: dict[str, dict[str, float]] = {}",
+      "tradition": "event-sourcing-fowler",
+      "content": "# Fowler's event sourcing invariant: state is the function of events, not the inverse.\n# This cycle event now carries enough state to reconstruct the moment entirely.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_3e453a26",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "cycle_duration_ms = max(0, int((perf_counter() - cycle_started_perf) * 1000))",
+      "tradition": "heraclitus-river",
+      "content": "# Heraclitus: you cannot step into the same cycle twice. The duration is proof it happened. The snapshot is proof of what it was.",
+      "placement": "inline_comment",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_7b7ab207",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def _manifest_has_tradition(manifest_eggs: list[dict[str, Any]], file: str, tradition: str) -> bool:",
+      "tradition": "idempotent-ring",
+      "content": "# Abstract algebra: an idempotent element satisfies f(f(x)) = f(x).\n# A blessed file, re-blessed, remains blessed. The mathematics demands it.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_59ac0040",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def _load_manifest(repo_root: Path, *, create_if_missing: bool) -> dict[str, Any]:",
+      "tradition": "audubon-field-guide",
+      "content": "# Audubon catalogued 435 species before photography existed. Every specimen placed, every placement recorded.\n# This is the field guide.",
+      "placement": "before_function",
+      "pr_number": 233,
+      "applied_at": "2026-03-02T22:14:56Z"
+    },
+    {
+      "id": "egg_a1b2c3d4",
+      "file": "engine/brain/calibration.py",
+      "anchor": "Glenn W. Brier, 1950.",
+      "tradition": "brier-score-1950",
+      "content": "Glenn W. Brier, 1950. \"Verification of Forecasts Expressed in Terms of Probability.\"\nMonthly Weather Review, 78(1): 1-3. Three pages. The scoring rule that outlasted\nevery forecaster who ignored it.",
+      "placement": "module_docstring",
+      "pr_number": 239,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_e5f6a7b8",
+      "file": "engine/brain/calibration.py",
+      "anchor": "# Popper: a theory that cannot be tested is not a theory. It is a belief.",
+      "tradition": "popper-falsifiability",
+      "content": "# Popper: a theory that cannot be tested is not a theory. It is a belief.\n# Resolution is the test. The score is the record.",
+      "placement": "inline_comment",
+      "pr_number": 239,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_c9d0e1f2",
+      "file": "engine/brain/calibration_curves.py",
+      "anchor": "Allan Murphy, 1977.",
+      "tradition": "murphy-reliability-1977",
+      "content": "Allan Murphy, 1977. \"The value of climatological, categorical, and\nprobabilistic forecasts in the cost-loss ratio situation.\"\nThe reliability diagram appeared here before anyone called it that.\nA perfectly calibrated forecaster lies on the diagonal y = x.\nNo forecaster lies on the diagonal y = x.",
+      "placement": "module_docstring",
+      "pr_number": 241,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_03041526",
+      "file": "engine/brain/calibration_curves.py",
+      "anchor": "# Shannon: information is the resolution of uncertainty.",
+      "tradition": "shannon-information",
+      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative — just not in the direction claimed.",
+      "placement": "inline_comment",
+      "pr_number": 241,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_37485960",
+      "file": "engine/brain/correlation.py",
+      "anchor": "# Karl Pearson, 1895. \"Notes on regression and inheritance in the case of two parents.\"",
+      "tradition": "pearson-correlation-1895",
+      "content": "# Karl Pearson, 1895. \"Notes on regression and inheritance in the case of two parents.\"\n# One of the most cited statistics in existence. Almost always misinterpreted.",
+      "placement": "inline_comment",
+      "pr_number": 238,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_71829304",
+      "file": "engine/brain/correlation.py",
+      "anchor": "# In a gamelan ensemble, no single player has the complete melody.",
+      "tradition": "gamelan-ensemble",
+      "content": "# In a gamelan ensemble, no single player has the complete melody.\n# The music emerges from interlocking patterns across the full ensemble.\n# No single producer has the complete signal. The matrix is the product.",
+      "placement": "inline_comment",
+      "pr_number": 238,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_a5b6c7d8",
+      "file": "engine/brain/scoring.py",
+      "anchor": "# Von Foerster, second-order cybernetics: the observer is part of the system.",
+      "tradition": "von-foerster-second-order",
+      "content": "# Von Foerster, second-order cybernetics: the observer is part of the system.\n# These defaults are not neutral. They encode assumptions about what markets reward.\n# Shadow mode exists so the system can question its own priors before acting on them.",
+      "placement": "inline_comment",
+      "pr_number": 240,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_e9f0a1b2",
+      "file": "engine/brain/scoring.py",
+      "anchor": "# Bhagavad Gita 2.47: you have a right to perform your duties,",
+      "tradition": "bhagavad-gita-karma",
+      "content": "# Bhagavad Gita 2.47: you have a right to perform your duties,\n# but you are not entitled to the fruits of your actions.\n# The shadow runs the experiment. This function collects the result.",
+      "placement": "inline_comment",
+      "pr_number": 240,
+      "applied_at": "2026-03-03T00:05:48Z"
+    },
+    {
+      "id": "egg_b2c3d4e5",
+      "file": "engine/brain/isotonic.py",
+      "anchor": "def _fit_isotonic_fallback",
+      "tradition": "zadrozny-elkan-2002",
+      "content": "# Pool Adjacent Violators — Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
+      "placement": "before_function",
+      "pr_number": 245,
+      "applied_at": "2026-03-03T01:16:00Z"
+    },
+    {
+      "id": "egg_f6a7b8c9",
+      "file": "tests/test_isotonic.py",
+      "anchor": "def test_edge_case_all_losses_returns_floor_after_clamp",
+      "tradition": "popper-falsifiability",
+      "content": "# Knowing that you know nothing is not the same as knowing nothing.\n# A calibrator trained entirely on misses returns floor confidence.\n# This is the epistemically correct result. Popper would approve.",
+      "placement": "before_function",
+      "pr_number": 245,
+      "applied_at": "2026-03-03T01:16:00Z"
+    },
+    {
+      "id": "egg_f428fafd",
+      "file": "engine/brain/isotonic.py",
+      "anchor": "def fit_calibrator(",
+      "tradition": "zadrozny-elkan-calibration",
+      "content": "# Zadrozny & Elkan (2002): calibration is where probabilities stop pretending.",
+      "placement": "inline_comment",
+      "pr_number": 245,
+      "applied_at": "2026-03-04T00:08:13Z"
+    },
+    {
+      "id": "egg_8a62deb4",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "_BUDGET_TIERS: list[tuple[int, int]] = [",
+      "tradition": "audubon-ledger",
+      "content": "# Audubon kept a ledger for every specimen; this manifest keeps one for every blessing.",
+      "placement": "inline_comment",
+      "pr_number": 246,
+      "applied_at": "2026-03-04T00:08:17Z"
+    },
+    {
+      "id": "egg_986e86d9",
+      "file": "engine/core/regime.py",
+      "anchor": "REGIME_CAPS: dict[str, float] = {",
+      "tradition": "ashby-requisite-variety",
+      "content": "# Ashby would call this requisite variety: controls must match the market's regimes.",
+      "placement": "inline_comment",
+      "pr_number": 250,
+      "applied_at": "2026-03-04T00:08:20Z"
+    },
+    {
+      "id": "egg_3e29bb4b",
+      "file": "engine/producers/sentiment.py",
+      "anchor": "@register(\"market-sentiment\", domain=\"social\")",
+      "tradition": "gamelan-interlocking-patterns",
+      "content": "# Gamelan logic: each section holds a fragment, and synthesis is the full melody.",
+      "placement": "inline_comment",
+      "pr_number": 252,
+      "applied_at": "2026-03-04T00:08:23Z"
+    },
+    {
+      "id": "egg_77c4891d",
+      "file": "engine/core/self_memory.py",
+      "anchor": "class SelfMemory:",
+      "tradition": "grimoire-memory",
+      "content": "# A grimoire is memory with teeth: lessons persist because they are callable.",
+      "placement": "inline_comment",
+      "pr_number": 254,
+      "applied_at": "2026-03-04T00:08:25Z"
+    },
+    {
+      "id": "egg_f2c5b9f2",
+      "file": "engine/core/prosecutor.py",
+      "anchor": "class Prosecutor:",
+      "tradition": "talmudic-counterargument",
+      "content": "# Talmudic discipline: every thesis deserves its strongest counter-argument.",
+      "placement": "inline_comment",
+      "pr_number": 256,
+      "applied_at": "2026-03-04T00:08:28Z"
+    },
+    {
+      "id": "egg_f7757f10",
+      "file": "engine/brain/hierarchy.py",
+      "anchor": "class HierarchyEngine:",
+      "tradition": "stafford-beer-coordination",
+      "content": "# Stafford Beer would call this coordination, not consensus.",
+      "placement": "inline_comment",
+      "pr_number": 258,
+      "applied_at": "2026-03-04T00:08:31Z"
+    },
+    {
+      "id": "egg_eaf76cfd",
+      "file": "engine/core/horizons.py",
+      "anchor": "HORIZONS = [\"1h\", \"4h\", \"24h\", \"3d\", \"7d\"]",
+      "tradition": "mandelbrot-fat-tails",
+      "content": "# Mandelbrot's tails care deeply about horizon choice, even when dashboards do not.",
+      "placement": "inline_comment",
+      "pr_number": 260,
+      "applied_at": "2026-03-04T00:08:33Z"
+    },
+    {
+      "id": "egg_9aa51a4f",
+      "file": "engine/core/novelty.py",
+      "anchor": "def compute_novelty_penalty(",
+      "tradition": "von-foerster-observer-effect",
+      "content": "# Von Foerster's observer effect: repeated agreement can be information loss.",
+      "placement": "inline_comment",
+      "pr_number": 262,
+      "applied_at": "2026-03-04T00:08:37Z"
+    }
+  ]
+}
