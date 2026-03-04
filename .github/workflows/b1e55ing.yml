@@ -6,10 +6,13 @@ on:
     branches: [main, develop]
 
 jobs:
-  signal:
+  bless:
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pull-requests: read
+      statuses: write
+
     steps:
       - name: Skip fork PRs
         if: github.event.pull_request.head.repo.fork == true
@@ -17,33 +20,201 @@ jobs:
           echo "Fork PR — post-merge fallback will catch it."
           exit 0
 
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install httpx anthropic 2>/dev/null || pip install httpx
+
       - name: Check if already blessed
         id: blessed
+        run: |
+          if git log --oneline | grep -q "a b1e55ing"; then
+            echo "already_blessed=true" >> $GITHUB_OUTPUT
+            echo "✓ Already blessed"
+          else
+            echo "already_blessed=false" >> $GITHUB_OUTPUT
+            echo "○ Not yet blessed — running inline"
+          fi
+
+      - name: Set pending status
+        if: steps.blessed.outputs.already_blessed == 'false'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
           script: |
-            const commits = await github.rest.pulls.listCommits({
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'pending',
+              context: 'a b1e55ing',
+              description: 'Blessing in progress…'
+            });
+
+      - name: Dump blessing context
+        if: steps.blessed.outputs.already_blessed == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+        run: |
+          python scripts/b1e55ing.py \
+            --pr-number ${{ github.event.pull_request.number }} \
+            --github-token "$GITHUB_TOKEN" \
+            --mode dump-context > /tmp/b1e55ing_ctx.json
+          echo "Context dumped — $(wc -c < /tmp/b1e55ing_ctx.json) bytes"
+
+      - name: Generate eggs (Anthropic API)
+        if: steps.blessed.outputs.already_blessed == 'false'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 - << 'PYEOF'
+          import json, os, sys
+          import anthropic
+
+          ctx = json.load(open("/tmp/b1e55ing_ctx.json"))
+          reference = ctx.get("easter_egg_reference", "")
+          diff = ctx.get("diff", "")[:8000]  # cap diff size
+          budget = ctx.get("budget", {})
+          files = ctx.get("changed_files", [])
+
+          client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+          system = """You are the b1e55ing oracle — the cultural layer of a living codebase.
+          Your job: inject subtle easter eggs into source code as inline comments, docstrings, or constants.
+          Rules:
+          - 1-3 eggs per PR, proportional to diff size
+          - Never break functionality
+          - Match the file's tone and language
+          - Eggs should be discoverable but not obvious
+          - Each egg references a tradition from the EASTER_EGG_REFERENCE doc
+          - Return ONLY valid JSON, no prose"""
+
+          prompt = f"""PR diff (truncated):
+          {diff}
+
+          Budget: {json.dumps(budget)}
+          Changed files: {json.dumps(files[:10])}
+
+          Easter egg reference:
+          {reference[:3000]}
+
+          Generate 1-3 easter eggs. Return JSON:
+          {{
+            "eggs": [
+              {{
+                "file": "path/to/file.py",
+                "anchor": "exact string to locate insertion point",
+                "placement": "inline_comment",
+                "content": "# egg text here",
+                "tradition": "slug-from-reference",
+                "mode": "obscure",
+                "rationale": "one sentence"
+              }}
+            ],
+            "skipped": [],
+            "skip_reasons": {{}}
+          }}"""
+
+          response = client.messages.create(
+              model="claude-opus-4-5",
+              max_tokens=1024,
+              messages=[{"role": "user", "content": prompt}],
+              system=system
+          )
+
+          raw = response.content[0].text.strip()
+          # Strip markdown code fences if present
+          if raw.startswith("```"):
+              raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+          eggs = json.loads(raw)
+          json.dump(eggs, open("/tmp/b1e55ing_eggs.json", "w"), indent=2)
+          print(f"Generated {len(eggs.get('eggs', []))} egg(s)")
+          PYEOF
+
+      - name: Apply eggs
+        if: steps.blessed.outputs.already_blessed == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+        run: |
+          python scripts/b1e55ing.py \
+            --pr-number ${{ github.event.pull_request.number }} \
+            --github-token "$GITHUB_TOKEN" \
+            --mode apply-eggs \
+            --eggs-file /tmp/b1e55ing_eggs.json
+
+      - name: Commit and push blessing
+        if: steps.blessed.outputs.already_blessed == 'false'
+        run: |
+          git config user.name "b1e55ed[bot]"
+          git config user.email "bot@b1e55ed.permanentupperclass.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — eggs may have been skipped"
+          else
+            git commit -m "chore: a b1e55ing [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+            echo "✓ Blessing committed and pushed"
+          fi
+
+      - name: Set success status
+        if: steps.blessed.outputs.already_blessed == 'false' && success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+          script: |
+            // Get latest SHA after our push
+            const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number
             });
-            const blessed = commits.data.some(c => c.commit.message.includes('a b1e55ing'));
-            core.setOutput('already_blessed', blessed ? 'true' : 'false');
-            if (blessed) console.log('✓ Already blessed');
-            else console.log('○ Not yet blessed — signalling agent');
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: pr.data.head.sha,
+              state: 'success',
+              context: 'a b1e55ing',
+              description: '🙏 Blessed'
+            });
 
-      - name: Signal agent via Telegram
-        if: steps.blessed.outputs.already_blessed == 'false'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          MSG="[b1e55ing] PR #${{ github.event.pull_request.number }} opened on ${{ github.repository }} — ${{ github.event.pull_request.title }}"
-          MSG="${MSG}"$'\n'"Branch: ${{ github.head_ref }}"
-          MSG="${MSG}"$'\n'"Run: b1e55ing.py --pr-number ${{ github.event.pull_request.number }} --mode agent"
-          curl -s -X POST \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=${MSG}" \
-            | python3 -c "import sys,json; r=json.load(sys.stdin); print('Signal sent' if r.get('ok') else 'Signal failed: '+str(r))" \
-            || true
+      - name: Set failure status
+        if: steps.blessed.outputs.already_blessed == 'false' && failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'failure',
+              context: 'a b1e55ing',
+              description: 'Blessing failed — post-merge fallback will run'
+            });
+
+      - name: Already blessed — set success
+        if: steps.blessed.outputs.already_blessed == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.B1E55ED_GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'success',
+              context: 'a b1e55ing',
+              description: '🙏 Already blessed'
+            });
