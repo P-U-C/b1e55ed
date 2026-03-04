@@ -220,6 +220,16 @@
       "placement": "inline_comment",
       "pr_number": 260,
       "applied_at": "2026-03-04T00:08:33Z"
+    },
+    {
+      "id": "egg_9aa51a4f",
+      "file": "engine/core/novelty.py",
+      "anchor": "def compute_novelty_penalty(",
+      "tradition": "von-foerster-observer-effect",
+      "content": "# Von Foerster's observer effect: repeated agreement can be information loss.",
+      "placement": "inline_comment",
+      "pr_number": 262,
+      "applied_at": "2026-03-04T00:08:37Z"
     }
   ]
 }
