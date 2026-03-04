@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.0.0-beta.8 — 2026-03-04
+
+### Producer Intelligence Layer (P3 + P4)
+
+**P3 — Per-Signal Adaptations**
+- P3.1: LLM critic layer with shadow mode (confidence gate before emit)
+- P3.2: Regime decision matrix — per-producer regime conditioning
+- P3.3: Differentiated data inputs — domain-specific signal enrichment
+- P3.4: Producer self-memory — karma history adjusts confidence with guardrails
+- P3.5: Adversarial prosecutor pass — counter-case gate before emit
+
+**P4 — System-Level Intelligence**
+- P4.1: Hierarchical weighting — domain priors × reliability × asset_fit × regime_fit × correlation
+- P4.2: Multi-horizon forecasts — domain-specific horizon sets (4h/24h/3d/7d)
+- P4.3: Cross-producer awareness — novelty penalty via aggregate brain conviction
+- P4.4: Meta-producer — outcome resolver, performance aggregator, ensemble pattern learner
+
+**Docs**
+- New: `docs/producer-intelligence.md` — full P3/P4 interpreter stack documentation
+- Updated: architecture, learning loop, producers, openclaw integration
+
+**Operator Tooling**
+- New: `P-U-C/b1e55ed-operator-template` — GitHub template repo for OpenClaw operators
+- New: `P-U-C/openclaw-skills` — ClawHub skill: `b1e55ed-operator`
+- New: `b1e55ed resolve-outcomes` CLI command
+
+
 ## Unreleased — Flywheel Sprints (S0–S7)
 
 ### Highlights
