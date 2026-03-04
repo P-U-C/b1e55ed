@@ -9,15 +9,21 @@ Producers (internal + registered) ───────────────�
                                                          │
 Curator Pipeline (operator intel → structured signals) ──┤
                                                          ▼
+                                               Interpreter Stack
+                                              (7 layers per producer)
+                                                         │
+                                                   FORECAST_V1
+                                                         │
                                                    Event Store
                                                   (SQLite + hash chain)
                                                          │
                                            ┌─────────────┼──────────────┐
                                            ▼             ▼              ▼
                                          Brain       Backtest       Oracle
-                                    (synthesis,    (walk-forward, (provenance
-                                     learning,      gridsweep,    projection,
-                                     regime)        megasweep)    no auth)
+                                    (synthesis +   (walk-forward, (provenance
+                                     hierarchy,     gridsweep,    projection,
+                                     learning,      megasweep)    no auth)
+                                     regime)
                                            │
                                     Kill Switch
                                            │
@@ -33,6 +39,32 @@ Curator Pipeline (operator intel → structured signals) ──┤
                                          ├────── SSE stream
                                          └────── Oracle endpoint (public)
 ```
+
+## Interpreter Stack (P3/P4 Intelligence Layer)
+
+Every producer's raw output passes through a layered interpreter chain before becoming a `FORECAST_V1` event:
+
+```text
+BaseProducer.collect() + normalize()
+        ↓
+  Interpreter.interpret()              ← rule-based signal → forecast
+        ↓
+  LLMCriticInterpreter                ← LLM shadow critique (P3.1)
+        ↓
+  RegimeMatrix conditioning            ← regime-aware confidence scaling (P3.2)
+        ↓
+  SelfMemoryInterpreter               ← Brier-based confidence ± delta (P3.4)
+        ↓
+  ProsecutorInterpreter               ← adversarial counter-case (P3.5)
+        ↓
+  NoveltyInterpreter                  ← cross-producer awareness (P4.3)
+        ↓
+  FORECAST_V1 event → Event Store
+```
+
+All LLM and adaptive layers default to **shadow mode**: they observe and log without mutating the forecast. The hierarchy engine (P4.1) adjusts domain weights in brain synthesis based on rolling Brier scores. The meta-producer (P4.4) learns from resolved outcomes and emits ensemble pattern forecasts after 500+ outcomes accumulate.
+
+For full details, see [producer-intelligence.md](producer-intelligence.md).
 
 ## Contributor layer
 
