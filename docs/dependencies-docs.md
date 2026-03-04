@@ -682,3 +682,11 @@ engine/core/interpreter.py
   → engine/core/events.py (ForecastPayload, AbstentionReason)
   → engine/core/forecast.py (abstain)
 ```
+
+## Whitepapers
+
+```text
+docs/whitepaper-technical.md (standalone — no internal deps)
+docs/whitepaper-summary.md (standalone — no internal deps)
+docs/whitepaper-onepager.md (standalone — no internal deps)
+```
