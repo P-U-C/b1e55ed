@@ -69,7 +69,7 @@ The resolver computes:
 - **Direction correctness**: did price move in the predicted direction?
 - **Brier score**: (confidence − outcome)², where outcome is 1 if correct, 0 if incorrect
 
-The Brier score is a proper scoring rule. It penalizes overconfidence and underconfidence symmetrically. A forecaster who says "70% confident" should be correct 70% of the time across many forecasts. If they are correct 90% of the time, they were underconfident. If correct 50% of the time, they were overconfident. The Brier score captures both calibration and resolution.
+The Brier score is a proper scoring rule (Gneiting & Raftery, 2007). It penalizes overconfidence and underconfidence symmetrically. A forecaster who says "70% confident" should be correct 70% of the time across many forecasts. If they are correct 90% of the time, they were underconfident. If correct 50% of the time, they were overconfident. The Brier score captures both calibration and resolution.
 
 ### 3.3 Karma as Producer Weight
 
@@ -83,7 +83,37 @@ When a position closes:
 
 This update rule (α = 0.05) gives recent outcomes weight while retaining memory of historical performance. A producer who has been consistently correct will have high karma. A producer who has been consistently wrong will have low karma. A producer who has been random will drift toward neutral.
 
-### 3.4 The Compound Loop
+**Regime non-stationarity.** The EMA with α = 0.05 means approximately 95% of karma weight reflects the last ~100 outcomes. This creates a vulnerability: a trend-following producer accumulates high karma during trending periods, then receives maximum weight exactly when regime shifts and their edge disappears. The system addresses this through regime-conditional decay (Hamilton, 1989): when a regime change is detected via hidden Markov model transition probabilities, the EMA decay rate increases temporarily (α → 0.15), accelerating karma recalibration. Karma scores are not assumed portable across detected regime boundaries.
+
+### 3.4 Adversarial Dynamics and the Sharpness Incentive
+
+**The Goodhart problem.** Once karma determines weight, rational producers have an incentive to game the scoring mechanism. The naive attack: emit forecasts clustered around 0.50–0.55 confidence. Such forecasts achieve near-optimal Brier scores regardless of outcome—technically well-calibrated but informationally useless. The producer earns karma while contributing nothing.
+
+This is Goodhart's Law applied to forecast systems: when a measure becomes a target, it ceases to be a good measure.
+
+**The Brier decomposition.** The Brier score decomposes into calibration (how well confidence matches realized frequency) and resolution (how much forecasts deviate from the base rate). A producer emitting 0.50 confidence achieves perfect calibration but zero resolution. The system must reward resolution, not merely calibration.
+
+**The sharpness incentive.** b1e55ed addresses this through resolution-weighted karma: producers who make bold forecasts (confidence far from 0.50) and prove correct earn disproportionately higher karma than timid forecasters. The karma update includes a resolution multiplier: `resolution_factor = |confidence - 0.5| × 2`. A correct call at 0.90 confidence contributes more to karma than a correct call at 0.55 confidence, proportional to the information content of the forecast.
+
+This creates the intended incentive gradient: timid forecasts cannot accumulate high karma, regardless of calibration.
+
+### 3.5 The Correlation Discount
+
+Five technical-analysis producers emitting correlated signals would dominate synthesis through volume, not information content. The system must discount redundant signal.
+
+The NoveltyInterpreter (P4.3) addresses this directly: it penalizes producers whose forecasts agree with existing brain conviction. When a producer emits a signal that matches the current synthesis direction, its contribution is discounted by the degree of agreement. This is the correlation discount—agreement with consensus earns less karma than novel, correct disagreement.
+
+The mechanism: for each incoming signal, compute `novelty = 1 - |correlation(signal, current_conviction)|`. Karma contribution scales by novelty factor. Producers are incentivized to find information the system does not already have.
+
+### 3.6 Position Sizing and Attribution Weights
+
+Signal quality without position sizing rules is half a system.
+
+Direction and confidence map to position size via fractional Kelly: `size = (edge × kelly_fraction) / odds`. A 0.90 confidence correct call and a 0.55 confidence correct call contribute different dollar P&L—the attribution weights must reflect this.
+
+When computing producer karma from position outcomes, the attribution weight is proportional to the position size that signal confidence implied. A producer whose high-confidence calls lead to larger positions earns more karma from correct calls (and loses more from incorrect ones). This aligns producer incentives with capital efficiency.
+
+### 3.7 The Compound Loop
 
 Karma feeds back into synthesis.
 
@@ -147,9 +177,11 @@ The meta-producer learns ensemble patterns: which combinations of producer signa
 
 It does not emit actionable forecasts until 500 outcomes have been resolved.
 
-Below 500 outcomes, the sample size is insufficient to distinguish signal from noise. A pattern that appears predictive at n=50 may be random variation. At n=500, statistical regularities become identifiable.
+**Power analysis framing.** To detect a 5% improvement in Brier score over baseline with 80% statistical power requires a minimum sample size that depends on outcome variance. For typical forecast calibration variance (σ² ≈ 0.04), standard power calculations yield n ≈ 400–600 outcomes. The 500-outcome gate represents a conservative threshold within this range, calibrated empirically from simulation of the producer population.
 
-This gate is not configurable. It is a structural minimum.
+This threshold would change under different conditions: higher effect size (easier to detect) would lower n; lower baseline variance would raise it; different power requirements (90% instead of 80%) would increase it. The specific value is not a universal constant—it is a parameter that reflects the system's tolerance for false positive pattern detection.
+
+Below this threshold, apparent patterns are more likely noise than signal. The gate enforces epistemic honesty about what the data can support.
 
 ### 5.3 Activation Sequence
 
@@ -183,13 +215,17 @@ Karma scores are public within the system. Any observer can verify:
 
 This verifiability is what makes attribution meaningful. A producer cannot claim a track record it does not have. The event store is the single source of truth.
 
-### 6.3 The Oracle
+### 6.3 The Oracle as Platform
 
 The oracle is a read-only projection of the event store. It answers one question: does a signal producer have verifiable history?
 
-External systems can query the oracle without authentication. They receive provenance data—historical forecasts, outcomes, karma scores—sufficient to verify any claimed track record.
+**Who the customer is.** Any trader who wants to access machine-verified producer track records without running the full b1e55ed stack. Hedge funds evaluating signal providers. Retail traders assessing influencer calls. Platforms building leaderboards. Anyone who needs to distinguish luck from skill in forecast accuracy claims.
 
-The oracle does not interpret. It does not recommend. It provides facts that enable independent verification.
+**How value flows.** Operators earn attribution when their producer signals contribute to profitable outcomes. The oracle makes these track records publicly verifiable—a producer cannot inflate their history, and an operator cannot hide poor performance. This creates a market for verified signal quality where reputation is earned, not claimed.
+
+**Why this is a platform, not infrastructure.** The oracle decouples the accountability mechanism from the execution layer. Third parties can verify a producer's track record without trusting the operator, without running b1e55ed, without access to the underlying event store. The verification is cryptographic, not trust-based.
+
+This is the commercially differentiated piece: verifiable signal track records as a service. The trading system is one use case. The oracle enables an ecosystem of applications that depend on knowing whether a forecaster has genuine skill.
 
 ---
 
@@ -200,7 +236,10 @@ The system guarantees:
 - **Immutability**: Forecasts cannot be modified after emission
 - **Attribution**: Every trade is linked to contributing signals
 - **Calibration feedback**: Brier scores are computed for every producer
+- **Resolution incentive**: Bold correct forecasts earn more than timid correct forecasts
+- **Correlation discount**: Redundant signals are penalized via NoveltyInterpreter
 - **Weight adjustment**: Karma affects synthesis weights
+- **Regime conditioning**: Karma decay accelerates during detected regime changes
 - **Benchmark comparison**: Four baselines run continuously
 - **Kill switches**: Five conditions halt trading automatically (consecutive losses, single large loss, total risk exposure, data degradation, fill divergence)
 
@@ -209,6 +248,7 @@ The system does not guarantee:
 - **Profitability**: Edge is demonstrated, not assumed
 - **Regime robustness**: Performance in one market regime may not transfer to another
 - **Producer quality**: The system learns from producers; it does not select which producers to trust initially
+- **Adversarial resistance**: Sophisticated gaming may find exploits not yet anticipated
 - **Latency**: The system is designed for swing trading horizons, not high-frequency
 
 ---
@@ -252,6 +292,14 @@ b1e55ed does not claim to be profitable. It claims to be falsifiable.
 Every forecast is testable. Every producer is accountable. Every outcome feeds back into weights. The system either demonstrates edge against benchmarks or it does not.
 
 This is the only honest claim a trading system can make.
+
+---
+
+## References
+
+Gneiting, T., & Raftery, A. E. (2007). Strictly proper scoring rules, prediction, and estimation. *Journal of the American Statistical Association*, 102(477), 359–378.
+
+Hamilton, J. D. (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. *Econometrica*, 57(2), 357–384.
 
 ---
 
