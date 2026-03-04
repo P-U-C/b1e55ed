@@ -1,6 +1,6 @@
-# b1e55ed: A Falsifiable Profit Engine for Systematic Crypto Trading
+# b1e55ed: A Falsifiable Trading Intelligence Engine for Systematic Crypto
 
-**Version**: 2.0.0 | **Date**: March 2026
+**Version**: 3.0.0 | **Date**: March 2026
 
 ---
 
@@ -8,11 +8,11 @@
 
 Most crypto "alpha" is unverifiable. Signal services give you a call with no prior calibration, no track record, no accountability. Discretionary traders cannot separate skill from luck. Even systematic traders rarely close the attribution loop — they know the P&L but not which signals drove which trades, which producers were right, or whether their confidence calibration reflects reality.
 
-b1e55ed is a **falsifiable profit engine** designed to close that loop. Every forecast is an immutable, timestamped probability statement attributed to a specific producer. Every outcome is resolved against actual prices. Every score feeds back into weights and confidence calibration. The system cannot retroactively explain away losses because the evidence chain is hash-linked and externally verifiable.
+b1e55ed is a **falsifiable trading intelligence engine** designed to close that loop. Every forecast is an immutable, timestamped probability statement attributed to a specific producer. Every outcome is resolved against actual prices. Every score feeds back into weights and confidence calibration. The system cannot retroactively explain away losses because the evidence chain is hash-linked and externally verifiable.
 
 The benchmark is not beating a market index — it's beating flat/no-trade. The system must prove it earns its execution cost. Four benchmarks run in parallel (naive momentum, equal-weight ensemble, flat/no-trade, discretionary override), and the brain must outperform all four to claim edge. The primary proof metric is confidence stratification: do signals with confidence > 0.65 outperform signals with confidence < 0.45 after fees?
 
-The current implementation (beta.8) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via an EMA with sharpness weighting. All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate (a threshold derived from power analysis, not arbitrary choice). This is deliberate: the system must prove its calibration before it earns trust.
+The current implementation (beta.8) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via an EMA with sharpness weighting. All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate (an operational minimum calibrated for the effect sizes we aim to detect). This is deliberate: the system must prove its calibration before it earns trust.
 
 ---
 
@@ -61,6 +61,15 @@ A falsifiable profit engine must satisfy:
 
 6. **External verifiability.** A third party with no system access can verify the claim chain via the oracle endpoint.
 
+### 1.4 Competitive Positioning
+
+The closest analogues are:
+- **Numerai**: crowdsourced model tournament where producers cannot verify their own contribution to portfolio returns. Aggregation is opaque by design.
+- **Polymarket**: prediction markets providing calibrated probabilities, but no synthesis into portfolio construction or attribution.
+- **Traditional signal aggregation**: vendors providing signals without systematic calibration, attribution, or closed-loop feedback.
+
+b1e55ed's structural differentiator: closed-loop attribution that producers and buyers can independently audit. Producers receive a portable, verifiable track record (karma + Brier history via oracle). Buyers receive machine-verified producer history before capital allocation. The oracle decouples the accountability mechanism from the execution layer — verification does not require trusting the operator.
+
 ---
 
 ## 2. System Architecture
@@ -80,6 +89,12 @@ b1e55ed is built on event sourcing. All state changes are represented as immutab
 
 The event store is SQLite with deterministic hash chaining. Each event includes `prev_hash`, creating a Merkle-like structure that detects tampering. The `verify_hash_chain()` function validates chain integrity.
 
+The event store enforces append-only writes at the application layer. Each event carries a `prev_hash` field referencing the SHA-256 hash of the prior event, forming a linked chain. Retroactive modification of any event requires recomputing the hash chain from the tampered point forward — detectable on any replay or audit. The `verify_hash_chain()` function validates the full chain on demand.
+
+**Current architecture**: append-only, hash-linked, application-layer enforcement.
+
+**Audit roadmap**: cryptographic anchoring to an external chain (EAS or equivalent) for operator-independent verification. Until that ships, the hash chain provides auditability within the trust boundary of the operator.
+
 ### 2.2 The Producer Layer (13 Base Producers)
 
 Producers are signal generators that feed the brain's synthesis engine. Each producer periodically collects data, normalizes it into a typed payload, and publishes events. The 13 base producers span 6 domains:
@@ -94,6 +109,12 @@ Producers are signal generators that feed the brain's synthesis engine. Each pro
 | **events** | `market-events`, `meta` | Catalysts, ensemble pattern matching |
 
 Producers are dumb signal emitters by design. They collect data, normalize it, and publish. They have no memory of whether they were right or wrong, no awareness of what other producers are saying, and no ability to adapt to different market regimes. That intelligence lives in the interpreter stack.
+
+#### Bootstrapping and Cold-Start
+
+The system is not inert before external contributors join. Thirteen internal producers — spanning on-chain capital flows, technical analysis, TradFi basis and funding, sentiment, and social signals — run from first deployment. These producers generate the initial outcome volume that calibration, isotonic regression, and the meta-producer require.
+
+External contributors join a system with an existing track record. The first 500 resolved outcomes — the meta-producer activation gate — are reachable without a single external producer. This eliminates the cold-start failure mode: the system begins learning from day one, independent of contributor network size.
 
 ### 2.3 The Interpreter Stack (P3/P4 — 7 Layers)
 
@@ -127,7 +148,21 @@ Every producer's raw output passes through a layered interpreter chain before be
 
 **Key invariant:** No layer in the stack ever changes the forecast `action` (long/short/flat). Only `confidence` is modulated, or the forecast is replaced with an abstention.
 
-### 2.4 Brain Synthesis and Conviction
+> **Definition — Confidence**: A producer's confidence value is its stated probability that the following canonical event resolves as true: the forecast's target asset closes above (LONG) or below (SHORT) its entry reference price after horizon H, net of execution fees. This is the event the Brier score evaluates. Every confidence value in the system refers to this definition. Producers with different implicit event definitions are not comparable; the system enforces the canonical definition at resolution time via `OutcomeResolver`.
+
+### 2.4 Evaluation Layers
+
+The system distinguishes three evaluation layers that are related but not identical:
+
+**Layer 1 — Forecast Quality**: Did the forecast resolve correctly under the canonical event definition? Measured by Brier score per producer per cycle. A producer can be well-calibrated (good Brier) while being economically useless after fees and slippage.
+
+**Layer 2 — Attribution Quality**: Which producers contributed to synthesis, and at what weight? Tracked by karma EMA. A producer can have high karma (consistent directional contribution) without strong Brier calibration, and vice versa.
+
+**Layer 3 — Portfolio Performance**: Did the resulting positions outperform all four benchmarks after fees, slippage, and risk constraints? This is the only layer that directly measures economic edge.
+
+The decisive falsification test operates at Layer 3: do forecasts assigned higher confidence produce better realized economic outcomes than lower-confidence forecasts, net of fees, under identical execution assumptions? Higher directional accuracy is necessary but not sufficient. Higher Brier score is necessary but not sufficient. The test is economic.
+
+### 2.5 Brain Synthesis and Conviction
 
 The brain reads `FORECAST_V1` events and synthesizes them into a conviction score. Synthesis uses domain weights (configurable, default sum to 1.0):
 
@@ -142,7 +177,7 @@ The brain reads `FORECAST_V1` events and synthesizes them into a conviction scor
 
 Domain weights are modulated by the hierarchy engine (P4.1) based on rolling Brier scores. The conviction engine converts the weighted score into a direction (long/short/flat) and magnitude (0-100 PCS — Position Conviction Score).
 
-### 2.5 Position Sizing via Fractional Kelly
+### 2.6 Position Sizing via Fractional Kelly
 
 Direction and confidence alone are incomplete. A system must also specify how much to risk on each signal. b1e55ed maps conviction to position size via fractional Kelly criterion.
 
@@ -181,7 +216,7 @@ In b1e55ed, the `confidence` field in `FORECAST_V1` maps directly to the $p$ par
 | 0.75 | 0.50 | 12.5% |
 | 0.85 | 0.70 | 17.5% |
 
-**Position sizing is clamped** by the same kill switch constraints in §2.6:
+**Position sizing is clamped** by the same kill switch constraints in §2.7:
 - Single position: max 15% portfolio
 - Single sector: max 30% portfolio
 - Total open risk: max 5% aggregate
@@ -194,7 +229,7 @@ $$\text{karma\_weight} = \frac{\text{position\_size}}{\sum \text{position\_sizes
 
 This ensures that bold, correct calls that actually move capital receive appropriate credit.
 
-### 2.6 Execution and Kill Switches
+### 2.7 Execution and Kill Switches
 
 Execution follows conviction through a preflight check, then submits to paper or live broker. Five kill switch conditions are enforced:
 
@@ -473,6 +508,19 @@ score = 100 × clamp(
 | `consistency_norm` | 15% | √(streak_days) / √30 |
 | `recency` | 10% | Days since last accepted signal |
 
+#### Karma and Brier: Complementary, Not Redundant
+
+Karma and Brier score serve distinct purposes. Brier score measures **calibration quality** — whether a producer's stated probabilities match realized outcome frequencies. Karma is an **operational weighting signal** — a directional EMA tracker that determines how much a producer's current forecasts influence synthesis.
+
+The karma update rule `karma_new = karma_old × 0.95 + outcome × sharpness_factor × 0.05` is intentionally simple: it captures contribution to directional outcomes, not calibration quality. This is a design choice: calibration analysis is expensive (requires resolved outcomes at scale), while directional karma can update every cycle.
+
+The two signals are complementary diagnostics:
+- High Brier + low karma: well-calibrated producer not contributing to profitable synthesis
+- Low Brier + high karma: producer gaming easy directional calls without calibration quality
+- High Brier + high karma: trusted producer — target state
+
+Both metrics must be healthy. Neither alone is sufficient for elevated synthesis weight.
+
 ### 4.4 Calibration and Isotonic Regression
 
 The `forecast_calibration` table tracks per-producer, per-asset, per-horizon, per-regime Brier scores. This enables:
@@ -546,7 +594,9 @@ Where $\alpha = 0.05$ (EMA learning rate).
 
 ### 4.7 The 500-Outcome Gate: Statistical Justification
 
-The meta-producer's activation gate of 500 resolved outcomes is not arbitrary. It derives from power analysis for detecting meaningful forecast skill.
+The meta-producer's activation gate of 500 resolved outcomes derives from power analysis for detecting meaningful forecast skill.
+
+The 500-outcome gate is an operational minimum, not a universal statistical threshold. It is calibrated for the effect size the system is designed to detect: a 5% improvement in Brier score over baseline (σ² ≈ 0.04, 80% power, α = 0.05) yields a required n in the range 400–600 under standard power analysis. The 500 figure sits conservatively within this range. It should be treated as a hyperparameter recalibratable after observing actual Brier variance — not asserted as structural truth.
 
 **The Detection Problem**
 
@@ -590,10 +640,6 @@ The 500 figure sits at the upper end of the power-analysis range and provides:
 - Sufficient outcomes per major ensemble pattern (~50+)
 - Buffer against variance underestimation
 
-**Hyperparameter Status:** The exact value of 500 should be treated as a hyperparameter to be recalibrated after observing actual Brier variance in production. If observed variance is lower, the gate could be reduced; if higher, it should increase.
-
-**Reference:** Gneiting, T. & Raftery, A.E. (2007). "Strictly Proper Scoring Rules, Prediction, and Estimation." *Journal of the American Statistical Association*, 102(477): 359-378.
-
 ### 4.8 Regime-Conditional Karma
 
 **The Non-Stationarity Problem**
@@ -629,7 +675,11 @@ This forces faster reputation re-establishment when the market environment chang
 
 **Implementation Status:** Both mechanisms are specified but currently in shadow mode. The system logs what karma would be under regime-conditional rules without affecting live synthesis.
 
-**Reference:** Hamilton, J.D. (1989). "A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle." *Econometrica*, 57(2): 357-384.
+#### Meta-Labeling and Regime-Conditional Performance
+
+Karma scores are not regime-portable. A producer that correctly forecasts BTC direction during a low-entropy trending regime accumulates karma that may not reflect skill in a high-entropy choppy regime. López de Prado's meta-labeling framework (2018) addresses this directly: outcomes should be labeled not just by direction but by the difficulty of the prediction environment.
+
+b1e55ed's approach: regime-conditional karma tables. The system maintains separate karma histories per detected regime (BULL/BEAR/TRANSITION/CRISIS). At regime transition, synthesis weights draw preferentially from the incoming regime's karma table, preventing cross-regime karma bleed. Additionally, during detected regime transitions, the EMA decay accelerates (α → 0.15) to speed forgetting of the prior regime's signal quality.
 
 ---
 
@@ -649,6 +699,8 @@ Four benchmarks run in parallel, producing signals through the same pipeline as 
 **The rule:** Brain must beat ALL FOUR to claim edge. Beating three but losing to one is not edge — it's a regime fit that will eventually revert.
 
 Benchmarks flow through the same `SIGNAL_ACCEPTED_V1` → karma path as real signals. They get karma scores. Karma for benchmarks quantifies "brain adds X% vs naive momentum."
+
+All benchmark comparisons run under identical assumptions: same market data source, same fee model, same slippage model, same execution timestamps, same rebalance cadence, and same exposure constraints. A benchmark that runs under different assumptions is not a valid comparison.
 
 ### 5.2 Confidence Stratification Test (primary proof metric)
 
@@ -731,6 +783,15 @@ Each contributor receives:
 - EAS attestation (optional): off-chain Ethereum Attestation Service record
 
 Signals are attributed to contributors via `node_id` in the submission payload.
+
+Producer identities are cryptographically persistent: each producer is bound to a keypair, and forecast history is inseparable from that key. A producer's track record cannot be reset or transferred.
+
+Cryptographic persistence supports continuity and auditability. It does not by itself prevent a single actor from registering multiple keys. Sybil resistance in b1e55ed relies on layered friction:
+1. **Karma cold-start**: new producers carry zero karma weight. There is no shortcut to influence.
+2. **EAS attestation**: registration via the oracle requires an Ethereum Attestation Service attestation, creating a cost and identity signal.
+3. **Correlation detection**: P4.3 (`NoveltyInterpreter`) penalizes producers whose forecasts align with existing brain conviction — a Sybil cluster submitting identical signals amplifies the penalty, not the weight.
+
+These are friction mechanisms, not cryptographic proofs of uniqueness. The threat model acknowledges that sophisticated actors can operate multiple producers; the system's defense is that doing so is costly and detectable via correlation analysis.
 
 ### 6.3 The Product: Verifiable Track Records
 
@@ -844,8 +905,6 @@ b1e55ed as infrastructure + oracle = a verifiable signal marketplace.
 | Brier score penalty | Confident-but-wrong signals hurt |
 | Acceptance rate gate | < 10% acceptance → score = 0 |
 | Sharpness weighting | Timid hedging doesn't accumulate karma |
-
-**Sybil note:** Karma is not Sybil-resistant until Forge cost is implemented. A bad actor can register multiple contributors, run them in parallel, and cherry-pick the winner. Treat contributors with < 30 resolved signals with skepticism.
 
 ---
 
@@ -967,13 +1026,17 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 
 ## References
 
-Gneiting, T. & Raftery, A.E. (2007). "Strictly Proper Scoring Rules, Prediction, and Estimation." *Journal of the American Statistical Association*, 102(477): 359-378.
+- Gneiting, T. & Raftery, A.E. (2007). Strictly Proper Scoring Rules, Prediction, and Estimation. *JASA* 102(477).
 
-Goodhart, C.A.E. (1984). "Problems of Monetary Management: The UK Experience." In *Monetary Theory and Practice*, pp. 91-121. Macmillan.
+- Goodhart, C.A.E. (1984). "Problems of Monetary Management: The UK Experience." In *Monetary Theory and Practice*, pp. 91-121. Macmillan.
 
-Hamilton, J.D. (1989). "A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle." *Econometrica*, 57(2): 357-384.
+- Hamilton, J.D. (1989). A New Approach to the Economic Analysis of Nonstationary Time Series. *Econometrica* 57(2).
 
-Kelly, J.L. (1956). "A New Interpretation of Information Rate." *Bell System Technical Journal*, 35(4): 917-926.
+- Kelly, J.L. (1956). A New Interpretation of Information Rate. *Bell System Technical Journal* 35(4).
+
+- López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
+
+- Tetlock, P. & Gardner, D. (2015). *Superforecasting: The Art and Science of Prediction*. Crown.
 
 ---
 
