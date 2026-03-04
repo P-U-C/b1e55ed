@@ -491,17 +491,47 @@ CREATE INDEX IF NOT EXISTS idx_sp_producer ON scoring_params(producer_name);
 -- ============================================================
 CREATE TABLE IF NOT EXISTS producer_correlation (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    computed_at REAL,
     producer_a TEXT NOT NULL,
     producer_b TEXT NOT NULL,
     asset TEXT NOT NULL DEFAULT 'ALL',
+    horizon TEXT NOT NULL DEFAULT '24h',
     regime TEXT NOT NULL DEFAULT 'unknown',
     pearson_r REAL,
+    agreement_rate REAL,
+    agreement_win_rate REAL,
+    disagreement_win_rate_a REAL,
     sample_count INTEGER NOT NULL DEFAULT 0,
     window_days INTEGER NOT NULL DEFAULT 30,
     last_updated TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(producer_a, producer_b, asset, regime)
 );
 CREATE INDEX IF NOT EXISTS idx_pc_pair ON producer_correlation(producer_a, producer_b);
+
+-- ============================================================
+-- Forecast Resolution + Meta Producer Performance (P4.4)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forecast_resolution_state (
+    forecast_event_id TEXT PRIMARY KEY,
+    resolved_at REAL,
+    outcome_event_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS producer_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    computed_at REAL NOT NULL,
+    producer_id TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    horizon TEXT NOT NULL,
+    regime TEXT NOT NULL DEFAULT 'all',
+    window_days INTEGER NOT NULL,
+    forecast_count INTEGER NOT NULL,
+    win_rate REAL,
+    avg_brier REAL,
+    avg_confidence REAL,
+    confidence_reliability REAL
+);
+CREATE INDEX IF NOT EXISTS idx_pp_lookup ON producer_performance(producer_id, asset, horizon, regime, computed_at DESC);
 
 -- ============================================================
 -- Forecast Calibration (P2.1)
@@ -629,6 +659,8 @@ class Database:
         self._ensure_table_exists("producer_calibration")
         # P3.1 — LLM critic shadow logging
         self._ensure_table_exists("llm_shadow_log")
+        # P4.4 — outcome resolution + meta-producer performance tables
+        self._ensure_resolution_tables()
         # P2.5 — isotonic calibration uses forecast_calibration (P2.1); no new table
         self._migrate_karma_intents_unique_trade_id()
 
@@ -648,6 +680,21 @@ class Database:
             return
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+    def _ensure_resolution_tables(self) -> None:
+        """Ensure additive tables/columns needed for forecast outcome resolution exist."""
+
+        self._ensure_table_exists("forecast_resolution_state")
+        self._ensure_table_exists("producer_performance")
+        self._ensure_table_exists("producer_correlation")
+
+        # producer_correlation existed before P4.4; add additive columns for the
+        # new agreement-style matrix while preserving backwards compatibility.
+        self._ensure_column("producer_correlation", "computed_at", "REAL")
+        self._ensure_column("producer_correlation", "horizon", "TEXT NOT NULL DEFAULT '24h'")
+        self._ensure_column("producer_correlation", "agreement_rate", "REAL")
+        self._ensure_column("producer_correlation", "agreement_win_rate", "REAL")
+        self._ensure_column("producer_correlation", "disagreement_win_rate_a", "REAL")
 
     def _migrate_karma_intents_unique_trade_id(self) -> None:
         """Rebuild karma_intents with UNIQUE(trade_id) and contributor_id if not already present.
