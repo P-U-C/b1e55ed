@@ -35,17 +35,7 @@ openclaw --version
 openclaw onboard --install-daemon
 ```
 
-This installs OpenClaw as a background service and walks you through initial setup.
-
-**Add your AI provider token** — use your existing subscription rather than paying per API call:
-
-```bash
-# Claude (Anthropic)
-openclaw config set anthropic.api_key "YOUR_ANTHROPIC_API_KEY"
-
-# or OpenAI
-openclaw config set openai.api_key "YOUR_OPENAI_API_KEY"
-```
+This launches a setup wizard that walks you through everything — including connecting your AI provider. When prompted, use an **Anthropic setup-token** (Claude subscription) or **OpenAI Codex** token — these use your existing subscription and are the most cost-effective options.
 
 **Check the gateway is operational:**
 
@@ -81,21 +71,17 @@ You need a Telegram bot to receive alerts and send commands to OpenClaw.
 1. Message [@userinfobot](https://t.me/userinfobot)
 2. It replies with your ID (e.g. `505841972`)
 
-**2c. Add your bot token to OpenClaw:**
+**2c. Connect the bot via the OpenClaw wizard**
 
-```bash
-openclaw config set telegram.bot_token "YOUR_BOT_TOKEN"
-```
+The `openclaw onboard --install-daemon` wizard (Step 1) handles Telegram configuration. When prompted, enter your bot token and Telegram user ID.
 
-**2d. Pair via Telegram**
-
-Message your bot from Telegram — it will reply with a pairing code. Then approve it on your machine:
+After the wizard completes, message your bot from Telegram — it will reply with a pairing code. Approve it on your machine:
 
 ```bash
 openclaw pairing approve telegram [PAIRING_CODE]
 ```
 
-**2e. Verify**
+**2d. Verify**
 
 Send any message to your bot. You should get a response within a few seconds confirming it is operational.
 
