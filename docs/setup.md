@@ -132,11 +132,40 @@ This will:
 - Register your node with the b1e55ed oracle
 - Create a GitHub issue confirming your contributor ID
 
-Save your node ID — it appears at the end of the wizard.
+**Save your node ID** — it appears at the end of the wizard. You'll need it in the next step.
 
 ---
 
-## Step 5 — Start the Engine
+## Step 5 — Install the Operator Workspace
+
+This sets up the OpenClaw agent workspace that gives your instance its identity and operating context.
+
+```bash
+git clone https://github.com/P-U-C/b1e55ed-operator-template /tmp/b1e55ed-operator-template
+bash /tmp/b1e55ed-operator-template/scripts/setup-openclaw.sh
+```
+
+Then fill in two files with your details:
+
+**`~/.openclaw/workspace/USER.md`** — who you are:
+```
+- Name: <your name>
+- Telegram: @yourusername
+- Timezone: UTC-8
+- GitHub: yourusername
+```
+
+**`~/.openclaw/workspace/CRITICAL.md`** — your instance state (update after every significant change):
+```
+- b1e55ed version: 1.0.0-beta.8
+- Node ID: <from wizard>
+- API: http://localhost:5050
+- Dashboard: http://localhost:5051
+```
+
+---
+
+## Step 6 — Start the Engine
 
 ```bash
 b1e55ed start
@@ -152,75 +181,40 @@ curl localhost:5050/health
 # → {"status": "ok", ...}
 ```
 
----
-
-## Step 6 — Install the Operator Workspace
-
-Clone the operator template and run the installer:
+**Start the outcome resolver** (runs every 30 minutes — essential for the system to learn):
 
 ```bash
-git clone https://github.com/P-U-C/b1e55ed-operator-template /tmp/b1e55ed-operator-template
-bash /tmp/b1e55ed-operator-template/scripts/setup-openclaw.sh
+(crontab -l 2>/dev/null; echo "*/30 * * * * b1e55ed resolve-outcomes >> ~/.b1e55ed/logs/resolver.log 2>&1") | crontab -
 ```
 
-Then fill in two files:
+This is the loop that closes: forecasts emit → horizons pass → outcomes resolve → Brier scores update → karma updates → weights shift. Without it the engine runs but never learns. The meta-producer activates after 500 resolved outcomes (~3-4 weeks).
 
-**`~/.openclaw/workspace/USER.md`** — your details:
-```
-- Name: <your name>
-- Telegram: @yourusername
-- Timezone: UTC-8
-- GitHub: yourusername
-```
-
-**`~/.openclaw/workspace/CRITICAL.md`** — instance state:
-```
-- b1e55ed version: 1.0.0-beta.8
-- Node ID: <from wizard>
-- API: http://localhost:5050
-- Dashboard: http://localhost:5051
-- GH_TOKEN: (store in env, not here)
+Verify the cron is set:
+```bash
+crontab -l | grep resolve-outcomes
 ```
 
 ---
 
-## Step 7 — Set Up Crons
+## Step 7 — Verify Everything
 
 ```bash
-GH_TOKEN=your_github_token \
-REPO=P-U-C/b1e55ed \
-bash ~/.openclaw/workspace/scripts/setup-crons.sh
+curl localhost:5050/health
+# → {"status": "ok", ...}
+
+b1e55ed resolve-outcomes --dry-run
+# → shows pending outcomes without applying them
 ```
 
-This sets up:
-- `b1e55ed resolve-outcomes` every 30 minutes (outcome resolver)
-- OpenClaw queue drain every 5 minutes (b1e55ing, reviews, alerts)
+Expected state after ~5 minutes of running:
 
-Verify:
-```bash
-crontab -l
-openclaw cron list
-```
-
----
-
-## Step 8 — Verify Everything
-
-```bash
-bash ~/.openclaw/workspace/scripts/verify-engine.sh
-```
-
-Expected output after ~5 minutes of running:
 ```
 ✅ API: running (localhost:5050)
-📡 Producer activity (last 2h):
-   btc_tradfi  | 2026-03-04 02:35:00 | 3 forecasts
-   sol_onchain | 2026-03-04 02:34:00 | 2 forecasts
-   ...
-🔄 Outcome resolver:
-   Last run: 2026-03-04 02:30:00
-   Total outcomes: 0 / 500 (MetaProducer activation)
-   Unresolved backlog: 12
+📡 Producer activity:
+   btc_tradfi  | forecasts emitting
+   sol_onchain | forecasts emitting
+🔄 Outcome resolver: scheduled (next run in <30 min)
+   Total outcomes: 0 / 500 (MetaProducer not yet active)
 ```
 
 ---
@@ -232,15 +226,15 @@ The system runs autonomously from here. The data accumulation timeline:
 | Timeframe | Milestone |
 |-----------|-----------|
 | Hour 1 | First forecasts in DB, outcome resolver running |
-| Day 3 | ~100 outcomes — first calibration data |
-| Week 2 | ~300 outcomes — LLM critic and prosecutor go live (review shadow logs first) |
-| Week 3-4 | **500 outcomes** — MetaProducer activates |
+| Day 3 | ~100 outcomes — first calibration data visible |
+| Week 2 | ~300 outcomes — LLM critic and prosecutor observing in shadow |
+| Week 3–4 | **500 outcomes** — MetaProducer activates |
 | Month 3 | Regime-conditional stats mature — full system live |
 
-Monitor progress anytime:
+Check progress anytime:
 ```bash
 sqlite3 ~/.b1e55ed/brain.db \
-  "SELECT COUNT(*) as outcomes, ROUND(COUNT(*)*100.0/500,1) as pct FROM events WHERE type='FORECAST_OUTCOME_V1'"
+  "SELECT COUNT(*) as outcomes, ROUND(COUNT(*)*100.0/500,1) as pct_to_meta FROM events WHERE type='FORECAST_OUTCOME_V1'"
 ```
 
 ---
@@ -249,14 +243,14 @@ sqlite3 ~/.b1e55ed/brain.db \
 
 **Bot not responding in Telegram**
 ```bash
-openclaw gateway status  # is it running?
+openclaw gateway status
 openclaw gateway restart
 ```
 
 **`b1e55ed start` crashes**
 ```bash
-b1e55ed start --debug  # see full error
-# Common: port 5050 already in use → kill existing process
+b1e55ed start --debug
+# Common: port 5050 already in use
 lsof -ti:5050 | xargs kill -9
 ```
 
@@ -269,7 +263,7 @@ xattr -dr com.apple.quarantine ~/.local/bin/b1e55ed-forge
 **Outcome resolver exits non-zero**
 ```bash
 b1e55ed resolve-outcomes --debug
-# Common: DB not initialized yet → run b1e55ed start first
+# Common: DB not initialized yet — run b1e55ed start first
 ```
 
 ---
