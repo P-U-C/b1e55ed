@@ -101,6 +101,22 @@ None.
 
 ---
 
+### Bug Fixes & Reliability
+
+- **Security**: Redact all config secrets from `GET /config` response; fix rate limiter TOCTOU race condition; add global exception handler + request_id middleware (#acb14ef)
+- **Karma**: Add UNIQUE constraint on trade_id (prevents double-spend); fix contributor attribution; wire profitable field; crash recovery (#e12329f)
+- **b1e55ing**: Migrate from deprecated `google.generativeai` → `google.genai` SDK; fix YAML syntax; session-driven blessing (no external API key); apply-eggs now commits (#133, #134, #214, #216)
+- **Oracle**: Fix GitHub App auth fallback to baked-in community constants; update oracle URL to `oracle.b1e55ed.permanentupperclass.com` (#125, #197)
+- **Release workflow**: Add `workflow_dispatch` fallback for squash-merge `[skip ci]` body inheritance; squash body warning in bump-version.sh (#135)
+- **Contributor registration**: Show actual error in wizard; fix fallback logic (#119)
+- **Dashboard**: Fix 500 error; fix `b1e55ed start` command; fix `repo_root` when installed as uv tool (#108, #115)
+- **Config**: Fix packaging; fix `slots __dict__` error; start command robustness (#117)
+- **Versioning**: Single-source versioning via bump-version.sh + release workflow; forge auto-build wired (#114)
+- **Docs (Mintlify)**: `mint.json` → `docs.json` for Mintlify v4 schema; branding update (#126)
+- **CI**: Add CLI doc coverage check — fails if commands added without `docs/cli-reference.md` entry; fix GITHUB_OUTPUT assertion
+- **Backtest**: Fix prior-close vol returns, equity calculation, periods_per_year propagation (#e2bde77)
+
+
 ## v1.0.0-beta.7 — 2026-02-28
 
 ### Highlights
