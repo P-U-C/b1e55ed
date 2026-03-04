@@ -506,8 +506,13 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {dim('Running: b1e55ed identity forge')}")
             print()
             try:
+                import shutil as _shutil
+
+                _b1e55ed = _shutil.which("b1e55ed")
+                _forge_cmd: list[str] = [_b1e55ed, "identity", "forge"] if _b1e55ed is not None else [sys.executable, "-m", "engine.cli", "identity", "forge"]
+
                 proc = subprocess.run(
-                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    _forge_cmd,
                     cwd=str(repo_root),
                     check=False,
                 )
@@ -533,8 +538,13 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {dim('Running: b1e55ed identity forge')}")
             print()
             try:
+                import shutil as _shutil
+
+                _b1e55ed = _shutil.which("b1e55ed")
+                _forge_cmd = [_b1e55ed, "identity", "forge"] if _b1e55ed is not None else [sys.executable, "-m", "engine.cli", "identity", "forge"]
+
                 proc = subprocess.run(
-                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    _forge_cmd,
                     cwd=str(repo_root),
                     check=False,
                 )
