@@ -1,4 +1,4 @@
-# b1e55ed: A Falsifiable Profit Engine
+# b1e55ed: A Falsifiable Trading Intelligence Engine
 
 **March 2026**
 
@@ -58,7 +58,9 @@ Every signal source in b1e55ed emits forecasts with a fixed schema:
 - **Horizon**: the time window over which the forecast applies
 - **Producer ID**: the source of the forecast
 
-Forecasts are persisted to an append-only event store. They cannot be modified after emission. This immutability is not a policy preference—it is a structural property enforced by the storage layer.
+A producer's confidence value is its stated probability that the following canonical event will resolve as true: the forecast's target asset will close above (for LONG) or below (for SHORT) its entry reference price after horizon H, net of execution fees. This is the event the Brier score evaluates. Every confidence value in the system refers to this event definition.
+
+Forecasts are written to an append-only, hash-linked event store. Each event references the hash of the prior event, making retroactive modification detectable. The store enforces append-only writes at the application layer; production-grade cryptographic anchoring to an external chain is on the audit roadmap. Within the current architecture, modification of past events would require recomputing the full hash chain from the point of tampering — detectable on any replay.
 
 ### 3.2 Resolution Against Realized Prices
 
@@ -82,6 +84,8 @@ When a position closes:
 3. Karma updates via exponential moving average: `karma_new = karma_old × 0.95 + outcome × 0.05`
 
 This update rule (α = 0.05) gives recent outcomes weight while retaining memory of historical performance. A producer who has been consistently correct will have high karma. A producer who has been consistently wrong will have low karma. A producer who has been random will drift toward neutral.
+
+Karma and Brier score serve different purposes. Brier score measures calibration quality — whether stated probabilities match realized frequencies. Karma is an operational weighting signal — a lightweight EMA tracker that determines how much a producer's current forecasts influence synthesis. Karma is directional (+1 correct, -1 incorrect) by design: it captures contribution to outcomes, not calibration quality. The two signals are complementary. High Brier without karma contribution means a well-calibrated producer who isn't influencing the profitable trades. High karma without Brier quality means a producer gaming easy calls. Both metrics must be healthy for a producer to be trusted.
 
 **Regime non-stationarity.** The EMA with α = 0.05 means approximately 95% of karma weight reflects the last ~100 outcomes. This creates a vulnerability: a trend-following producer accumulates high karma during trending periods, then receives maximum weight exactly when regime shifts and their edge disappears. The system addresses this through regime-conditional decay (Hamilton, 1989): when a regime change is detected via hidden Markov model transition probabilities, the EMA decay rate increases temporarily (α → 0.15), accelerating karma recalibration. Karma scores are not assumed portable across detected regime boundaries.
 
@@ -129,6 +133,20 @@ The system that accurately attributed yesterday's outcomes makes better-weighted
 
 ---
 
+## Three Evaluation Layers
+
+Forecast quality, attribution quality, and portfolio performance are distinct but linked evaluation domains.
+
+A producer can be well-calibrated probabilistically (good Brier score) while being economically useless after fees and slippage. A direction-only win rate can look strong while the resulting trades lose money. b1e55ed treats these three layers separately:
+
+1. **Forecast layer** — Did the forecast resolve correctly under the canonical event definition? Scored by Brier.
+2. **Attribution layer** — Which producers contributed to synthesis and at what weight? Tracked by karma.
+3. **Portfolio layer** — Did the resulting positions outperform all four benchmarks after fees, slippage, and risk constraints?
+
+The system's primary proof metric is at the portfolio layer: do forecasts assigned higher confidence produce better realized economic outcomes than lower-confidence forecasts, net of fees, under identical execution assumptions? This is the decisive falsification test.
+
+---
+
 ## 4. Falsifiability
 
 A trading system is falsifiable if it makes predictions that can be proven wrong.
@@ -157,6 +175,10 @@ b1e55ed runs four benchmarks continuously:
 
 The brain must beat all four benchmarks to claim edge. "Edge" means: risk-adjusted returns net of fees exceed the best alternative.
 
+All benchmark comparisons run under identical assumptions: same market data source, same fee model, same slippage assumptions, same execution timestamps, same rebalance cadence, same exposure constraints.
+
+The single most important proof test: over a sufficiently large forward sample, do forecasts assigned higher confidence produce better realized economic outcomes than lower-confidence forecasts, net of fees, under identical execution assumptions? Not just higher directional accuracy. Not just better Brier score. Economic outcomes under controlled conditions. If confidence does not map monotonically to realized value, the system's weighting logic has not earned trust.
+
 ---
 
 ## 5. The Intelligence Layer
@@ -177,9 +199,7 @@ The meta-producer learns ensemble patterns: which combinations of producer signa
 
 It does not emit actionable forecasts until 500 outcomes have been resolved.
 
-**Power analysis framing.** To detect a 5% improvement in Brier score over baseline with 80% statistical power requires a minimum sample size that depends on outcome variance. For typical forecast calibration variance (σ² ≈ 0.04), standard power calculations yield n ≈ 400–600 outcomes. The 500-outcome gate represents a conservative threshold within this range, calibrated empirically from simulation of the producer population.
-
-This threshold would change under different conditions: higher effect size (easier to detect) would lower n; lower baseline variance would raise it; different power requirements (90% instead of 80%) would increase it. The specific value is not a universal constant—it is a parameter that reflects the system's tolerance for false positive pattern detection.
+The 500-outcome gate is an operational minimum, not a universal statistical threshold. It is chosen to reduce obvious overfitting risk before the meta-producer influences synthesis. The exact value should be treated as a conservative hyperparameter: too low, and the meta-producer activates on noise; too high, and genuine learning is delayed. At 500 outcomes across multiple producers, assets, and regimes, statistical regularities become identifiable for the effect sizes the system is designed to detect (≥5% Brier improvement over baseline at 80% power, given estimated forecast variance σ² ≈ 0.04).
 
 Below this threshold, apparent patterns are more likely noise than signal. The gate enforces epistemic honesty about what the data can support.
 
@@ -197,7 +217,7 @@ This staged activation—shadow, advisory, weighted—ensures that every compone
 
 ### 6.1 Producer Registration
 
-Signal producers register with a node identity. This identity is cryptographically stable—the same producer cannot claim to be multiple producers.
+Signal producers register with a node identity. Producer identities are cryptographically persistent, binding forecast history to a stable key over time. This supports continuity and auditability — a producer's track record cannot be reset or transferred. It does not by itself prevent a single actor from registering multiple keys. Sybil resistance relies on a combination of reputation cold-start (new producers carry no karma weight), registration attestation via EAS, and the economic cost of building karma from zero.
 
 Registration requires:
 
@@ -227,13 +247,15 @@ The oracle is a read-only projection of the event store. It answers one question
 
 This is the commercially differentiated piece: verifiable signal track records as a service. The trading system is one use case. The oracle enables an ecosystem of applications that depend on knowing whether a forecaster has genuine skill.
 
+The closest analogues are Numerai (crowdsourced model tournament) and traditional signal aggregation services. Numerai producers cannot verify their own contribution to portfolio returns — the aggregation is opaque. Traditional signal services have no systematic calibration or attribution. b1e55ed's wedge: closed-loop attribution that both producers and buyers can audit. Producers get a portable, verifiable track record. Buyers get Brier-scored history before allocating capital. The oracle makes these track records accessible without requiring trust in the operator.
+
 ---
 
 ## 7. Properties
 
 The system guarantees:
 
-- **Immutability**: Forecasts cannot be modified after emission
+- **Immutability**: Forecasts are written to hash-linked event store; modification is detectable
 - **Attribution**: Every trade is linked to contributing signals
 - **Calibration feedback**: Brier scores are computed for every producer
 - **Resolution incentive**: Bold correct forecasts earn more than timid correct forecasts
@@ -258,6 +280,8 @@ The system does not guarantee:
 b1e55ed is in beta.
 
 Version: 1.0.0-beta.8
+
+The system is not inert before external contributors join. Thirteen internal producers — spanning on-chain flows, technical analysis, TradFi basis, sentiment, and social signals — run from first deployment. These producers generate the initial outcome volume that builds the calibration data the meta-producer requires. External contributors join a system that already has a track record, not an empty one. The first 500 outcomes are reachable without a single external producer.
 
 The flywheel sprint (S0–S7) closed the attribution loop. The following components are operational:
 
@@ -297,9 +321,10 @@ This is the only honest claim a trading system can make.
 
 ## References
 
-Gneiting, T., & Raftery, A. E. (2007). Strictly proper scoring rules, prediction, and estimation. *Journal of the American Statistical Association*, 102(477), 359–378.
-
-Hamilton, J. D. (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. *Econometrica*, 57(2), 357–384.
+- Gneiting, T. & Raftery, A.E. (2007). Strictly Proper Scoring Rules, Prediction, and Estimation. *Journal of the American Statistical Association*, 102(477), 359–378.
+- Hamilton, J.D. (1989). A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle. *Econometrica*, 57(2), 357–384.
+- López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
+- Kelly, J.L. (1956). A New Interpretation of Information Rate. *Bell System Technical Journal*, 35(4), 917–926.
 
 ---
 
