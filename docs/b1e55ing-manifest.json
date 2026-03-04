@@ -140,6 +140,96 @@
       "placement": "before_function",
       "pr_number": 245,
       "applied_at": "2026-03-03T01:16:00Z"
+    },
+    {
+      "id": "egg_f428fafd",
+      "file": "engine/brain/isotonic.py",
+      "anchor": "def fit_calibrator(",
+      "tradition": "zadrozny-elkan-calibration",
+      "content": "# Zadrozny & Elkan (2002): calibration is where probabilities stop pretending.",
+      "placement": "inline_comment",
+      "pr_number": 245,
+      "applied_at": "2026-03-04T00:08:13Z"
+    },
+    {
+      "id": "egg_8a62deb4",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "_BUDGET_TIERS: list[tuple[int, int]] = [",
+      "tradition": "audubon-ledger",
+      "content": "# Audubon kept a ledger for every specimen; this manifest keeps one for every blessing.",
+      "placement": "inline_comment",
+      "pr_number": 246,
+      "applied_at": "2026-03-04T00:08:17Z"
+    },
+    {
+      "id": "egg_986e86d9",
+      "file": "engine/core/regime.py",
+      "anchor": "REGIME_CAPS: dict[str, float] = {",
+      "tradition": "ashby-requisite-variety",
+      "content": "# Ashby would call this requisite variety: controls must match the market's regimes.",
+      "placement": "inline_comment",
+      "pr_number": 250,
+      "applied_at": "2026-03-04T00:08:20Z"
+    },
+    {
+      "id": "egg_3e29bb4b",
+      "file": "engine/producers/sentiment.py",
+      "anchor": "@register(\"market-sentiment\", domain=\"social\")",
+      "tradition": "gamelan-interlocking-patterns",
+      "content": "# Gamelan logic: each section holds a fragment, and synthesis is the full melody.",
+      "placement": "inline_comment",
+      "pr_number": 252,
+      "applied_at": "2026-03-04T00:08:23Z"
+    },
+    {
+      "id": "egg_77c4891d",
+      "file": "engine/core/self_memory.py",
+      "anchor": "class SelfMemory:",
+      "tradition": "grimoire-memory",
+      "content": "# A grimoire is memory with teeth: lessons persist because they are callable.",
+      "placement": "inline_comment",
+      "pr_number": 254,
+      "applied_at": "2026-03-04T00:08:25Z"
+    },
+    {
+      "id": "egg_f2c5b9f2",
+      "file": "engine/core/prosecutor.py",
+      "anchor": "class Prosecutor:",
+      "tradition": "talmudic-counterargument",
+      "content": "# Talmudic discipline: every thesis deserves its strongest counter-argument.",
+      "placement": "inline_comment",
+      "pr_number": 256,
+      "applied_at": "2026-03-04T00:08:28Z"
+    },
+    {
+      "id": "egg_f7757f10",
+      "file": "engine/brain/hierarchy.py",
+      "anchor": "class HierarchyEngine:",
+      "tradition": "stafford-beer-coordination",
+      "content": "# Stafford Beer would call this coordination, not consensus.",
+      "placement": "inline_comment",
+      "pr_number": 258,
+      "applied_at": "2026-03-04T00:08:31Z"
+    },
+    {
+      "id": "egg_eaf76cfd",
+      "file": "engine/core/horizons.py",
+      "anchor": "HORIZONS = [\"1h\", \"4h\", \"24h\", \"3d\", \"7d\"]",
+      "tradition": "mandelbrot-fat-tails",
+      "content": "# Mandelbrot's tails care deeply about horizon choice, even when dashboards do not.",
+      "placement": "inline_comment",
+      "pr_number": 260,
+      "applied_at": "2026-03-04T00:08:33Z"
+    },
+    {
+      "id": "egg_9aa51a4f",
+      "file": "engine/core/novelty.py",
+      "anchor": "def compute_novelty_penalty(",
+      "tradition": "von-foerster-observer-effect",
+      "content": "# Von Foerster's observer effect: repeated agreement can be information loss.",
+      "placement": "inline_comment",
+      "pr_number": 262,
+      "applied_at": "2026-03-04T00:08:37Z"
     }
   ]
 }

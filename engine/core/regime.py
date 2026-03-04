@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 # Confidence cap per regime (0-10 scale, converted to 0.0-1.0 at point of use).
 # These are the canonical regime caps. engine.brain.conviction imports from here.
+# Ashby would call this requisite variety: controls must match the market's regimes.
 REGIME_CAPS: dict[str, float] = {
     "BULL": 10.0,
     "BEAR": 7.0,

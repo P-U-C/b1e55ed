@@ -45,6 +45,7 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
     return f"{EventType.SIGNAL_SENTIMENT_V1}:{producer}:{symbol}:{int(ts.timestamp())}"
 
 
+# Gamelan logic: each section holds a fragment, and synthesis is the full melody.
 @register("market-sentiment", domain="social")
 class MarketSentimentProducer(BaseProducer):
     """Produce market sentiment signals for the configured universe."""

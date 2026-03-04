@@ -98,6 +98,7 @@ def _fit_isotonic_fallback(confidences: list[float], outcomes: list[float]) -> t
     return x_unique, fitted
 
 
+# Zadrozny & Elkan (2002): calibration is where probabilities stop pretending.
 def fit_calibrator(
     db: Any,
     producer_name: str,

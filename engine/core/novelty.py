@@ -36,6 +36,7 @@ class NoveltyResult:
     agreement: float  # -1=full disagreement, +1=full agreement
 
 
+# Von Foerster's observer effect: repeated agreement can be information loss.
 def compute_novelty_penalty(
     *,
     candidate_action: str,
