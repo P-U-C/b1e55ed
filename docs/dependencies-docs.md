@@ -110,6 +110,7 @@ architecture.md
   → contributors.md
   → eas-integration.md
   → dependencies-code.md
+  → producer-intelligence.md
 ```
 
 ### `docs/eas-integration.md`
@@ -173,12 +174,28 @@ internal/DASHBOARD_DESIGN_SPEC.md
 
 ---
 
+### `docs/producer-intelligence.md`
+
+**References:**
+```
+producer-intelligence.md
+  (no outgoing references — self-contained specification)
+```
+
+**Referenced by:**
+- docs/producers.md
+- docs/learning-loop.md
+- docs/architecture.md
+
+---
+
 ### `docs/learning-loop.md`
 
 **References:**
 ```
 learning-loop.md
   └→ ROADMAP.md               (Karma system design)
+  └→ producer-intelligence.md  (P4 intelligence layer)
 ```
 
 **Referenced by:**
@@ -305,6 +322,7 @@ Tier 1: Getting Started
 Tier 2: Architecture & Development
   ├─ architecture.md
   ├─ developers.md
+  ├─ producer-intelligence.md
   ├─ dependencies-code.md
   └─ dependencies-docs.md (this file)
 
@@ -557,7 +575,7 @@ docs/contributing/how-to-contribute.mdx
 ```text
 docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
 docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
-docs/producers.md           → configuration.md, api-reference.md, mcp.md, producers/overview.mdx
+docs/producers.md           → configuration.md, api-reference.md, mcp.md, producers/overview.mdx, producer-intelligence.md
 ```
 
 ## CLI setup command modules

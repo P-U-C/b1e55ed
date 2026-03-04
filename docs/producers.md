@@ -21,7 +21,13 @@ Why it matters:
 
 ---
 
-## 2) The 13 producers
+## Intelligence Layer
+
+The 13 producers below are raw signal emitters. On top of them sits a **Producer Intelligence Layer** that makes every forecast adaptive: regime conditioning, LLM critique, self-memory (Brier-based confidence adjustment), adversarial prosecution, novelty filtering, and hierarchical domain weighting. Every adaptive layer defaults to **shadow mode** — it observes and logs without mutating the forecast — so the system learns before it acts. For the full specification, see [producer-intelligence.md](producer-intelligence.md).
+
+---
+
+## 2) The 13+1 producers
 
 ### Default domain weights (system defaults)
 
@@ -55,6 +61,7 @@ Defined in `engine/core/config.py` (`DomainWeights`). Defaults:
 | `orderbook-depth` | technical | Bid/ask depth, imbalance, liquidity-on-depth score | Medium (endpoint; frequent) | 0.10 | When microstructure/liquidity matters (breakouts, dumps) |
 | `price-alerts` | technical | Price/bid/ask/venue (polling “ws-like” feed) | Medium (endpoint; **every 1 min**) | 0.10 | When you need fast price state for technical context |
 | `market-events` | events | Catalyst list + headline sentiment + impact score + count | Medium (endpoint; NLP/news) | 0.05 | When catalysts/news drive discontinuities |
+| `meta` | events | Ensemble pattern matching from historical producer track records | Medium (reads local DB only) | adaptive | Auto-activates after 500 resolved outcomes; shadow=True default |
 
 ## MCP signal access
 
