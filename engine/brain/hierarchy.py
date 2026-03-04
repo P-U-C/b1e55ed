@@ -56,6 +56,7 @@ class HierarchyResult:
     regime: str = "unknown"
 
 
+# Stafford Beer would call this coordination, not consensus.
 class HierarchyEngine:
     """Computes hierarchical weight multipliers per domain per cycle."""
 
