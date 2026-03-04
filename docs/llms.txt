@@ -120,3 +120,9 @@ Full machine-readable API specification.
 ## Optional: extended content
 
 For verbose page content, fetch individual pages or use the Mintlify MCP server for this documentation site.
+
+## Whitepapers
+
+- docs/whitepaper-technical.md: Full technical whitepaper — architecture, interpreter stack, evaluation layers, falsifiability mechanisms, oracle platform. 7,400 words.
+- docs/whitepaper-summary.md: Summary whitepaper — system overview for informed generalists. Covers producers, karma, synthesis loop, benchmarks, oracle. 2,400 words.
+- docs/whitepaper-onepager.md: Capital allocator brief — what you can verify before deploying capital, proof standard, current status. 600 words.
