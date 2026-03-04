@@ -197,7 +197,9 @@ class TestExportKarmaDateFilter:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")
@@ -227,7 +229,9 @@ class TestExportKarmaDateFilter:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")
@@ -257,7 +261,9 @@ class TestExportKarmaDateFilter:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         repo_root = _scaffold_repo(tmp_path)
         db = Database(repo_root / "data" / "brain.db")

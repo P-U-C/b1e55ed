@@ -1,10 +1,15 @@
 """api.routes.mcp
 
-Minimal JSON-RPC 2.0 MCP (Model Context Protocol) server.
+MCP signal registry + JSON-RPC endpoints.
 
-Allows Claude, GPT, and other MCP-aware agents to use b1e55ed as native tools.
+Exposes the MCPProducerRegistry over HTTP so external agents and dashboards
+can discover live producer signals without a direct MCP protocol connection.
 
-Spec: https://spec.modelcontextprotocol.io/specification/2024-11-05/
+GET /api/v1/mcp/producers  — list all registered producers + latest signal
+GET /api/v1/mcp/status     — registry health and stats
+
+Also serves the JSON-RPC MCP endpoint used by MCP-aware clients:
+POST /mcp
 """
 
 from __future__ import annotations
@@ -12,21 +17,26 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+from dataclasses import asdict
 from datetime import datetime
 
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
 from api.deps import get_config, get_db
 from engine.core.config import Config
 from engine.core.database import Database
+from engine.mcp.auth import get_mcp_auth_dependency
+from engine.mcp.registry import get_registry as get_mcp_registry
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +95,52 @@ def _check_auth(request: Request, x_api_key: str | None) -> bool:
             return True
 
     return False
+
+
+def _require_mcp_registry_auth(
+    request: Request,
+    x_mcp_key: str | None = Header(default=None, alias="X-MCP-Key"),
+) -> None:
+    """Optional API-key gate for /api/v1/mcp/* registry endpoints."""
+
+    config: Config = get_config(request)
+    auth_dependency = get_mcp_auth_dependency(config)
+    auth_dependency(x_mcp_key)
+
+
+@router.get("/mcp/producers", dependencies=[Depends(_require_mcp_registry_auth)])
+def list_mcp_producers() -> dict:
+    """List all producers with their manifest and latest signal (if available)."""
+
+    registry = get_mcp_registry()
+    producers: list[dict[str, Any]] = []
+
+    for manifest in registry.list_producers():
+        latest_signal = registry.get_latest(manifest.name)
+        manifest_payload = asdict(manifest)
+        manifest_payload["latest_signal"] = asdict(latest_signal) if latest_signal is not None else None
+        producers.append(manifest_payload)
+
+    return {
+        "producers": producers,
+        "count": len(producers),
+    }
+
+
+@router.get("/mcp/status", dependencies=[Depends(_require_mcp_registry_auth)])
+def mcp_status(request: Request) -> dict:
+    """Return MCP registry availability and buffer stats."""
+
+    registry = get_mcp_registry()
+    stats = registry.stats()
+    config: Config = get_config(request)
+
+    return {
+        "enabled": bool(config.mcp.enabled),
+        "producer_count": int(stats.get("producer_count", 0)),
+        "total_signals_buffered": int(stats.get("total_signals_buffered", 0)),
+        "registry_ok": True,
+    }
 
 
 # ---------------------------------------------------------------------------

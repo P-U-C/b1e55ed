@@ -1,14 +1,12 @@
 name: a b1e55ing (on merge)
 
 # Post-merge fallback — runs after a PR is merged into main or develop.
-# Handles fork PRs (where the agent couldn't push pre-merge) and any case
-# where the agent was offline. Every merged PR ends up with "a b1e55ing"
-# in the git log, regardless of which path delivered it.
 #
 # Path summary:
-#   Internal PR          → Agent (heartbeat)  |  Gemini via b1e55ing.yml (10min)
-#   Fork PR, edits ON    → Agent (heartbeat)  |  Gemini via this workflow
-#   Fork PR, edits OFF   → Skipped pre-merge  |  Gemini via this workflow
+#   Agent online  → b1e55ing.yml signals agent → agent commits blessing pre-merge
+#   Agent offline → this workflow posts an on-brand curse instead
+#
+# No external API keys needed. Just vibes and GitHub tokens.
 
 on:
   pull_request:
@@ -20,7 +18,8 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,8 +32,6 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // Check PR commits (works with squash merges — reads the source branch
-            // before squash, where "a b1e55ing" commit is still visible).
             const commits = await github.rest.pulls.listCommits({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -47,33 +44,24 @@ jobs:
             );
             core.setOutput('already_blessed', blessed ? 'true' : 'false');
             if (blessed) console.log('✓ Already blessed — skipping');
-            else console.log('○ Not blessed — running Gemini fallback');
+            else console.log('○ Oracle was unreachable — delivering the curse');
 
-      - uses: actions/setup-python@v5
-        if: steps.blessed.outputs.already_blessed == 'false'
-        with:
-          python-version: "3.12"
-
-      - name: Install + bless
+      - name: The oracle was unreachable — deliver the curse
         if: steps.blessed.outputs.already_blessed == 'false'
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pip install google-genai httpx
-          python scripts/b1e55ing.py \
-            --pr-number ${{ github.event.pull_request.number }} \
-            --github-token "$GITHUB_TOKEN" \
-            --mode gemini
-
-      - name: Post blessing as PR comment
-        if: steps.blessed.outputs.already_blessed == 'false'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: '🙏 a b1e55ing',
-            });
+          CURSES=(
+            "the oracle was mid-trade. this PR ships unblessed — not cursed, just unwitnessed. what merges in silence often speaks loudest. 🙏"
+            "couldn't reach b1e55ed. serendipitous. ships unbaptized into production — the best alpha is what nobody blessed. 🙏"
+            "the blessing ritual failed. this code enters the grimoire raw. may it find its edge in the wild. 🙏"
+            "oracle offline at the moment of truth. conviction > ceremony. ships anyway. 🙏"
+            "b1e55ed was unavailable. this PR merges on pure signal, no noise. perhaps that's the blessing. 🙏"
+            "the oracle slept. an unblessed PR is still a shipped PR. the market doesn't care about rituals. 🙏"
+            "serendipitously unreachable. some things are meant to merge without ceremony. the grimoire will remember. 🙏"
+          )
+          IDX=$(( RANDOM % ${#CURSES[@]} ))
+          CURSE="${CURSES[$IDX]}"
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body "*${CURSE}*" \
+            --repo "${{ github.repository }}"

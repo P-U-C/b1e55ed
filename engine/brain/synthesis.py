@@ -12,20 +12,24 @@ This module ports the *v2* synthesis philosophy from the legacy system:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any, Final
 
+from engine.brain.hierarchy import HierarchyEngine, HierarchyResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType
-from engine.core.types import FeatureSnapshot
+from engine.core.types import CANONICAL_DOMAINS, FeatureSnapshot
 
 
 def _clamp01(x: float) -> float:
@@ -38,6 +42,24 @@ def _mean(xs: list[float]) -> float | None:
     return float(sum(xs) / len(xs))
 
 
+_DEFAULT_DECAY_LAMBDA = 0.01  # half-life ~70 minutes
+# Shannon: information is the resolution of uncertainty. At lambda=0.01, resolving power halves every 70 minutes.
+
+
+# Ebbinghaus charted the forgetting curve in 1885: R = exp(-t/S). He used nonsense syllables.
+# Memory, radioactive isotope, market signal -- the mathematics of decay is invariant across domains.
+def _freshness_factor(event_ts: datetime, now: datetime, lambda_: float = _DEFAULT_DECAY_LAMBDA) -> float:
+    """Exponential freshness decay: exp(-λ × age_minutes). Clamped to [0.01, 1.0]."""
+    if event_ts.tzinfo is None:
+        event_ts = event_ts.replace(tzinfo=UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+
+    age_minutes = max(0.0, (now - event_ts).total_seconds() / 60.0)
+    factor = math.exp(-lambda_ * age_minutes)
+    return max(0.01, min(1.0, factor))
+
+
 @dataclass(frozen=True, slots=True)
 class SynthesisResult:
     """Output of v2 synthesis for a symbol."""
@@ -46,6 +68,8 @@ class SynthesisResult:
     domain_scores: dict[str, float]  # 0..1 per domain (only domains with features)
     weights_used: dict[str, float]  # domain -> weight used this cycle (after quality adjustment)
     weighted_score: float  # 0..1 (domain_scores ⋅ weights_used)
+    hierarchy_factors: dict[str, float] = field(default_factory=dict)  # domain -> final hierarchy multiplier
+    regime_tag: str = "unknown"  # per-asset regime (populated by synthesize_with_regime)
 
 
 class FeatureExtractor:
@@ -169,7 +193,7 @@ class FeatureExtractor:
 class VectorSynthesis:
     """v2 synthesis engine: builds feature snapshots + computes a weighted score."""
 
-    DOMAINS: Final[list[str]] = ["curator", "onchain", "tradfi", "social", "technical", "events"]
+    DOMAINS: Final[list[str]] = sorted(CANONICAL_DOMAINS)
 
     def __init__(self, config: Config, db: Database):
         self.config = config
@@ -210,7 +234,11 @@ class VectorSynthesis:
             vec = self.extractor.extract_domain_features(event_type=et, payload=chosen.payload)
             if not vec:
                 continue
-            feats[dom].update(vec)
+
+            factor = _freshness_factor(chosen.ts, now)
+            decayed_vec = {k: float(v) * factor for k, v in vec.items()}
+
+            feats[dom].update(decayed_vec)
             source_event_ids.append(chosen.id)
 
         # Drop empty domains to keep snapshot compact.
@@ -273,11 +301,25 @@ class VectorSynthesis:
         elif dom == "tradfi":
             fund = f.get("funding_annualized")
             if fund is not None:
-                # ideal ~10, punish extremes
-                scores.append(_clamp01(1.0 - abs(float(fund) - 10.0) / 30.0))
+                # Parameterized via scoring_params (P2.4). Shadow-safe defaults.
+                try:
+                    from engine.brain.scoring import get_param as _gp
+
+                    _fc = _gp(self.db, "tradfi.funding_optimal_center")
+                    _fs = _gp(self.db, "tradfi.funding_scale")
+                except Exception:
+                    _fc, _fs = 10.0, 30.0
+                scores.append(_clamp01(1.0 - abs(float(fund) - _fc) / _fs))
             basis = f.get("basis_annualized")
             if basis is not None:
-                scores.append(_clamp01(1.0 - abs(float(basis) - 5.0) / 8.0))
+                try:
+                    from engine.brain.scoring import get_param as _gp2
+
+                    _bc = _gp2(self.db, "tradfi.basis_optimal_center")
+                    _bs = _gp2(self.db, "tradfi.basis_scale")
+                except Exception:
+                    _bc, _bs = 5.0, 8.0
+                scores.append(_clamp01(1.0 - abs(float(basis) - _bc) / _bs))
             oi = f.get("oi_change_pct")
             if oi is not None:
                 scores.append(_clamp01(0.5 + float(oi) / 40.0))
@@ -308,6 +350,60 @@ class VectorSynthesis:
 
         return _mean(scores)
 
+    def _load_karma_multipliers(self) -> dict[str, float]:
+        """Load average karma_score per domain from producer_karma table.
+
+        Returns a dict of domain -> average karma_score for producers in that domain.
+        If table is empty or doesn't exist, returns empty dict (Phase 0 neutral).
+        """
+        try:
+            # producer_karma has producer_id (which maps to source/producer_id in SIGNAL_ACCEPTED_V1)
+            # We need to map producer_id -> domain. Query the latest SIGNAL_ACCEPTED_V1 events
+            # to build producer -> domain mapping, then average karma per domain.
+            rows = self.db.conn.execute("SELECT producer_id, karma_score FROM producer_karma").fetchall()
+            if not rows:
+                return {}
+
+            producer_domains = self._build_producer_domain_map()
+            if not producer_domains:
+                return {}
+
+            # Average karma per domain
+            domain_scores: dict[str, list[float]] = {}
+            for row in rows:
+                pid = str(row[0])
+                ks = float(row[1])
+                dom = producer_domains.get(pid)
+                if dom:
+                    domain_scores.setdefault(dom, []).append(ks)
+
+            if not domain_scores:
+                return {}
+
+            return {dom: sum(scores) / len(scores) for dom, scores in domain_scores.items()}
+        except Exception:
+            return {}
+
+    def _build_producer_domain_map(self) -> dict[str, str]:
+        """Build producer_name -> domain map from recent SIGNAL_ACCEPTED_V1 events."""
+        import json as _json
+
+        try:
+            rows = self.db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
+                (str(EventType.SIGNAL_ACCEPTED_V1),),
+            ).fetchall()
+            mapping: dict[str, str] = {}
+            for row in rows:
+                payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                producer_id = str(payload.get("producer_id", "")).strip()
+                domain = str(payload.get("domain", "")).strip().lower()
+                if producer_id and domain and producer_id not in mapping:
+                    mapping[producer_id] = domain
+            return mapping
+        except Exception:
+            return {}
+
     def synthesize(
         self,
         *,
@@ -318,6 +414,7 @@ class VectorSynthesis:
         quality_adjustment: dict[str, float] | None = None,
     ) -> SynthesisResult:
         snapshot = self.build_snapshot(cycle_id=cycle_id, symbol=symbol, as_of=as_of)
+        hier_result: HierarchyResult | None = None
 
         base_weights = weights or self.config.weights.model_dump()
         # quality_adjustment: domain -> 0..1 multiplier (already computed by DataQualityMonitor)
@@ -327,6 +424,38 @@ class VectorSynthesis:
             weights_used = {k: (v / total if total > 0 else 0.0) for k, v in adjusted.items()}
         else:
             weights_used = dict(base_weights)
+
+        # Flywheel: apply producer karma as weight multiplier
+        karma_multipliers = self._load_karma_multipliers()
+        if karma_multipliers:
+            for dom in list(weights_used.keys()):
+                mult = karma_multipliers.get(dom, 1.0)
+                weights_used[dom] = float(weights_used[dom]) * float(mult)
+            # Re-normalize
+            total_w = sum(weights_used.values())
+            if total_w > 0:
+                weights_used = {k: v / total_w for k, v in weights_used.items()}
+
+        # P4.1: Hierarchical weighting — best-effort modulation of domain priors.
+        try:
+            producer_domain_map = self._build_producer_domain_map()
+            if producer_domain_map:
+                hierarchy = HierarchyEngine(self.db)
+                regime_tag = getattr(snapshot, "regime", None) or "unknown"
+                hier_result = hierarchy.compute(
+                    symbol=symbol,
+                    regime=str(regime_tag),
+                    producer_domain_map=producer_domain_map,
+                )
+                for dom in list(weights_used.keys()):
+                    mult = hier_result.multipliers.get(dom, 1.0)
+                    weights_used[dom] = float(weights_used[dom]) * float(mult)
+                # Re-normalize
+                total_w = sum(weights_used.values())
+                if total_w > 0:
+                    weights_used = {k: v / total_w for k, v in weights_used.items()}
+        except Exception:
+            pass  # hierarchy is best-effort; never break synthesis
 
         domain_scores: dict[str, float] = {}
         for dom, feats in snapshot.features.items():
@@ -343,4 +472,38 @@ class VectorSynthesis:
             domain_scores=domain_scores,
             weights_used=weights_used,
             weighted_score=_clamp01(weighted_score),
+            hierarchy_factors=(dict(hier_result.multipliers) if hier_result is not None else {}),
+        )
+
+    def synthesize_with_regime(
+        self,
+        *,
+        cycle_id: str,
+        symbol: str,
+        quality_adjustment: dict[str, float] | None,
+        regime_detector: Any,
+        as_of: datetime | None = None,
+        weights: dict[str, float] | None = None,
+    ) -> SynthesisResult:
+        """Run synthesis and attach a per-asset regime tag.
+
+        Existing callers can continue using ``synthesize()``; this method is an
+        additive convenience for pipelines that need symbol-local regime tags.
+        """
+        result = self.synthesize(
+            cycle_id=cycle_id,
+            symbol=symbol,
+            as_of=as_of,
+            weights=weights,
+            quality_adjustment=quality_adjustment,
+        )
+        regime_result = regime_detector.detect_for_asset(result.snapshot)
+
+        return SynthesisResult(
+            snapshot=result.snapshot,
+            domain_scores=result.domain_scores,
+            weights_used=result.weights_used,
+            weighted_score=result.weighted_score,
+            hierarchy_factors=result.hierarchy_factors,
+            regime_tag=regime_result.state.regime,
         )

@@ -375,6 +375,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON (default).",
     )
 
+    p_resolve = sub.add_parser("resolve-outcomes", help="Resolve elapsed FORECAST_V1 events into FORECAST_OUTCOME_V1")
+    p_resolve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_keys = sub.add_parser("keys", help="Manage API keys")
     keys_sub = p_keys.add_subparsers(dest="keys_cmd")
 
@@ -464,6 +467,11 @@ def build_parser() -> argparse.ArgumentParser:
     from engine.cli.commands.export import build_export_parser
 
     build_export_parser(sub)
+
+    # -- report --
+    from engine.cli.commands.report import build_report_parser
+
+    build_report_parser(sub)
 
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
@@ -651,7 +659,9 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         def _parse_iso(ts: str | None) -> datetime | None:
             if not ts:
@@ -1110,7 +1120,9 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     try:
         from datetime import UTC  # py311+
     except ImportError:  # pragma: no cover
-        UTC = UTC  # noqa: N806
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
 
     from engine.core.database import Database
 
@@ -1744,6 +1756,36 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Resolve eligible forecasts into FORECAST_OUTCOME_V1 events.
+
+    Exit code is always 0 (cron/monitoring friendly).
+    """
+
+    from engine.brain.outcome_resolver import OutcomeResolver
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    db = Database(repo_root / "data" / "brain.db")
+
+    resolved = 0
+    skipped = 0
+    try:
+        resolver = OutcomeResolver(db)
+        resolved = int(resolver.resolve_pending())
+        skipped = int(getattr(resolver, "last_skipped_missing_price", 0))
+    except Exception:
+        # Never fail this command; resolver itself is best-effort.
+        resolved = 0
+        skipped = 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"resolved": resolved, "skipped_missing_price": skipped}))
+    else:
+        print(f"resolved {resolved} forecasts, skipped {skipped} (missing price data)")
+    return 0
+
+
 def _cmd_keys(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli_keys import cmd_keys_list, cmd_keys_remove, cmd_keys_set, cmd_keys_test
     from engine.security.keystore import Keystore
@@ -1832,7 +1874,9 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
         try:
             from datetime import UTC  # py311+
         except ImportError:  # pragma: no cover
-            UTC = UTC  # noqa: N806
+            from datetime import timezone as _tz  # noqa: PLC0415
+
+            UTC = _tz.utc  # noqa: N806, UP017
 
         node_id = f"b1e55ed-{pub_raw.hex()[:8]}"
         created_at = datetime.now(tz=UTC).isoformat()
@@ -3091,6 +3135,7 @@ def main(argv: list[str] | None = None) -> int:
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
+        "resolve-outcomes": _cmd_resolve_outcomes,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
         "start": _cmd_start,
@@ -3105,6 +3150,7 @@ def main(argv: list[str] | None = None) -> int:
         "export": _cmd_export,
         "wizard": _cmd_wizard,
         "uninstall": _cmd_uninstall,
+        "report": lambda ctx, args: __import__("engine.cli.commands.report", fromlist=["run_report"]).run_report(ctx, args),
     }
 
     fn = dispatch.get(str(args.command))

@@ -19,7 +19,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
@@ -125,6 +127,102 @@ class RegimeDetector:
         prev = self._last_regime
         changed = prev is not None and prev != regime
         self._last_regime = regime
+
+        return RegimeResult(state=state, changed=changed, previous=prev)
+
+    # Ashby's Law of Requisite Variety: a controller needs at least as much variety as the system it controls.
+    # One global regime for n assets has less variety than the market. Per-asset is the correct resolution.
+    def detect_for_asset(self, snapshot: FeatureSnapshot) -> RegimeResult:
+        """Compute regime for a single asset using its own feature snapshot.
+
+        Uses asset-specific technical/tradfi features and falls back to the
+        last known global regime when no usable indicators are present.
+        """
+        now = snapshot.ts
+
+        tech = snapshot.features.get("technical", {})
+        tradfi = snapshot.features.get("tradfi", {})
+        social = snapshot.features.get("social", {})
+
+        rsi = _to_float(tech.get("rsi_14"))
+        ema_20 = _to_float(tech.get("ema_20"))
+        ema_50 = _to_float(tech.get("ema_50"))
+        ema_200 = _to_float(tech.get("ema_200"))
+
+        funding = _to_float(tradfi.get("funding_annualized"))
+        basis = _to_float(tradfi.get("basis_annualized"))
+        fear_greed = _to_float(social.get("fear_greed"))
+
+        evidence: dict[str, float] = {}
+        if rsi is not None:
+            evidence["rsi_14"] = rsi
+        if ema_20 is not None:
+            evidence["ema_20"] = ema_20
+        if ema_50 is not None:
+            evidence["ema_50"] = ema_50
+        if ema_200 is not None:
+            evidence["ema_200"] = ema_200
+        if funding is not None:
+            evidence["funding_annualized"] = funding
+        if basis is not None:
+            evidence["basis_annualized"] = basis
+        if fear_greed is not None:
+            evidence["fear_greed"] = fear_greed
+
+        prev = self._last_regime
+
+        # Von Foerster: the observer is part of the system. An asset's regime is local. The global frame is an approximation.
+        # No usable indicators: carry forward last known global regime, else
+        # default to TRANSITION for deterministic behavior.
+        if not evidence:
+            regime = prev or "TRANSITION"
+            state = RegimeState(regime=regime, ts=now, evidence=evidence)
+            changed = prev is not None and prev != regime
+            return RegimeResult(state=state, changed=changed, previous=prev)
+
+        bull = 0
+        bear = 0
+
+        # Crisis should trigger on extreme stress from any key indicator.
+        crisis = (funding is not None and funding < -0.05) or (rsi is not None and rsi < 20.0)
+
+        # Bullish evidence: positive momentum + healthy basis/funding/EMA trend.
+        if rsi is not None and rsi > 55.0:
+            bull += 1
+        if basis is not None and basis > 3.0:
+            bull += 1
+        if funding is not None and funding > 0.0:
+            bull += 1
+        if ema_20 is not None and ema_50 is not None and ema_20 > ema_50:
+            bull += 1
+        if ema_50 is not None and ema_200 is not None and ema_50 > ema_200:
+            bull += 1
+
+        # Bearish evidence: weak momentum + negative funding/structure.
+        if rsi is not None and rsi < 45.0:
+            bear += 1
+        if funding is not None and funding < 0.0:
+            bear += 1
+        if basis is not None and basis < 2.0:
+            bear += 1
+        if ema_20 is not None and ema_50 is not None and ema_20 < ema_50:
+            bear += 1
+        if ema_50 is not None and ema_200 is not None and ema_50 < ema_200:
+            bear += 1
+        if fear_greed is not None and fear_greed < 25.0:
+            bear += 1
+
+        if crisis:
+            regime = "CRISIS"
+        elif bull >= 2 and bull > bear:
+            regime = "BULL"
+        elif bear >= 2 and bear >= bull:
+            regime = "BEAR"
+        else:
+            regime = "TRANSITION"
+
+        state = RegimeState(regime=regime, ts=now, evidence=evidence)
+        changed = prev is not None and prev != regime
 
         return RegimeResult(state=state, changed=changed, previous=prev)
 

@@ -145,7 +145,9 @@ async def test_attribution_outcome_with_closed_position(app_factory, tmp_path):
     try:
         from datetime import UTC  # py311+
     except ImportError:  # pragma: no cover
-        UTC = UTC  # noqa: N806
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
 
     db = Database(tmp_path / "brain5.db")
     ev = db.append_event(

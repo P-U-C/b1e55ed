@@ -12,7 +12,9 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from pathlib import Path
 from typing import Any
@@ -910,8 +912,10 @@ def signal_history_partial(request: Request, domain: str | None = None) -> HTMLR
 from dashboard.contributors import register as _register_contributors  # noqa: E402
 from dashboard.identity import register as _register_identity  # noqa: E402
 from dashboard.producers import register as _register_producers  # noqa: E402
+from dashboard.routes.cockpit import register as _register_cockpit  # noqa: E402
 from dashboard.webhooks import register as _register_webhooks  # noqa: E402
 
+_register_cockpit(app, templates)
 _register_contributors(app, templates)
 _register_identity(app, templates)
 _register_webhooks(app, templates)

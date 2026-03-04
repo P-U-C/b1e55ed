@@ -25,12 +25,15 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 
+from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database
-from engine.core.events import EventType, TradeIntentPayload
+from engine.core.events import EventType, SignalAcceptedPayload, TradeIntentPayload
 from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
 from engine.execution.paper import PaperBroker
@@ -184,6 +187,36 @@ class OMS:
                 source="execution.oms",
             )
 
+            # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution)
+            self._emit_signal_accepted(
+                trade_id=fill.order_id,
+                intent=intent,
+            )
+
+            # KS-5: Fill divergence check
+            try:
+                if intent.intended_price is not None and intent.intended_price > 0:
+                    divergence = abs(fill.fill_price - intent.intended_price) / intent.intended_price
+                    if divergence > 0.005:
+                        self.preflight.kill_switch.evaluate(
+                            manual_level=KillSwitchLevel.CAUTION,
+                            reason=f"fill_divergence_{divergence:.4f}",
+                        )
+                        self.db.append_event(
+                            event_type=EventType.AUDIT_V1,
+                            payload={
+                                "reason": "ks5_fill_divergence",
+                                "intended": intent.intended_price,
+                                "actual": fill.fill_price,
+                                "divergence": divergence,
+                            },
+                            source="execution.oms",
+                        )
+            except Exception:
+                import logging
+
+                logging.getLogger("b1e55ed.execution.oms").warning("KS-5 fill divergence check failed", exc_info=True)
+
             return OMSResult(
                 status="filled",
                 mode=mode,
@@ -196,6 +229,52 @@ class OMS:
             raise NotImplementedError("live execution adapter not implemented in Sprint 2A")
 
         return OMSResult(status="error", mode=mode, reasons=[f"unknown_mode:{mode}"])
+
+    def _emit_signal_accepted(self, *, trade_id: str, intent: TradeIntent) -> None:
+        """Emit SIGNAL_ACCEPTED_V1 for each source event that contributed to this trade."""
+        from engine.brain.synthesis import FeatureExtractor
+
+        if not intent.source_event_ids:
+            return
+
+        extractor = FeatureExtractor()
+
+        for event_id in intent.source_event_ids:
+            # Look up the original event to get producer/domain info
+            row = self.db.conn.execute(
+                "SELECT type, source FROM events WHERE id = ?",
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                continue
+
+            event_type_str = str(row["type"])
+            source = str(row["source"]) if row["source"] else "unknown"
+
+            # Derive domain from event type
+            try:
+                et = EventType(event_type_str)
+                domain = extractor.DOMAIN_BY_EVENT_TYPE.get(et, "unknown")
+            except ValueError:
+                domain = "unknown"
+
+            payload = SignalAcceptedPayload(
+                trade_id=trade_id,
+                producer_id=source,
+                domain=domain,
+                signal_event_id=event_id,
+                contribution_weight=1.0,  # Phase 0: equal weights
+                direction=intent.direction,
+                confidence=float(intent.conviction_score),
+                horizon=intent.horizon,
+                invalidation=intent.invalidation,
+            ).model_dump(mode="json")
+
+            self.db.append_event(
+                event_type=EventType.SIGNAL_ACCEPTED_V1,
+                payload=payload,
+                source="execution.oms",
+            )
 
 
 def default_sizer_from_config(cfg: Config) -> CorrelationAwareSizer:

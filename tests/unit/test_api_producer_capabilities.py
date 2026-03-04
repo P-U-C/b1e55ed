@@ -13,16 +13,20 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from types import SimpleNamespace
 
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from pathlib import Path
 
 import pytest
 
+from api.deps import get_publisher
 from api.main import create_app
 from engine.core.database import Database
 from tests.unit._api_test_client import make_client
@@ -179,3 +183,17 @@ async def test_capabilities_empty_when_no_producers(tmp_path: Path, test_config)
     assert r.status_code == 200
     assert r.json() == []
     db.close()
+
+
+def test_get_publisher_uses_community_app_when_config_app_id_zero(test_config, monkeypatch) -> None:
+    github_cfg = test_config.publish.github.model_copy(update={"app_id": 0, "token": ""})
+    cfg = test_config.model_copy(update={"publish": test_config.publish.model_copy(update={"github": github_cfg})})
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(config=cfg)))
+
+    monkeypatch.delenv("B1E55ED_GITHUB_APP_ID", raising=False)
+    monkeypatch.delenv("B1E55ED_GITHUB_INSTALLATION_ID", raising=False)
+    monkeypatch.setenv("B1E55ED_GITHUB_APP_KEY", "dummy-private-key")
+
+    publisher = get_publisher(request)
+
+    assert publisher is not None

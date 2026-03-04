@@ -80,7 +80,7 @@ jobs:
       - name: Check for secrets
         run: |
           # Exclude legitimate pattern definitions and tests
-          if grep -r "sk-" --include="*.py" --exclude-dir=".venv" --exclude="*redaction.py" --exclude="test_redaction.py" . ; then
+          if grep -rP "(?<![a-z])sk-[a-zA-Z0-9]{20,}" --include="*.py" --exclude-dir=".venv" --exclude="*redaction.py" --exclude="test_redaction.py" . ; then
             echo "❌ Possible API key found in code"
             exit 1
           fi

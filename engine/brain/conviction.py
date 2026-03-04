@@ -14,13 +14,15 @@ but expressed in the v3 event + types contract.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
@@ -28,7 +30,8 @@ from engine.brain.synthesis import SynthesisResult
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
-from engine.core.types import ConvictionScore
+from engine.core.regime import REGIME_CAPS as _REGIME_CAPS
+from engine.core.types import ConvictionScore, FeatureSnapshot
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -41,14 +44,33 @@ def _commitment_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+# Philip Brier proposed (confidence - outcome)^2 as the scoring rule in 1950.
+# Lower is better. This formula is the hypothesis. That score is the verdict.
+def _confidence_v1(*, pcs: float, cts: float, regime: str | None) -> float:
+    # P0B.2 confidence v1: PCS/CTS/regime formula.
+    # Calibration tiering exists at forecast-level; calibrated remains False for now.
+    _regime = (regime or "TRANSITION").upper()
+    _regime_factor = {"BULL": 1.0, "BEAR": 0.85, "CHOP": 0.7, "TRANSITION": 0.8}.get(_regime, 0.8)
+    _pcs_component = (pcs - 50.0) / 50.0
+    _cts_penalty = cts / 200.0
+    return float(_clamp(0.5 + (_pcs_component * 0.5 * _regime_factor) - _cts_penalty, 0.1, 0.95))
+
+
 @dataclass(frozen=True, slots=True)
 class ConvictionResult:
     score: ConvictionScore
     pcs: float
     cts: float
     final_conviction: float
+    domain_scores: dict[str, float] = field(default_factory=dict)
+    weights_used: dict[str, float] = field(default_factory=dict)
+    snapshot: FeatureSnapshot | None = None
+    capped_by_regime: bool = False
+    pre_cap_magnitude: float | None = None
 
 
+# Kahneman's System 2: the slow, deliberate override that checks fast pattern recognition.
+# CounterThesis is the brain's System 2 -- triggered by conviction, skeptical by design.
 class CounterThesis:
     """A tiny devil's advocate.
 
@@ -79,9 +101,9 @@ class CounterThesis:
         if regime == "CRISIS":
             penalties.append(30.0)
 
-        # If PCS is high and we have any explicit contradictions, CTS ramps.
+        # If we have any explicit contradictions, CTS ramps.
         base = sum(penalties)
-        if pcs > 75.0 and base > 0:
+        if base > 0:
             base += 10.0
 
         return float(_clamp(base, 0.0, 100.0))
@@ -106,7 +128,7 @@ class ConvictionEngine:
 
         # PCS is 0..100
         pcs = float(_clamp(synthesis.weighted_score * 100.0, 0.0, 100.0))
-        cts = float(self.counter_thesis.compute(synthesis=synthesis, pcs=pcs, regime=regime) if pcs > 75.0 else 0.0)
+        cts = float(self.counter_thesis.compute(synthesis=synthesis, pcs=pcs, regime=regime))
 
         # Final conviction: penalize PCS by up to 50% (cts=100 => -50%)
         final = float(_clamp(pcs * (1.0 - cts / 200.0), 0.0, 100.0))
@@ -121,6 +143,13 @@ class ConvictionEngine:
             direction = "neutral"
 
         magnitude = float(_clamp(abs(final - 50.0) / 5.0, 0.0, 10.0))
+
+        regime_key = regime.upper() if regime else "TRANSITION"
+        cap = _REGIME_CAPS.get(regime_key, _REGIME_CAPS["TRANSITION"])
+        capped_by_regime = magnitude > cap
+        pre_cap_magnitude = magnitude if capped_by_regime else None
+        # Kelly: optimal bet size shrinks as variance expands. In CRISIS, variance is the regime. The cap is the Kelly denominator responding.
+        magnitude = min(magnitude, cap)
 
         payload_wo_commit = {
             "symbol": synthesis.snapshot.symbol,
@@ -146,12 +175,31 @@ class ConvictionEngine:
             cts_score=cts,
             regime=regime,
             domains_used=sorted(list(synthesis.domain_scores.keys())),
-            confidence=float(_clamp((synthesis.snapshot.features and len(synthesis.snapshot.features) or 0) / 6.0, 0.0, 1.0)),
+            confidence=_confidence_v1(pcs=pcs, cts=cts, regime=synthesis.snapshot.regime),
         )
 
-        return ConvictionResult(score=score, pcs=pcs, cts=cts, final_conviction=final)
+        return ConvictionResult(
+            score=score,
+            pcs=pcs,
+            cts=cts,
+            final_conviction=final,
+            domain_scores=dict(synthesis.domain_scores),
+            weights_used=dict(synthesis.weights_used),
+            snapshot=synthesis.snapshot,
+            capped_by_regime=capped_by_regime,
+            pre_cap_magnitude=pre_cap_magnitude,
+        )
 
-    def emit(self, result: ConvictionResult, *, cycle_id: str, source: str = "brain.conviction") -> None:
+    def emit(
+        self,
+        result: ConvictionResult,
+        *,
+        cycle_id: str,
+        source: str = "brain.conviction",
+        producer_name: str = "",
+        event_id: str = "",
+        contribution_weight: float = 1.0,
+    ) -> None:
         p = {
             "symbol": result.score.symbol,
             "direction": result.score.direction,
@@ -165,7 +213,11 @@ class ConvictionEngine:
         }
         self.db.append_event(event_type=EventType.CONVICTION_V1, payload=p, source=source, trace_id=cycle_id)
 
-        # Also persist to conviction_scores table for learning.
+        producer = producer_name or ""
+        signal_event_id = event_id or ""
+        contribution = float(contribution_weight)
+
+        # Also persist to conviction_scores + conviction_log tables for learning.
         with self.db.conn:
             self.db.conn.execute(
                 """
@@ -190,3 +242,49 @@ class ConvictionEngine:
                     result.score.confidence,
                 ),
             )
+
+            for domain, domain_score in result.domain_scores.items():
+                domain_weight = float(result.weights_used.get(domain, 0.0))
+                weighted_contribution = float(domain_score) * domain_weight * contribution
+
+                # Hayek: the knowledge that matters is dispersed and particular. The primary feature is the local knowledge that drove this conviction.
+                feature_key: str | None = None
+                feature_value: float | None = None
+                if result.snapshot is not None:
+                    domain_features = result.snapshot.features.get(domain, {})
+                    if domain_features:
+                        feature_key, feature_value = max(domain_features.items(), key=lambda kv: abs(kv[1]))
+                        feature_value = float(feature_value)
+
+                self.db.conn.execute(
+                    """
+                    INSERT INTO conviction_log (
+                        cycle_id,
+                        symbol,
+                        domain,
+                        domain_score,
+                        domain_weight,
+                        weighted_contribution,
+                        producer_name,
+                        event_id,
+                        contribution_weight,
+                        feature_key,
+                        feature_value,
+                        ts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cycle_id,
+                        result.score.symbol,
+                        domain,
+                        float(domain_score),
+                        domain_weight,
+                        weighted_contribution,
+                        producer,
+                        signal_event_id,
+                        contribution,
+                        feature_key,
+                        feature_value,
+                        result.score.ts.isoformat(),
+                    ),
+                )

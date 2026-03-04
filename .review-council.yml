@@ -1,0 +1,54 @@
+# .review-council.yml
+# Review council integration for P-U-C/b1e55ed
+# Extend-only — cannot disable core reviewers (Correctness + Epistemics)
+
+reviewers:
+  conditional:
+    - reviewer: trading-logic
+      when:
+        paths:
+          - "engine/brain/**"
+          - "engine/producers/**"
+          - "engine/core/events.py"
+          - "engine/core/forecast.py"
+        watches:
+          - "engine/brain/conviction.py"
+          - "engine/core/events.py"
+          - "engine/core/database.py"
+    - reviewer: security
+      when:
+        paths:
+          - "**/auth*"
+          - "**/karma*"
+          - "**/credentials*"
+
+hard_human_gate:
+  paths:
+    - "engine/core/events.py"
+    - "engine/brain/conviction.py"
+    - "engine/core/database.py"
+    - "engine/brain/orchestrator.py"
+    - "scripts/b1e55ing.py"
+  label: "review/human-required"
+  block_merge: true
+
+noise_budget:
+  max_findings_per_100_loc: 3
+  max_findings_per_pr: 20
+
+escape_hatch:
+  allowed_humans:
+    - "zozDOTeth"
+    - "b1e55ed-bot"
+
+review_sla_minutes: 10
+
+labels:
+  pending: "review/pending"
+  pass: "review/pass"
+  concern: "review/concern"
+  block: "review/block"
+  human_gate: "review/human-required"
+  override: "review/override"
+
+block_on: "block"

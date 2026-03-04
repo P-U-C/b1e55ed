@@ -158,6 +158,23 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:5050/api/v1/capabilities
 ```
 
+## Cockpit
+
+After setup, visit the cockpit for a "what do I trade today" view:
+
+```bash
+open http://localhost:5050/cockpit
+```
+
+The cockpit shows top convictions, current regime, kill switch status, and recent P&L. Refreshes every 30 seconds via HTMX.
+
+## Reports
+
+```bash
+b1e55ed report --stratification   # confidence band analysis
+b1e55ed report --cockpit-summary  # 7-day summary
+```
+
 ## Next steps
 
 - [Configuration](configuration.md)

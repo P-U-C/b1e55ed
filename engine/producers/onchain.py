@@ -22,13 +22,16 @@ from datetime import datetime
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from typing import Any
 
 import httpx
 
 from engine.core.events import EventType, OnchainSignalPayload
+from engine.core.horizons import ONCHAIN_HORIZONS
 from engine.core.models import Event
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
@@ -44,6 +47,7 @@ def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
 @register("onchain-flows", domain="onchain")
 class OnchainFlowsProducer(BaseProducer):
     schedule = "*/30 * * * *"
+    mcp_source_url: str | None = None  # override with MCP server URL when available
 
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_ONCHAIN_FLOWS_URL") or os.getenv("ONCHAIN_FLOWS_URL")
@@ -71,12 +75,31 @@ class OnchainFlowsProducer(BaseProducer):
             if not sym:
                 continue
 
+            exchange_flow = row.get("exchange_flow")
+            flow_direction: str | None = None
+            flow_magnitude: float | None = None
+            if exchange_flow is not None:
+                try:
+                    ef = float(exchange_flow)
+                except (TypeError, ValueError):
+                    ef = 0.0
+                if ef > 1_000_000:
+                    flow_direction = "inflow"
+                elif ef < -1_000_000:
+                    flow_direction = "outflow"
+                else:
+                    flow_direction = "neutral"
+                flow_magnitude = round(min(abs(ef) / 50_000_000, 1.0), 3)
+
             payload_obj = OnchainSignalPayload(
                 symbol=sym,
                 whale_netflow=row.get("whale_netflow"),
-                exchange_flow=row.get("exchange_flow"),
+                exchange_flow=exchange_flow,
                 active_addresses_change=row.get("active_addresses_change"),
                 price_momentum_24h=row.get("price_momentum_24h"),
+                flow_direction=flow_direction,
+                flow_magnitude=flow_magnitude,
+                entity_type=row.get("entity_type"),
             )
             payload = payload_obj.model_dump(mode="json")
             out.append(
@@ -104,6 +127,17 @@ class OnchainFlowsProducer(BaseProducer):
                 health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            signal_payloads = [e.payload for e in events]
+            for symbol in symbols:
+                self.emit_forecasts_multi_horizon(
+                    asset=symbol,
+                    signals=signal_payloads,
+                    regime_tag="unknown",
+                    visible_signal_refs=[],
+                    horizon_configs=ONCHAIN_HORIZONS,
+                )
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR

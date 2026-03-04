@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Final
 
 try:
     from enum import StrEnum  # py311+
@@ -28,6 +29,37 @@ except ImportError:  # pragma: no cover
             return format(str(self), spec)
 
 
+# Linnaeus proposed six ranks -- kingdom, class, order, genus, species, variety.
+# Six domains. Exhaustive, non-overlapping. Any addition requires a new system.
+CANONICAL_DOMAINS: Final[frozenset[str]] = frozenset(
+    {
+        "technical",
+        "onchain",
+        "tradfi",
+        "social",
+        "events",
+        "curator",
+    }
+)
+"""Canonical 6 producer domains.
+
+Rules:
+- ``curator`` is a human-input/override channel — never rename to macro.
+- ``macro`` becomes the 7th domain only when a dedicated macro producer ships.
+- ACI → social. Stablecoin → onchain. Price alerts → technical.
+- Any producer with a domain not in this set will raise at initialisation.
+"""
+
+
+# Phil Karlton's two hard problems: cache invalidation and naming things.
+# This function is the second problem, resolved by constraint.
+def validate_domain(domain: str) -> str:
+    """Validate a domain string against CANONICAL_DOMAINS. Returns domain if valid."""
+    if domain not in CANONICAL_DOMAINS:
+        raise ValueError(f"Invalid producer domain '{domain}'. Must be one of: {sorted(CANONICAL_DOMAINS)}")
+    return domain
+
+
 @dataclass(frozen=True, slots=True)
 class ConvictionScore:
     node_id: str
@@ -42,6 +74,8 @@ class ConvictionScore:
     regime: str | None = None
     domains_used: list[str] = field(default_factory=list)
     confidence: float | None = None
+    horizon: str | None = None
+    invalidation: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +89,10 @@ class TradeIntent:
     rationale: str
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    horizon: str | None = None
+    invalidation: float | None = None
+    source_event_ids: list[str] = field(default_factory=list)
+    intended_price: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

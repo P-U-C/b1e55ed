@@ -21,7 +21,13 @@ Why it matters:
 
 ---
 
-## 2) The 13 producers
+## Intelligence Layer
+
+The 13 producers below are raw signal emitters. On top of them sits a **Producer Intelligence Layer** that makes every forecast adaptive: regime conditioning, LLM critique, self-memory (Brier-based confidence adjustment), adversarial prosecution, novelty filtering, and hierarchical domain weighting. Every adaptive layer defaults to **shadow mode** — it observes and logs without mutating the forecast — so the system learns before it acts. For the full specification, see [producer-intelligence.md](producer-intelligence.md).
+
+---
+
+## 2) The 13+1 producers
 
 ### Default domain weights (system defaults)
 
@@ -55,6 +61,32 @@ Defined in `engine/core/config.py` (`DomainWeights`). Defaults:
 | `orderbook-depth` | technical | Bid/ask depth, imbalance, liquidity-on-depth score | Medium (endpoint; frequent) | 0.10 | When microstructure/liquidity matters (breakouts, dumps) |
 | `price-alerts` | technical | Price/bid/ask/venue (polling “ws-like” feed) | Medium (endpoint; **every 1 min**) | 0.10 | When you need fast price state for technical context |
 | `market-events` | events | Catalyst list + headline sentiment + impact score + count | Medium (endpoint; NLP/news) | 0.05 | When catalysts/news drive discontinuities |
+| `meta` | events | Ensemble pattern matching from historical producer track records | Medium (reads local DB only) | adaptive | Auto-activates after 500 resolved outcomes; shadow=True default |
+
+## MCP signal access
+
+Every producer auto-registers with the MCP registry on startup.
+
+| Producer | Domain | `mcp_source_url` | Description |
+|---|---|---|---|
+| TechnicalAnalysis (`technical-analysis`) | technical | `null` | Technical indicators and structure signals for configured symbols. |
+| Onchain (`onchain-flows`) | onchain | `null` | On-chain flow and activity metrics. |
+| TradFiBasis (`tradfi-basis`) | tradfi | `null` | Basis/funding/open-interest carry regime signals. |
+| Sentiment (`market-sentiment`) | social | `null` | Market sentiment and fear/greed risk appetite. |
+| Social (`social-intel`) | social | `null` | Narrative/attention-driven social intelligence pipeline. |
+| Whale (`whale-tracking`) | onchain | `null` | Whale and smart-money positioning changes. |
+| Stablecoin (`stablecoin-supply`) | onchain | `null` | Stablecoin expansion/contraction liquidity proxy. |
+| ETF (`etf-flows`) | tradfi | `null` | Spot ETF flow pressure and streak dynamics. |
+| Orderbook (`orderbook-depth`) | technical | `null` | Orderbook imbalance and liquidity-depth conditions. |
+| Events (`market-events`) | events | `null` | Event/catalyst sentiment and impact scoring. |
+| Curator (`curator-intel`) | curator | `null` | Operator/curator directional thesis ingestion. |
+| ACI (`ai-consensus`) | curator | `null` | AI consensus directional score from model output. |
+| FinancialDatasets (`financial_datasets`) | tradfi | `https://github.com/financial-datasets/mcp-server` | MCP-enabled earnings surprise and fundamentals stream (registered when API key is configured). |
+
+- `mcp_source_url: null` = producer uses REST/WebSocket-style data collection.
+- `mcp_source_url: <url>` = producer has an upstream MCP server (for now: `financial_datasets`).
+
+See [mcp.md](mcp.md) for the full operator guide.
 
 ---
 

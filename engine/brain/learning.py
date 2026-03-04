@@ -29,7 +29,9 @@ from datetime import datetime, timedelta
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    UTC = _tz.utc  # noqa: N806, UP017
 
 from pathlib import Path
 from typing import Any
@@ -613,3 +615,67 @@ def write_learned_weights_yaml(config: Config, weights: dict[str, float]) -> Non
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"weights": {k: float(v) for k, v in weights.items()}}
     path.write_text(yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
+
+
+class StratificationTracker:
+    """Tracks signal outcomes by confidence bucket for the 30-day proof metric."""
+
+    BUCKET_HIGH = "high"
+    BUCKET_MID = "mid"
+    BUCKET_LOW = "low"
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    @staticmethod
+    def _bucket(confidence: float) -> str:
+        if confidence >= 0.65:
+            return StratificationTracker.BUCKET_HIGH
+        if confidence >= 0.45:
+            return StratificationTracker.BUCKET_MID
+        return StratificationTracker.BUCKET_LOW
+
+    def record_signal(self, signal_id: str, symbol: str, confidence: float, direction: str, ts: datetime) -> None:
+        bucket = self._bucket(confidence)
+        with self.db.conn:
+            self.db.conn.execute(
+                """INSERT OR IGNORE INTO signal_stratification
+                   (signal_id, symbol, confidence, bucket, direction, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (signal_id, symbol, float(confidence), bucket, direction, ts.isoformat()),
+            )
+
+    def record_outcome(self, signal_id: str, realized_pnl_usd: float, ts: datetime) -> None:
+        with self.db.conn:
+            self.db.conn.execute(
+                """UPDATE signal_stratification
+                   SET outcome_pnl_usd = ?, attributed_at = ?
+                   WHERE signal_id = ?""",
+                (float(realized_pnl_usd), ts.isoformat(), signal_id),
+            )
+
+    def get_report(self) -> dict:
+        now = utc_now()
+        report: dict = {}
+        for bucket in (self.BUCKET_HIGH, self.BUCKET_MID, self.BUCKET_LOW):
+            rows = self.db.conn.execute(
+                "SELECT confidence, outcome_pnl_usd FROM signal_stratification WHERE bucket = ?",
+                (bucket,),
+            ).fetchall()
+            count = len(rows)
+            with_outcome = [r for r in rows if r["outcome_pnl_usd"] is not None]
+            wo_count = len(with_outcome)
+            if wo_count > 0:
+                avg_pnl = sum(float(r["outcome_pnl_usd"]) for r in with_outcome) / wo_count
+                win_rate = sum(1 for r in with_outcome if float(r["outcome_pnl_usd"]) > 0) / wo_count
+            else:
+                avg_pnl = 0.0
+                win_rate = 0.0
+            report[bucket] = {
+                "count": count,
+                "with_outcome": wo_count,
+                "avg_pnl_usd": round(avg_pnl, 2),
+                "win_rate": round(win_rate, 4),
+            }
+        report["as_of"] = now.isoformat()
+        return report

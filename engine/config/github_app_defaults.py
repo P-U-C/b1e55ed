@@ -16,3 +16,4 @@ from __future__ import annotations
 # These are public info (visible in GitHub UI), not secrets.
 COMMUNITY_APP_ID: int = 2953603
 COMMUNITY_INSTALLATION_ID: int = 112556330
+COMMUNITY_REPO: str = "offchain-attestations"

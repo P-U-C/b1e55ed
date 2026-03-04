@@ -48,6 +48,7 @@ class Preflight:
     ) -> None:
         self.policy = policy
         self.kill_switch = kill_switch
+        self.db = kill_switch.db
         self.gas_requirements = gas_requirements or []
 
     def check(
@@ -88,6 +89,20 @@ class Preflight:
                 if have + 1e-12 < float(req.min_amount):
                     reasons.append("insufficient_gas")
                     break
+
+        # KS-3: Open risk limit
+        try:
+            config = self.kill_switch.config
+            portfolio_value = float(config.risk.portfolio_value_usd)
+            max_risk_pct = float(config.risk.max_open_risk_pct)
+            rows = self.db.conn.execute("SELECT size_notional, leverage FROM positions WHERE status = 'open'").fetchall()
+            total_risk = sum(float(r[0]) * float(r[1]) for r in rows)
+            risk_pct = total_risk / portfolio_value if portfolio_value > 0 else 0.0
+            details["open_risk_pct"] = risk_pct
+            if risk_pct > max_risk_pct:
+                reasons.append("open_risk_limit_5pct")
+        except Exception:
+            pass  # fail-open
 
         return PreflightResult(approved=(len(reasons) == 0), reasons=reasons, details=details)
 

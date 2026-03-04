@@ -380,6 +380,73 @@ Lists settlement receipts.
 
 ---
 
+## Cockpit
+
+### GET `/cockpit`
+
+Cockpit dashboard — 4-quadrant "what do I trade today" view. Returns HTML with HTMX 30-second auto-refresh. No authentication required.
+
+### GET `/cockpit/state`
+
+JSON state backing the cockpit dashboard.
+
+**Response** (`200`):
+```json
+{
+  "top_convictions": [],
+  "regime": "EARLY_BULL",
+  "kill_switch_level": 0,
+  "recent_pnl_usd": 142.50,
+  "open_positions": []
+}
+```
+
+---
+
+## Signal Validation
+
+### POST `/signals/validate`
+
+Validate a signal payload against the signal contract schema without persisting it.
+
+**Request body**: Same as `POST /signals/submit`.
+
+**Response** (`200`):
+```json
+{
+  "valid": true,
+  "errors": []
+}
+```
+
+---
+
+## Benchmarks
+
+### POST `/benchmarks/discretionary`
+
+Submit a discretionary signal (human operator override).
+
+**Request body**:
+```json
+{
+  "symbol": "BTC",
+  "direction": "bullish",
+  "confidence": 0.8,
+  "rationale": "Breakout above 70k resistance"
+}
+```
+
+**Response** (`201`):
+```json
+{
+  "signal_id": "...",
+  "accepted": true
+}
+```
+
+---
+
 ## Regime
 
 ### GET `/regime`
@@ -493,3 +560,65 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
 ```
 
 See: [oracle.md](oracle.md).
+
+---
+
+## MCP
+
+### GET `/api/v1/mcp/producers`
+
+```http
+GET /api/v1/mcp/producers
+Authorization: Bearer <token>
+```
+
+Response:
+
+```json
+{
+  "producers": [
+    {
+      "name": "tradfi_basis",
+      "domain": "tradfi",
+      "mcp_source_url": null,
+      "description": "...",
+      "assets": ["BTC", "ETH", "SOL"],
+      "schedule": "*/15 * * * *",
+      "registered_at": "2026-03-01T05:00:00Z",
+      "latest_signal": {
+        "producer": "tradfi_basis",
+        "domain": "tradfi",
+        "asset": "BTC",
+        "direction": "long",
+        "confidence": 0.72,
+        "horizon": "4h",
+        "reason": "Basis unwound to 1.8%, funding 0.9% — re-leveraging setup",
+        "timestamp": "2026-03-01T05:00:00Z",
+        "raw_score": 7.2,
+        "metadata": {}
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+### GET `/api/v1/mcp/status`
+
+```http
+GET /api/v1/mcp/status
+Authorization: Bearer <token>
+```
+
+Response:
+
+```json
+{
+  "enabled": true,
+  "producer_count": 13,
+  "total_signals_buffered": 847,
+  "registry_ok": true
+}
+```
+
+If `mcp.require_auth=true`, include `X-MCP-Key: <key>` in addition to bearer auth.
