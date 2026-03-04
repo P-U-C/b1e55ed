@@ -34,6 +34,8 @@ jobs:
             if (blessed) console.log('✓ Already blessed');
             else console.log('○ Not yet blessed — setting pending, signalling agent');
 
+      # Ashby's Law of Requisite Variety: a controller needs at least as much
+      # variety as the system it controls. One status check -- exactly sufficient.
       - name: Set pending status (blocks merge until agent blesses)
         if: steps.blessed.outputs.already_blessed == 'false'
         uses: actions/github-script@v7
@@ -64,6 +66,7 @@ jobs:
             | python3 -c "import sys,json; r=json.load(sys.stdin); print('Signal sent' if r.get('ok') else 'Signal failed: '+str(r))" \
             || true
 
+      # Hal Finney received block 170. The handshake completed before anyone moved on.
       - name: Already blessed — set success
         if: steps.blessed.outputs.already_blessed == 'true'
         uses: actions/github-script@v7
