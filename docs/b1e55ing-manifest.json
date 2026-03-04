@@ -150,6 +150,16 @@
       "placement": "inline_comment",
       "pr_number": 245,
       "applied_at": "2026-03-04T00:08:13Z"
+    },
+    {
+      "id": "egg_8a62deb4",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "_BUDGET_TIERS: list[tuple[int, int]] = [",
+      "tradition": "audubon-ledger",
+      "content": "# Audubon kept a ledger for every specimen; this manifest keeps one for every blessing.",
+      "placement": "inline_comment",
+      "pr_number": 246,
+      "applied_at": "2026-03-04T00:08:17Z"
     }
   ]
 }
