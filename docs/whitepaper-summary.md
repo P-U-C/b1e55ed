@@ -6,7 +6,9 @@
 
 ## Abstract
 
-Trading systems claim edge but cannot prove it. The problem is structural: without closed attribution between signals and outcomes, skill cannot be separated from luck. b1e55ed solves this by making every forecast a falsifiable, immutable probability statement. Each forecast carries direction, confidence, horizon, and producer attribution. Outcomes are resolved against realized prices. Resolution produces a Brier score for every producer, every cycle. Those scores feed back into calibration and domain weights. The loop closes. The system compounds learning through repeated attribution, recalibration, and weight adjustment.
+The decisive test: do forecasts assigned higher confidence produce better realized economic outcomes than lower-confidence forecasts, net of fees, under identical execution assumptions?
+
+Trading systems claim edge but cannot prove it. The problem is structural: without closed attribution between signals and outcomes, skill cannot be separated from luck. b1e55ed solves this by making every forecast a falsifiable, immutable probability statement. Each forecast carries direction, confidence, horizon, and producer attribution. Outcomes are resolved against realized prices. Resolution produces a Brier score for every producer, every cycle. Those scores feed back into calibration and domain weights. The loop closes.
 
 ---
 
@@ -81,11 +83,9 @@ When a position closes:
 2. For each contributing producer, it computes an outcome value: +1 for correct direction, −1 for incorrect
 3. Karma updates via exponential moving average: `karma_new = karma_old × 0.95 + outcome × 0.05`
 
-This is the core karma mechanism: a directional EMA tracker with α = 0.05 that gives recent outcomes weight while retaining memory of historical performance. A producer who has been consistently correct will have high karma. A producer who has been consistently wrong will have low karma. A producer who has been random will drift toward neutral.
+This is the core karma mechanism: a lightweight directional EMA tracker with α = 0.05. A producer who has been consistently correct will have high karma. A producer who has been consistently wrong will have low karma. A producer who has been random will drift toward neutral.
 
-Karma and Brier score serve different purposes. Brier score measures calibration quality — whether stated probabilities match realized frequencies. Karma is an operational weighting signal that determines how much a producer's current forecasts influence synthesis. High Brier without karma contribution means a well-calibrated producer who isn't influencing the profitable trades. High karma without Brier quality means a producer gaming easy calls. Both metrics must be healthy for a producer to be trusted.
-
-Future enhancements under evaluation include sharpness weighting (rewarding bold correct forecasts), novelty scaling (discounting correlated producers), and regime-conditional decay.
+Karma and Brier score serve different purposes. Brier score measures calibration quality — whether stated probabilities match realized frequencies. Karma is an operational weighting signal — it determines how much a producer's current forecasts influence synthesis. Both metrics must be healthy for a producer to be trusted.
 
 ### 3.4 The Sharpness Incentive
 
@@ -95,9 +95,7 @@ This reward structure is gated: sharpness multipliers apply only to producers wh
 
 ### 3.5 The Correlation Discount
 
-Five technical-analysis producers emitting correlated signals would dominate synthesis through volume, not information content. The system must discount redundant signal.
-
-The novelty penalty (P4.3, shadow mode) penalizes producers whose forecast directions align with existing ensemble conviction, discounting redundant signal. The specific correlation measure — applied over rolling forecast agreement across matched assets and horizons — is specified but subject to calibration.
+Five technical-analysis producers emitting correlated signals would dominate synthesis through volume, not information content. The system discounts redundant signal by penalizing producers whose forecasts align with existing ensemble conviction. This novelty penalty is deployed in shadow mode, measuring its effect before it influences weights.
 
 ### 3.6 The Compound Loop
 
@@ -112,8 +110,6 @@ Signal → Trade → Outcome → Attribution → Karma Update → Weight Adjustm
 ```
 
 The system that accurately attributed yesterday's outcomes makes better-weighted decisions today. The improvement is not hypothetical—it is measured by the same Brier scoring that drives attribution.
-
-Position sizing is confidence-sensitive; fractional Kelly is one candidate implementation, kept separate from the attribution thesis described here.
 
 ---
 
@@ -177,7 +173,7 @@ The meta-producer learns ensemble patterns: which combinations of producer signa
 
 It does not emit actionable forecasts until 500 outcomes have been resolved.
 
-The 500-outcome gate is an operational minimum, not a universal statistical threshold. It is chosen to reduce obvious overfitting risk before the meta-producer influences synthesis. At 500 outcomes across multiple producers, assets, and regimes, statistical regularities become identifiable for the effect sizes the system is designed to detect (≥5% Brier improvement over baseline at 80% power, given estimated forecast variance σ² ≈ 0.04). (These parameters are estimated from expected forecast variance in binary crypto direction prediction; actual required n will be calibrated from observed Brier variance during the data accumulation phase.)
+The 500-outcome gate is an operational minimum chosen to reduce obvious overfitting risk before the meta-producer influences synthesis. At 500 outcomes across multiple producers, assets, and regimes, statistical regularities become distinguishable from noise for the effect sizes the system is designed to detect. The exact threshold is a conservative hyperparameter — too low risks activating on noise, too high delays genuine learning.
 
 ### 5.3 Activation Sequence
 
@@ -213,7 +209,7 @@ A producer cannot claim a track record it does not have. The event store is the 
 
 ### 6.3 The Oracle as Platform
 
-The oracle serves producer track records from the same append-only, hash-linked event log that drives the engine. In the current beta architecture, verification relies on hash chain integrity and reproducible replay within the operator's trust boundary. Stronger guarantees — external chain anchoring, signed events, operator-independent verification — are on the audit roadmap. The system is designed for cryptographic auditability; that design is not yet fully implemented.
+The oracle serves producer track records from the same append-only, hash-linked event log that drives the engine. In the current beta architecture, verification relies on hash chain integrity and reproducible replay within the operator's trust boundary. The system is designed for cryptographic auditability — hash-linked today, external chain anchoring on roadmap.
 
 **Who the customer is.** Any trader who wants to access machine-verified producer track records without running the full b1e55ed stack.
 
@@ -282,8 +278,6 @@ b1e55ed does not claim to be profitable. It claims to be falsifiable.
 
 Every forecast is testable. Every producer is accountable. Every outcome feeds back into weights. The system either demonstrates edge against benchmarks or it does not.
 
-This is the most defensible claim an early-stage trading system can make.
-
 ---
 
 ## References
@@ -291,9 +285,5 @@ This is the most defensible claim an early-stage trading system can make.
 - Gneiting, T. & Raftery, A.E. (2007). Strictly Proper Scoring Rules, Prediction, and Estimation. *Journal of the American Statistical Association*, 102(477), 359–378.
 - Hamilton, J.D. (1989). A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle. *Econometrica*, 57(2), 357–384.
 - López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
-
----
-
-*"The system that learns from its own outcomes has a structural advantage over systems that cannot."*
 
 <!-- Nine pages changed the topology of trust. Seven thousand words attempt to change the topology of accountability. -->

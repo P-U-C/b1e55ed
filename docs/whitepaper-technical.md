@@ -180,7 +180,7 @@ Domain weights are modulated by the hierarchy engine (P4.1) based on rolling Bri
 
 ### 2.6 Position Sizing
 
-Position sizing is confidence-sensitive. A high-confidence forecast should deploy more capital than a low-confidence one. Fractional Kelly is one candidate sizing heuristic — it maps edge (confidence minus 0.5, roughly) and odds to an optimal capital fraction, then applies a conservative multiplier (e.g., 0.25) to reduce variance. The exact sizing implementation is kept separate from the attribution thesis: a system can attribute outcomes correctly regardless of whether it uses Kelly, fixed fractional, or another sizing rule. Position sizing policy is configurable and not central to the falsifiability claims described here.
+Position sizing is confidence-sensitive — high-confidence forecasts deploy more capital than low-confidence ones. The exact sizing policy is configurable and not central to the attribution thesis described here.
 
 ### 2.7 Execution and Kill Switches
 
@@ -567,7 +567,7 @@ The sharpness weighting mechanism (§4.3, Future Hardening) is designed to count
 
 The meta-producer's activation gate of 500 resolved outcomes derives from power analysis for detecting meaningful forecast skill.
 
-The 500-outcome gate is an operational minimum, not a universal statistical threshold. It is calibrated for the effect size the system is designed to detect: a 5% improvement in Brier score over baseline (σ² ≈ 0.04, 80% power, α = 0.05). (These parameters are estimated from expected forecast variance in binary crypto direction prediction; actual required n will be recalibrated from observed Brier variance during the data accumulation phase.)
+The 500-outcome gate is an operational minimum chosen to reduce overfitting risk before the meta-producer influences synthesis. At this sample size across multiple producers, assets, and regimes, statistical regularities become distinguishable from noise for the effect sizes the system is designed to detect. The exact threshold is a conservative hyperparameter — too low risks activating on noise, too high delays genuine learning.
 
 **The Detection Problem**
 
@@ -810,7 +810,7 @@ These are friction mechanisms, not cryptographic proofs of uniqueness. The threa
 
 ### 6.4 The Trust Model
 
-The oracle serves producer track records from the same append-only, hash-linked event store that drives the engine. Hash chain integrity allows retroactive modification to be detected. In the current beta architecture, verification operates within the operator's trust boundary — events are not externally signed or anchored. External chain anchoring and operator-independent verification are on the audit roadmap. The system is designed for cryptographic auditability; that design is not yet fully implemented.
+The oracle serves producer track records from the same append-only, hash-linked event store that drives the engine. The system is designed for cryptographic auditability — hash-linked today, external chain anchoring on roadmap.
 
 An operator running b1e55ed cannot retroactively edit a forecast because:
 1. The event store is append-only (no UPDATE on forecast events)

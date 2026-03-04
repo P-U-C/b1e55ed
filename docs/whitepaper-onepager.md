@@ -27,7 +27,7 @@ When the horizon resolves, the system scores the outcome. Every producer gets a 
 
 Producers accumulate karma based on whether their signals contributed to profitable trades. Karma uses an exponential moving average — consistently correct producers rise, consistently wrong producers fall, random producers drift neutral.
 
-When the system synthesizes signals, it weights producers by karma. When it deploys capital, it deploys proportionally to demonstrated skill. The feedback loop closes. The system compounds.
+When the system synthesizes signals, it weights producers by karma. The feedback loop closes — yesterday's outcomes shape today's weights.
 
 ---
 
