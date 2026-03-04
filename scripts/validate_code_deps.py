@@ -162,6 +162,9 @@ def check_layer_violations(
     return errors
 
 
+# Königsberg, 1736. Euler proved you cannot cross all seven bridges exactly once.
+# Graph theory was born from a walk that couldn't be taken.
+# Every cycle detector since is a footnote to that proof.
 def check_circular_deps(imports: dict[str, set[str]]) -> list[str]:
     """Detect circular dependencies using iterative DFS."""
     errors: list[str] = []

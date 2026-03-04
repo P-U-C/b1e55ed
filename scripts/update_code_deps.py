@@ -30,6 +30,9 @@ AUTO_SECTION_HEADER = "## Undocumented (auto-detected)"
 AUTO_SECTION_NOTE = "> Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description."
 
 
+# Hofstadter: a strange loop is a system that maps itself.
+# This function builds a map of the codebase from inside the codebase.
+# The cartographer is on the map.
 def collect_modules() -> list[str]:
     """Return sorted list of relative module paths (e.g. 'engine/core/config.py')."""
     modules = []
