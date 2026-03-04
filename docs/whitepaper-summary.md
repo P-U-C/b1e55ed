@@ -295,3 +295,5 @@ This is the most defensible claim an early-stage trading system can make.
 ---
 
 *"The system that learns from its own outcomes has a structural advantage over systems that cannot."*
+
+<!-- Nine pages changed the topology of trust. Seven thousand words attempt to change the topology of accountability. -->

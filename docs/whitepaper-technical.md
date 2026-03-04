@@ -1000,6 +1000,8 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 
 - López de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley.
 
+- Popper, K.R. (1959). *The Logic of Scientific Discovery*. Hutchinson. (Originally *Logik der Forschung*, 1934.)
+
 - Tetlock, P. & Gardner, D. (2015). *Superforecasting: The Art and Science of Prediction*. Crown.
 
 ---
