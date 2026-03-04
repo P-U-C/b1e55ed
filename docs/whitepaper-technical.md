@@ -16,6 +16,7 @@ The current implementation (beta.8) runs 13 domain producers through a 7-layer i
 
 ---
 
+The decisive falsification test: do high-confidence forecasts produce better economic outcomes than low-confidence forecasts, net of fees, under identical execution assumptions? This question — not aggregate P&L, not directional accuracy — is the proof standard the system is designed to answer.
 ## 1. Problem Statement
 
 ### 1.1 The Alpha Accountability Gap
