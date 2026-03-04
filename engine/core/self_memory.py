@@ -50,6 +50,7 @@ class SelfMemoryConfig:
     streak_weight: float = STREAK_WEIGHT
 
 
+# A grimoire is memory with teeth: lessons persist because they are callable.
 class SelfMemory:
     """Compute confidence deltas from producer calibration history.
 

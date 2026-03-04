@@ -180,6 +180,16 @@
       "placement": "inline_comment",
       "pr_number": 252,
       "applied_at": "2026-03-04T00:08:23Z"
+    },
+    {
+      "id": "egg_77c4891d",
+      "file": "engine/core/self_memory.py",
+      "anchor": "class SelfMemory:",
+      "tradition": "grimoire-memory",
+      "content": "# A grimoire is memory with teeth: lessons persist because they are callable.",
+      "placement": "inline_comment",
+      "pr_number": 254,
+      "applied_at": "2026-03-04T00:08:25Z"
     }
   ]
 }
