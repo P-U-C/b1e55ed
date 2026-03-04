@@ -1,6 +1,6 @@
 # b1e55ed: A Falsifiable Profit Engine for Systematic Crypto Trading
 
-**Version**: 1.0.0-beta.8 | **Date**: March 2026
+**Version**: 2.0.0 | **Date**: March 2026
 
 ---
 
@@ -12,7 +12,7 @@ b1e55ed is a **falsifiable profit engine** designed to close that loop. Every fo
 
 The benchmark is not beating a market index — it's beating flat/no-trade. The system must prove it earns its execution cost. Four benchmarks run in parallel (naive momentum, equal-weight ensemble, flat/no-trade, discretionary override), and the brain must outperform all four to claim edge. The primary proof metric is confidence stratification: do signals with confidence > 0.65 outperform signals with confidence < 0.45 after fees?
 
-The current implementation (beta.8) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via EMA. All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate. This is deliberate: the system must prove its calibration before it earns trust.
+The current implementation (beta.8) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via an EMA with sharpness weighting. All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate (a threshold derived from power analysis, not arbitrary choice). This is deliberate: the system must prove its calibration before it earns trust.
 
 ---
 
@@ -101,7 +101,7 @@ Every producer's raw output passes through a layered interpreter chain before be
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   NoveltyInterpreter                    │  ← P4.3: cross-producer awareness
+│                   NoveltyInterpreter                    │  ← P4.3: redundancy discount
 │  ┌───────────────────────────────────────────────────┐  │
 │  │              ProsecutorInterpreter                │  │  ← P3.5: adversarial counter-case
 │  │  ┌─────────────────────────────────────────────┐  │  │
@@ -142,7 +142,59 @@ The brain reads `FORECAST_V1` events and synthesizes them into a conviction scor
 
 Domain weights are modulated by the hierarchy engine (P4.1) based on rolling Brier scores. The conviction engine converts the weighted score into a direction (long/short/flat) and magnitude (0-100 PCS — Position Conviction Score).
 
-### 2.5 Execution and Kill Switches
+### 2.5 Position Sizing via Fractional Kelly
+
+Direction and confidence alone are incomplete. A system must also specify how much to risk on each signal. b1e55ed maps conviction to position size via fractional Kelly criterion.
+
+**The Kelly Criterion**
+
+The Kelly criterion (Kelly, 1956) determines the optimal fraction of capital to wager on a favorable bet to maximize long-term growth rate:
+
+$$f^* = \frac{pb - q}{b}$$
+
+Where:
+- $f^*$ = fraction of capital to wager
+- $p$ = probability of winning (derived from confidence)
+- $q = 1 - p$ = probability of losing
+- $b$ = net odds received on the wager (win amount / loss amount)
+
+For a 1:1 payoff ($b = 1$), this simplifies to:
+
+$$f^* = 2p - 1$$
+
+**Fractional Kelly**
+
+Full Kelly betting maximizes geometric growth but produces uncomfortable volatility. b1e55ed uses fractional Kelly with a configurable fraction (default 0.25):
+
+$$f_{position} = K \times f^* = K \times \frac{pb - q}{b}$$
+
+Where $K$ = Kelly fraction (0.25 default).
+
+**Confidence-to-Size Mapping**
+
+In b1e55ed, the `confidence` field in `FORECAST_V1` maps directly to the $p$ parameter:
+
+| Confidence | Kelly f* (b=1) | Position Size (K=0.25) |
+|------------|----------------|------------------------|
+| 0.55 | 0.10 | 2.5% |
+| 0.65 | 0.30 | 7.5% |
+| 0.75 | 0.50 | 12.5% |
+| 0.85 | 0.70 | 17.5% |
+
+**Position sizing is clamped** by the same kill switch constraints in §2.6:
+- Single position: max 15% portfolio
+- Single sector: max 30% portfolio
+- Total open risk: max 5% aggregate
+
+**Attribution Alignment**
+
+Karma attribution and position sizing must be aligned. A 0.85-confidence correct call that sizes into a 4% position should receive proportionally more karma credit than a 0.55-confidence correct call in a 1% position. The attribution outcome calculation (§4.3) weights karma updates by actual position size, not just by confidence:
+
+$$\text{karma\_weight} = \frac{\text{position\_size}}{\sum \text{position\_sizes}}$$
+
+This ensures that bold, correct calls that actually move capital receive appropriate credit.
+
+### 2.6 Execution and Kill Switches
 
 Execution follows conviction through a preflight check, then submits to paper or live broker. Five kill switch conditions are enforced:
 
@@ -155,21 +207,6 @@ Execution follows conviction through a preflight check, then submits to paper or
 | Fill divergence | Actual fill > 0.5% from intended | Pause, investigate | CAUTION |
 
 Kill switches are not suggestions. They are hard gates that override conviction.
-
-### 2.6 The Oracle and Contributor Network
-
-The oracle is a read-only projection layer over the event store. It answers one question: does this signal producer have verifiable history? No authentication required.
-
-**Oracle endpoint:** `GET /api/v1/oracle/producers/{id}/provenance`
-
-Returns:
-- `chain_verified`: whether the hash chain validates
-- `total_forecasts`: count of attributed forecasts
-- `resolved_forecasts`: count with outcomes
-- `brier_score`: aggregate calibration metric
-- `karma_score`: 5-factor composite reputation
-
-External agents can query the oracle to verify claims before trusting a contributor's signals.
 
 ---
 
@@ -299,25 +336,40 @@ Each domain produces forecasts at domain-appropriate horizons with horizon-speci
 
 TradFi gets a slight 24h boost because basis/funding signals are more meaningful over 24h. On-chain gets a 3d boost because accumulation/distribution patterns play out over days.
 
-#### 3.2.3 Cross-Producer Awareness (Novelty Penalty)
+#### 3.2.3 The Redundancy Discount (Correlation Discounting)
 
-Gives each producer a single aggregate signal about what the rest of the system is thinking.
+**The Correlated-Producer Problem**
 
-**Aggregate conviction:** `ConvictionStateReader` reads recent `FORECAST_V1` events (last 2 hours). For each asset: weighted average of `(confidence × direction_sign)` across all producers. Result: signed float in `[-1, +1]`.
+In a multi-producer ensemble, correlated signals pose a fundamental threat: N technical-analysis producers all emit similar signals during trending markets, dominating synthesis through volume rather than information content. A brain that naively weights by producer count will overweight redundant signals.
 
-**Novelty penalty mechanics:**
-- High agreement with strong conviction → suppress confidence (adding noise, not signal)
-- Contrarian signal → slight confidence boost (disagreement = information)
-- Weak conviction → no penalty (brain is uncertain, all signals valuable)
+**NoveltyInterpreter as the Solution**
+
+The P4.3 `NoveltyInterpreter` directly addresses this problem. It reads aggregate brain conviction (the running weighted sum of all `FORECAST_V1` events in the prior 2-hour window) and penalizes any producer whose forecast agrees with the existing consensus.
+
+This is explicit correlation discounting — not just conceptually, but mechanically:
+
+**Redundancy discount formula:**
+
+$$\text{confidence}_{\text{adjusted}} = \text{confidence} \times (1 - \text{novelty\_penalty})$$
+
+Where:
+
+$$\text{novelty\_penalty} = |\text{aggregate\_conviction}| \times \text{alignment\_factor}$$
+
+And `alignment_factor = 1.0` if the new forecast agrees with aggregate direction, `0.0` otherwise.
+
+**Mechanically:** A producer saying "long" when five others have already said "long" with high conviction receives a confidence penalty proportional to the existing conviction magnitude. A contrarian signal (disagreeing with aggregate) receives a slight boost.
 
 **Tuning constants:**
 
-| Constant | Value |
-|----------|-------|
-| `NOVELTY_CONVICTION_THRESHOLD` | 0.5 |
-| `NOVELTY_AGREEMENT_PENALTY` | 0.15 |
-| `NOVELTY_CONTRARIAN_BOOST` | 0.05 |
-| `NOVELTY_MIN_CONFIDENCE` | 0.1 |
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `NOVELTY_CONVICTION_THRESHOLD` | 0.5 | Minimum aggregate conviction to trigger penalty |
+| `NOVELTY_AGREEMENT_PENALTY` | 0.15 | Maximum penalty for redundant agreement |
+| `NOVELTY_CONTRARIAN_BOOST` | 0.05 | Bonus for disagreeing with consensus |
+| `NOVELTY_MIN_CONFIDENCE` | 0.1 | Floor after penalty applied |
+
+**Why this works:** A producer that provides genuinely new information will either (a) disagree with consensus (contrarian boost), or (b) agree but when conviction is low (no penalty). A producer that merely echoes existing consensus when the brain is already confident is penalized — its signal is redundant, not additive.
 
 #### 3.2.4 The Meta-Producer
 
@@ -325,7 +377,7 @@ The meta-producer learns from the ensemble's historical track record. It reads o
 
 **Hard constraint:** Inputs restricted to `FORECAST_V1`, `FORECAST_OUTCOME_V1`, and `producer_performance`/`producer_correlation` tables.
 
-**Activation gate:** `MIN_FORECASTS_FOR_ACTIVATION = 500` resolved outcomes must exist before the meta-producer emits any non-abstention forecast. Below this, it always abstains with `INSUFFICIENT_DATA`.
+**Activation gate:** `MIN_FORECASTS_FOR_ACTIVATION = 500` resolved outcomes must exist before the meta-producer emits any non-abstention forecast. Below this, it always abstains with `INSUFFICIENT_DATA`. (See §4.7 for the statistical justification of this threshold.)
 
 **Pattern matching:**
 1. Gets current ensemble state: latest action per producer for target asset (last 2 hours)
@@ -382,7 +434,7 @@ For each unresolved `FORECAST_V1` whose horizon has elapsed (+ 5-minute buffer):
 - 0.25: random guess baseline
 - 1.00: maximally wrong (confident in opposite direction)
 
-### 4.3 Karma Attribution
+### 4.3 Karma Attribution with Sharpness Weighting
 
 When a position closes:
 
@@ -393,9 +445,10 @@ When a position closes:
    - P&L < 0 → outcome = -1.0
    - P&L ≈ 0 → outcome = 0.0
 
-4. Karma update (EMA, α = 0.05):
+4. **Sharpness-weighted karma update** (see §4.6 for rationale):
    ```
-   karma_new = karma_old × 0.95 + outcome × 0.05
+   sharpness = |confidence - 0.5| × 2
+   karma_new = karma_old × 0.95 + outcome × sharpness × 0.05
    ```
 
 5. Emit `ATTRIBUTION_OUTCOME_V1` event
@@ -453,17 +506,130 @@ The learning loop adjusts domain weights based on rolling performance:
 
 **Overfitting protection:** If 3 consecutive cycles degrade performance, weights revert to preset defaults.
 
-### 4.6 The 500-Outcome Gate
+### 4.6 Adversarial Dynamics: The Sharpness Penalty
 
-The meta-producer's activation gate is not arbitrary. It reflects the minimum sample size for meaningful pattern statistics.
+**Goodhart's Problem with Pure Calibration**
 
-**Why 500:**
-- At 10 trades/day, 500 outcomes = ~50 days
-- Statistical power for detecting 60% win rate vs 50% baseline requires n ≈ 100+ per pattern
-- With pattern diversity, 500 total outcomes provides ~50+ outcomes per major ensemble pattern
-- Below this threshold, pattern matching is noise-fitting
+A naive karma system that rewards only Brier score calibration creates a perverse incentive. The Brier score for a binary forecast decomposes as:
 
-The gate is a hard requirement. The meta-producer cannot be forced into live mode below 500 resolved outcomes.
+$$\text{Brier} = \text{Calibration} + \text{Resolution} - \text{Uncertainty}$$
+
+Where:
+- **Calibration**: Do stated probabilities match actual frequencies? (0.7-confidence forecasts should be correct 70% of the time)
+- **Resolution**: How much do forecasts differ from the base rate? (Informativeness)
+- **Uncertainty**: Irreducible noise in the outcome
+
+A rational producer in a system that only rewards calibration will cluster forecasts near the base rate (typically ~0.50 for directional predictions). This minimizes Brier downside: a 0.52-confidence forecast that's wrong incurs Brier = (0.52 - 0)² = 0.27, barely worse than random. A 0.85-confidence forecast that's wrong incurs Brier = (0.85 - 0)² = 0.72, much worse.
+
+The result: a system full of timid, technically-well-calibrated, informationally-useless forecasts. This is the Goodhart's Law failure mode for prediction markets (Goodhart, 1984).
+
+**The Sharpness Factor**
+
+To counter this, b1e55ed rewards **resolution** disproportionately. A bold, correct 0.85-confidence forecast should earn more karma than five correct 0.55-confidence forecasts.
+
+**Mechanism:** Multiply the karma update by a sharpness factor $S$:
+
+$$S = |\text{confidence} - 0.5| \times 2$$
+
+This normalizes to the range $[0, 1]$:
+- Confidence = 0.50 → S = 0.00 (no karma movement)
+- Confidence = 0.75 → S = 0.50 (half weight)
+- Confidence = 1.00 → S = 1.00 (full weight)
+
+**Modified karma EMA:**
+
+$$\kappa_{t+1} = \kappa_t \times (1 - \alpha) + \text{outcome} \times S \times \alpha$$
+
+Where $\alpha = 0.05$ (EMA learning rate).
+
+**Consequence:** A producer who issues confident forecasts and is right will accumulate karma faster than a producer who hedges at 0.55. A producer who issues confident forecasts and is wrong will lose karma faster. The system rewards bold calibrated signals over timid accurate ones.
+
+### 4.7 The 500-Outcome Gate: Statistical Justification
+
+The meta-producer's activation gate of 500 resolved outcomes is not arbitrary. It derives from power analysis for detecting meaningful forecast skill.
+
+**The Detection Problem**
+
+We want to detect whether a producer's Brier score is significantly better than random guessing. Define:
+- $H_0$: Producer Brier = 0.25 (random binary baseline)
+- $H_1$: Producer Brier = 0.20 (20% improvement)
+- $\alpha = 0.05$ (Type I error rate)
+- $\beta = 0.20$ (Type II error rate, i.e., 80% power)
+
+**Brier Score Variance**
+
+For calibrated binary forecasts, the variance of the Brier score is approximately:
+
+$$\text{Var}(\text{Brier}) \approx p(1-p)(1-2p)^2 + p^2(1-p)^2$$
+
+For $p \approx 0.5$, this simplifies to $\sigma^2 \approx 0.0625$.
+
+**Sample Size Calculation**
+
+Using the standard power analysis formula for comparing means:
+
+$$n \approx \frac{(z_\alpha + z_\beta)^2 \times 2\sigma^2}{\Delta^2}$$
+
+Where:
+- $z_\alpha = 1.96$ (two-tailed)
+- $z_\beta = 0.84$
+- $\Delta = 0.05$ (effect size: 0.25 - 0.20)
+- $\sigma^2 = 0.0625$
+
+$$n \approx \frac{(1.96 + 0.84)^2 \times 2 \times 0.0625}{0.05^2} = \frac{7.84 \times 0.125}{0.0025} \approx 392$$
+
+**Conservative Adjustment**
+
+The theoretical minimum is ~400 outcomes. However:
+- Crypto forecast variance is often higher than theoretical due to regime shifts
+- Pattern diversity requires multiple outcomes per ensemble configuration
+- Statistical estimates should include safety margin
+
+The 500 figure sits at the upper end of the power-analysis range and provides:
+- ~50 days of data at 10 forecasts/day
+- Sufficient outcomes per major ensemble pattern (~50+)
+- Buffer against variance underestimation
+
+**Hyperparameter Status:** The exact value of 500 should be treated as a hyperparameter to be recalibrated after observing actual Brier variance in production. If observed variance is lower, the gate could be reduced; if higher, it should increase.
+
+**Reference:** Gneiting, T. & Raftery, A.E. (2007). "Strictly Proper Scoring Rules, Prediction, and Estimation." *Journal of the American Statistical Association*, 102(477): 359-378.
+
+### 4.8 Regime-Conditional Karma
+
+**The Non-Stationarity Problem**
+
+Karma uses an EMA with $\alpha = 0.05$, meaning ~95% of the score reflects the last ~100 outcomes. This creates a regime-mismatch failure mode:
+
+A trending-market specialist accumulates maximum karma during a bull market, then carries maximum synthesis weight into a regime transition — exactly when their signals become least reliable. The karma system is stationary; markets are not.
+
+**Solution 1: Regime-Conditional Karma Tables**
+
+Maintain separate karma tables per detected regime:
+
+| Table | Applies When |
+|-------|--------------|
+| `karma_bull` | `RegimeDetector.regime == BULL` |
+| `karma_bear` | `RegimeDetector.regime == BEAR` |
+| `karma_transition` | `RegimeDetector.regime == TRANSITION` |
+| `karma_crisis` | `RegimeDetector.regime == CRISIS` |
+
+At regime transition, the incoming regime's karma table receives higher weight in synthesis:
+
+$$\text{karma}_{\text{effective}} = 0.7 \times \text{karma}_{\text{current\_regime}} + 0.3 \times \text{karma}_{\text{global}}$$
+
+This prevents producers from carrying cross-regime reputation they haven't earned.
+
+**Solution 2: Accelerated Decay During Transitions**
+
+When `RegimeDetector` signals `TRANSITION`:
+- Temporarily increase EMA $\alpha$ from 0.05 to 0.15 (3× faster forgetting)
+- Maintain accelerated decay until regime stabilizes (2 consecutive non-TRANSITION readings)
+
+This forces faster reputation re-establishment when the market environment changes.
+
+**Implementation Status:** Both mechanisms are specified but currently in shadow mode. The system logs what karma would be under regime-conditional rules without affecting live synthesis.
+
+**Reference:** Hamilton, J.D. (1989). "A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle." *Econometrica*, 57(2): 357-384.
 
 ---
 
@@ -538,9 +704,21 @@ On trigger:
 
 ---
 
-## 6. The Contributor Network
+## 6. The Oracle as a Verifiable Signal Marketplace
 
-### 6.1 Producer Registration and Identity
+### 6.1 Beyond Infrastructure: The Platform Play
+
+The oracle is not merely a read-only projection layer. It is b1e55ed's most commercially differentiated component — the foundation of a **verifiable signal marketplace**.
+
+**The Core Value Proposition**
+
+The oracle answers a question that no existing crypto signal platform can answer credibly:
+
+> "Does this signal provider have a machine-verified track record, or are they just claiming one?"
+
+Traditional signal services operate on trust. The oracle operates on verification.
+
+### 6.2 Producer Registration and Identity
 
 Contributors register via:
 - CLI: `b1e55ed register`
@@ -554,25 +732,7 @@ Each contributor receives:
 
 Signals are attributed to contributors via `node_id` in the submission payload.
 
-### 6.2 Karma as On-Chain-Equivalent Attribution
-
-Karma is not a trust score. It does not predict future performance. It is a compressed historical summary of past outcomes — nothing more.
-
-**Anti-gaming measures:**
-
-| Measure | What It Prevents |
-|---------|------------------|
-| Volume counts accepted only | Spam submissions don't inflate score |
-| Streak counts accepted days | Drip-farming (1 signal/day, all rejected) |
-| Hit rate requires resolution | Can't inflate by avoiding outcomes |
-| Brier score penalty | Confident-but-wrong signals hurt |
-| Acceptance rate gate | < 10% acceptance → score = 0 |
-
-**Sybil note:** Karma is not Sybil-resistant until Forge cost is implemented. A bad actor can register multiple contributors, run them in parallel, and cherry-pick the winner. Treat contributors with < 30 resolved signals with skepticism.
-
-### 6.3 The Oracle
-
-The oracle exposes contributor provenance for external verification:
+### 6.3 The Product: Verifiable Track Records
 
 **Endpoint:** `GET /api/v1/oracle/producers/{id}/provenance`
 
@@ -584,15 +744,108 @@ The oracle exposes contributor provenance for external verification:
   "total_forecasts": 847,
   "resolved_forecasts": 812,
   "brier_score": 0.19,
+  "brier_by_regime": {
+    "BULL": 0.17,
+    "BEAR": 0.23,
+    "TRANSITION": 0.21,
+    "CRISIS": 0.28
+  },
+  "directional_accuracy": 0.58,
   "karma_score": 74.2,
+  "karma_by_regime": {
+    "BULL": 82.1,
+    "BEAR": 61.3,
+    "TRANSITION": 68.7,
+    "CRISIS": 54.2
+  },
+  "sharpness_ratio": 0.72,
+  "avg_confidence": 0.68,
   "first_signal": "2026-01-15T...",
-  "last_signal": "2026-03-04T..."
+  "last_signal": "2026-03-04T...",
+  "hash_chain_root": "0x7f3a..."
 }
 ```
 
-**`chain_verified`:** Calls `verify_hash_chain(fast=True, last_n=100)` — not just "hash exists" but "hash chain validates."
+**Key Fields:**
+- `chain_verified`: Calls `verify_hash_chain(fast=True, last_n=100)` — not just "hash exists" but "hash chain validates from origin"
+- `brier_by_regime`: Performance breakdown by market regime — reveals regime specialists vs all-weather producers
+- `sharpness_ratio`: Average confidence distance from 0.5 — distinguishes bold forecasters from hedgers
+- `hash_chain_root`: Merkle root of all forecasts, enabling external verification
 
-No authentication required. The oracle is a public good.
+### 6.4 Why It's Defensible
+
+The oracle's value derives from a structural property: **it doesn't trust the operator**.
+
+An operator running b1e55ed cannot retroactively edit a forecast because:
+1. The event store is append-only (no UPDATE on forecast events)
+2. Each event is hash-linked to its predecessor
+3. The oracle can recompute the hash chain from origin
+4. Any tampering breaks the chain and flips `chain_verified` to `false`
+
+**The trust model is inverted:** The oracle assumes the operator is adversarial and verifies anyway. This is fundamentally different from signal services that ask you to trust their self-reported track records.
+
+### 6.5 The Customer
+
+**Primary:** Any trader, fund, or algorithmic system that wants access to machine-verified producer track records without operating the full b1e55ed stack.
+
+**Use cases:**
+- Fund evaluating signal providers before allocation
+- Trader vetting a CT alpha caller's actual history
+- System integrating third-party signals with trust requirements
+- Researcher studying forecast calibration across the crypto industry
+
+**What they're buying:** Not the signals themselves (those require contributor agreement). They're buying the *verification* — the cryptographic proof that a claimed track record is real.
+
+### 6.6 The Value Flow
+
+```
+Producer → Forecasts → b1e55ed → Outcomes → Karma
+                                    ↓
+                             Oracle (public)
+                                    ↓
+                           Consumer queries
+                                    ↓
+                        Verification → Trust → Allocation
+```
+
+**For producers:** Karma becomes portable reputation. A producer with high karma verified by the oracle can charge for signal access, knowing their track record is independently verifiable. The oracle enforces attribution — downstream consumers can verify that the producer actually made the calls they claim.
+
+**For consumers:** Access to the only cryptographically-verifiable signal quality database in crypto. No more trusting screenshots of Telegram calls.
+
+**For the platform:** Network effects compound. More producers → better verification → more consumers → more producers. The oracle is the coordination layer.
+
+### 6.7 The Platform Play
+
+b1e55ed as infrastructure + oracle = a verifiable signal marketplace.
+
+**Phase 1 (current):** Oracle as public good. No authentication required. Establishes credibility and network effects.
+
+**Phase 2:** Premium oracle tier with:
+- Real-time provenance updates (vs 30-min batch)
+- Webhook notifications on producer karma changes
+- Bulk query API for systematic consumers
+- Historical regime-conditional performance data
+
+**Phase 3:** Signal marketplace:
+- Producers list signals for subscription (price in USDC/ETH)
+- Oracle enforces attribution and verifies track record
+- Settlement on-chain with oracle-verified karma as collateral
+- Revenue share: platform takes X% of signal subscription revenue
+
+**The asymmetric upside:** The oracle turns b1e55ed from a trading system into a platform. Producers compete on verified track record, not claims. Consumers pay for access to verifiable alpha. The oracle is the trust layer that makes the marketplace possible.
+
+### 6.8 Anti-Gaming Measures
+
+| Measure | What It Prevents |
+|---------|------------------|
+| Volume counts accepted only | Spam submissions don't inflate score |
+| Streak counts accepted days | Drip-farming (1 signal/day, all rejected) |
+| Hit rate requires resolution | Can't inflate by avoiding outcomes |
+| Brier score penalty | Confident-but-wrong signals hurt |
+| Acceptance rate gate | < 10% acceptance → score = 0 |
+| Sharpness weighting | Timid hedging doesn't accumulate karma |
+
+**Sybil note:** Karma is not Sybil-resistant until Forge cost is implemented. A bad actor can register multiple contributors, run them in parallel, and cherry-pick the winner. Treat contributors with < 30 resolved signals with skepticism.
 
 ---
 
@@ -624,6 +877,7 @@ The system does not trust itself until it has earned trust.
 | Hierarchy | 5 resolved forecasts per domain | Domain weight multipliers |
 | Meta-producer | 500 total resolved outcomes | Pattern logging begins |
 | Meta-producer live | 500 + 10 matching episodes + 60% win rate | Live ensemble forecasts |
+| Regime-conditional karma | 100 outcomes per regime | Regime-specific karma tables |
 
 **Cold start behavior:**
 - Days 1-30: observe only, no weight adjustments
@@ -663,19 +917,21 @@ To enable live mode for a shadow layer:
 - 7-layer interpreter stack (all shadow by default)
 - Event-sourced database with hash chain
 - Outcome resolution via Brier score (30-min cron)
-- Karma attribution on position close (EMA α=0.05)
+- Karma attribution with sharpness weighting (EMA α=0.05)
 - 4 benchmarks running in parallel
 - Kill switches enforced (all 5 conditions)
 - Cockpit dashboard with 30s HTMX refresh
 - Auto-paper-trade on confidence ≥ 0.65
 - Stratification tracking and CLI reporting
 - Oracle endpoint for external verification
+- Kelly-based position sizing (fractional K=0.25)
 
 **What's in shadow mode:**
 - LLM critic (observing, not adjusting)
 - Prosecutor (observing, not suppressing)
 - Novelty penalty (observing, not penalizing)
 - Meta-producer (pattern logging, always abstains)
+- Regime-conditional karma (logging, not affecting synthesis)
 
 ### 8.2 Data Accumulation Timeline
 
@@ -697,7 +953,7 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 
 **Sybil resistance:** Karma is gameable until registration has non-trivial cost. Planned: Forge-based proof of work or on-chain stake.
 
-**Regime detection:** Current regime tagging is rule-based (BULL/BEAR/TRANSITION/CRISIS). Planned: probabilistic regime model with uncertainty.
+**Regime detection:** Current regime tagging is rule-based (BULL/BEAR/TRANSITION/CRISIS). Planned: probabilistic regime model with uncertainty (Hamilton, 1989).
 
 **Calibration curves:** Current Brier score is aggregate. Planned: per-confidence-bucket calibration with isotonic regression for probability mapping.
 
@@ -705,11 +961,23 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 
 **External data quality:** Binance public API fallback is best-effort. Planned: redundant price feeds with median selection.
 
+**Oracle monetization:** Current oracle is a public good. Planned: premium tier with real-time updates, webhooks, and bulk API access.
+
 ---
 
-## References / Appendix
+## References
 
-### A. Key Source Files
+Gneiting, T. & Raftery, A.E. (2007). "Strictly Proper Scoring Rules, Prediction, and Estimation." *Journal of the American Statistical Association*, 102(477): 359-378.
+
+Goodhart, C.A.E. (1984). "Problems of Monetary Management: The UK Experience." In *Monetary Theory and Practice*, pp. 91-121. Macmillan.
+
+Hamilton, J.D. (1989). "A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle." *Econometrica*, 57(2): 357-384.
+
+Kelly, J.L. (1956). "A New Interpretation of Information Rate." *Bell System Technical Journal*, 35(4): 917-926.
+
+---
+
+## Appendix A: Key Source Files
 
 | File | What It Contains |
 |------|-----------------|
@@ -723,8 +991,9 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 | `engine/brain/performance_aggregator.py` | `PerformanceAggregator` |
 | `engine/producers/meta.py` | `MetaProducer` |
 | `engine/execution/karma.py` | `KarmaEngine`, `attribute_outcome` |
+| `engine/execution/kelly.py` | `KellyCalculator`, `position_size` |
 
-### B. Database Tables
+## Appendix B: Database Tables
 
 | Table | Purpose |
 |-------|---------|
@@ -733,32 +1002,40 @@ Month 6:    Full ensemble pattern library; all layers can be evaluated
 | `forecast_calibration` | Per-producer Brier scores |
 | `producer_performance` | Rolling producer stats |
 | `producer_correlation` | Pairwise producer agreement rates |
-| `producer_karma` | EMA karma scores |
+| `producer_karma` | EMA karma scores (global) |
+| `producer_karma_regime` | Regime-conditional karma scores |
 | `signal_stratification` | Confidence band outcome tracking |
 | `system_state` | Kill switch and cockpit state |
 | `contributors` | Registered contributor identities |
 | `karma_intents` | Trade → karma attribution links |
 
-### C. Configuration Reference
+## Appendix C: Configuration Reference
 
 | Parameter | Default | What It Controls |
 |-----------|---------|------------------|
 | `brain.auto_paper_trade` | `true` | Auto-execute on high confidence |
 | `weights.*` | sum to 1.0 | Domain synthesis weights |
+| `kelly.fraction` | `0.25` | Fractional Kelly multiplier |
+| `karma.sharpness_weighted` | `true` | Apply sharpness factor to karma updates |
+| `karma.regime_conditional` | `false` | Enable regime-conditional karma tables |
 | `B1E55ED_LLM_CRITIC_SHADOW` | `true` | LLM critic shadow mode |
 | `B1E55ED_PROSECUTOR_SHADOW` | `true` | Prosecutor shadow mode |
 | `MIN_FORECASTS_FOR_ACTIVATION` | 500 | Meta-producer activation gate |
 | `MIN_SAMPLE_FOR_PATTERN` | 10 | Meta-producer pattern threshold |
 | `WIN_RATE_THRESHOLD` | 0.60 | Meta-producer win rate gate |
 
-### D. Glossary
+## Appendix D: Glossary
 
 | Term | Definition |
 |------|------------|
 | **Brier score** | `(confidence - outcome)²` — calibration metric where 0 is perfect |
 | **Karma** | 5-factor composite reputation score for contributors |
+| **Kelly criterion** | Optimal bet sizing formula: `f = (pb - q) / b` |
 | **PCS** | Position Conviction Score — brain output, 0-100 scale |
+| **Redundancy discount** | Confidence penalty for signals that agree with existing consensus |
+| **Resolution** | Brier component measuring forecast informativeness vs base rate |
 | **Shadow mode** | Layer observes and logs but does not mutate forecasts |
+| **Sharpness** | `|confidence - 0.5| × 2` — reward factor for bold forecasts |
 | **Stratification** | Bucketing signals by confidence for calibration testing |
 | **The Forge** | Ethereum vanity address generator for `0xb1e55ed` prefix |
 
