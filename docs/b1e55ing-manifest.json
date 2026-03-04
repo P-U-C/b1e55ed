@@ -140,6 +140,16 @@
       "placement": "before_function",
       "pr_number": 245,
       "applied_at": "2026-03-03T01:16:00Z"
+    },
+    {
+      "id": "egg_f428fafd",
+      "file": "engine/brain/isotonic.py",
+      "anchor": "def fit_calibrator(",
+      "tradition": "zadrozny-elkan-calibration",
+      "content": "# Zadrozny & Elkan (2002): calibration is where probabilities stop pretending.",
+      "placement": "inline_comment",
+      "pr_number": 245,
+      "applied_at": "2026-03-04T00:08:13Z"
     }
   ]
 }
