@@ -29,11 +29,45 @@ openclaw --version
 > xattr -dr com.apple.quarantine ~/.local/bin/openclaw
 > ```
 
+**Onboard and install the daemon:**
+
+```bash
+openclaw onboard --install-daemon
+```
+
+This installs OpenClaw as a background service and walks you through initial setup.
+
+**Add your AI provider token** — use your existing subscription rather than paying per API call:
+
+```bash
+# Claude (Anthropic)
+openclaw config set anthropic.api_key "YOUR_ANTHROPIC_API_KEY"
+
+# or OpenAI
+openclaw config set openai.api_key "YOUR_OPENAI_API_KEY"
+```
+
+**Check the gateway is operational:**
+
+```bash
+openclaw gateway status
+```
+
+If it is not running, check overall status and run the doctor:
+
+```bash
+openclaw status
+openclaw doctor
+openclaw doctor --fix
+```
+
+You should see `Doctor complete`. The gateway should now be up.
+
 ---
 
 ## Step 2 — Connect a Telegram Bot
 
-You need a Telegram bot token to receive alerts and send commands.
+You need a Telegram bot to receive alerts and send commands to OpenClaw.
 
 **2a. Create the bot**
 
@@ -47,22 +81,23 @@ You need a Telegram bot token to receive alerts and send commands.
 1. Message [@userinfobot](https://t.me/userinfobot)
 2. It replies with your ID (e.g. `505841972`)
 
-**2c. Configure OpenClaw**
+**2c. Add your bot token to OpenClaw:**
 
 ```bash
 openclaw config set telegram.bot_token "YOUR_BOT_TOKEN"
-openclaw config set telegram.allowed_users "YOUR_TELEGRAM_USER_ID"
 ```
 
-**2d. Start the gateway**
+**2d. Pair via Telegram**
+
+Message your bot from Telegram — it will reply with a pairing code. Then approve it on your machine:
 
 ```bash
-openclaw gateway start
+openclaw pairing approve telegram [PAIRING_CODE]
 ```
 
 **2e. Verify**
 
-Send `/status` to your bot in Telegram. You should get a response within a few seconds.
+Send any message to your bot. You should get a response within a few seconds confirming it is operational.
 
 ---
 
