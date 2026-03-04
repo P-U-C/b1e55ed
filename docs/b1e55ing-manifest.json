@@ -190,6 +190,16 @@
       "placement": "inline_comment",
       "pr_number": 254,
       "applied_at": "2026-03-04T00:08:25Z"
+    },
+    {
+      "id": "egg_f2c5b9f2",
+      "file": "engine/core/prosecutor.py",
+      "anchor": "class Prosecutor:",
+      "tradition": "talmudic-counterargument",
+      "content": "# Talmudic discipline: every thesis deserves its strongest counter-argument.",
+      "placement": "inline_comment",
+      "pr_number": 256,
+      "applied_at": "2026-03-04T00:08:28Z"
     }
   ]
 }

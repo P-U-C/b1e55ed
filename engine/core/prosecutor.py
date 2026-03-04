@@ -85,6 +85,7 @@ class ProsecutionResult:
     error: str | None = None
 
 
+# Talmudic discipline: every thesis deserves its strongest counter-argument.
 class Prosecutor:
     """Adversarial LLM pass — finds the strongest counter-case against a forecast."""
 
