@@ -2,31 +2,71 @@
 
 ## v1.0.0-beta.8 — 2026-03-04
 
-### Producer Intelligence Layer (P3 + P4)
+This release completes the full producer intelligence sprint (P0–P4), building a 7-layer interpreter stack on top of the base producer framework. The meta-producer's 90-day data clock starts on first deploy.
 
-**P3 — Per-Signal Adaptations**
-- P3.1: LLM critic layer with shadow mode (confidence gate before emit)
-- P3.2: Regime decision matrix — per-producer regime conditioning
-- P3.3: Differentiated data inputs — domain-specific signal enrichment
-- P3.4: Producer self-memory — karma history adjusts confidence with guardrails
-- P3.5: Adversarial prosecutor pass — counter-case gate before emit
+### P4 — System-Level Intelligence (new in this release)
 
-**P4 — System-Level Intelligence**
-- P4.1: Hierarchical weighting — domain priors × reliability × asset_fit × regime_fit × correlation
-- P4.2: Multi-horizon forecasts — domain-specific horizon sets (4h/24h/3d/7d)
-- P4.3: Cross-producer awareness — novelty penalty via aggregate brain conviction
-- P4.4: Meta-producer — outcome resolver, performance aggregator, ensemble pattern learner
+- **P4.1 — Hierarchical Weighting** (#258): Domain weight multipliers computed from 4 factors: domain prior reliability, per-asset fit, regime fit, cross-domain correlation. Applied in `VectorSynthesis.synthesize()` after karma multipliers.
+- **P4.2 — Multi-Horizon Forecasts** (#260): Producers emit forecasts across domain-specific horizon sets (TradFi: 4h/24h/3d; Technical: 4h/24h; OnChain/Sentiment: 4h/24h/3d). Horizon-specific confidence scaling and caps per domain.
+- **P4.3 — Cross-Producer Awareness** (#262): `ConvictionStateReader` aggregates recent FORECAST_V1 into a single signed conviction float per asset. `NoveltyInterpreter` applies a novelty penalty when a producer's call agrees with strong existing brain conviction — suppresses redundant signal, rewards contrarian information. shadow=True default.
+- **P4.4 — The Meta-Producer** (#265): Three-component system:
+  - `OutcomeResolver`: resolves FORECAST_V1 against actual prices (Binance fallback) → writes immutable FORECAST_OUTCOME_V1. Run every 30min via `b1e55ed resolve-outcomes`. Idempotent.
+  - `PerformanceAggregator`: rolling per-producer stats (win_rate, Brier, confidence_reliability) and cross-producer correlation matrix.
+  - `MetaProducer`: reads performance tables only (no market data). Pattern-matches current ensemble state against historical episodes. Activates at 500 resolved outcomes (~3-4 weeks). shadow=True until data matures.
 
-**Docs**
-- New: `docs/producer-intelligence.md` — full P3/P4 interpreter stack documentation
-- Updated: architecture, learning loop, producers, openclaw integration
+### P3 — Per-Signal Adaptations (new in this release)
 
-**Operator Tooling**
-- New: `P-U-C/b1e55ed-operator-template` — GitHub template repo for OpenClaw operators
-- New: `P-U-C/openclaw-skills` — ClawHub skill: `b1e55ed-operator`
-- New: `b1e55ed resolve-outcomes` CLI command
+- **P3.1 — LLM Critic** (#249): `LLMCriticInterpreter` wraps any interpreter. Calls configurable LLM endpoint to review signal before emit. shadow=True default. Brier > 0.35 forces shadow regardless of config.
+- **P3.2 — Regime Matrix** (#250): `RegimeInterpreter` applies per-regime confidence caps and direction weights via `RegimeMatrix`. Global caps: BULL 0.85, BEAR 0.85, CRISIS 0.60, TRANSITION 0.70.
+- **P3.3 — Differentiated Inputs** (#252): Domain producers receive signals unavailable to other domains: liquidation clusters and flow direction (onchain), basis/funding/OI (tradfi), volatility compression and positioning extremes (technical), narrative velocity (sentiment).
+- **P3.4 — Producer Self-Memory** (#254): `SelfMemoryInterpreter` reads producer's karma history and adjusts confidence proportionally. Guardrails: max delta ±0.30, min 5 resolved forecasts required, streak weight 0.35. shadow=True default.
+- **P3.5 — Adversarial Prosecutor** (#256): `ProsecutorInterpreter` constructs the strongest counter-case against every forecast. Abstains if bear_strength > configured threshold. shadow=True default. Last gate before emit.
 
+### P2 — Calibration & Learning (prior sprint, included in this release)
 
+- **P2.1 — Brier Score Tracking** (#239): `forecast_calibration` table + resolution logic. Foundation for all calibration-based features.
+- **P2.2 — Calibration Curves** (#241): Per-producer calibration curve storage and visualization.
+- **P2.3 — Correlation Tracking** (#238): `producer_correlation` table, Pearson r matrix across producer pairs.
+- **P2.4 — Learnable Scoring** (#240): `scoring_params` table, shadow/live param promotion workflow.
+- **P2.5 — Isotonic Calibration** (#245): Per-producer confidence calibration via sklearn IsotonicRegression. Applied at synthesis time.
+
+### P1 — Brain Improvements (prior sprint, included in this release)
+
+- **P1.1 — Signal Age Decay** (#226): Exponential freshness factor `exp(-λ × age_minutes)` in synthesis.
+- **P1.2 — Per-Asset Regime Detection** (#227): Each asset gets an independent regime tag (vs. global regime).
+- **P1.3 — Counter-Thesis Caps** (#229): Counter-thesis fires at all PCS levels + regime conviction caps.
+- **P1.4 — Feature Introspection** (#228): `feature_key`/`feature_value` in conviction_log for primary feature visibility.
+- **P1.5 — Brain Cycle Snapshot** (#233): `BRAIN_CYCLE_V1` full-state event — single-event reconstructability.
+
+### P0 — Foundation (prior sprint, included in this release)
+
+- **P0a — Interpreter base** (#217): `Interpreter` base class, forecast seam wired into `BaseProducer`.
+- **P0b — Confidence v1** (#222): PCS/CTS/regime formula replaces `len(features)/6.0`. Per-producer attribution in conviction_log. TradFiBasisInterpreter + dual-write SIGNAL_TRADFI_V1 + FORECAST_V1.
+
+### Infrastructure
+
+- **Review Council** (#237): Multi-persona PR review workflow. Labels: review/pass, review/concern, review/block, review/human-required.
+- **b1e55ing Manifest** (#234): Egg tracking with idempotency — audit trail for placed easter eggs.
+- **CLI** — New command: `b1e55ed resolve-outcomes` (outcome resolver entry point, exit 0 always).
+
+### New DB Tables
+
+`forecast_resolution_state`, `producer_performance`, `producer_correlation` (P4.4); `forecast_calibration` (P2.1); `scoring_params` (P2.4); `producer_correlation` (P2.3); `forecast_attribution` (P0b).
+
+### Docs
+
+- New: `docs/producer-intelligence.md` — 583-line reference for the full P3/P4 interpreter stack
+- New: `docs/producer-intelligence.md` — interpreter stack architecture, shadow mode guide, cron setup, data activation timeline
+- Updated: `docs/architecture.md`, `docs/learning-loop.md`, `docs/producers.md`, `docs/openclaw-integration.md`
+
+### Operator Tooling
+
+- New repo: [`P-U-C/b1e55ed-operator-template`](https://github.com/P-U-C/b1e55ed-operator-template) — GitHub template for OpenClaw operator workspace
+- New repo: [`P-U-C/openclaw-skills`](https://github.com/P-U-C/openclaw-skills) — `b1e55ed-operator` ClawHub skill
+
+### New Engine Files
+
+`engine/core/llm_critic.py`, `engine/core/regime.py`, `engine/core/prosecutor.py`, `engine/core/novelty.py`, `engine/core/horizons.py`, `engine/core/self_memory.py`, `engine/core/utils.py`, `engine/brain/hierarchy.py`, `engine/brain/conviction_state.py`, `engine/brain/outcome_resolver.py`, `engine/brain/performance_aggregator.py`, `engine/producers/meta.py`
 ## Unreleased — Flywheel Sprints (S0–S7)
 
 ### Highlights
