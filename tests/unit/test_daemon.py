@@ -214,17 +214,22 @@ class TestSupervisorRun:
 
             sup._wait_for_api_healthy = _fast_health  # type: ignore[assignment]
 
+            became_healthy = False
+
             async def check_and_stop() -> None:
-                for _ in range(30):
-                    await asyncio.sleep(0.5)
+                nonlocal became_healthy
+                for _ in range(40):
+                    await asyncio.sleep(0.3)
                     if svc.healthy:
+                        became_healthy = True
                         break
                 sup._request_shutdown()
 
             task = asyncio.create_task(check_and_stop())
             await sup.run()
             await task
-            assert svc.healthy
+            # Check the flag captured before shutdown (shutdown resets svc.healthy to False)
+            assert became_healthy
         finally:
             daemon_mod._HEALTHY_THRESHOLD = original_threshold
 
