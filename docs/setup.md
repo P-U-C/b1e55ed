@@ -126,45 +126,42 @@ This will:
 
 This sets up the OpenClaw agent workspace that gives your instance its identity and operating context.
 
+> ⚠️ **Do Step 2 (Telegram bot) before running this script** — it will ask for your bot token.
+
 ```bash
 git clone https://github.com/P-U-C/b1e55ed-operator-template /tmp/b1e55ed-operator-template
 bash /tmp/b1e55ed-operator-template/scripts/setup-openclaw.sh
 ```
 
-Then fill in two files with your details:
-
-**`~/.openclaw/workspace/USER.md`** — who you are:
-```
-- Name: <your name>
-- Telegram: @yourusername
-- Timezone: UTC-8
-- GitHub: yourusername
-```
-
-**`~/.openclaw/workspace/CRITICAL.md`** — your instance state (update after every significant change):
-```
-- b1e55ed version: 1.0.0-beta.8
-- Node ID: <from wizard>
-- API: http://localhost:5050
-- Dashboard: http://localhost:5051
-```
+The script prompts you for your name, Telegram handle, timezone, GitHub username, and bot token. It then:
+- Detects your node ID automatically from the installed CLI
+- Writes `~/.openclaw/workspace/USER.md` and `CRITICAL.md` with your real details (no manual editing needed)
+- Sets up the OpenClaw queue-drain cron (every 5 min)
 
 ---
 
 ## Step 6 — Start the Engine
 
+b1e55ed runs as a **persistent systemd service** — it starts on boot and restarts automatically if it crashes. The `setup-connected.sh` script installs and enables it. Start it now:
+
 ```bash
-b1e55ed start
+sudo systemctl start b1e55ed
+sudo systemctl status b1e55ed
 ```
 
 This starts:
 - **API server** on `localhost:5050`
-- **Dashboard** on `localhost:5051` (opens in browser automatically)
+- **Dashboard** on `localhost:5051`
 
 Verify:
 ```bash
 curl localhost:5050/health
 # → {"status": "ok", ...}
+```
+
+View live logs:
+```bash
+sudo journalctl -u b1e55ed -f
 ```
 
 **Start the outcome resolver** (runs every 30 minutes — essential for the system to learn):
