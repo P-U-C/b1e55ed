@@ -78,5 +78,5 @@ jobs:
               sha: context.payload.pull_request.head.sha,
               state: 'success',
               context: 'a b1e55ing',
-              description: '🙏 Already blessed'
+              description: 'Already blessed'
             });

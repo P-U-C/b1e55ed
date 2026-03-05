@@ -272,6 +272,16 @@
       "applied_at": "2026-03-04T20:44:05Z"
     },
     {
+      "id": "egg_3e24a173",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step3_identity(repo_root: Path) -> None:",
+      "tradition": "symbolic-cosmology",
+      "content": "# Identity is not configured. It becomes through action.\n# Beauvoir: one is not born, but rather becomes.",
+      "placement": "before_function",
+      "pr_number": 288,
+      "applied_at": "2026-03-05T05:29:16Z"
+    },
+    {
       "id": "egg_352fcac5",
       "file": "scripts/b1e55ing.py",
       "anchor": "MAX_EGGS_PER_FILE = 2",
