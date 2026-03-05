@@ -205,7 +205,7 @@ class TestSupervisorRun:
         original_threshold = daemon_mod._HEALTHY_THRESHOLD
 
         try:
-            daemon_mod._HEALTHY_THRESHOLD = 2.0  # 2s instead of 10s
+            daemon_mod._HEALTHY_THRESHOLD = 0.5  # 0.5s instead of 10s — generous for CI
 
             # Patch _wait_for_api_healthy to return immediately so the monitor
             # loop (which updates svc.healthy) starts without delay.
