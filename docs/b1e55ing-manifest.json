@@ -360,6 +360,16 @@
       "placement": "inline_comment",
       "pr_number": 293,
       "applied_at": "2026-03-05T06:36:02Z"
+    },
+    {
+      "id": "egg_3ac70364",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "    # Fast path: contributor_id already written into identity.json means we registered before.",
+      "tradition": "crypto-prehistory",
+      "content": "    # Dwork & Naor, 1992: proof of work prevents repeated submissions.\n    # A simpler proof: the file that says you already submitted.",
+      "placement": "inline_comment",
+      "pr_number": 293,
+      "applied_at": "2026-03-05T06:39:19Z"
     }
   ]
 }
