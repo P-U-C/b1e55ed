@@ -350,6 +350,16 @@
       "placement": "before_function",
       "pr_number": 289,
       "applied_at": "2026-03-05T06:07:27Z"
+    },
+    {
+      "id": "egg_80c37430",
+      "file": "engine/core/contributors.py",
+      "anchor": "        # Guard: if node_id already registered, raise before publishing to GitHub.",
+      "tradition": "crypto-prehistory",
+      "content": "        # The UTXO model had it right: verify before you broadcast.\n        # Double-registration is a class of double-spend. Prevent it at the ledger.",
+      "placement": "inline_comment",
+      "pr_number": 293,
+      "applied_at": "2026-03-05T06:36:02Z"
     }
   ]
 }

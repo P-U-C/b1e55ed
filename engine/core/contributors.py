@@ -98,6 +98,15 @@ class ContributorRegistry:
             except Exception:
                 pass
 
+        # The UTXO model had it right: verify before you broadcast.
+        # Double-registration is a class of double-spend. Prevent it at the ledger.
+        # Guard: if node_id already registered, raise before publishing to GitHub.
+        # The publisher fires before the INSERT, so without this check a new GH issue
+        # is created on every re-registration attempt — even though the INSERT will fail.
+        _existing_row = self._db.conn.execute("SELECT id FROM contributors WHERE node_id = ?", (node_id,)).fetchone()
+        if _existing_row is not None:
+            raise ValueError("contributor.duplicate_node")
+
         # Best-effort GitHub publish — always fires, fail-open (never blocks registration)
         if self._gh_publisher is not None:
             try:

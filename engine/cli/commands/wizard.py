@@ -783,6 +783,12 @@ def _step_register_contributor(repo_root: Path) -> None:
     if not node_id:
         return
 
+    # Fast path: contributor_id already written into identity.json means we registered before.
+    # This survives DB wipes and oracle restarts — the ledger entry is permanent.
+    if data.get("contributor_id"):
+        print(f"  {_ok('Already registered (skipping)')}")
+        return
+
     print(f"  Registering: {dim(node_id)}")
     print()
 
@@ -806,6 +812,13 @@ def _step_register_contributor(repo_root: Path) -> None:
             result = _json.loads(resp.read())
             issue_url = result.get("issue_url")
             registered = True
+            # Persist contributor_id into identity.json so future wizard runs skip this step
+            try:
+                _id_data = _json.loads(identity_path.read_text(encoding="utf-8"))
+                _id_data["contributor_id"] = result.get("contributor_id")
+                identity_path.write_text(_json.dumps(_id_data, indent=2), encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass  # non-fatal — worst case wizard re-runs step next time
     except urllib.error.HTTPError as e:
         if e.code == 409:
             already_registered = True  # oracle confirms: already registered
