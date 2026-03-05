@@ -400,6 +400,8 @@ class ForecastPayload(BaseModel):
         return self
 
 
+# Brier (1950): a forecast is only complete when the outcome is observed.
+# This payload is the closure record.
 class ForecastOutcomePayload(BaseModel):
     """Payload for FORECAST_OUTCOME_V1 — resolved forecast outcome."""
 

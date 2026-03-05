@@ -757,6 +757,8 @@ dashboard:
 _ORACLE_URL = "https://oracle.b1e55ed.permanentupperclass.com"
 
 
+# RFC 7231 §6.5.9 defines 409 as "conflict with the current state of the target resource."
+# Translation: you are already here.  The ledger does not need a second entry.
 def _step_register_contributor(repo_root: Path) -> None:
     """Auto-register new contributor via the oracle (no credentials needed on user machine)."""
     import json as _json
@@ -785,8 +787,10 @@ def _step_register_contributor(repo_root: Path) -> None:
     print()
 
     # Try oracle first — it holds the GitHub App key, creates the issue server-side
+    # Oracle is the source of truth: 409 = already registered, no side-effect needed.
     issue_url: str | None = None
     registered = False
+    already_registered = False
     oracle_err: Exception | None = None
     local_err: Exception | None = None
 
@@ -804,13 +808,20 @@ def _step_register_contributor(repo_root: Path) -> None:
             registered = True
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            registered = True  # already registered — fine
+            already_registered = True  # oracle confirms: already registered
+            registered = True
         else:
             oracle_err = e
     except Exception as e:  # noqa: BLE001
         oracle_err = e  # oracle unreachable — fall through to local
 
-    # Always register locally too (idempotent) — use Python API directly
+    # Short-circuit: oracle confirmed already registered — nothing more to do
+    # The oracle does not forget. Neither does the chain.
+    if already_registered:
+        print(f"  {_ok('Already registered (skipping)')}")
+        return
+
+    # Register locally too (idempotent)
     try:
         from engine.core.contributors import ContributorRegistry as _Registry
         from engine.core.database import Database as _Database
@@ -825,7 +836,7 @@ def _step_register_contributor(repo_root: Path) -> None:
         )
         registered = True
     except ValueError:
-        registered = True  # already registered — idempotent
+        registered = True  # already registered locally — idempotent
     except Exception as e:  # noqa: BLE001
         local_err = e  # local DB unavailable — oracle registration is enough
 
@@ -900,6 +911,7 @@ def _completion() -> None:
 # ── Public entrypoint ─────────────────────────────────────────────────────────
 
 
+# A wizard that repeats steps the initiate has already passed is not wise — it is forgetful.
 def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG001
     """Run the interactive b1e55ed setup wizard."""
     repo_root = ctx.repo_root
