@@ -379,49 +379,88 @@ def _step2_password() -> None:
     print("  Set " + bold("B1E55ED_MASTER_PASSWORD") + " in your shell profile, or enter it each time.")
     print()
 
+    env_lines: list[str] = []
+
     existing = os.environ.get("B1E55ED_MASTER_PASSWORD", "")
     if existing:
         print(f"  {_ok('B1E55ED_MASTER_PASSWORD already set in environment')}")
-        _persist_env_file([f"B1E55ED_MASTER_PASSWORD={existing}"])
-        return
+        env_lines.append(f"B1E55ED_MASTER_PASSWORD={existing}")
+    else:
+        try:
+            import getpass
 
-    try:
-        import getpass
+            password = getpass.getpass("  Enter master password (or press Enter to skip encryption): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+            env_lines.append("B1E55ED_DEV_MODE=1")
+            os.environ["B1E55ED_DEV_MODE"] = "1"
+            password = ""
 
-        password = getpass.getpass("  Enter master password (or press Enter to skip encryption): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
-        _persist_env_file(["B1E55ED_DEV_MODE=1"])
-        os.environ["B1E55ED_DEV_MODE"] = "1"
-        return
+        if password:
+            try:
+                import getpass
 
-    if not password:
-        print(f"  {dim('Skipping encryption — setting DEV_MODE.')}")
-        _persist_env_file(["B1E55ED_DEV_MODE=1"])
-        os.environ["B1E55ED_DEV_MODE"] = "1"
-        return
+                confirm = getpass.getpass("  Confirm password: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+                env_lines.append("B1E55ED_DEV_MODE=1")
+                os.environ["B1E55ED_DEV_MODE"] = "1"
+                confirm = ""
+                password = ""
 
-    try:
-        import getpass
+            if password and password != confirm:
+                print(f"  {red('Passwords do not match — setting DEV_MODE instead.')}")
+                env_lines.append("B1E55ED_DEV_MODE=1")
+                os.environ["B1E55ED_DEV_MODE"] = "1"
+            elif password:
+                print(f"  {_ok('Passwords match')}")
+                env_lines.append(f"B1E55ED_MASTER_PASSWORD={password}")
+                os.environ["B1E55ED_MASTER_PASSWORD"] = password
+        elif not env_lines:
+            print(f"  {dim('Skipping encryption — setting DEV_MODE.')}")
+            env_lines.append("B1E55ED_DEV_MODE=1")
+            os.environ["B1E55ED_DEV_MODE"] = "1"
 
-        confirm = getpass.getpass("  Confirm password: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
-        _persist_env_file(["B1E55ED_DEV_MODE=1"])
-        os.environ["B1E55ED_DEV_MODE"] = "1"
-        return
+    # Prompt for optional data API keys
+    print()
+    print("  " + bold("Data API keys") + " (optional — needed for on-chain and financial producers):")
+    print()
 
-    if password != confirm:
-        print(f"  {red('Passwords do not match — setting DEV_MODE instead.')}")
-        _persist_env_file(["B1E55ED_DEV_MODE=1"])
-        os.environ["B1E55ED_DEV_MODE"] = "1"
-        return
+    nansen_key = os.environ.get("B1E55ED_NANSEN_API_KEY", "") or os.environ.get("NANSEN_API_KEY", "")
+    if nansen_key:
+        print(f"  {_ok('Nansen API key found in environment')}")
+        env_lines.append(f"NANSEN_API_KEY={nansen_key}")
+    else:
+        try:
+            nansen_key = _ask("  Nansen API key", default="")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            nansen_key = ""
+        if nansen_key:
+            env_lines.append(f"NANSEN_API_KEY={nansen_key}")
+            print(f"  {_ok('Nansen key configured')}")
+        else:
+            print(f"  {dim('Skipping — add later via ~/.b1e55ed/env')}")
 
-    print(f"  {_ok('Passwords match')}")
-    _persist_env_file([f"B1E55ED_MASTER_PASSWORD={password}"])
-    os.environ["B1E55ED_MASTER_PASSWORD"] = password
+    fd_key = os.environ.get("B1E55ED_FD_API_KEY", "") or os.environ.get("FINANCIAL_DATASETS_API_KEY", "")
+    if fd_key:
+        print(f"  {_ok('Financial Datasets API key found in environment')}")
+        env_lines.append(f"FINANCIAL_DATASETS_API_KEY={fd_key}")
+    else:
+        try:
+            fd_key = _ask("  Financial Datasets API key", default="")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            fd_key = ""
+        if fd_key:
+            env_lines.append(f"FINANCIAL_DATASETS_API_KEY={fd_key}")
+            print(f"  {_ok('Financial Datasets key configured')}")
+        else:
+            print(f"  {dim('Skipping — add later via ~/.b1e55ed/env')}")
+
+    _persist_env_file(env_lines)
 
 
 def _check_rust_grinder() -> str | None:
@@ -746,6 +785,33 @@ def _step4_configuration(repo_root: Path) -> None:
     labels: ["b1e55ed-attestation"]
 """
 
+    # Daemon interval configuration
+    print()
+    print("  " + bold("Daemon intervals") + " — how often each subsystem runs:")
+    print()
+    print(f"  {dim('Press Enter to accept defaults (recommended).')}")
+    print()
+
+    try:
+        brain_interval = _ask("  Brain fast cycle (seconds)", default="300")
+        brain_interval = int(brain_interval) if brain_interval.isdigit() else 300
+    except (EOFError, KeyboardInterrupt, ValueError):
+        brain_interval = 300
+
+    try:
+        brain_full_interval = _ask("  Brain full cycle (seconds)", default="21600")
+        brain_full_interval = int(brain_full_interval) if brain_full_interval.isdigit() else 21600
+    except (EOFError, KeyboardInterrupt, ValueError):
+        brain_full_interval = 21600
+
+    try:
+        resolver_interval = _ask("  Outcome resolver (seconds)", default="1800")
+        resolver_interval = int(resolver_interval) if resolver_interval.isdigit() else 1800
+    except (EOFError, KeyboardInterrupt, ValueError):
+        resolver_interval = 1800
+
+    print(f"  {_ok(f'brain={brain_interval}s, brain-full={brain_full_interval}s, resolver={resolver_interval}s')}")
+
     config_content = f"""# Generated by `b1e55ed wizard`
 preset: balanced
 
@@ -772,6 +838,11 @@ dashboard:
   host: "127.0.0.1"
   port: 5051
   auth_token: ""
+
+daemon:
+  brain_interval_seconds: {brain_interval}
+  brain_full_interval_seconds: {brain_full_interval}
+  resolver_interval_seconds: {resolver_interval}
 
 {github_publish_block}"""
 
@@ -1002,16 +1073,14 @@ WantedBy=multi-user.target
             print(f"  {dim(f'Error: {stderr}')}")
 
 
-# Gregorian chant: the oldest daemon. Ritual, repetition, anonymous.
-# Every 30 minutes, the brain intones. The congregation need not be present.
 def _step_brain_cron(repo_root: Path) -> None:  # noqa: ARG001
-    """Offer to set up a cron job for the brain cycle."""
-    import shutil
+    """Legacy brain cron step — superseded by ``b1e55ed daemon``.
 
-    _section("[4d] Brain cycle")
-
+    If an old brain cron exists, offer to remove it since the unified
+    daemon supervisor now handles brain scheduling.
+    """
+    # Check if a legacy brain cron exists and offer to clean it up
     try:
-        # Check if brain cron already exists
         result = subprocess.run(
             ["crontab", "-l"],
             capture_output=True,
@@ -1019,45 +1088,27 @@ def _step_brain_cron(repo_root: Path) -> None:  # noqa: ARG001
             check=False,
         )
         if "b1e55ed brain" in (result.stdout or ""):
-            print(f"  {_ok('Brain cron already configured (skipping)')}")
-            return
+            print()
+            print(f"  {yellow('⚠')} Legacy brain cron detected.")
+            print(f"  {dim('The daemon supervisor now handles brain scheduling — cron is no longer needed.')}")
+            try:
+                remove = _ask_yn("  Remove legacy brain cron entry?", default=True)
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+
+            if remove:
+                # Filter out the b1e55ed brain line
+                lines = [line for line in (result.stdout or "").splitlines() if "b1e55ed brain" not in line]
+                new_crontab = "\n".join(lines) + "\n" if lines else ""
+                subprocess.run(
+                    ["bash", "-c", f'echo "{new_crontab}" | crontab -'],
+                    check=True,
+                    capture_output=True,
+                )
+                print(f"  {_ok('Legacy brain cron removed')}")
     except Exception:  # noqa: BLE001
-        pass  # No crontab — continue to offer setup
-
-    try:
-        setup = _ask_yn("  Set up brain to run every 30 minutes?", default=True)
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping brain cron setup.')}")
-        return
-
-    if not setup:
-        print(f"  {dim('Skipping. Run manually: b1e55ed brain')}")
-        return
-
-    try:
-        # Find b1e55ed binary
-        b1e55ed_bin = shutil.which("b1e55ed")
-        if not b1e55ed_bin:
-            b1e55ed_bin = f"{sys.executable} -m engine.cli"
-
-        # Ensure logs directory exists
-        log_dir = Path.home() / ".b1e55ed" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        cron_entry = f"*/30 * * * * {b1e55ed_bin} brain >> ~/.b1e55ed/logs/brain.log 2>&1"
-
-        subprocess.run(
-            ["bash", "-c", f'(crontab -l 2>/dev/null; echo "{cron_entry}") | crontab -'],
-            check=True,
-            capture_output=True,
-        )
-        print(f"  {_ok('Brain will run every 30 minutes')}")
-        print(f"  {dim(f'Cron: {cron_entry}')}")
-        print(f"  {dim('Logs: ~/.b1e55ed/logs/brain.log')}")
-    except Exception as e:  # noqa: BLE001
-        print(f"  {yellow('⚠')} Could not set up brain cron: {e}")
-        print(f"  {dim('Add manually: crontab -e')}")
+        pass  # No crontab available — nothing to clean up
 
 
 def _step5_test_run(repo_root: Path) -> None:
@@ -1106,10 +1157,11 @@ def _completion() -> None:
     print("  " + green("══════════════════════════════════════"))
     print("  " + bold(green("  Setup complete. ✓")))
     print()
-    print(f"  {bold('Start the brain:')}     b1e55ed brain")
+    print(f"  {bold('Start everything:')}    b1e55ed daemon")
+    print(f"  {bold('Check daemon status:')} b1e55ed daemon --status")
+    print(f"  {bold('Run brain once:')}      b1e55ed brain")
     print(f'  {bold("Submit a signal:")}     b1e55ed signal "BTC looking strong" --direction bullish')
     print(f"  {bold('Check your status:')}   b1e55ed contributors score --id <your-id>")
-    print(f"  {bold('Start the API:')}       b1e55ed api")
     print()
     print(f"  {bold('Docs:')} https://github.com/P-U-C/b1e55ed/tree/main/docs")
     print("  " + green("══════════════════════════════════════"))

@@ -138,15 +138,15 @@ class Supervisor:
         for svc in self.services:
             asyncio.create_task(self._run_service(svc))
 
-        # Wait for API health before starting schedulers
-        api_healthy = await self._wait_for_api_healthy(timeout=30.0)
-        if api_healthy:
-            self._log_supervisor("API healthy — starting schedulers")
-        else:
-            self._log_supervisor("API health check timed out — schedulers will retry per-tick")
-
-        # Start scheduler loops
+        # Start scheduler loops immediately — each scheduler's wait_for field
+        # handles dependency ordering, so we don't block here.  This avoids a
+        # race where a long API health-check timeout could delay schedulers
+        # past a requested shutdown.
         scheduler_tasks = [asyncio.create_task(self._run_scheduler(sch)) for sch in self.schedulers]
+
+        # Eagerly check API health so we can log readiness (non-blocking for schedulers).
+        if self.services:
+            asyncio.create_task(self._log_api_health())
 
         # Wait until shutdown requested
         try:
@@ -272,6 +272,14 @@ class Supervisor:
                 logger.info(text)
 
     # -- health check -------------------------------------------------------
+
+    async def _log_api_health(self, timeout: float = 30.0) -> None:
+        """Background task: wait for API and log readiness (informational only)."""
+        healthy = await self._wait_for_api_healthy(timeout=timeout)
+        if healthy:
+            self._log_supervisor("API healthy")
+        else:
+            self._log_supervisor("API did not become healthy within timeout")
 
     async def _wait_for_api_healthy(self, timeout: float = 30.0) -> bool:
         """Poll the API health endpoint until it responds OK."""
