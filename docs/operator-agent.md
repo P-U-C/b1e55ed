@@ -197,30 +197,31 @@ The simplest integration pattern:
   - `curl http://127.0.0.1:5050/api/v1/health`
   - `b1e55ed status`
 
-### 5.0 Run the operator setup script
+### 5.0 Run the operator setup scripts
 
-This does everything in one step: installs the OpenClaw workspace, writes your `USER.md` and `CRITICAL.md` with real values, **installs b1e55ed as a persistent systemd service**, and wires the queue-drain cron.
+Two separate scripts, two separate concerns:
+
+**`scripts/setup-connected.sh`** — installs b1e55ed + OpenClaw + Telegram, and **registers b1e55ed as a systemd service**. Run this first if you haven't already (it's the full connected install script).
+
+**`scripts/setup-openclaw.sh`** — configures the OpenClaw workspace (USER.md, CRITICAL.md, queue-drain cron). Run this after.
 
 <Warning>
-**Do Step 3 (Telegram bot) before running this script.** The script will ask for your bot token and write it to OpenClaw config.
+**Do Step 3 (Telegram bot) before running setup-openclaw.sh.** The script will ask for your bot token.
 </Warning>
 
 ```bash
 export GH_TOKEN="ghp_xxx"   # required for queue automation
+
+# If starting fresh (installs everything + systemd):
+bash scripts/setup-connected.sh
+
+# OpenClaw workspace only (USER.md, CRITICAL.md, cron):
 bash scripts/setup-openclaw.sh
 ```
 
-The script prompts you for:
-- Your name, Telegram handle, timezone, GitHub username
-- Telegram bot token (from Step 3)
+`setup-openclaw.sh` prompts for: name, Telegram handle, timezone, GitHub username, bot token — then writes your workspace files with real values (no placeholders).
 
-It then:
-- Detects your node ID automatically
-- Writes `~/.openclaw/workspace/USER.md` and `CRITICAL.md` with your real details
-- Installs `b1e55ed` as a **systemd service** (`sudo systemctl status b1e55ed`)
-- Adds the OpenClaw queue-drain cron (every 5 min)
-
-Verify after setup:
+Verify the engine is running:
 
 ```bash
 sudo systemctl status b1e55ed     # engine running?

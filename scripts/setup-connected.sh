@@ -94,6 +94,58 @@ else
 fi
 
 echo ""
+echo "[6/6] Installing b1e55ed as a persistent systemd service..."
+
+B1E55ED_BIN_PATH="$(command -v b1e55ed 2>/dev/null || echo "$HOME/.local/bin/b1e55ed")"
+CURRENT_USER="$(whoami)"
+SERVICE_FILE="/etc/systemd/system/b1e55ed.service"
+SYSTEMD_ENV_FILE="$HOME/.config/b1e55ed/b1e55ed.env"
+
+mkdir -p "$(dirname "$SYSTEMD_ENV_FILE")"
+cat > "$SYSTEMD_ENV_FILE" <<EOF
+HOME=$HOME
+PATH=$PATH
+GH_TOKEN=${GH_TOKEN:-}
+TELEGRAM_BOT_TOKEN=${TG_TOKEN:-}
+EOF
+chmod 600 "$SYSTEMD_ENV_FILE"
+
+UNIT="[Unit]
+Description=b1e55ed profit engine
+After=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$HOME
+EnvironmentFile=$SYSTEMD_ENV_FILE
+ExecStart=$B1E55ED_BIN_PATH start --no-browser
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target"
+
+if sudo tee "$SERVICE_FILE" > /dev/null <<< "$UNIT" 2>/dev/null; then
+  sudo systemctl daemon-reload
+  sudo systemctl enable b1e55ed
+  ok "b1e55ed systemd service installed and enabled"
+  echo "      Start now: sudo systemctl start b1e55ed"
+  echo "      Status:    sudo systemctl status b1e55ed"
+  echo "      Logs:      sudo journalctl -u b1e55ed -f"
+else
+  warn "Could not install systemd service (no sudo). Run manually:"
+  echo ""
+  echo "  sudo tee $SERVICE_FILE > /dev/null <<'UNIT'"
+  printf '%s\n' "$UNIT"
+  echo "UNIT"
+  echo "  sudo systemctl daemon-reload && sudo systemctl enable --now b1e55ed"
+fi
+
+echo ""
 echo "Next:"
-echo "  - Run: b1e55ed wizard"
-echo "  - Then: b1e55ed start"
+echo "  1. b1e55ed wizard                        (forge your identity)"
+echo "  2. sudo systemctl start b1e55ed          (start the engine)"
+echo "  3. bash scripts/setup-openclaw.sh        (configure OpenClaw workspace)"
