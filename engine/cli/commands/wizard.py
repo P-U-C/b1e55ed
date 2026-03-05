@@ -479,6 +479,7 @@ def _step3_identity(repo_root: Path) -> None:
             address = data.get("address", "???")
             node_id = data.get("node_id", "???")
             print(f"  {_ok(f'Identity found: {address} ({node_id})')}")
+            print(f"  {dim('Re-running wizard will not re-forge your identity.')}")
             return
         except Exception:  # noqa: BLE001
             print(f"  {yellow('⚠')} Existing identity file could not be read — will offer to forge.")
