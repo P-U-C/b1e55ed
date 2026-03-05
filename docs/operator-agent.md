@@ -19,7 +19,7 @@ Everything in the standalone deployment, plus:
 
 - **AI monitors 24/7**: watches health, events, and anomalies
 - **Telegram alerts**: sends actionable notifications (failures, thresholds, noteworthy shifts)
-- **Natural-language ops**: ask questions like “what’s HYPE doing?” and get a synthesized answer
+- **Natural-language ops**: ask questions like "what's HYPE doing?" and get a synthesized answer
 - **Proactive analysis**: agent can summarize what changed since last check
 - **Heartbeat checks**: a small, explicit checklist that runs periodically
 
@@ -65,7 +65,7 @@ Optional: Oracle endpoint exposed so agents (or other systems) can check produce
 
 - **Anthropic API key** (required)
   - Create one at: https://console.anthropic.com/
-  - You’ll copy the key into OpenClaw during setup.
+  - You'll copy the key into OpenClaw during setup.
 - **Telegram account** (required)
 - Optional model keys (only if you plan to use them):
   - OpenAI key: https://platform.openai.com/
@@ -73,7 +73,7 @@ Optional: Oracle endpoint exposed so agents (or other systems) can check produce
 
 ⚠️ **Common failure point #1: no AI key / wrong AI key**
 
-Symptoms: OpenClaw starts but can’t run tools, or errors on model calls.
+Symptoms: OpenClaw starts but can't run tools, or errors on model calls.
 
 Fix: re-run `openclaw setup` and ensure the key is stored (see Step 4).
 
@@ -94,19 +94,13 @@ export PATH="$HOME/.local/bin:$PATH"
 b1e55ed wizard
 ```
 
-At the end of the wizard you should be able to run:
-
-```bash
-b1e55ed start --no-browser
-```
-
-Keep it running while you bring up OpenClaw (or run it under systemd later).
+At the end of the wizard you should be able to run `b1e55ed start`. **Do not run it manually - Step 5 installs it as a systemd service automatically.** Just confirm the wizard completes cleanly.
 
 ---
 
 ## Step 2: Install OpenClaw
 
-Install Node.js first if you don’t have it (Ubuntu):
+Install Node.js first if you don't have it (Ubuntu):
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -162,7 +156,7 @@ openclaw config set telegram.token "TOKEN"
 
 If OpenClaw is running, you should see it acknowledge messages (depending on your configured skills/heartbeats).
 
-⚠️ **Common failure point #2: Telegram bot doesn’t respond**
+⚠️ **Common failure point #2: Telegram bot doesn't respond**
 
 Checklist:
 
@@ -184,32 +178,12 @@ OpenClaw uses a workspace directory containing operator instructions.
 
 Two files matter most:
 
-- `SOUL.md`: the assistant’s personality + operating principles
-- `USER.md`: your preferences and what “good” looks like
+- `SOUL.md`: the assistant's personality + operating principles
+- `USER.md`: your preferences and what "good" looks like
 
-Create/edit them in your OpenClaw workspace (you can find the workspace path via `openclaw config`, but the default is usually `~/.openclaw/workspace`).
+**The setup script in Step 5 writes these for you** from your answers to the prompts. You do not need to create them manually.
 
-Minimal examples:
-
-### `SOUL.md`
-
-```md
-You are an operations assistant for a b1e55ed deployment.
-
-You:
-- keep messages short and actionable
-- never guess: verify via CLI/health endpoints
-- prioritize safety: do not place trades without explicit instruction
-```
-
-### `USER.md`
-
-```md
-Operator preferences:
-- Alert me on any service restart, health=DEGRADED/ERROR, or missed brain cycles.
-- Summarize: top 3 changes since last check.
-- Keep output concise.
-```
+If you want to customize after setup, edit them at `~/.openclaw/workspace/` — your own copy with your real name, Telegram handle, timezone, and node ID already filled in.
 
 ---
 
@@ -223,9 +197,41 @@ The simplest integration pattern:
   - `curl http://127.0.0.1:5050/api/v1/health`
   - `b1e55ed status`
 
+### 5.0 Run the operator setup scripts
+
+Two separate scripts, two separate concerns:
+
+**`scripts/setup-connected.sh`** — installs b1e55ed + OpenClaw + Telegram, and **registers b1e55ed as a systemd service**. Run this first if you haven't already (it's the full connected install script).
+
+**`scripts/setup-openclaw.sh`** — configures the OpenClaw workspace (USER.md, CRITICAL.md, queue-drain cron). Run this after.
+
+<Warning>
+**Do Step 3 (Telegram bot) before running setup-openclaw.sh.** The script will ask for your bot token.
+</Warning>
+
+```bash
+export GH_TOKEN="ghp_xxx"   # required for queue automation
+
+# If starting fresh (installs everything + systemd):
+bash scripts/setup-connected.sh
+
+# OpenClaw workspace only (USER.md, CRITICAL.md, cron):
+bash scripts/setup-openclaw.sh
+```
+
+`setup-openclaw.sh` prompts for: name, Telegram handle, timezone, GitHub username, bot token — then writes your workspace files with real values (no placeholders).
+
+Verify the engine is running:
+
+```bash
+sudo systemctl status b1e55ed     # engine running?
+sudo journalctl -u b1e55ed -f     # live logs
+openclaw cron list                 # queue drain active?
+```
+
 ### 5.1 Ensure b1e55ed is reachable locally
 
-On the VPS:
+On the VPS (give it ~10s to start):
 
 ```bash
 curl -s http://127.0.0.1:5050/api/v1/health
@@ -260,7 +266,7 @@ b1e55ed health --json
 b1e55ed status
 ```
 
-⚠️ **Common failure point #3: OpenClaw can’t find the `b1e55ed` command**
+⚠️ **Common failure point #3: OpenClaw can't find the `b1e55ed` command**
 
 Fix: ensure the service environment PATH includes `~/.local/bin`, or use an absolute path in your heartbeat commands.
 
@@ -313,9 +319,9 @@ Typical Telegram alerts you should configure for:
 
 ### Example natural-language queries
 
-- “what’s BTC doing today?”
-- “summarize last 2 hours of signals”
-- “is the engine healthy?”
+- "what's BTC doing today?"
+- "summarize last 2 hours of signals"
+- "is the engine healthy?"
 
 Under the hood, OpenClaw should answer by calling:
 
@@ -335,7 +341,7 @@ Edit `HEARTBEAT.md` to change thresholds and escalation.
 
 Practical knobs:
 
-- “brain stale” threshold (e.g., 10 minutes vs 30 minutes)
+- "brain stale" threshold (e.g., 10 minutes vs 30 minutes)
 - which endpoints matter (API, oracle, dashboard)
 - noise filtering (only alert on consecutive failures)
 
