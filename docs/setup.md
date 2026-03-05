@@ -165,7 +165,7 @@ Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$HOME
 EnvironmentFile=$ENV_FILE
-ExecStart=$B1E55ED_BIN start --no-browser
+ExecStart=$B1E55ED_BIN daemon
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -191,18 +191,9 @@ View live logs:
 sudo journalctl -u b1e55ed -f
 ```
 
-**Start the outcome resolver** (runs every 30 minutes — essential for the system to learn):
-
-```bash
-(crontab -l 2>/dev/null; echo "*/30 * * * * b1e55ed resolve-outcomes >> ~/.b1e55ed/logs/resolver.log 2>&1") | crontab -
-```
-
-This is the loop that closes: forecasts emit → horizons pass → outcomes resolve → Brier scores update → karma updates → weights shift. Without it the engine runs but never learns. The meta-producer activates after 500 resolved outcomes (~3-4 weeks).
-
-Verify the cron is set:
-```bash
-crontab -l | grep resolve-outcomes
-```
+> **Note:** Outcome resolution runs automatically every 30 minutes via `b1e55ed daemon`. No crontab needed.
+>
+> This is the loop that closes: forecasts emit → horizons pass → outcomes resolve → Brier scores update → karma updates → weights shift. The meta-producer activates after 500 resolved outcomes (~3-4 weeks).
 
 ---
 
@@ -274,7 +265,7 @@ xattr -dr com.apple.quarantine ~/.local/bin/b1e55ed-forge
 **Outcome resolver exits non-zero**
 ```bash
 b1e55ed resolve-outcomes --debug
-# Common: DB not initialized yet — run b1e55ed start first
+# Common: DB not initialized yet — run b1e55ed daemon first
 ```
 
 ---

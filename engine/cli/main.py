@@ -431,6 +431,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_start.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     p_start.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
 
+    p_daemon = sub.add_parser(
+        "daemon",
+        help="Start all subsystems as a supervised process group (recommended for production)",
+    )
+    p_daemon.add_argument("--status", action="store_true", help="Show daemon status and exit")
+
     p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
     eas_sub = p_eas.add_subparsers(dest="eas_cmd")
 
@@ -2383,6 +2389,23 @@ def _cmd_dashboard(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_daemon(ctx: CliContext, args: argparse.Namespace) -> int:
+    if getattr(args, "status", False):
+        from engine.cli.commands.daemon import _show_status
+
+        return _show_status()
+
+    from engine.core.config import Config
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
+    from engine.cli.commands.daemon import run_daemon
+
+    return run_daemon(repo_root, config)
+
+
 def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     import time
 
@@ -3143,6 +3166,7 @@ def main(argv: list[str] | None = None) -> int:
         "start": _cmd_start,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
+        "daemon": _cmd_daemon,
         "status": _cmd_status,
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,

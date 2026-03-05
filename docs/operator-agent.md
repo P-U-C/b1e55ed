@@ -351,18 +351,16 @@ Keep it explicit and small so it stays reliable.
 
 ## Running as a service (systemd)
 
-This section runs **four** services under systemd:
+This section runs **two** services under systemd:
 
-- `b1e55ed-api.service`
-- `b1e55ed-brain.service`
-- `openclaw-gateway.service`
-- `openclaw-agent.service` (optional wrapper if you run a dedicated agent process)
+- `b1e55ed.service` — runs `b1e55ed daemon` (manages API, dashboard, brain, resolver internally)
+- `openclaw-gateway.service` — runs the OpenClaw AI layer
 
-### b1e55ed services
+### b1e55ed service
 
-Use the unit files from the standalone guide:
+`b1e55ed daemon` manages all subsystems in a single process — no separate API/brain units, no crontab.
 
-- [Standalone Operator Guide → Running as a service](operator-standalone.md#running-as-a-service-systemd)
+See: [Standalone Operator Guide → Running as a service](operator-standalone.md#running-as-a-service-systemd)
 
 ### OpenClaw gateway service
 
@@ -427,8 +425,9 @@ sudo npm install -g openclaw
 
 ```bash
 curl -v http://127.0.0.1:5050/api/v1/health
-systemctl status b1e55ed-api.service --no-pager || true
-journalctl -u b1e55ed-api.service -n 200 --no-pager || true
+systemctl status b1e55ed.service --no-pager || true
+journalctl -u b1e55ed -n 200 --no-pager || true
+tail -f ~/.b1e55ed/logs/api.log
 ```
 
 For deeper b1e55ed ops docs, see the repo docs index in `README.md`.
