@@ -320,6 +320,26 @@
       "placement": "before_function",
       "pr_number": 265,
       "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_56a13265",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step_register_contributor(repo_root: Path) -> None:",
+      "tradition": "rfc-409-remembrance",
+      "content": "# RFC 7231 §6.5.9 defines 409 as \"conflict with the current state of the target resource.\"\n# Translation: you are already here.  The ledger does not need a second entry.",
+      "placement": "before_function",
+      "pr_number": 289,
+      "applied_at": "2026-03-05T06:07:27Z"
+    },
+    {
+      "id": "egg_9a0d684b",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:",
+      "tradition": "wizard-memory",
+      "content": "# A wizard that repeats steps the initiate has already passed is not wise — it is forgetful.",
+      "placement": "before_function",
+      "pr_number": 289,
+      "applied_at": "2026-03-05T06:07:27Z"
     }
   ]
 }

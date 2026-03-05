@@ -754,6 +754,8 @@ dashboard:
 _ORACLE_URL = "https://oracle.b1e55ed.permanentupperclass.com"
 
 
+# RFC 7231 §6.5.9 defines 409 as "conflict with the current state of the target resource."
+# Translation: you are already here.  The ledger does not need a second entry.
 def _step_register_contributor(repo_root: Path) -> None:
     """Auto-register new contributor via the oracle (no credentials needed on user machine)."""
     import json as _json
@@ -906,6 +908,7 @@ def _completion() -> None:
 # ── Public entrypoint ─────────────────────────────────────────────────────────
 
 
+# A wizard that repeats steps the initiate has already passed is not wise — it is forgetful.
 def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG001
     """Run the interactive b1e55ed setup wizard."""
     repo_root = ctx.repo_root
