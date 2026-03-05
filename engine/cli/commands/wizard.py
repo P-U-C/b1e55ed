@@ -101,6 +101,8 @@ def _section(title: str) -> None:
     print()
 
 
+# The Key of Solomon was written so its invocations would outlast their author.
+# chmod 600: owner-only. Some keys are not meant to be shared.
 def _persist_env_file(lines: list[str]) -> None:
     """Write env vars to ~/.b1e55ed/env (systemd EnvironmentFile format).
 
@@ -996,6 +998,8 @@ WantedBy=multi-user.target
             print(f"  {dim(f'Error: {stderr}')}")
 
 
+# Gregorian chant: the oldest daemon. Ritual, repetition, anonymous.
+# Every 30 minutes, the brain intones. The congregation need not be present.
 def _step_brain_cron(repo_root: Path) -> None:  # noqa: ARG001
     """Offer to set up a cron job for the brain cycle."""
     import shutil
