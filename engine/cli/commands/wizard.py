@@ -867,6 +867,102 @@ def _step_register_contributor(repo_root: Path) -> None:
             print(f"  {dim('Local error:')}  {local_err!r}")
 
 
+def _step_systemd(repo_root: Path) -> None:  # noqa: ARG001
+    """Offer to install b1e55ed as a systemd service (Linux only)."""
+    import platform
+    import shutil
+
+    # Only Linux — skip silently on macOS/Windows
+    if platform.system() != "Linux":
+        return
+
+    _section("[4c] System service")
+
+    # Check prerequisites
+    if not shutil.which("systemctl"):
+        print(f"  {yellow('⚠')} systemctl not found — skipping systemd setup.")
+        return
+    if not shutil.which("sudo"):
+        print(f"  {yellow('⚠')} sudo not found — skipping systemd setup.")
+        return
+
+    service_path = Path("/etc/systemd/system/b1e55ed.service")
+    if service_path.exists():
+        print(f"  {_ok('Already installed (skipping)')}")
+        return
+
+    try:
+        install = _ask_yn("  Install b1e55ed as a systemd service (auto-start on boot)?", default=False)
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(f"  {dim('Skipping systemd setup.')}")
+        return
+
+    if not install:
+        print(f"  {dim('Skipping.')}")
+        return
+
+    unit_content = """\
+[Unit]
+Description=b1e55ed trading intelligence
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i
+ExecStart=/home/%i/.local/bin/b1e55ed start
+Restart=on-failure
+RestartSec=10
+Environment=PATH=/home/%i/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+    try:
+        subprocess.run(
+            ["sudo", "tee", "/etc/systemd/system/b1e55ed.service"],
+            input=unit_content.encode(),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"  {_fail('Could not write service file')}")
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        if stderr:
+            print(f"  {dim(f'Error: {stderr}')}")
+        return
+    except Exception as e:  # noqa: BLE001
+        print(f"  {_fail(f'Could not write service file: {e}')}")
+        return
+
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "daemon-reload"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "systemctl", "enable", "b1e55ed"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "systemctl", "start", "b1e55ed"],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  {_ok('systemd service installed, enabled, and started')}")
+        print(f"  {dim('Manage with: sudo systemctl [status|stop|restart] b1e55ed')}")
+    except subprocess.CalledProcessError as e:
+        print(f"  {yellow('⚠')} Service installed but could not start automatically.")
+        print(f"  {dim('Try: sudo systemctl start b1e55ed')}")
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        if stderr:
+            print(f"  {dim(f'Error: {stderr}')}")
+
+
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
@@ -943,6 +1039,7 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step3_identity(repo_root),
         lambda: _step4_configuration(repo_root),
         lambda: _step_register_contributor(repo_root),
+        lambda: _step_systemd(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 
