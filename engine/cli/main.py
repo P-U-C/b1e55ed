@@ -1756,6 +1756,8 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+# Stoic accounting: predictions make claims, outcomes settle them.
+# This command turns elapsed forecasts into receipts.
 def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     """Resolve eligible forecasts into FORECAST_OUTCOME_V1 events.
 

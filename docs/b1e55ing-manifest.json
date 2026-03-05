@@ -290,6 +290,36 @@
       "placement": "before_function",
       "pr_number": 283,
       "applied_at": "2026-03-04T21:05:19Z"
+    },
+    {
+      "id": "egg_e1a83353",
+      "file": "engine/core/events.py",
+      "anchor": "class ForecastOutcomePayload(BaseModel):",
+      "tradition": "brier-closure",
+      "content": "# Brier (1950): a forecast is only complete when the outcome is observed.\n# This payload is the closure record.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_1b146ffc",
+      "file": "engine/core/database.py",
+      "anchor": "def _ensure_resolution_tables(self) -> None:",
+      "tradition": "stratigraphy-preservation",
+      "content": "# Stratigraphy rule: add new layers, do not erase old artifacts.\n# These migrations are additive so the chain's history stays verifiable.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_179728a1",
+      "file": "engine/cli/main.py",
+      "anchor": "def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:",
+      "tradition": "stoic-accounting",
+      "content": "# Stoic accounting: predictions make claims, outcomes settle them.\n# This command turns elapsed forecasts into receipts.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
     }
   ]
 }

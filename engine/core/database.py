@@ -681,6 +681,8 @@ class Database:
         with self.conn:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
+    # Stratigraphy rule: add new layers, do not erase old artifacts.
+    # These migrations are additive so the chain's history stays verifiable.
     def _ensure_resolution_tables(self) -> None:
         """Ensure additive tables/columns needed for forecast outcome resolution exist."""
 
