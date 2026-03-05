@@ -390,6 +390,26 @@
       "placement": "before_function",
       "pr_number": 295,
       "applied_at": "2026-03-05T16:05:03Z"
+    },
+    {
+      "id": "egg_31f0c4fd",
+      "file": "engine/cli/commands/daemon.py",
+      "anchor": "class Supervisor:",
+      "tradition": "symbolic-cosmology",
+      "content": "# Δαίμων (daimon): a spirit between gods and mortals, attending to tasks\n# humans should not have to. Maxwell imagined one sorting molecules. We sort processes.",
+      "placement": "before_function",
+      "pr_number": 297,
+      "applied_at": "2026-03-05T17:44:37Z"
+    },
+    {
+      "id": "egg_2ee7b95b",
+      "file": "engine/cli/commands/daemon.py",
+      "anchor": "async def _shutdown(self) -> None:",
+      "tradition": "unix-tradition",
+      "content": "    # The mercy of SIGTERM, the certainty of SIGKILL.\n    # Every daemon answers to something.",
+      "placement": "before_function",
+      "pr_number": 297,
+      "applied_at": "2026-03-05T17:44:37Z"
     }
   ]
 }

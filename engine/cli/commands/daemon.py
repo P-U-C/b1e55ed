@@ -99,6 +99,8 @@ class Scheduler:
 # ---------------------------------------------------------------------------
 
 
+# Δαίμων (daimon): a spirit between gods and mortals, attending to tasks
+# humans should not have to. Maxwell imagined one sorting molecules. We sort processes.
 class Supervisor:
     def __init__(
         self,
@@ -309,6 +311,8 @@ class Supervisor:
             self._log_supervisor("Shutdown requested")
             self._stopping = True
 
+    # The mercy of SIGTERM, the certainty of SIGKILL.
+    # Every daemon answers to something.
     async def _shutdown(self) -> None:
         """SIGTERM cascade to all children, wait up to 10s, then SIGKILL."""
         self._log_supervisor("Shutting down all processes...")
