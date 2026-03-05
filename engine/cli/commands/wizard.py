@@ -902,19 +902,26 @@ def _step_systemd(repo_root: Path) -> None:  # noqa: ARG001
         print(f"  {dim('Skipping.')}")
         return
 
-    unit_content = """\
+    import getpass
+
+    _current_user = getpass.getuser()
+    _home = str(Path.home())
+
+    unit_content = f"""\
 [Unit]
 Description=b1e55ed trading intelligence
 After=network.target
 
 [Service]
 Type=simple
-User=%i
-WorkingDirectory=/home/%i
-ExecStart=/home/%i/.local/bin/b1e55ed start
+User={_current_user}
+WorkingDirectory={_home}
+EnvironmentFile=-{_home}/.b1e55ed/env
+ExecStart={_home}/.local/bin/b1e55ed daemon
 Restart=on-failure
 RestartSec=10
-Environment=PATH=/home/%i/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

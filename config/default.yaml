@@ -23,6 +23,11 @@ karma:
   threshold_usd: 50.0
   treasury_address: ""
 
+daemon:
+  brain_interval_seconds: 300        # 5 min
+  brain_full_interval_seconds: 21600  # 6 hours
+  resolver_interval_seconds: 1800    # 30 min
+
 logging:
   level: INFO
   json_output: false

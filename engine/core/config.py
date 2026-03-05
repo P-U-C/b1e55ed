@@ -97,6 +97,12 @@ class KarmaConfig(BaseModel):
     treasury_address: str = ""
 
 
+class DaemonConfig(BaseModel):
+    brain_interval_seconds: int = 300  # 5 min
+    brain_full_interval_seconds: int = 21600  # 6 hours
+    resolver_interval_seconds: int = 1800  # 30 min
+
+
 class UniverseConfig(BaseModel):
     symbols: list[str] = ["BTC", "ETH", "SOL", "SUI", "HYPE"]
     max_size: int = 100
@@ -178,6 +184,7 @@ class Config(BaseSettings):
     eas: EASConfig = Field(default_factory=EASConfig)
     publish: PublishConfig = Field(default_factory=PublishConfig)
     github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
+    daemon: DaemonConfig = Field(default_factory=DaemonConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 
