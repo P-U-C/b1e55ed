@@ -811,6 +811,7 @@ def _step_register_contributor(repo_root: Path) -> None:
         oracle_err = e  # oracle unreachable — fall through to local
 
     # Short-circuit: oracle confirmed already registered — nothing more to do
+    # The oracle does not forget. Neither does the chain.
     if already_registered:
         print(f"  {_ok('Already registered (skipping)')}")
         return
