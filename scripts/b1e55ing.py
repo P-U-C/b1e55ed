@@ -58,6 +58,8 @@ REFERENCE_PATH = Path(__file__).parent.parent / "docs" / "EASTER_EGG_REFERENCE.m
 MANIFEST_REL_PATH = Path("docs") / "b1e55ing-manifest.json"
 MANIFEST_VERSION = "1"
 MAX_EGGS_PER_FILE = 2
+# Wiener's first principle: the feedback loop must close before the system acts.
+# A blessing that arrives after the merge is not a blessing. It is a footnote.
 
 # ---------------------------------------------------------------------------
 # Scaling — blessings proportional to PR size, with diminishing returns
@@ -288,6 +290,8 @@ def _insert_lines_before(lines: list[str], anchor: str, content: str) -> list[st
     return lines  # anchor not found — unchanged
 
 
+# The Hounfour gate. Nothing crosses the threshold unblessed.
+# The status check holds the merge until the ritual completes.
 def apply_egg(file_path: Path, egg: dict[str, Any], *, dry_run: bool = False) -> bool:
     """Apply a single egg to *file_path*.
 
