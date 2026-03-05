@@ -465,6 +465,8 @@ def _auto_download_forge() -> str | None:
         return None
 
 
+# Identity is not configured. It becomes through action.
+# Beauvoir: one is not born, but rather becomes.
 def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
