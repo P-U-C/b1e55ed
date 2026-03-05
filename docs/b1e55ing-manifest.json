@@ -370,6 +370,26 @@
       "placement": "inline_comment",
       "pr_number": 293,
       "applied_at": "2026-03-05T06:39:19Z"
+    },
+    {
+      "id": "egg_2ca84a57",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _persist_env_file(lines: list[str]) -> None:",
+      "tradition": "grimoire-persistence",
+      "content": "# The Key of Solomon was written so its invocations would outlast their author.\n# chmod 600: owner-only. Some keys are not meant to be shared.",
+      "placement": "before_function",
+      "pr_number": 295,
+      "applied_at": "2026-03-05T16:05:03Z"
+    },
+    {
+      "id": "egg_5a279b94",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step_brain_cron(repo_root: Path) -> None:",
+      "tradition": "music-art-subculture",
+      "content": "# Gregorian chant: the oldest daemon. Ritual, repetition, anonymous.\n# Every 30 minutes, the brain intones. The congregation need not be present.",
+      "placement": "before_function",
+      "pr_number": 295,
+      "applied_at": "2026-03-05T16:05:03Z"
     }
   ]
 }
