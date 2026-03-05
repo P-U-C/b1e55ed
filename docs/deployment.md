@@ -7,7 +7,7 @@ Production deployment guide for b1e55ed.
 ### Option 1: Standalone Server (Recommended)
 
 Single VPS running all components:
-- Brain cycle (cron)
+- Brain cycle (daemon-managed, every 5 min)
 - API server
 - Dashboard
 - Database (SQLite)
@@ -105,74 +105,34 @@ EOF
 source ~/.bashrc
 ```
 
-### 5. Setup Systemd Services
+### 5. Setup Systemd Service
 
-**API Service:**
+The daemon runs the API, dashboard, brain cycle (every 5 min), and outcome resolver (every 30 min) in a single process:
 
 ```bash
-sudo tee /etc/systemd/system/b1e55ed-api.service << EOF
+sudo tee /etc/systemd/system/b1e55ed.service >/dev/null <<EOF
 [Unit]
-Description=b1e55ed API Server
+Description=b1e55ed trading intelligence
 After=network.target
 
 [Service]
 Type=simple
-User=b1e55ed
-WorkingDirectory=/home/b1e55ed/b1e55ed
-Environment="PATH=/home/b1e55ed/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/b1e55ed/.env
-ExecStart=/home/b1e55ed/.cargo/bin/uv run b1e55ed api --host 0.0.0.0 --port 5050
-Restart=always
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+EnvironmentFile=-/home/ubuntu/.b1e55ed/env
+ExecStart=/home/ubuntu/.local/bin/b1e55ed daemon
+Restart=on-failure
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
-```
 
-**Dashboard Service:**
-
-```bash
-sudo tee /etc/systemd/system/b1e55ed-dashboard.service << EOF
-[Unit]
-Description=b1e55ed Dashboard
-After=network.target b1e55ed-api.service
-
-[Service]
-Type=simple
-User=b1e55ed
-WorkingDirectory=/home/b1e55ed/b1e55ed
-Environment="PATH=/home/b1e55ed/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/b1e55ed/.env
-ExecStart=/home/b1e55ed/.cargo/bin/uv run b1e55ed dashboard --host 0.0.0.0 --port 5051
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-**Enable & Start:**
-
-```bash
 sudo systemctl daemon-reload
-sudo systemctl enable b1e55ed-api b1e55ed-dashboard
-sudo systemctl start b1e55ed-api b1e55ed-dashboard
-
-# Check status
-sudo systemctl status b1e55ed-api
-sudo systemctl status b1e55ed-dashboard
-```
-
-### 6. Setup Cron (Brain Cycles)
-
-```bash
-# Brain runs every 5 minutes
-crontab -e
-
-# Add:
-*/5 * * * * cd /home/b1e55ed/b1e55ed && /home/b1e55ed/.cargo/bin/uv run b1e55ed brain >> /home/b1e55ed/logs/brain.log 2>&1
+sudo systemctl enable --now b1e55ed.service
+sudo systemctl status b1e55ed.service
 ```
 
 ### 7. Reverse Proxy (Nginx)
@@ -274,12 +234,8 @@ crontab -e
 ### Logs
 
 ```bash
-# Service logs
-sudo journalctl -u b1e55ed-api -f
-sudo journalctl -u b1e55ed-dashboard -f
-
-# Brain logs
-tail -f /home/b1e55ed/logs/brain.log
+# Service logs (all components in one unit)
+sudo journalctl -u b1e55ed -f
 ```
 
 ### Health Checks
@@ -358,7 +314,7 @@ Target: < 24 hours of data loss
 cp /path/to/backup/brain-20260218.db.gz .
 gunzip brain-20260218.db.gz
 cp brain-20260218.db data/brain.db
-sudo systemctl restart b1e55ed-api
+sudo systemctl restart b1e55ed
 ```
 
 **Server down:**
