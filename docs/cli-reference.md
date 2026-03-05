@@ -348,6 +348,16 @@ b1e55ed webhooks remove <id>
 
 ## Services
 
+### `b1e55ed daemon`
+
+Start all subsystems as a supervised process group. **Recommended for production** — manages API, dashboard, brain cycles, and outcome resolution with automatic restart.
+
+```text
+b1e55ed daemon [--status]
+```
+
+- `--status` — show daemon status and exit without starting
+
 ### `b1e55ed start`
 
 Start API + dashboard together. **Recommended entry point** — opens browser automatically.
