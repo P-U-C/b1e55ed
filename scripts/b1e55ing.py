@@ -625,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = subprocess.run(
-        ["git", "commit", "-m", "chore: a b1e55ing [skip ci]"],
+        ["git", "commit", "-m", "chore: a b1e55ing"],
         cwd=repo_root,
         capture_output=True,
         text=True,
