@@ -783,6 +783,8 @@ def _step_register_contributor(repo_root: Path) -> None:
     if not node_id:
         return
 
+    # Dwork & Naor, 1992: proof of work prevents repeated submissions.
+    # A simpler proof: the file that says you already submitted.
     # Fast path: contributor_id already written into identity.json means we registered before.
     # This survives DB wipes and oracle restarts — the ledger entry is permanent.
     if data.get("contributor_id"):
