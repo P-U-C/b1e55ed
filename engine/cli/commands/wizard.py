@@ -101,6 +101,44 @@ def _section(title: str) -> None:
     print()
 
 
+# The Key of Solomon was written so its invocations would outlast their author.
+# chmod 600: owner-only. Some keys are not meant to be shared.
+def _persist_env_file(lines: list[str]) -> None:
+    """Write env vars to ~/.b1e55ed/env (systemd EnvironmentFile format).
+
+    Also appends ``source ~/.b1e55ed/env`` to ~/.bashrc when missing so
+    interactive shells pick up the variables too.
+    """
+    try:
+        env_dir = Path.home() / ".b1e55ed"
+        env_dir.mkdir(parents=True, exist_ok=True)
+        (env_dir / "logs").mkdir(parents=True, exist_ok=True)
+
+        env_file = env_dir / "env"
+        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
+
+        # Append source line to ~/.bashrc so interactive shells pick it up
+        bashrc = Path.home() / ".bashrc"
+        source_line = "source ~/.b1e55ed/env"
+        if bashrc.exists():
+            content = bashrc.read_text(encoding="utf-8")
+            if source_line not in content:
+                with bashrc.open("a", encoding="utf-8") as f:
+                    f.write(f"\n# b1e55ed environment\n{source_line}\n")
+
+        print(f"  {_ok(f'Persisted to {env_file}:')}")
+        for line in lines:
+            if "MASTER_PASSWORD" in line:
+                key, _ = line.split("=", 1)
+                print(f"    {dim(f'{key}=***')}")
+            else:
+                print(f"    {dim(line)}")
+        print(f"  {dim('File permissions: 600 (owner-only)')}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not persist env file: {e}")
+
+
 # ── Symbol packs ─────────────────────────────────────────────────────────────
 
 _SYMBOL_PACKS: dict[str, dict] = {
@@ -312,6 +350,15 @@ def _step1_environment(repo_root: Path) -> bool:
     else:
         print(f"  {yellow('⚠')} config/ not found at {config_dir}")
 
+    # Create ~/.b1e55ed/ directories
+    try:
+        b1e55ed_dir = Path.home() / ".b1e55ed"
+        b1e55ed_dir.mkdir(parents=True, exist_ok=True)
+        (b1e55ed_dir / "logs").mkdir(parents=True, exist_ok=True)
+        print(f"  {_ok('~/.b1e55ed/ directory ready')}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not create ~/.b1e55ed/: {e}")
+
     print()
     if all_ok:
         print(f"  {green(bold('[1/5] Environment OK'))}")
@@ -321,7 +368,12 @@ def _step1_environment(repo_root: Path) -> bool:
 
 
 def _step2_password() -> None:
-    """Password setup step."""
+    """Password setup step.
+
+    Persists either B1E55ED_MASTER_PASSWORD or B1E55ED_DEV_MODE=1 to
+    ``~/.b1e55ed/env`` so that both interactive shells (via ``source``)
+    and systemd (via ``EnvironmentFile``) pick up the value.
+    """
     _section("[2/5] Master password")
     print("  Your identity and keys are encrypted at rest with a master password.")
     print("  Set " + bold("B1E55ED_MASTER_PASSWORD") + " in your shell profile, or enter it each time.")
@@ -330,6 +382,7 @@ def _step2_password() -> None:
     existing = os.environ.get("B1E55ED_MASTER_PASSWORD", "")
     if existing:
         print(f"  {_ok('B1E55ED_MASTER_PASSWORD already set in environment')}")
+        _persist_env_file([f"B1E55ED_MASTER_PASSWORD={existing}"])
         return
 
     try:
@@ -338,11 +391,15 @@ def _step2_password() -> None:
         password = getpass.getpass("  Enter master password (or press Enter to skip encryption): ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
-        print(f"  {dim('Skipping password setup.')}")
+        print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+        _persist_env_file(["B1E55ED_DEV_MODE=1"])
+        os.environ["B1E55ED_DEV_MODE"] = "1"
         return
 
     if not password:
-        print(f"  {dim('Skipping encryption.')}")
+        print(f"  {dim('Skipping encryption — setting DEV_MODE.')}")
+        _persist_env_file(["B1E55ED_DEV_MODE=1"])
+        os.environ["B1E55ED_DEV_MODE"] = "1"
         return
 
     try:
@@ -351,45 +408,20 @@ def _step2_password() -> None:
         confirm = getpass.getpass("  Confirm password: ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
-        print(f"  {dim('Skipping password setup.')}")
+        print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+        _persist_env_file(["B1E55ED_DEV_MODE=1"])
+        os.environ["B1E55ED_DEV_MODE"] = "1"
         return
 
     if password != confirm:
-        print(f"  {red('Passwords do not match — skipping.')}")
+        print(f"  {red('Passwords do not match — setting DEV_MODE instead.')}")
+        _persist_env_file(["B1E55ED_DEV_MODE=1"])
+        os.environ["B1E55ED_DEV_MODE"] = "1"
         return
 
     print(f"  {_ok('Passwords match')}")
-
-    try:
-        save = _ask_yn("  Save B1E55ED_MASTER_PASSWORD to shell profile?", default=True)
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping shell profile update.')}")
-        return
-
-    if save:
-        export_line = f'export B1E55ED_MASTER_PASSWORD="{password}"'
-        saved_to: list[str] = []
-
-        for rc in [Path.home() / ".bashrc", Path.home() / ".zshrc"]:
-            if rc.exists():
-                existing_content = rc.read_text(encoding="utf-8")
-                if "B1E55ED_MASTER_PASSWORD" not in existing_content:
-                    try:
-                        with rc.open("a", encoding="utf-8") as f:
-                            f.write(f"\n# b1e55ed master password\n{export_line}\n")
-                        saved_to.append(str(rc))
-                    except Exception as e:  # noqa: BLE001
-                        print(f"  {yellow('⚠')} Could not write to {rc}: {e}")
-
-        if saved_to:
-            print(f"  {_ok('Saved to: ' + ', '.join(saved_to))}")
-            print(f"  {dim('Reload your shell or run: source ~/.bashrc')}")
-        else:
-            print(f"  {yellow('⚠')} No shell rc files found to update. Set manually:")
-            print(f"    {export_line}")
-    else:
-        print(f"  {dim('Password not saved — set B1E55ED_MASTER_PASSWORD manually when needed.')}")
+    _persist_env_file([f"B1E55ED_MASTER_PASSWORD={password}"])
+    os.environ["B1E55ED_MASTER_PASSWORD"] = password
 
 
 def _check_rust_grinder() -> str | None:
@@ -970,6 +1002,64 @@ WantedBy=multi-user.target
             print(f"  {dim(f'Error: {stderr}')}")
 
 
+# Gregorian chant: the oldest daemon. Ritual, repetition, anonymous.
+# Every 30 minutes, the brain intones. The congregation need not be present.
+def _step_brain_cron(repo_root: Path) -> None:  # noqa: ARG001
+    """Offer to set up a cron job for the brain cycle."""
+    import shutil
+
+    _section("[4d] Brain cycle")
+
+    try:
+        # Check if brain cron already exists
+        result = subprocess.run(
+            ["crontab", "-l"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "b1e55ed brain" in (result.stdout or ""):
+            print(f"  {_ok('Brain cron already configured (skipping)')}")
+            return
+    except Exception:  # noqa: BLE001
+        pass  # No crontab — continue to offer setup
+
+    try:
+        setup = _ask_yn("  Set up brain to run every 30 minutes?", default=True)
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(f"  {dim('Skipping brain cron setup.')}")
+        return
+
+    if not setup:
+        print(f"  {dim('Skipping. Run manually: b1e55ed brain')}")
+        return
+
+    try:
+        # Find b1e55ed binary
+        b1e55ed_bin = shutil.which("b1e55ed")
+        if not b1e55ed_bin:
+            b1e55ed_bin = f"{sys.executable} -m engine.cli"
+
+        # Ensure logs directory exists
+        log_dir = Path.home() / ".b1e55ed" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        cron_entry = f"*/30 * * * * {b1e55ed_bin} brain >> ~/.b1e55ed/logs/brain.log 2>&1"
+
+        subprocess.run(
+            ["bash", "-c", f'(crontab -l 2>/dev/null; echo "{cron_entry}") | crontab -'],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  {_ok('Brain will run every 30 minutes')}")
+        print(f"  {dim(f'Cron: {cron_entry}')}")
+        print(f"  {dim('Logs: ~/.b1e55ed/logs/brain.log')}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not set up brain cron: {e}")
+        print(f"  {dim('Add manually: crontab -e')}")
+
+
 def _step5_test_run(repo_root: Path) -> None:
     """Optional first-run brain test."""
     _section("[5/5] Test run")
@@ -1047,6 +1137,7 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step4_configuration(repo_root),
         lambda: _step_register_contributor(repo_root),
         lambda: _step_systemd(repo_root),
+        lambda: _step_brain_cron(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 

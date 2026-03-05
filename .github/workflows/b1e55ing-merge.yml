@@ -21,13 +21,26 @@ jobs:
       pull-requests: write
       contents: read
     steps:
+      - name: Skip housekeeping PRs
+        id: skip
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if echo "$TITLE" | grep -qiE "^(chore: auto-update|a b1e55ing|chore: a b1e55ing)"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "✓ Housekeeping PR — no curse needed"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.skip.outputs.skip == 'false'
         with:
           ref: ${{ github.base_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 20
 
       - name: Check if already blessed
+        if: steps.skip.outputs.skip == 'false'
         id: blessed
         uses: actions/github-script@v7
         with:
@@ -47,7 +60,7 @@ jobs:
             else console.log('○ Oracle was unreachable — delivering the curse');
 
       - name: The oracle was unreachable — deliver the curse
-        if: steps.blessed.outputs.already_blessed == 'false'
+        if: steps.skip.outputs.skip == 'false' && steps.blessed.outputs.already_blessed == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
