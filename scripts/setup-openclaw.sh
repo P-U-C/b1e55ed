@@ -52,7 +52,6 @@ prompt OPERATOR_NAME     "Your name (e.g. Alice)"
 prompt OPERATOR_TG       "Your Telegram username (without @, e.g. alice)"
 prompt OPERATOR_TZ       "Your timezone (e.g. UTC-8, America/Vancouver)" "UTC"
 prompt OPERATOR_GH       "Your GitHub username"
-prompt TELEGRAM_BOT_TOKEN "Telegram bot token (from BotFather — do Step 2 first)"
 
 echo ""
 
@@ -179,16 +178,6 @@ if [[ ! -f "$WORKSPACE/memory/heartbeat-state.json" ]]; then
 }
 JSON
   echo "[setup] created: $WORKSPACE/memory/heartbeat-state.json"
-fi
-
-# ─── write Telegram token to OpenClaw config ─────────────────────────────────
-
-OPENCLAW_ENV="$HOME/.openclaw/.env"
-if grep -q "TELEGRAM_BOT_TOKEN" "$OPENCLAW_ENV" 2>/dev/null; then
-  echo "[setup] TELEGRAM_BOT_TOKEN already in $OPENCLAW_ENV"
-else
-  echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> "$OPENCLAW_ENV"
-  echo "[setup] wrote TELEGRAM_BOT_TOKEN to $OPENCLAW_ENV"
 fi
 
 # ─── OpenClaw queue-drain cron ───────────────────────────────────────────────

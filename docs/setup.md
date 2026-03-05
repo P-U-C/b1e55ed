@@ -13,7 +13,27 @@ Get from bare machine to a running b1e55ed instance with OpenClaw in under 30 mi
 
 ---
 
-## Step 1 — Install OpenClaw
+## Step 1 — Create a Telegram Bot
+
+You'll need a bot token before running the OpenClaw setup wizard (it asks for it).
+
+**1a. Create the bot**
+
+1. Open Telegram and message [@BotFather](https://t.me/BotFather)
+2. Send `/newbot`
+3. Follow prompts — choose a name and username (e.g. `b1e55ed_monitor_bot`)
+4. Copy the token: `1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ`
+
+**1b. Get your Telegram user ID**
+
+1. Message [@userinfobot](https://t.me/userinfobot)
+2. It replies with your ID (e.g. `505841972`)
+
+Keep both handy — the wizard in Step 2 will ask for them.
+
+---
+
+## Step 2 — Install OpenClaw
 
 ```bash
 curl -fsSL https://install.openclaw.ai | bash
@@ -29,13 +49,16 @@ openclaw --version
 > xattr -dr com.apple.quarantine ~/.local/bin/openclaw
 > ```
 
-**Onboard and install the daemon:**
+**Onboard and install the daemon.** This wizard walks through connecting your AI provider and Telegram bot in one flow:
 
 ```bash
 openclaw onboard --install-daemon
 ```
 
-This launches a setup wizard that walks you through everything — including connecting your AI provider. When prompted, use an **Anthropic setup-token** (Claude subscription) or **OpenAI Codex** token — these use your existing subscription and are the most cost-effective options.
+When prompted:
+- **AI key**: use an Anthropic setup-token (Claude subscription) or OpenAI Codex token — these use your existing subscription and are the most cost-effective options
+- **Bot token**: paste the token from Step 1a
+- **Telegram user ID**: paste the ID from Step 1b
 
 **Check the gateway is operational:**
 
@@ -43,47 +66,24 @@ This launches a setup wizard that walks you through everything — including con
 openclaw gateway status
 ```
 
-If it is not running, check overall status and run the doctor:
+If it is not running:
 
 ```bash
-openclaw status
 openclaw doctor
 openclaw doctor --fix
 ```
 
 You should see `Doctor complete`. The gateway should now be up.
 
----
+**Pair your Telegram account:**
 
-## Step 2 — Connect a Telegram Bot
-
-You need a Telegram bot to receive alerts and send commands to OpenClaw.
-
-**2a. Create the bot**
-
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot`
-3. Follow prompts — choose a name and username (e.g. `b1e55ed_monitor_bot`)
-4. Copy the token: `1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ`
-
-**2b. Get your Telegram user ID**
-
-1. Message [@userinfobot](https://t.me/userinfobot)
-2. It replies with your ID (e.g. `505841972`)
-
-**2c. Connect the bot via the OpenClaw wizard**
-
-The `openclaw onboard --install-daemon` wizard (Step 1) handles Telegram configuration. When prompted, enter your bot token and Telegram user ID.
-
-After the wizard completes, message your bot from Telegram — it will reply with a pairing code. Approve it on your machine:
+Message your bot from Telegram — it will reply with a pairing code. Approve it:
 
 ```bash
 openclaw pairing approve telegram [PAIRING_CODE]
 ```
 
-**2d. Verify**
-
-Send any message to your bot. You should get a response within a few seconds confirming it is operational.
+Send any message to your bot to verify it responds.
 
 ---
 
@@ -118,43 +118,70 @@ This will:
 - Register your node with the b1e55ed oracle
 - Create a GitHub issue confirming your contributor ID
 
-**Save your node ID** — it appears at the end of the wizard. You'll need it in the next step.
+**Save your node ID** — it appears at the end of the wizard.
 
 ---
 
 ## Step 5 — Install the Operator Workspace
 
-This sets up the OpenClaw agent workspace that gives your instance its identity and operating context.
-
-> ⚠️ **Do Step 2 (Telegram bot) before running this script** — it will ask for your bot token.
+This configures the OpenClaw agent workspace — your instance's identity and operating context:
 
 ```bash
 git clone https://github.com/P-U-C/b1e55ed-operator-template /tmp/b1e55ed-operator-template
 bash /tmp/b1e55ed-operator-template/scripts/setup-openclaw.sh
 ```
 
-The script prompts you for your name, Telegram handle, timezone, GitHub username, and bot token. It then:
+The script prompts for your name, Telegram handle, timezone, and GitHub username. It then:
 - Detects your node ID automatically from the installed CLI
-- Writes `~/.openclaw/workspace/USER.md` and `CRITICAL.md` with your real details (no manual editing needed)
+- Writes `~/.openclaw/workspace/USER.md` and `CRITICAL.md` with your real details
 - Sets up the OpenClaw queue-drain cron (every 5 min)
 
 ---
 
 ## Step 6 — Start the Engine
 
-b1e55ed runs as a **persistent systemd service** — it starts on boot and restarts automatically if it crashes. The `setup-connected.sh` script installs and enables it. Start it now:
+Install b1e55ed as a persistent systemd service so it runs on boot and restarts automatically:
 
 ```bash
-sudo systemctl start b1e55ed
-sudo systemctl status b1e55ed
-```
+B1E55ED_BIN="$(command -v b1e55ed)"
+CURRENT_USER="$(whoami)"
+ENV_FILE="$HOME/.config/b1e55ed/b1e55ed.env"
 
-This starts:
-- **API server** on `localhost:5050`
-- **Dashboard** on `localhost:5051`
+mkdir -p "$(dirname "$ENV_FILE")"
+cat > "$ENV_FILE" <<EOF
+HOME=$HOME
+PATH=$PATH
+GH_TOKEN=${GH_TOKEN:-}
+EOF
+chmod 600 "$ENV_FILE"
+
+sudo tee /etc/systemd/system/b1e55ed.service > /dev/null <<EOF
+[Unit]
+Description=b1e55ed profit engine
+After=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$HOME
+EnvironmentFile=$ENV_FILE
+ExecStart=$B1E55ED_BIN start --no-browser
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now b1e55ed
+```
 
 Verify:
 ```bash
+sudo systemctl status b1e55ed
 curl localhost:5050/health
 # → {"status": "ok", ...}
 ```
@@ -230,11 +257,12 @@ openclaw gateway status
 openclaw gateway restart
 ```
 
-**`b1e55ed start` crashes**
+**b1e55ed service not starting**
 ```bash
-b1e55ed start --debug
+sudo journalctl -u b1e55ed -n 50
 # Common: port 5050 already in use
 lsof -ti:5050 | xargs kill -9
+sudo systemctl restart b1e55ed
 ```
 
 **Forge binary slow (~30 min instead of ~5 sec)**
