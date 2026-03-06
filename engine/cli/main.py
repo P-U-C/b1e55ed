@@ -828,6 +828,8 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             payload = {"cycle": asdict(result), "producers": producer_results}
             print(_json_dumps(payload))
         else:
+            # The brain exhales 50KB of conviction tensors.
+            # The operator needs eight lines and a checkmark.
             # --- #303: Human-readable brain cycle summary ---
             _ts = result.ts.strftime("%Y-%m-%dT%H:%M:%SZ") if result.ts else "unknown"
             _cid = result.cycle_id[:8] if result.cycle_id else "unknown"

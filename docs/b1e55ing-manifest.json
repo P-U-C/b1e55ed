@@ -412,14 +412,14 @@
       "applied_at": "2026-03-05T17:44:37Z"
     },
     {
-      "id": "egg_76468086",
-      "file": "engine/security/identity.py",
-      "anchor": "is None",
-      "tradition": "hex-blessing",
-      "content": "# 0xb1e55ed — empty is not absent; the void is a valid key",
+      "id": "egg_d2d9b925",
+      "file": "engine/cli/main.py",
+      "anchor": "# --- #303: Human-readable brain cycle summary ---",
+      "tradition": "cartography",
+      "content": "            # The brain exhales 50KB of conviction tensors.\n            # The operator needs eight lines and a checkmark.",
       "placement": "inline_comment",
-      "pr_number": 307,
-      "applied_at": "2026-03-06T07:26:41Z"
+      "pr_number": 306,
+      "applied_at": "2026-03-06T06:23:22Z"
     }
   ]
 }
