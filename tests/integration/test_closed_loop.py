@@ -94,10 +94,10 @@ def test_fresh_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert rc == 0
 
     assert (repo_root / "config" / "user.yaml").exists()
-    assert (repo_root / "data" / "brain.db").exists()
+    assert (tmp_path / "home" / ".b1e55ed" / "data" / "brain.db").exists()
 
     cfg = Config.from_yaml(repo_root / "config" / "user.yaml")
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
 
     _append_minimal_signals(db)
 
@@ -135,7 +135,7 @@ def test_signal_to_brain_to_alert(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert rc_sig == 0
 
     cfg = Config.from_yaml(repo_root / "config" / "user.yaml")
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
 
     # 2) Brain cycle
     _append_minimal_signals(db)
@@ -231,7 +231,7 @@ def test_multi_signal_no_conflict(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert main(["signal", "BTC A", "--symbols", "BTC", "--source", "agent-a", "--direction", "bullish", "--conviction", "7"]) == 0
     assert main(["signal", "BTC B", "--symbols", "BTC", "--source", "agent-b", "--direction", "bearish", "--conviction", "6"]) == 0
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
     rows = db.get_events(event_type=EventType.SIGNAL_CURATOR_V1, limit=50)
 
     sources = {str(e.payload.get("source")) for e in rows}
@@ -255,7 +255,7 @@ def test_graceful_degradation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert main(["setup", "--non-interactive"]) == 0
 
     cfg = Config.from_yaml(repo_root / "config" / "user.yaml")
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
     _append_minimal_signals(db)
 
     out = BrainOrchestrator(cfg, db, generate_node_identity()).run_cycle(["BTC"])
@@ -277,7 +277,7 @@ def test_cold_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert main(["setup", "--non-interactive"]) == 0
 
     cfg = Config.from_yaml(repo_root / "config" / "user.yaml")
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
     _append_minimal_signals(db)
 
     out = BrainOrchestrator(cfg, db, generate_node_identity()).run_cycle(["BTC"])
@@ -286,7 +286,7 @@ def test_cold_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_webhook_delivery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    repo_root = _init_minimal_repo(tmp_path, monkeypatch)
+    _init_minimal_repo(tmp_path, monkeypatch)
 
     monkeypatch.setenv("B1E55ED_NONINTERACTIVE", "1")
     monkeypatch.setenv("B1E55ED_PRESET", "balanced")
@@ -295,7 +295,7 @@ def test_webhook_delivery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     # Register webhook via CLI.
     assert main(["webhooks", "add", "http://example/hook", "--events", "signal.price_alert.*"]) == 0
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
     subs = list_webhook_subscriptions(db)
     assert subs
 

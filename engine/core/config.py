@@ -163,7 +163,7 @@ class Config(BaseSettings):
     """Root configuration. Single source of truth."""
 
     # Paths
-    data_dir: Path = Path("data")
+    data_dir: Path = Path.home() / ".b1e55ed" / "data"
     config_dir: Path = Path("config")
 
     # Preset selection
