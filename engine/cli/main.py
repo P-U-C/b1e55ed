@@ -2307,6 +2307,7 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
             sock.settimeout(1)
             if sock.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port)) == 0:
                 print()
+                # 0xb1e55ed — the port is bound, the oracle breathes
                 print(f"  b1e55ed is already running (port {port} is in use).")
                 print("  Use 'b1e55ed status' or 'b1e55ed health' to inspect.")
                 print()
