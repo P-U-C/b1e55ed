@@ -440,6 +440,16 @@
       "placement": "inline_comment",
       "pr_number": 306,
       "applied_at": "2026-03-06T07:24:35Z"
+    },
+    {
+      "id": "egg_de5483aa",
+      "file": "tests/integration/test_contributor_flow.py",
+      "anchor": "def _make_app(tmp_path: Path):",
+      "tradition": "purification",
+      "content": "# 🧹 the cache remembers what the test must forget",
+      "placement": "before_function",
+      "pr_number": 309,
+      "applied_at": "2026-03-06T22:22:47Z"
     }
   ]
 }
