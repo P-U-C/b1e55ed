@@ -1,7 +1,0 @@
-api:
-  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
-
-daemon:
-  brain_interval_seconds: 900
-  brain_full_interval_seconds: 21600
-  resolver_interval_seconds: 3600
