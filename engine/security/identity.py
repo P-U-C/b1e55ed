@@ -167,10 +167,12 @@ def _derive_fernet_key(password: str, salt: bytes) -> bytes:
 
 
 def _password() -> str:
-    pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
-    if pw:
-        return pw
-    raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
+    pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
+    if pw is None:
+        pw = os.environ.get("B1E55ED_IDENTITY_PASSWORD")
+    if pw is None:
+        raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
+    return pw
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +245,9 @@ class NodeIdentity:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
+        pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
+        if pw is None:
+            pw = os.environ.get("B1E55ED_IDENTITY_PASSWORD")
 
         blob: dict = {
             "node_id": self.node_id,
@@ -256,7 +260,7 @@ class NodeIdentity:
         if self.eth_address:
             blob["eth_address"] = self.eth_address
 
-        if pw:
+        if pw is not None:
             # v2: Argon2id + AES-256-GCM for Ed25519 key
             enc = _encrypt_v2(bytes.fromhex(self.private_key), pw)
             blob["private_key_enc_v2"] = enc

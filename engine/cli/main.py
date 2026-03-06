@@ -76,6 +76,18 @@ def _repo_root_from_cwd() -> Path:
     return Path.cwd()
 
 
+def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
+    """Derive brain.db path from config.data_dir, falling back to repo_root/data."""
+    if config is not None:
+        data_dir = getattr(config, "data_dir", None)
+        if data_dir is not None:
+            data_dir = Path(data_dir)
+            if data_dir.is_absolute():
+                return data_dir / "brain.db"
+            return repo_root / data_dir / "brain.db"
+    return repo_root / "data" / "brain.db"
+
+
 def _load_config(ctx: CliContext) -> Config | None:
     try:
         from engine.core.config import Config
@@ -607,7 +619,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root, config))
     identity = ensure_identity()
 
     # Best-effort crash-recovery sweep on startup.
