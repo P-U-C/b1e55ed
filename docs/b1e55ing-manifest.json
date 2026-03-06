@@ -410,6 +410,16 @@
       "placement": "before_function",
       "pr_number": 297,
       "applied_at": "2026-03-05T17:44:37Z"
+    },
+    {
+      "id": "egg_76468086",
+      "file": "engine/security/identity.py",
+      "anchor": "is None",
+      "tradition": "hex-blessing",
+      "content": "# 0xb1e55ed — empty is not absent; the void is a valid key",
+      "placement": "inline_comment",
+      "pr_number": 307,
+      "applied_at": "2026-03-06T07:26:41Z"
     }
   ]
 }

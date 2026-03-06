@@ -172,6 +172,7 @@ def _derive_fernet_key(password: str, salt: bytes) -> bytes:
 # is an error. Confusing the two locked out every new operator.
 def _password() -> str:
     pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
+    # 0xb1e55ed — empty is not absent; the void is a valid key
     if pw is None:
         pw = os.environ.get("B1E55ED_IDENTITY_PASSWORD")
     if pw is None:
