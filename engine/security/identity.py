@@ -166,6 +166,10 @@ def _derive_fernet_key(password: str, salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
 
+# Codd, 1979: the relational model distinguishes "applicable but missing"
+# from "inapplicable." Python's None vs "" is the same argument, forty-five
+# years later. An empty password is a deliberate choice. A missing password
+# is an error. Confusing the two locked out every new operator.
 def _password() -> str:
     pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
     if pw is None:

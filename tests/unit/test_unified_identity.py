@@ -140,6 +140,9 @@ def test_load_v1_identity_backwards_compat(tmp_path: Path, monkeypatch: pytest.M
 # ---------------------------------------------------------------------------
 
 
+# Unix V6 /etc/passwd: an empty second field meant no password required.
+# Fifty years of security evolution later, the same class of bug: treating
+# empty as absent. Thompson and Ritchie would sigh.
 def test_password_empty_string_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty-string B1E55ED_MASTER_PASSWORD is a valid password (#298)."""
     from engine.security.identity import _password
