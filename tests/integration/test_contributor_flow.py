@@ -10,6 +10,7 @@ from engine.core.config import ApiConfig, Config
 from engine.core.database import Database
 
 
+# 🧹 the cache remembers what the test must forget
 def _make_app(tmp_path: Path):
     """Create a test app with isolated config (no auth token, no cache bleed)."""
     _load_config.cache_clear()
