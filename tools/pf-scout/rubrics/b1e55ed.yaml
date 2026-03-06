@@ -1,0 +1,80 @@
+name: b1e55ed Producer Fit
+version: "1.0"
+description: >
+  Scoring rubric for identifying Post Fiat contributors who could become
+  b1e55ed producers, infrastructure contributors, or mechanism reviewers.
+  Higher weight dimensions are more predictive of producer success.
+
+dimensions:
+  - id: quant_depth
+    name: Quantitative Depth
+    weight: 1.5
+    description: Statistical, ML, or quantitative finance background observable in public work
+    score_guide:
+      5: PhD/professional quant, published models, production ML systems
+      4: Strong ML/stats background, GitHub shows applied quantitative work
+      3: Engineering-first with clear quantitative exposure (data pipelines, analytics)
+      2: Some data skills, limited quant focus
+      1: No observable quantitative background
+
+  - id: infra_capability
+    name: Infrastructure Capability
+    weight: 1.2
+    description: Can build and operate server-side data pipelines, APIs, and nodes
+    score_guide:
+      5: Runs production infra, multi-server deployments, validators, distributed systems
+      4: Active DevOps/backend contributor, cloud infra history
+      3: Can self-host services, moderate infra experience
+      2: Limited infra exposure, mainly frontend or scripting
+      1: No observable infrastructure capability
+
+  - id: market_analysis
+    name: Market Analysis / Forecasting
+    weight: 1.3
+    description: Track record of structured market commentary or quantitative market analysis
+    score_guide:
+      5: Professional trader/PM background, published systematic research, verified public calls
+      4: Regular structured market analysis with verifiable outputs
+      3: Market-aware, occasional structured analysis
+      2: Crypto-native but limited analytical depth
+      1: No market analysis observable
+
+  - id: signal_generation
+    name: Signal Generation History
+    weight: 1.4
+    description: Has produced or could produce data-driven signals from on-chain, market, or social data
+    score_guide:
+      5: Built production signal pipelines or systematic alpha research
+      4: Demonstrated ETL/analytics for market or on-chain data; blockchain analytics background
+      3: Clear data engineering applicable to signal production (APIs, scrapers, pipelines)
+      2: Some data work, not yet signal-focused
+      1: No signal generation background observable
+
+  - id: engagement_consistency
+    name: Engagement Consistency
+    weight: 1.0
+    description: Demonstrates reliable, sustained engagement with the Post Fiat ecosystem
+    score_guide:
+      5: Core contributor, consistent multi-month activity, daily/weekly presence
+      4: Regular contributor, multiple months verifiable, responds and ships
+      3: Periodic contributor, engaged when active but inconsistent
+      2: One-time or sparse contribution
+      1: Minimal or no verifiable engagement
+
+tiers:
+  top:
+    label: "🔴 TOP"
+    threshold_pct: 0.64
+    description: "≥70th percentile raw score (≥18 of 25 raw). Priority recruitment targets."
+  mid:
+    label: "🟡 MID"
+    threshold_pct: 0.40
+    description: "40th–70th percentile (11–17 raw). Ready at meta-producer gate or after b1e55ed public launch."
+  speculative:
+    label: "⚪ SPECULATIVE"
+    threshold_pct: 0.0
+    description: "<40th percentile (<11 raw). Worth watching; insufficient signal for active recruitment now."
+
+max_score: 25
+top_threshold_raw: 16
+mid_threshold_raw: 11
