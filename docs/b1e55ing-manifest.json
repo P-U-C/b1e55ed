@@ -412,14 +412,34 @@
       "applied_at": "2026-03-05T17:44:37Z"
     },
     {
-      "id": "egg_76468086",
-      "file": "engine/security/identity.py",
-      "anchor": "is None",
-      "tradition": "hex-blessing",
-      "content": "# 0xb1e55ed — empty is not absent; the void is a valid key",
+      "id": "egg_d2d9b925",
+      "file": "engine/cli/main.py",
+      "anchor": "# --- #303: Human-readable brain cycle summary ---",
+      "tradition": "cartography",
+      "content": "            # The brain exhales 50KB of conviction tensors.\n            # The operator needs eight lines and a checkmark.",
       "placement": "inline_comment",
+      "pr_number": 306,
+      "applied_at": "2026-03-06T06:23:22Z"
+    },
+    {
+      "id": "egg_0c21a41c",
+      "file": "engine/security/identity.py",
+      "anchor": "def _password() -> str:",
+      "tradition": "codd-null-distinction",
+      "content": "# Codd, 1979: the relational model distinguishes \"applicable but missing\"\n# from \"inapplicable.\" Python's None vs \"\" is the same argument, forty-five\n# years later. An empty password is a deliberate choice. A missing password\n# is an error. Confusing the two locked out every new operator.",
+      "placement": "before_function",
       "pr_number": 307,
-      "applied_at": "2026-03-06T07:26:41Z"
+      "applied_at": "2026-03-06T06:24:16Z"
+    },
+    {
+      "id": "egg_a5ee2689",
+      "file": "engine/cli/main.py",
+      "anchor": "b1e55ed is already running",
+      "tradition": "hex-blessing",
+      "content": "# 0xb1e55ed — the port is bound, the oracle breathes",
+      "placement": "inline_comment",
+      "pr_number": 306,
+      "applied_at": "2026-03-06T07:24:35Z"
     }
   ]
 }

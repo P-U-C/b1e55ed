@@ -828,7 +828,44 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             payload = {"cycle": asdict(result), "producers": producer_results}
             print(_json_dumps(payload))
         else:
-            print(result)
+            # The brain exhales 50KB of conviction tensors.
+            # The operator needs eight lines and a checkmark.
+            # --- #303: Human-readable brain cycle summary ---
+            _ts = result.ts.strftime("%Y-%m-%dT%H:%M:%SZ") if result.ts else "unknown"
+            _cid = result.cycle_id[:8] if result.cycle_id else "unknown"
+            _regime = result.regime.state.regime if result.regime and result.regime.state else "unknown"
+            _dq = result.data_quality.overall_quality * 100 if result.data_quality else 0.0
+
+            # Find top conviction call
+            _top_call = "none"
+            if result.convictions:
+                top_sym = max(
+                    result.convictions,
+                    key=lambda s: abs(result.convictions[s].final_conviction),
+                )
+                tc = result.convictions[top_sym]
+                _dir = tc.score.direction if tc.score else "neutral"
+                _mag = f"{tc.score.magnitude:.1f}" if tc.score else "?"
+                _conf = f"{(tc.score.confidence or 0):.1f}" if tc.score else "?"
+                _top_call = f"{top_sym} {_dir} (magnitude {_mag}, confidence {_conf})"
+
+            # Count active domains from data quality
+            _domains_active = "unknown"
+            if result.data_quality:
+                dq = result.data_quality
+                active = [d for d, q in dq.per_domain_quality.items() if q > 0]
+                total = len(dq.per_domain_quality) + len(dq.missing_domains)
+                _domains_active = f"{', '.join(active) or 'none'} ({len(active)} of {total})"
+
+            print("\n  \u2713 Brain cycle complete")
+            print(f"    Cycle ID:       {_cid}")
+            print(f"    Timestamp:      {_ts}")
+            print(f"    Regime:         {_regime}")
+            print(f"    Top call:       {_top_call}")
+            print(f"    Assets scored:  {len(result.synthesis)}")
+            print(f"    Data quality:   {_dq:.1f}%")
+            print(f"    Domains active: {_domains_active}")
+            print()
 
         try:
             import asyncio
@@ -2181,6 +2218,17 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     key_path.write_text(private_key, encoding="utf-8")
     key_path.chmod(0o600)
 
+    # Write identity.key — encrypted Ed25519 key derived from forge key (#299)
+    try:
+        from engine.security.identity import generate_node_identity
+
+        node_ident = generate_node_identity(eth_private_key=private_key, eth_address=address)
+        identity_key_path = identity_dir / "identity.key"
+        node_ident.save(identity_key_path)
+    except Exception as exc:  # noqa: BLE001
+        if not use_json:
+            print(f"  ⚠ Could not write identity.key: {exc}", file=sys.stderr)
+
     attestation_uid = None
     try:
         config = _load_config(ctx)
@@ -2243,6 +2291,7 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     """Start API + dashboard as background processes, then tail their logs."""
     import contextlib
     import signal
+    import socket
     import subprocess as _sp
     import sys
     import time
@@ -2251,6 +2300,18 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     api_port = args.api_port
     dash_port = args.dashboard_port
     open_browser = not args.no_browser
+
+    # --- #301: Check if ports are already in use before starting ---
+    for port in (api_port, dash_port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            if sock.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port)) == 0:
+                print()
+                # 0xb1e55ed — the port is bound, the oracle breathes
+                print(f"  b1e55ed is already running (port {port} is in use).")
+                print("  Use 'b1e55ed status' or 'b1e55ed health' to inspect.")
+                print()
+                return 0
 
     api_url = f"http://{host}:{api_port}"
     dash_url = f"http://{host}:{dash_port}"
@@ -2445,12 +2506,25 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
 
     ks = Keystore.default()
 
+    # --- #302: Surface API auth token (masked) ---
+    auth_token_display = "(not set)"
+    try:
+        from engine.core.config import Config as _Cfg
+
+        _config = _Cfg.from_yaml(cfg) if cfg.exists() else None
+        if _config and _config.api.auth_token:
+            tok = _config.api.auth_token
+            auth_token_display = tok[:8] + "..." if len(tok) > 8 else tok
+    except Exception:
+        auth_token_display = "(error reading config)"
+
     print("b1e55ed status")
     print(f"- uptime: {time.monotonic() - start:.3f}s")
     print(f"- config: {config_status}")
     print(f"- db: {db_path} ({db_status})")
     print(f"- identity: {identity_status()}")
     print(f"- keystore: {ks.describe()}")
+    print(f"- api auth token: {auth_token_display}")
 
     health = "blessed" if cfg.exists() else "degraded"
     print(f"- system health: {health}")
