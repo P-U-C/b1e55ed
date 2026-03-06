@@ -77,15 +77,16 @@ def _repo_root_from_cwd() -> Path:
 
 
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
-    """Derive brain.db path from config.data_dir, falling back to repo_root/data."""
+    """Derive brain.db path from config.data_dir, falling back to ~/.b1e55ed/data."""
+    default = Path.home() / ".b1e55ed" / "data"
     if config is not None:
         data_dir = getattr(config, "data_dir", None)
         if data_dir is not None:
             data_dir = Path(data_dir)
-            if data_dir.is_absolute():
-                return data_dir / "brain.db"
-            return repo_root / data_dir / "brain.db"
-    return repo_root / "data" / "brain.db"
+            if not data_dir.is_absolute():
+                data_dir = Path.home() / ".b1e55ed" / data_dir
+            return data_dir / "brain.db"
+    return default / "brain.db"
 
 
 def _load_config(ctx: CliContext) -> Config | None:
@@ -594,7 +595,8 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     identity = ensure_identity()
 
     # Initialize database
-    data_dir = repo_root / "data"
+    data_dir = Path.home() / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / "brain.db"
     _ = Database(db_path)
 
@@ -903,7 +905,7 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
     identity = ensure_identity()
 
     # Look up contributor for signal attribution (fail-open).
@@ -1064,9 +1066,9 @@ def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig
 
     repo_root = ctx.repo_root
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     if not db_path.exists():
-        print("error: data/brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
+        print(f"error: {db_path} not found. Run `b1e55ed setup` first.", file=sys.stderr)
         return 1
 
     db = Database(str(db_path))
@@ -1113,7 +1115,7 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.execution.pnl import PnLTracker
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
     tracker = PnLTracker(db)
 
     mark = _latest_mark_prices(db)
@@ -1192,7 +1194,7 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
                 db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
     ensure_endpoint_column(db)
 
     cmd = str(getattr(args, "producers_cmd", "") or "")
@@ -1284,7 +1286,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.security.identity import ensure_identity
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
@@ -1423,7 +1425,7 @@ def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
             return 2
 
         # We only verify locally stored off-chain attestations (in contributor metadata).
-        db = Database(repo_root / "data" / "brain.db")
+        db = Database(_resolve_db_path(repo_root))
         reg = _build_contributor_registry_with_eas(db=db, config=config)
 
         found: dict[str, object] | None = None
@@ -1520,7 +1522,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     cmd = str(getattr(args, "webhooks_cmd", "") or "")
     if cmd == "add":
@@ -1575,7 +1577,7 @@ def _cmd_kill_switch(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.events import EventType
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     if getattr(args, "kill_switch_cmd", None) == "set":
         lvl = int(args.level)
@@ -1611,7 +1613,7 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.time import parse_dt, utc_now
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     def _mk(
         *,
@@ -1784,7 +1786,7 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     except Exception as e:  # noqa: BLE001
         cfg_error = str(e)
 
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     db_ok = db_path.exists()
 
     chain_ok = None
@@ -1795,7 +1797,11 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001
             chain_ok = False
 
-    ks = Keystore.default()
+    try:
+        ks = Keystore.default()
+        ks_info = {"describe": ks.describe()}
+    except Exception:  # noqa: BLE001
+        ks_info = {"describe": "⚠ keystore unavailable"}
 
     payload = {
         "ok": bool(cfg_ok) and bool(db_ok) and (chain_ok is not False),
@@ -1803,7 +1809,7 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
         "config": {"path": str(cfg_path), "present": bool(cfg_path.exists()), "ok": bool(cfg_ok), "error": cfg_error},
         "db": {"path": str(db_path), "present": bool(db_ok), "hash_chain_ok": chain_ok},
         "identity": identity_status(),
-        "keystore": {"describe": ks.describe()},
+        "keystore": ks_info,
     }
 
     # health always returns JSON (suitable for cron/heartbeat)
@@ -1823,7 +1829,7 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     resolved = 0
     skipped = 0
@@ -2501,10 +2507,14 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     except Exception as e:
         config_status = f"{cfg} (error: {e})"
 
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     db_status = "present" if db_path.exists() else "missing"
 
-    ks = Keystore.default()
+    try:
+        ks = Keystore.default()
+        ks_display = ks.describe()
+    except Exception:  # noqa: BLE001
+        ks_display = "⚠ keystore unavailable"
 
     # --- #302: Surface API auth token (masked) ---
     auth_token_display = "(not set)"
@@ -2523,7 +2533,7 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     print(f"- config: {config_status}")
     print(f"- db: {db_path} ({db_status})")
     print(f"- identity: {identity_status()}")
-    print(f"- keystore: {ks.describe()}")
+    print(f"- keystore: {ks_display}")
     print(f"- api auth token: {auth_token_display}")
 
     health = "blessed" if cfg.exists() else "degraded"
@@ -2568,7 +2578,7 @@ def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.projections import ProjectionManager
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     try:
         t0 = time.monotonic()
@@ -2609,7 +2619,7 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.projections import ProjectionManager
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     try:
         t0 = time.monotonic()

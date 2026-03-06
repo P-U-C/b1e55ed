@@ -433,8 +433,10 @@ def _step2_password() -> None:
         print(f"  {_ok('Nansen API key found in environment')}")
         env_lines.append(f"NANSEN_API_KEY={nansen_key}")
     else:
+        print(f"  {dim('Nansen — https://app.nansen.ai/settings/api — Read-only access')}")
+        print(f"  {dim('Used by: on-chain smart money producers. Skippable (on-chain signals disabled).')}")
         try:
-            nansen_key = _ask("  Nansen API key", default="")
+            nansen_key = _ask("  Nansen API key [Enter to skip]", default="")
         except (EOFError, KeyboardInterrupt):
             print()
             nansen_key = ""
@@ -449,8 +451,10 @@ def _step2_password() -> None:
         print(f"  {_ok('Financial Datasets API key found in environment')}")
         env_lines.append(f"FINANCIAL_DATASETS_API_KEY={fd_key}")
     else:
+        print(f"  {dim('Financial Datasets — https://financialdatasets.ai/settings — Read-only access')}")
+        print(f"  {dim('Used by: TradFi producers (earnings, SEC filings). Skippable (TradFi signals disabled).')}")
         try:
-            fd_key = _ask("  Financial Datasets API key", default="")
+            fd_key = _ask("  Financial Datasets API key [Enter to skip]", default="")
         except (EOFError, KeyboardInterrupt):
             print()
             fd_key = ""

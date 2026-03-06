@@ -71,7 +71,7 @@ async def _identity_gate(request: Request, call_next):
 
 @app.on_event("startup")
 def _startup() -> None:
-    base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050")
+    base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050/api/v1")
     token = os.getenv("B1E55ED_API_TOKEN")
     app.state.api_client = ApiClient(base_url=base_url, token=token)
 

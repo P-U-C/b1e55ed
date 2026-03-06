@@ -152,9 +152,14 @@ def test_cli_replay_json(tmp_path, monkeypatch):
     """CLI replay command produces valid JSON output."""
     from engine.cli import main
 
-    # Create data dir and seed DB
-    (tmp_path / "data").mkdir()
-    db = Database(db_path=str(tmp_path / "data" / "brain.db"))
+    # Isolate HOME so _resolve_db_path uses tmp dir
+    home_dir = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    # Create data dir and seed DB at new default path
+    data_dir = home_dir / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db = Database(db_path=str(data_dir / "brain.db"))
     db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, source="test")
     db.close()
 
@@ -178,8 +183,14 @@ def test_cli_integrity_json(tmp_path, monkeypatch):
     """CLI integrity command produces valid JSON output."""
     from engine.cli import main
 
-    (tmp_path / "data").mkdir()
-    db = Database(db_path=str(tmp_path / "data" / "brain.db"))
+    # Isolate HOME so _resolve_db_path uses tmp dir
+    home_dir = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    # Create data dir and seed DB at new default path
+    data_dir = home_dir / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db = Database(db_path=str(data_dir / "brain.db"))
     db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, source="test")
     db.close()
 
