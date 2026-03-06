@@ -133,3 +133,109 @@ def test_load_v1_identity_backwards_compat(tmp_path: Path, monkeypatch: pytest.M
     assert loaded.node_id == "b1e55ed-aabbccdd"
     assert loaded.eth_address == ""
     assert loaded.eth_private_key == ""
+
+
+# ---------------------------------------------------------------------------
+# #298 — empty string password must be accepted
+# ---------------------------------------------------------------------------
+
+
+# Unix V6 /etc/passwd: an empty second field meant no password required.
+# Fifty years of security evolution later, the same class of bug: treating
+# empty as absent. Thompson and Ritchie would sigh.
+def test_password_empty_string_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty-string B1E55ED_MASTER_PASSWORD is a valid password (#298)."""
+    from engine.security.identity import _password
+
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "")
+    monkeypatch.delenv("B1E55ED_IDENTITY_PASSWORD", raising=False)
+
+    assert _password() == ""
+
+
+def test_password_unset_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Truly unset password vars must raise (#298)."""
+    from engine.security.identity import _password
+
+    monkeypatch.delenv("B1E55ED_MASTER_PASSWORD", raising=False)
+    monkeypatch.delenv("B1E55ED_IDENTITY_PASSWORD", raising=False)
+
+    with pytest.raises(ValueError, match="Missing identity encryption password"):
+        _password()
+
+
+def test_password_fallback_to_identity_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Falls back to B1E55ED_IDENTITY_PASSWORD when MASTER is unset (#298)."""
+    from engine.security.identity import _password
+
+    monkeypatch.delenv("B1E55ED_MASTER_PASSWORD", raising=False)
+    monkeypatch.setenv("B1E55ED_IDENTITY_PASSWORD", "fallback-pw")
+
+    assert _password() == "fallback-pw"
+
+
+def test_password_master_takes_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MASTER_PASSWORD takes precedence even when IDENTITY_PASSWORD is also set (#298)."""
+    from engine.security.identity import _password
+
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "master")
+    monkeypatch.setenv("B1E55ED_IDENTITY_PASSWORD", "identity")
+
+    assert _password() == "master"
+
+
+def test_save_load_roundtrip_empty_password(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full save/load roundtrip with empty-string password works (#298)."""
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "")
+    monkeypatch.delenv("B1E55ED_DEV_MODE", raising=False)
+
+    eth_key = "bb" * 32
+    ident = generate_node_identity(eth_private_key=eth_key, eth_address="0xb1e55edAABBCCDD")
+
+    path = tmp_path / "identity.key"
+    ident.save(path)
+
+    loaded = NodeIdentity.load(path)
+    assert loaded.private_key == ident.private_key
+    assert loaded.eth_private_key == eth_key
+
+
+# ---------------------------------------------------------------------------
+# #300 — _resolve_db_path helper
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_db_path_uses_config_data_dir() -> None:
+    """_resolve_db_path respects config.data_dir (#300)."""
+    import importlib
+
+    mod = importlib.import_module("engine.cli.main")
+
+    class FakeConfig:
+        data_dir = Path("/custom/data")
+
+    result = mod._resolve_db_path(Path("/repo"), FakeConfig())
+    assert result == Path("/custom/data/brain.db")
+
+
+def test_resolve_db_path_relative_data_dir() -> None:
+    """Relative data_dir resolved against repo_root (#300)."""
+    import importlib
+
+    mod = importlib.import_module("engine.cli.main")
+
+    class FakeConfig:
+        data_dir = Path("data")
+
+    result = mod._resolve_db_path(Path("/repo"), FakeConfig())
+    assert result == Path("/repo/data/brain.db")
+
+
+def test_resolve_db_path_no_config_fallback() -> None:
+    """No config falls back to repo_root/data/brain.db (#300)."""
+    import importlib
+
+    mod = importlib.import_module("engine.cli.main")
+
+    result = mod._resolve_db_path(Path("/repo"), None)
+    assert result == Path("/repo/data/brain.db")

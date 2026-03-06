@@ -166,11 +166,18 @@ def _derive_fernet_key(password: str, salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
 
+# Codd, 1979: the relational model distinguishes "applicable but missing"
+# from "inapplicable." Python's None vs "" is the same argument, forty-five
+# years later. An empty password is a deliberate choice. A missing password
+# is an error. Confusing the two locked out every new operator.
 def _password() -> str:
-    pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
-    if pw:
-        return pw
-    raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
+    pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
+    # 0xb1e55ed — empty is not absent; the void is a valid key
+    if pw is None:
+        pw = os.environ.get("B1E55ED_IDENTITY_PASSWORD")
+    if pw is None:
+        raise ValueError("Missing identity encryption password. Set B1E55ED_MASTER_PASSWORD (preferred) or B1E55ED_IDENTITY_PASSWORD.")
+    return pw
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +250,9 @@ class NodeIdentity:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        pw = os.environ.get("B1E55ED_MASTER_PASSWORD") or os.environ.get("B1E55ED_IDENTITY_PASSWORD")
+        pw = os.environ.get("B1E55ED_MASTER_PASSWORD")
+        if pw is None:
+            pw = os.environ.get("B1E55ED_IDENTITY_PASSWORD")
 
         blob: dict = {
             "node_id": self.node_id,
@@ -256,7 +265,7 @@ class NodeIdentity:
         if self.eth_address:
             blob["eth_address"] = self.eth_address
 
-        if pw:
+        if pw is not None:
             # v2: Argon2id + AES-256-GCM for Ed25519 key
             enc = _encrypt_v2(bytes.fromhex(self.private_key), pw)
             blob["private_key_enc_v2"] = enc
