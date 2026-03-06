@@ -11,8 +11,13 @@ from engine.core.database import Database
 from engine.core.events import EventType
 
 
-def _scaffold_repo(tmp_path: Path) -> Path:
-    """Create a minimal repo root layout expected by the CLI."""
+def _scaffold_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None) -> Path:
+    """Create a minimal repo root layout expected by the CLI.
+
+    When *monkeypatch* is supplied the function also isolates HOME so that
+    ``_resolve_db_path`` uses ``tmp_path/home/.b1e55ed/data/brain.db``
+    instead of the real ``~/.b1e55ed/data/brain.db``.
+    """
 
     repo_root = tmp_path
     src_root = Path(__file__).resolve().parents[2]
@@ -21,11 +26,18 @@ def _scaffold_repo(tmp_path: Path) -> Path:
     shutil.copy2(src_root / "config" / "default.yaml", repo_root / "config" / "default.yaml")
     shutil.copytree(src_root / "config" / "presets", repo_root / "config" / "presets")
 
-    (repo_root / "data").mkdir(parents=True, exist_ok=True)
-    _ = Database(repo_root / "data" / "brain.db")
+    # Isolate HOME so _resolve_db_path points to the temp dir.
+    home_dir = tmp_path / "home"
+    if monkeypatch is not None:
+        monkeypatch.setenv("HOME", str(home_dir))
+
+    # Create brain.db at the new default path (~/.b1e55ed/data/).
+    data_dir = home_dir / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    _ = Database(data_dir / "brain.db")
 
     # Create fake forged identity so the identity gate doesn't block CLI tests.
-    identity_dir = repo_root / ".b1e55ed"
+    identity_dir = home_dir / ".b1e55ed"
     identity_dir.mkdir(parents=True, exist_ok=True)
     (identity_dir / "identity.json").write_text(
         json.dumps(
@@ -100,7 +112,7 @@ def test_cli_parses_all_subcommands(cmd: str) -> None:
 
 
 def test_cli_signal_creates_curator_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(["signal", "--json", "BTC looking strong"])
@@ -116,7 +128,7 @@ def test_cli_signal_creates_curator_event(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_cli_signal_add_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     fp = repo_root / "note.txt"
@@ -130,7 +142,7 @@ def test_cli_signal_add_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_cli_signal_flags_override_symbols_and_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(
@@ -159,7 +171,7 @@ def test_cli_signal_flags_override_symbols_and_metadata(tmp_path: Path, monkeypa
 
 
 def test_cli_signal_add_accepts_flags_after_subcommand(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     fp = repo_root / "note2.txt"
@@ -186,7 +198,7 @@ def test_cli_signal_add_accepts_flags_after_subcommand(tmp_path: Path, monkeypat
 
 
 def test_cli_kill_switch_set_and_show(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(["kill-switch", "set", "3", "--json"])
@@ -201,7 +213,7 @@ def test_cli_kill_switch_set_and_show(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 def test_cli_alerts_and_positions_json_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(["alerts", "--json"])
@@ -214,10 +226,10 @@ def test_cli_alerts_and_positions_json_empty(tmp_path: Path, monkeypatch: pytest
 
 
 def test_cli_alerts_severity_and_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
 
     # kill switch -> CRITICAL
     _ = db.append_event(
@@ -251,10 +263,10 @@ def test_cli_alerts_severity_and_schema(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_cli_alerts_since_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
     db.conn.execute(
         "INSERT OR REPLACE INTO producer_health(name, domain, consecutive_failures, last_error, last_run_at) VALUES(?,?,?,?,?)",
         ("p", "d", 1, "err", "2000-01-01T00:00:00+00:00"),
@@ -267,10 +279,10 @@ def test_cli_alerts_since_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_cli_alerts_position_near_stop_is_warning_or_critical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
 
     # mark price
     _ = db.append_event(
@@ -294,7 +306,7 @@ def test_cli_alerts_position_near_stop_is_warning_or_critical(tmp_path: Path, mo
 
 
 def test_cli_health_returns_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(["health", "--json"])
@@ -306,7 +318,7 @@ def test_cli_health_returns_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def test_cli_webhooks_crud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    repo_root = _scaffold_repo(tmp_path)
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
     rc = main(["webhooks", "add", "http://example/hook", "--events", "signal.*"])

@@ -218,9 +218,11 @@ def test_resolve_db_path_uses_config_data_dir() -> None:
     assert result == Path("/custom/data/brain.db")
 
 
-def test_resolve_db_path_relative_data_dir() -> None:
-    """Relative data_dir resolved against repo_root (#300)."""
+def test_resolve_db_path_relative_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Relative data_dir resolved against ~/.b1e55ed/ (#300, #310)."""
     import importlib
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
     mod = importlib.import_module("engine.cli.main")
 
@@ -228,14 +230,16 @@ def test_resolve_db_path_relative_data_dir() -> None:
         data_dir = Path("data")
 
     result = mod._resolve_db_path(Path("/repo"), FakeConfig())
-    assert result == Path("/repo/data/brain.db")
+    assert result == tmp_path / "home" / ".b1e55ed" / "data" / "brain.db"
 
 
-def test_resolve_db_path_no_config_fallback() -> None:
-    """No config falls back to repo_root/data/brain.db (#300)."""
+def test_resolve_db_path_no_config_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No config falls back to ~/.b1e55ed/data/brain.db (#300, #310)."""
     import importlib
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
     mod = importlib.import_module("engine.cli.main")
 
     result = mod._resolve_db_path(Path("/repo"), None)
-    assert result == Path("/repo/data/brain.db")
+    assert result == tmp_path / "home" / ".b1e55ed" / "data" / "brain.db"

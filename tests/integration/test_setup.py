@@ -33,4 +33,4 @@ def test_setup_non_interactive_creates_config_identity_and_db(tmp_path: Path, mo
 
     assert (tmp_path / "config" / "user.yaml").exists()
     assert (Path(os.environ["HOME"]) / ".b1e55ed" / "identity.key").exists()
-    assert (tmp_path / "data" / "brain.db").exists()
+    assert (Path(os.environ["HOME"]) / ".b1e55ed" / "data" / "brain.db").exists()

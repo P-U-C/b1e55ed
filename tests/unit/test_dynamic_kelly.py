@@ -261,35 +261,31 @@ class TestMinPForBetting:
         assert sizer.kelly_fraction() == 0.0
 
 
-def _setup_cli_db(tmp_path) -> None:
-    """Create data/brain.db (the correct path used by CLI commands)."""
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(exist_ok=True)
+def _setup_cli_db(tmp_path, monkeypatch) -> None:
+    """Create brain.db at ~/.b1e55ed/data/ (the path used by CLI commands)."""
+    home_dir = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_dir))
+    data_dir = home_dir / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
     db = Database(str(data_dir / "brain.db"))
     _insert_trades(db, [{"pnl": 100.0}] * 8 + [{"pnl": -60.0}] * 4)
     db.close()
 
 
 class TestCLIKelly:
-    def test_cli_kelly_json(self, tmp_path) -> None:
+    def test_cli_kelly_json(self, tmp_path, monkeypatch) -> None:
         from engine.cli import main
 
-        _setup_cli_db(tmp_path)
+        _setup_cli_db(tmp_path, monkeypatch)
+        monkeypatch.chdir(tmp_path)
 
         import io
-        import os
         import sys
 
-        old_cwd = os.getcwd()
-        os.chdir(str(tmp_path))
         captured = io.StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            rc = main(["kelly", "--json"])
-        finally:
-            sys.stdout = old_stdout
-            os.chdir(old_cwd)
+        monkeypatch.setattr(sys, "stdout", captured)
+
+        rc = main(["kelly", "--json"])
 
         assert rc == 0
         data = json.loads(captured.getvalue())
@@ -298,25 +294,19 @@ class TestCLIKelly:
         assert "n_trades" in data
         assert data["n_trades"] == 12
 
-    def test_cli_kelly_human(self, tmp_path) -> None:
+    def test_cli_kelly_human(self, tmp_path, monkeypatch) -> None:
         from engine.cli import main
 
-        _setup_cli_db(tmp_path)
+        _setup_cli_db(tmp_path, monkeypatch)
+        monkeypatch.chdir(tmp_path)
 
         import io
-        import os
         import sys
 
-        old_cwd = os.getcwd()
-        os.chdir(str(tmp_path))
         captured = io.StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            rc = main(["kelly"])
-        finally:
-            sys.stdout = old_stdout
-            os.chdir(old_cwd)
+        monkeypatch.setattr(sys, "stdout", captured)
+
+        rc = main(["kelly"])
 
         assert rc == 0
         output = captured.getvalue()
