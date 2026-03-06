@@ -450,6 +450,36 @@
       "placement": "before_function",
       "pr_number": 309,
       "applied_at": "2026-03-06T22:22:47Z"
+    },
+    {
+      "id": "egg_02355560",
+      "file": "engine/core/config.py",
+      "anchor": "    data_dir: Path = Field(default_factory=lambda: Path.home() / \".b1e55ed\" / \"data\")",
+      "tradition": "unix-archaeology",
+      "content": "    # The dotfile convention was a bug. Thompson's ls skipped '.' and '..';\n    # the regex caught everything with a leading dot. Forty years later,\n    # every Unix program hides its state the same way. Accident as canon.",
+      "placement": "inline_comment",
+      "pr_number": 319,
+      "applied_at": "2026-03-06T23:59:39Z"
+    },
+    {
+      "id": "egg_2005d501",
+      "file": "engine/cli/main.py",
+      "anchor": "def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:",
+      "tradition": "unix-philosophy",
+      "content": "# The brain's data once lived beside the code that spawned it.\n# Now it lives under $HOME — where Unix says state belongs.\n# Rob Pike, 1984: \"A program should do one thing well.\"\n# Corollary: it should store one thing in the right place.",
+      "placement": "before_function",
+      "pr_number": 319,
+      "applied_at": "2026-03-06T23:59:39Z"
+    },
+    {
+      "id": "egg_904e371e",
+      "file": "dashboard/app.py",
+      "anchor": "def _startup() -> None:",
+      "tradition": "rfc-discipline",
+      "content": "# The route was /. The API was at /api/v1. The client talked to neither.\n# Fielding's REST dissertation, Chapter 5: uniform interface.\n# Uniformity requires the correct address.",
+      "placement": "before_function",
+      "pr_number": 319,
+      "applied_at": "2026-03-06T23:59:39Z"
     }
   ]
 }

@@ -76,6 +76,10 @@ def _repo_root_from_cwd() -> Path:
     return Path.cwd()
 
 
+# The brain's data once lived beside the code that spawned it.
+# Now it lives under $HOME — where Unix says state belongs.
+# Rob Pike, 1984: "A program should do one thing well."
+# Corollary: it should store one thing in the right place.
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
     """Derive brain.db path from config.data_dir, falling back to ~/.b1e55ed/data."""
     default = Path.home() / ".b1e55ed" / "data"

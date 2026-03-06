@@ -164,6 +164,9 @@ class Config(BaseSettings):
 
     # Paths — use default_factory so Path.home() is evaluated at construction
     # time, not import time (allows tests to monkeypatch HOME).
+    # The dotfile convention was a bug. Thompson's ls skipped '.' and '..';
+    # the regex caught everything with a leading dot. Forty years later,
+    # every Unix program hides its state the same way. Accident as canon.
     data_dir: Path = Field(default_factory=lambda: Path.home() / ".b1e55ed" / "data")
     config_dir: Path = Path("config")
 
