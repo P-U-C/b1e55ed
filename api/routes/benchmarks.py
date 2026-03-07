@@ -49,7 +49,7 @@ def create_discretionary_signal(
         expires = (datetime.now(tz=UTC) + timedelta(hours=body.expires_in_hours)).isoformat()
 
     with db.conn:
-        db.conn.execute(
+        db.execute(
             "INSERT INTO discretionary_signals (id, symbol, direction, confidence, reasoning, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (sig_id, body.symbol.upper(), body.direction, body.confidence, body.reasoning, now, expires),
         )

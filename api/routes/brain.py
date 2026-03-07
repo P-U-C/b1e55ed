@@ -37,7 +37,7 @@ def status(
     # Last regime change
     regime = None
     regime_at = None
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.regime_change.v1",),
     ).fetchone()
@@ -47,7 +47,7 @@ def status(
         regime_at = _parse_dt(str(row[1]))
 
     # Last kill switch change
-    ks_row = db.conn.execute(
+    ks_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
     ).fetchone()
@@ -59,7 +59,7 @@ def status(
         ks_at = _parse_dt(str(ks_row[1]))
 
     # Last cycle marker
-    cycle_row = db.conn.execute(
+    cycle_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.cycle.v1",),
     ).fetchone()

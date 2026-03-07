@@ -692,3 +692,9 @@ docs/whitepaper-technical.md (standalone — no internal deps)
 docs/whitepaper-summary.md (standalone — no internal deps)
 docs/whitepaper-onepager.md (standalone — no internal deps)
 ```
+
+## DeerFlow Integration Plan
+
+```text
+docs/DEERFLOW_PLAN.md (standalone — integration plan, no internal deps)
+```

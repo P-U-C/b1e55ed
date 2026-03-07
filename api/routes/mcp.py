@@ -243,6 +243,85 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["producer_id", "signal_type", "payload"],
         },
     },
+    {
+        "name": "get_regime_status",
+        "description": "Returns current regime, kill switch level, and last cycle timestamp with trend indicator.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_top_signals",
+        "description": "Returns recent signals with optional domain/symbol/signal_class filter and cursor-based pagination.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Filter by domain prefix (e.g. 'onchain', 'ta', 'research')"},
+                "symbol": {"type": "string", "description": "Filter by symbol in payload"},
+                "limit": {"type": "integer", "description": "Max results (default 20, max 100)", "default": 20},
+                "cursor": {"type": "string", "description": "Event ID to paginate from (exclusive)"},
+                "signal_class": {"type": "string", "description": "Filter by signal_class field in payload"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_regime_history",
+        "description": "Returns regime change history for the last N days with stability indicator.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "Number of days of history (default 7, max 30)", "default": 7},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "submit_research_signal",
+        "description": (
+            "Validates and emits a signal.research.v1 event. "
+            "Signal class constraints (schema-enforced): "
+            "observation: direction MUST be 'neutral' — no directional claims allowed. "
+            "detection: event_ts required (ISO timestamp of when the event occurred). "
+            "conviction: horizon required (e.g. '1-7d') — must be falsifiable. "
+            "operator_node_id is required. Karma flows to this node."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Trading symbol (e.g. 'BTC')"},
+                "signal_class": {"type": "string", "enum": ["observation", "detection", "conviction"]},
+                "confidence": {"type": "number", "description": "Confidence (0.0-1.0)"},
+                "direction": {"type": "string", "description": "'bullish', 'bearish', or 'neutral'"},
+                "rationale": {"type": "string", "description": "Reasoning behind the signal"},
+                "operator_node_id": {"type": "string", "description": "Forge node ID of the human operator"},
+                "horizon": {"type": "string", "description": "REQUIRED for conviction signals (e.g. '1-7d')"},
+                "event_ts": {"type": "string", "description": "REQUIRED for detection signals. ISO timestamp of when the event occurred."},
+                "sources": {"type": "array", "items": {"type": "string"}},
+                "deerflow_task_id": {"type": "string"},
+                "artifact_url": {"type": "string"},
+            },
+            "required": ["symbol", "signal_class", "confidence", "direction", "rationale", "operator_node_id"],
+        },
+    },
+    {
+        "name": "get_signals_bulk_export",
+        "description": "Bulk export of historical signals for backtest use (up to 1000 per call).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Filter by domain prefix"},
+                "symbol": {"type": "string", "description": "Filter by symbol in payload"},
+                "from_ts": {"type": "string", "description": "ISO timestamp start"},
+                "to_ts": {"type": "string", "description": "ISO timestamp end"},
+                "cursor": {"type": "string", "description": "Pagination cursor (event ID)"},
+                "limit": {"type": "integer", "description": "Max results (default 200, max 1000)", "default": 200},
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -254,7 +333,7 @@ TOOLS: list[dict[str, Any]] = [
 def _tool_get_brain_status(db: Database, params: dict) -> dict:
     regime = None
     regime_at = None
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.regime_change.v1",),
     ).fetchone()
@@ -265,7 +344,7 @@ def _tool_get_brain_status(db: Database, params: dict) -> dict:
 
     ks_level = 0
     ks_reason = None
-    ks_row = db.conn.execute(
+    ks_row = db.execute(
         "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
     ).fetchone()
@@ -276,7 +355,7 @@ def _tool_get_brain_status(db: Database, params: dict) -> dict:
 
     last_cycle_id = None
     last_cycle_at = None
-    cy_row = db.conn.execute(
+    cy_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.cycle.v1",),
     ).fetchone()
@@ -302,12 +381,12 @@ def _tool_get_recent_signals(db: Database, params: dict) -> list[dict]:
     if domain:
         # Match on the type prefix
         pattern = f"{domain}%"
-        rows = db.conn.execute(
+        rows = db.execute(
             "SELECT id, type, ts, source, payload FROM events WHERE type LIKE ? ORDER BY ts DESC LIMIT ?",
             (pattern, limit),
         ).fetchall()
     else:
-        rows = db.conn.execute(
+        rows = db.execute(
             "SELECT id, type, ts, source, payload FROM events WHERE type LIKE 'signal.%' ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -327,7 +406,7 @@ def _tool_get_recent_signals(db: Database, params: dict) -> list[dict]:
 
 
 def _tool_get_open_positions(db: Database, params: dict) -> list[dict]:
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage,
                stop_loss, take_profit, opened_at, status, realized_pnl
@@ -363,7 +442,7 @@ def _tool_get_signal_attribution(db: Database, params: dict) -> dict:
     if not signal_id:
         raise ValueError("signal_id is required")
 
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT id, type, ts, source, contributor_id, trace_id, payload FROM events WHERE id = ?",
         (signal_id,),
     ).fetchone()
@@ -383,7 +462,7 @@ def _tool_get_signal_attribution(db: Database, params: dict) -> dict:
 
     # Attribution: look up contributor info if available
     if row[4]:
-        contrib_row = db.conn.execute(
+        contrib_row = db.execute(
             "SELECT node_id, name, role FROM contributors WHERE id = ?",
             (row[4],),
         ).fetchone()
@@ -469,6 +548,256 @@ def _tool_emit_producer_signal(db: Database, params: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# DeerFlow S0 tools
+# ---------------------------------------------------------------------------
+
+
+def _tool_get_regime_status(db: Database, params: dict) -> dict:
+    """Returns current regime, kill switch level, last cycle timestamp, and trend."""
+    regime = None
+    regime_at = None
+    trend = "stable"
+
+    rows = db.conn.execute(
+        "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 2",
+        ("brain.regime_change.v1",),
+    ).fetchall()
+
+    if rows:
+        p = json.loads(str(rows[0][0]))
+        regime = p.get("regime") or p.get("state") or p.get("name")
+        regime_at = str(rows[0][1])
+        if len(rows) == 2:
+            prev_p = json.loads(str(rows[1][0]))
+            prev_regime = prev_p.get("regime") or prev_p.get("state") or prev_p.get("name")
+            if regime == prev_regime:
+                trend = "stable"
+            elif regime == "bull":
+                trend = "strengthening"
+            elif regime == "bear":
+                trend = "weakening"
+            else:
+                trend = "stable"
+
+    ks_level = 0
+    ks_reason = None
+    ks_row = db.conn.execute(
+        "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
+        ("system.kill_switch.v1",),
+    ).fetchone()
+    if ks_row is not None:
+        p = json.loads(str(ks_row[0]))
+        ks_level = int(p.get("level", 0))
+        ks_reason = p.get("reason")
+
+    last_cycle_at = None
+    cy_row = db.conn.execute(
+        "SELECT ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
+        ("brain.cycle.v1",),
+    ).fetchone()
+    if cy_row is not None:
+        last_cycle_at = str(cy_row[0])
+
+    return {
+        "regime": regime,
+        "regime_changed_at": regime_at,
+        "kill_switch_level": ks_level,
+        "kill_switch_reason": ks_reason,
+        "last_cycle_at": last_cycle_at,
+        "trend": trend,
+    }
+
+
+def _tool_get_top_signals(db: Database, params: dict) -> dict:
+    """Recent signals with optional filters and cursor pagination."""
+    limit = min(int(params.get("limit", 20)), 100)
+    domain: str | None = params.get("domain")
+    symbol: str | None = params.get("symbol")
+    cursor: str | None = params.get("cursor")
+    signal_class: str | None = params.get("signal_class")
+
+    conditions = ["type LIKE 'signal.%'"]
+    args: list[Any] = []
+
+    if domain:
+        conditions.append("type LIKE ?")
+        args.append(f"signal.{domain}%")
+    if symbol:
+        conditions.append("json_extract(payload, '$.symbol') = ?")
+        args.append(symbol)
+    if signal_class:
+        conditions.append("json_extract(payload, '$.signal_class') = ?")
+        args.append(signal_class)
+    if cursor:
+        cursor_row = db.conn.execute("SELECT ts FROM events WHERE id = ?", (cursor,)).fetchone()
+        if cursor_row:
+            conditions.append("(ts < ? OR (ts = ? AND id < ?))")
+            args.extend([str(cursor_row[0]), str(cursor_row[0]), cursor])
+
+    where = " AND ".join(conditions)
+    query = f"SELECT id, type, ts, source, payload FROM events WHERE {where} ORDER BY ts DESC, id DESC LIMIT ?"
+    args.append(limit)
+    rows = db.conn.execute(query, tuple(args)).fetchall()
+
+    items = []
+    for r in rows:
+        payload = json.loads(str(r[4]))
+        item: dict[str, Any] = {
+            "id": str(r[0]),
+            "type": str(r[1]),
+            "ts": str(r[2]),
+            "source": str(r[3]) if r[3] is not None else None,
+            "payload": payload,
+        }
+        if "signal_class" in payload:
+            item["signal_class"] = payload["signal_class"]
+        items.append(item)
+
+    return {
+        "items": items,
+        "next_cursor": items[-1]["id"] if len(items) == limit else None,
+        "total_returned": len(items),
+    }
+
+
+def _tool_get_regime_history(db: Database, params: dict) -> dict:
+    """Regime change history for last N days with stability indicator."""
+    days = min(int(params.get("days", 7)), 30)
+    rows = db.conn.execute(
+        "SELECT payload, ts FROM events WHERE type = ? AND ts > datetime('now', ?) ORDER BY ts DESC",
+        ("brain.regime_change.v1", f"-{days} days"),
+    ).fetchall()
+
+    items = []
+    for i, row in enumerate(rows):
+        p = json.loads(str(row[0]))
+        regime = p.get("regime") or p.get("state") or p.get("name")
+        changed_at = str(row[1])
+        duration_hours = None
+        if i > 0:
+            try:
+                dt_current = datetime.fromisoformat(str(changed_at).replace("Z", "+00:00"))
+                dt_next = datetime.fromisoformat(str(rows[i - 1][1]).replace("Z", "+00:00"))
+                duration_hours = round((dt_next - dt_current).total_seconds() / 3600, 1)
+            except (ValueError, TypeError):
+                pass
+        items.append({"regime": regime, "changed_at": changed_at, "duration_hours": duration_hours})
+
+    return {
+        "items": items,
+        "current_regime": items[0]["regime"] if items else None,
+        "regime_stability": "volatile" if len(items) > 3 else "stable",
+    }
+
+
+# Popper (1934): a claim that cannot be falsified is not science.
+# operator_node_id is the signature. horizon is the falsification window.
+# Without both, a research signal is opinion dressed as evidence.
+def _tool_submit_research_signal(db: Database, params: dict) -> dict:
+    """Validate and emit a signal.research.v1 event."""
+    from engine.core.events import EventType as _EventType
+    from engine.core.events import ResearchSignalPayload
+    from engine.core.karma import ensure_producer_karma_config
+
+    required = ["symbol", "signal_class", "confidence", "direction", "rationale", "operator_node_id"]
+    missing = [f for f in required if not params.get(f)]
+    if missing:
+        raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+    operator_node_id = str(params["operator_node_id"]).strip()
+    if not operator_node_id:
+        raise ValueError("operator_node_id must be a non-empty string")
+
+    payload_data: dict[str, Any] = {
+        "symbol": params["symbol"],
+        "signal_class": params["signal_class"],
+        "confidence": float(params["confidence"]),
+        "direction": params["direction"],
+        "rationale": params["rationale"],
+        "operator_node_id": operator_node_id,
+    }
+    for opt in ("horizon", "event_ts", "deerflow_task_id", "artifact_url"):
+        if params.get(opt):
+            payload_data[opt] = params[opt]
+    if params.get("sources"):
+        payload_data["sources"] = params["sources"]
+
+    validated = ResearchSignalPayload(**payload_data)
+    source = f"deerflow:{operator_node_id}"
+    ensure_producer_karma_config(db, source, source_type="llm_research")
+
+    ceiling_row = db.conn.execute(
+        "SELECT karma_ceiling FROM producer_karma_config WHERE producer_name = ?",
+        (source,),
+    ).fetchone()
+    karma_ceiling_active = ceiling_row is not None and float(ceiling_row[0]) < 1.0
+
+    event = db.append_event(
+        event_type=_EventType.SIGNAL_RESEARCH_V1,
+        payload=validated.model_dump(mode="json"),
+        source=source,
+        contributor_id=operator_node_id,
+        ts=datetime.now(tz=UTC),
+    )
+    return {"event_id": event.id, "signal_class": str(validated.signal_class), "karma_ceiling_active": karma_ceiling_active}
+
+
+def _tool_get_signals_bulk_export(db: Database, params: dict) -> dict:
+    """Bulk export of historical signals for backtest use."""
+    limit = min(int(params.get("limit", 200)), 1000)
+    domain: str | None = params.get("domain")
+    symbol: str | None = params.get("symbol")
+    from_ts: str | None = params.get("from_ts")
+    to_ts: str | None = params.get("to_ts")
+    cursor: str | None = params.get("cursor")
+
+    conditions = ["type LIKE 'signal.%'"]
+    args: list[Any] = []
+    if domain:
+        conditions.append("type LIKE ?")
+        args.append(f"signal.{domain}%")
+    if symbol:
+        conditions.append("json_extract(payload, '$.symbol') = ?")
+        args.append(symbol)
+    if from_ts:
+        conditions.append("ts >= ?")
+        args.append(from_ts)
+    if to_ts:
+        conditions.append("ts <= ?")
+        args.append(to_ts)
+    if cursor:
+        cursor_row = db.conn.execute("SELECT ts FROM events WHERE id = ?", (cursor,)).fetchone()
+        if cursor_row:
+            conditions.append("(ts < ? OR (ts = ? AND id < ?))")
+            args.extend([str(cursor_row[0]), str(cursor_row[0]), cursor])
+
+    where = " AND ".join(conditions)
+    query = f"SELECT id, type, ts, source, payload FROM events WHERE {where} ORDER BY ts DESC, id DESC LIMIT ?"
+    args.append(limit)
+    rows = db.conn.execute(query, tuple(args)).fetchall()
+
+    items = []
+    for r in rows:
+        payload = json.loads(str(r[4]))
+        item: dict[str, Any] = {
+            "id": str(r[0]),
+            "type": str(r[1]),
+            "ts": str(r[2]),
+            "source": str(r[3]) if r[3] is not None else None,
+            "payload": payload,
+        }
+        if "signal_class" in payload:
+            item["signal_class"] = payload["signal_class"]
+        items.append(item)
+
+    return {
+        "items": items,
+        "next_cursor": items[-1]["id"] if len(items) == limit else None,
+        "total_returned": len(items),
+    }
+
+
 # Map tool names to their handlers
 _TOOL_HANDLERS = {
     "get_brain_status": _tool_get_brain_status,
@@ -477,6 +806,11 @@ _TOOL_HANDLERS = {
     "get_signal_attribution": _tool_get_signal_attribution,
     "b1e55ed_provenance_check": _tool_provenance_check,
     "emit_producer_signal": _tool_emit_producer_signal,
+    "get_regime_status": _tool_get_regime_status,
+    "get_top_signals": _tool_get_top_signals,
+    "get_regime_history": _tool_get_regime_history,
+    "submit_research_signal": _tool_submit_research_signal,
+    "get_signals_bulk_export": _tool_get_signals_bulk_export,
 }
 
 

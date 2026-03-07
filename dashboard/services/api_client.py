@@ -39,6 +39,18 @@ class ApiClient:
         except Exception:
             return ApiResult(None, False)
 
+    # GET is observation. POST is intervention.
+    # Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.
+    def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:
+        url = f"{self.base_url}{path}"
+        try:
+            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
+                resp = client.post(url, json=body or {})
+                resp.raise_for_status()
+                return ApiResult(resp.json(), True)
+        except Exception:
+            return ApiResult(None, False)
+
     # ---- Brain / system -------------------------------------------------
 
     def get_cockpit_state(self) -> ApiResult:
@@ -91,3 +103,27 @@ class ApiClient:
 
     def get_curator_feed(self) -> ApiResult:
         return self._get_json("/social/curator-feed")
+
+    def get_social_status(self) -> ApiResult:
+        return self._get_json("/social/status")
+
+    def get_social_watchlist(self) -> ApiResult:
+        return self._get_json("/social/watchlist")
+
+    def post_social_seed(self, watchlist: list[str] | None = None) -> ApiResult:
+        body: dict[str, Any] = {}
+        if watchlist:
+            body["watchlist"] = watchlist
+        return self._post_json("/social/seed", body)
+
+    def post_social_reset_failures(self) -> ApiResult:
+        return self._post_json("/social/reset-failures", {})
+
+    def post_social_run_now(self) -> ApiResult:
+        return self._post_json("/social/run-now", {})
+
+    def post_social_add_watchlist(self, symbol: str) -> ApiResult:
+        return self._post_json("/social/watchlist/add", {"symbol": symbol})
+
+    def post_social_add_source(self, name: str, type: str, value: str) -> ApiResult:
+        return self._post_json("/social/sources/add", {"name": name, "type": type, "value": value})

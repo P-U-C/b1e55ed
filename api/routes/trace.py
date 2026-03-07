@@ -46,7 +46,7 @@ SESSION_TTL_HOURS = 24
 
 
 def _ensure_trace_sessions_table(db: Database) -> None:
-    db.conn.execute(
+    db.execute(
         """
         CREATE TABLE IF NOT EXISTS trace_sessions (
             session_id TEXT PRIMARY KEY,
@@ -57,7 +57,7 @@ def _ensure_trace_sessions_table(db: Database) -> None:
         )
         """
     )
-    db.conn.execute("CREATE INDEX IF NOT EXISTS idx_trace_sessions_label ON trace_sessions(label)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_trace_sessions_label ON trace_sessions(label)")
     db.conn.commit()
 
 
@@ -116,7 +116,7 @@ def _is_expired(last_accessed_at: str) -> bool:
 def _touch_session(db: Database, session_id: str) -> None:
     now = datetime.now(tz=UTC).isoformat()
     with db.conn:
-        db.conn.execute(
+        db.execute(
             "UPDATE trace_sessions SET last_accessed_at = ? WHERE session_id = ?",
             (now, session_id),
         )
@@ -139,7 +139,7 @@ def create_session(
     now = datetime.now(tz=UTC).isoformat()
 
     with db.conn:
-        db.conn.execute(
+        db.execute(
             """
             INSERT INTO trace_sessions (session_id, label, created_at, last_accessed_at, trace_ids)
             VALUES (?, ?, ?, ?, ?)
@@ -164,7 +164,7 @@ def append_trace(
     """Append a trace_id to an existing session."""
     _ensure_trace_sessions_table(db)
 
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT label, created_at, last_accessed_at, trace_ids FROM trace_sessions WHERE session_id = ?",
         (session_id,),
     ).fetchone()
@@ -195,7 +195,7 @@ def append_trace(
 
     now = datetime.now(tz=UTC).isoformat()
     with db.conn:
-        db.conn.execute(
+        db.execute(
             "UPDATE trace_sessions SET trace_ids = ?, last_accessed_at = ? WHERE session_id = ?",
             (json.dumps(trace_ids), now, session_id),
         )
@@ -216,7 +216,7 @@ def get_session(
     """Retrieve a trace session including all linked events."""
     _ensure_trace_sessions_table(db)
 
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT label, created_at, last_accessed_at, trace_ids FROM trace_sessions WHERE session_id = ?",
         (session_id,),
     ).fetchone()
@@ -239,7 +239,7 @@ def get_session(
     events: list[TraceEvent] = []
     if trace_ids and not expired:
         placeholders = ",".join("?" * len(trace_ids))
-        event_rows = db.conn.execute(
+        event_rows = db.execute(
             f"""
             SELECT id, type, ts, source, trace_id, payload
             FROM events

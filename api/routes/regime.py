@@ -26,7 +26,7 @@ def _parse_dt(ts: str | None) -> datetime | None:
 
 @router.get("")
 def get_regime(db: Database = Depends(get_db)) -> dict[str, Any]:
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.regime_change.v1",),
     ).fetchone()
