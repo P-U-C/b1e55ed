@@ -15,6 +15,7 @@ from __future__ import annotations
 from engine.cli.main import (  # noqa: F401
     CliContext,
     _cmd_setup,
+    _identity_dir,
     _identity_forge,
     _identity_show,
     _json_dumps,
