@@ -70,6 +70,8 @@ def _extract_score(payload: dict[str, Any]) -> float | None:
     return None
 
 
+# The feedback loop is the oldest machine. Watt's governor. Wiener's cybernetics.
+# Your producer's hit_rate.
 def _determine_outcome(signal_ts: str, db: Database) -> str:
     """Very lightweight outcome determination.
 

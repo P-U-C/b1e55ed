@@ -13,6 +13,19 @@
     </div>
 
     {% if producers %}
+    {% set healthy_count = producers | selectattr('status', 'equalto', 'healthy') | list | length %}
+    {% set degraded_count = producers | selectattr('status', 'equalto', 'degraded') | list | length %}
+    {% set failing_count = producers | selectattr('status', 'equalto', 'failing') | list | length %}
+    {% set quarantined_count = producers | selectattr('status', 'equalto', 'quarantined') | list | length %}
+    {% set unknown_count = producers | length - healthy_count - degraded_count - failing_count - quarantined_count %}
+    <div style="margin-bottom:0.75rem; font-size:0.85rem;" class="text-dim">
+      {{ producers | length }} producers —
+      <span class="text-bull">{{ healthy_count }} healthy</span> ·
+      <span style="color:var(--yellow, #f59e0b);">{{ degraded_count }} degraded</span> ·
+      <span class="text-bear">{{ failing_count }} failing</span> ·
+      <span class="text-bear">{{ quarantined_count }} quarantined</span> ·
+      <span class="text-dim">{{ unknown_count }} unknown</span>
+    </div>
     <table class="data-table">
       <thead>
         <tr>
@@ -22,6 +35,9 @@
           <th>Schedule</th>
           <th>Last Run</th>
           <th>Status</th>
+          <th style="text-align:right;">Fails</th>
+          <th>Last Success</th>
+          <th>Issue</th>
           <th style="text-align:right;">Events Produced</th>
         </tr>
       </thead>
@@ -34,12 +50,29 @@
           <td class="text-dim mono">{{ p.schedule }}</td>
           <td class="text-dim">{{ p.last_run }}</td>
           <td>
-            {% if p.healthy is none %}
-              <span class="text-dim">unknown</span>
-            {% elif p.healthy %}
-              <span class="text-bull">healthy</span>
+            {% if p.status == 'healthy' %}
+              <span class="text-bull">✓ healthy</span>
+            {% elif p.status == 'degraded' %}
+              <span style="color:var(--yellow, #f59e0b);">⚠ degraded</span>
+            {% elif p.status == 'failing' %}
+              <span class="text-bear">✗ failing</span>
+            {% elif p.status == 'quarantined' %}
+              <span class="text-bear">⛔ quarantined</span>
             {% else %}
-              <span class="text-bear">unhealthy</span>
+              <span class="text-dim">? unknown</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;{% if p.consecutive_failures > 0 %} color:var(--bear, #ef4444);{% endif %}">{{ p.consecutive_failures }}</td>
+          <td class="text-dim">{{ p.last_success }}</td>
+          <td style="font-size:0.75rem;">
+            {% if p.quarantined_until %}
+              <span class="text-bear mono">⛔ quarantined until {{ p.quarantined_until }}</span>
+            {% elif p.last_error %}
+              <span class="text-bear mono">{{ p.last_error[:60] }}{% if p.last_error | length > 60 %}…{% endif %}</span>
+            {% elif p.consecutive_failures > 0 %}
+              <span style="color:var(--yellow, #f59e0b);">⚠️ {{ p.consecutive_failures }} consecutive failures</span>
+            {% else %}
+              <span class="text-dim">—</span>
             {% endif %}
           </td>
           <td style="text-align:right;" class="data-live">{{ p.events_produced }}</td>
