@@ -40,6 +40,9 @@ _MAX_CEILING = 1.0
 # ---------------------------------------------------------------------------
 
 
+# Shannon (1948): a source that repeats itself carries less information.
+# The frequency penalty is source coding for karma.
+# A producer saying the same thing 50 times per day is not 50x more informative.
 def frequency_penalty(signals_per_day: float) -> float:
     """Returns a multiplier [0.1, 1.0] applied to karma earned per signal.
 
@@ -101,6 +104,9 @@ def karma_weight_for_signal(db: Database, producer_name: str, symbol: str) -> fl
 # ---------------------------------------------------------------------------
 
 
+# The academic tenure track, compressed to a float.
+# New faculty start probationary (0.3). Each validated paper raises the ceiling.
+# Full tenure at 1.0. The department votes with outcomes, not credentials.
 def ensure_producer_karma_config(db: Database, producer_name: str, source_type: str = "unknown") -> None:
     """Ensure a producer_karma_config row exists for the given producer.
 

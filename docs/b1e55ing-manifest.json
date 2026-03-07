@@ -500,6 +500,36 @@
       "placement": "before_function",
       "pr_number": 324,
       "applied_at": "2026-03-07T05:54:55Z"
+    },
+    {
+      "id": "egg_b4608c93",
+      "file": "engine/core/karma.py",
+      "anchor": "def frequency_penalty(signals_per_day: float) -> float:",
+      "tradition": "information-theory",
+      "content": "# Shannon (1948): a source that repeats itself carries less information.\n# The frequency penalty is source coding for karma.\n# A producer saying the same thing 50 times per day is not 50x more informative.",
+      "placement": "before_function",
+      "pr_number": 335,
+      "applied_at": "2026-03-07T18:40:33Z"
+    },
+    {
+      "id": "egg_a3ce871c",
+      "file": "engine/core/events.py",
+      "anchor": "class SignalClass(StrEnum):",
+      "tradition": "signal-detection-theory",
+      "content": "# Neyman & Pearson (1933): observe, detect, decide.\n# Three classes is not a design choice — it is the structure of inference itself.\n# An observation without a claim is safe. A conviction without a horizon is unfalsifiable.",
+      "placement": "before_function",
+      "pr_number": 335,
+      "applied_at": "2026-03-07T18:40:33Z"
+    },
+    {
+      "id": "egg_c56bf6b0",
+      "file": "engine/core/karma.py",
+      "anchor": "def ensure_producer_karma_config(db: Database, producer_name: str, source_type: str = \"unknown\") -> None:",
+      "tradition": "peer-review-systems",
+      "content": "# The academic tenure track, compressed to a float.\n# New faculty start probationary (0.3). Each validated paper raises the ceiling.\n# Full tenure at 1.0. The department votes with outcomes, not credentials.",
+      "placement": "before_function",
+      "pr_number": 335,
+      "applied_at": "2026-03-07T18:40:33Z"
     }
   ]
 }

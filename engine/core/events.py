@@ -117,6 +117,9 @@ class AbstentionReason(StrEnum):
     SHADOW_MODE = "shadow_mode"
 
 
+# Neyman & Pearson (1933): observe, detect, decide.
+# Three classes is not a design choice — it is the structure of inference itself.
+# An observation without a claim is safe. A conviction without a horizon is unfalsifiable.
 class SignalClass(StrEnum):
     """Signal classification for research signals (DeerFlow S0)."""
 
