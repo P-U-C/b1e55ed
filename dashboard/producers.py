@@ -77,6 +77,11 @@ class ProducerRow:
     last_run: str
     healthy: bool | None
     events_produced: int
+    last_success: str
+    consecutive_failures: int
+    last_error: str | None
+    quarantined_until: str | None
+    status: str
 
 
 def _producer_healthy(*, consecutive_failures: int, last_error: str | None) -> bool | None:
@@ -91,12 +96,17 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
     cols = [str(r[1]) for r in conn.execute("PRAGMA table_info(producer_health)").fetchall()]
     has_endpoint = "endpoint" in cols
 
-    sel = "name, domain, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+    has_quarantined = "quarantined_until" in cols
+
+    base_cols = "name, domain, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
     if has_endpoint:
-        sel = "name, domain, endpoint, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+        base_cols = "name, domain, endpoint, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+    if has_quarantined:
+        base_cols += ", quarantined_until"
 
-    rows = conn.execute(f"SELECT {sel} FROM producer_health ORDER BY name ASC").fetchall()
+    rows = conn.execute(f"SELECT {base_cols} FROM producer_health ORDER BY name ASC").fetchall()
 
+    now = datetime.now(tz=UTC)
     out: list[ProducerRow] = []
     for r in rows:
         if has_endpoint:
@@ -105,18 +115,43 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
             endpoint = str(r[2] or "—")
             schedule = str(r[3] or "—")
             last_run_at = str(r[4]) if r[4] is not None else None
+            last_success_at = str(r[5]) if r[5] is not None else None
             last_error = str(r[6]) if r[6] is not None else None
             consecutive_failures = int(r[7] or 0)
             events_produced = int(r[8] or 0)
+            q_idx = 9
         else:
             name = str(r[0] or "—")
             domain = str(r[1] or "—")
             endpoint = "—"
             schedule = str(r[2] or "—")
             last_run_at = str(r[3]) if r[3] is not None else None
+            last_success_at = str(r[4]) if r[4] is not None else None
             last_error = str(r[5]) if r[5] is not None else None
             consecutive_failures = int(r[6] or 0)
             events_produced = int(r[7] or 0)
+            q_idx = 8
+
+        quarantined_until_raw = str(r[q_idx]) if has_quarantined and r[q_idx] is not None else None
+
+        # Determine quarantine display
+        quarantined_until_fmt: str | None = None
+        is_quarantined = False
+        if quarantined_until_raw:
+            q_dt = _parse_dt(quarantined_until_raw)
+            if q_dt and q_dt > now:
+                is_quarantined = True
+                quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
+
+        # Determine status
+        if is_quarantined:
+            status = "quarantined"
+        elif consecutive_failures == 0:
+            status = "healthy"
+        elif consecutive_failures <= 4:
+            status = "degraded"
+        else:
+            status = "failing"
 
         healthy = _producer_healthy(consecutive_failures=consecutive_failures, last_error=last_error)
 
@@ -129,6 +164,11 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 last_run=_fmt_ts(last_run_at),
                 healthy=healthy,
                 events_produced=events_produced,
+                last_success=_fmt_ts(last_success_at),
+                consecutive_failures=consecutive_failures,
+                last_error=last_error,
+                quarantined_until=quarantined_until_fmt,
+                status=status,
             )
         )
 
