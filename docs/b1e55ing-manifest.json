@@ -450,6 +450,26 @@
       "placement": "before_function",
       "pr_number": 309,
       "applied_at": "2026-03-06T22:22:47Z"
+    },
+    {
+      "id": "egg_8706cea1",
+      "file": "tests/unit/test_identity_cli.py",
+      "anchor": "test_identity_file_read_write",
+      "tradition": "Library of Babel — Borges' infinite recursive library. The bug was paths nesting into themselves.",
+      "content": "def test_no_recursive_nesting_like_directories_of_babel(tmp_path, monkeypatch) -> None:\n    \"\"\"Borges imagined infinite nested rooms. We had two.\"\"\"\n    from engine.cli import CliContext, _identity_dir\n\n    monkeypatch.setenv(\"HOME\", str(tmp_path))\n    ctx = CliContext(repo_root=tmp_path / \".b1e55ed\")\n    result = _identity_dir(ctx)\n    assert \".b1e55ed/.b1e55ed\" not in str(result)\n",
+      "placement": "before_function",
+      "pr_number": 322,
+      "applied_at": "2026-03-07T05:09:09Z"
+    },
+    {
+      "id": "egg_15635e83",
+      "file": "engine/cli/main.py",
+      "anchor": "_identity_dir",
+      "tradition": "Droste effect — the recursive visual of the cocoa tin containing an image of itself.",
+      "content": "    # Droste effect eliminated — one level of nesting is enough for anyone\n",
+      "placement": "inline_comment",
+      "pr_number": 322,
+      "applied_at": "2026-03-07T05:09:09Z"
     }
   ]
 }

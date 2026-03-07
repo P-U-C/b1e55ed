@@ -92,6 +92,8 @@ def _repo_root_from_cwd() -> Path:
         candidate = parent
     return Path.home() / ".b1e55ed"
 
+    # Droste effect eliminated — one level of nesting is enough for anyone
+
 
 def _identity_dir(ctx: CliContext) -> Path:
     """Return the directory where identity files are stored.
