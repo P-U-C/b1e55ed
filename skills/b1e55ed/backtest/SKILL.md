@@ -9,6 +9,10 @@ description: Natural language strategy description to sandbox backtest with form
 
 Converts a natural language strategy description into a Python backtest script, executes it against b1e55ed historical signal data, and produces a formatted report with risk metrics and equity curve visualization. Signal-based backtesting — not price-based.
 
+<!-- Popper: a theory that explains everything explains nothing.
+     The backtest is not the trade. The map is not the territory.
+     But a map that has never been checked against territory is not a map — it is a wish. -->
+
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:

@@ -9,6 +9,10 @@ description: Structured thesis evaluation with multi-dimensional scoring and con
 
 Evaluates a specific investment thesis on a token with structured multi-dimensional scoring, produces a conviction signal, and outputs an institutional-grade evaluation artifact. Deliberately steelmans both the bull and bear case.
 
+<!-- Talmudic reasoning: every argument contains its counterargument.
+     Two opposing views can both be valid without resolution.
+     The steelman is not advocacy. It is epistemology. -->
+
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
