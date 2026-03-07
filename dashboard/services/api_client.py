@@ -91,3 +91,8 @@ class ApiClient:
 
     def get_curator_feed(self) -> ApiResult:
         return self._get_json("/social/curator-feed")
+
+    # ---- Artifacts ------------------------------------------------------
+
+    def get_artifacts(self, limit: int = 20) -> ApiResult:
+        return self._get_json("/artifacts/", params={"limit": limit})
