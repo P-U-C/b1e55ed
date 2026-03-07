@@ -139,7 +139,9 @@ class LearningLoop:
         if preset == "custom":
             # Best-effort: treat current config weights as preset if custom.
             return self._current_domain_weights()
-        base = Config.from_preset(preset, repo_root=Path.cwd())
+        from engine.core.paths import b1e55ed_dir
+
+        base = Config.from_preset(preset, repo_root=b1e55ed_dir())
         return {k: float(v) for k, v in base.weights.model_dump().items()}
 
     def _window_bounds(self) -> tuple[datetime, datetime]:

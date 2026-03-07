@@ -38,7 +38,9 @@ def _repo_root() -> Path:
     override = os.environ.get("B1E55ED_REPO_ROOT")
     if override:
         return Path(override)
-    return Path.cwd()
+    from engine.core.paths import b1e55ed_dir
+
+    return b1e55ed_dir()
 
 
 @app.middleware("http")
@@ -81,7 +83,7 @@ def _startup() -> None:
     if not token:
         try:
             user_path = config_dir() / "user.yaml"
-            cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(config_dir().parent)
+            cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(None)
             token = str(getattr(cfg.api, "auth_token", "") or "")
         except Exception:
             pass
