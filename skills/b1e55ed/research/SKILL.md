@@ -215,6 +215,17 @@ Write the following memory keys:
 
 **Critical rule:** Never silently skip a failed step. Every gap must be noted in the output artifact.
 
+### Model-Level Failures
+
+Model failure during coordinator steps (timeout, context overflow, provider error) is **intentionally not handled in this skill file**. This is a design decision, not an omission.
+
+DeerFlow's coordinator layer owns model-level retry and fallback — it retries failed steps, routes to backup models, and surfaces unrecoverable failures to the operator. Defining fallback model behavior inside a skill file would duplicate that logic and couple the skill to a specific deployment configuration, breaking portability across DeerFlow instances with different model configurations.
+
+**What this skill owns:** tool call failures, data gaps, partial artifacts.
+**What DeerFlow's coordinator owns:** model retries, context management, step-level recovery.
+
+This follows DeerFlow's skill authoring best practice: skills define *what to do*, the coordinator defines *how to recover when the doing fails*.
+
 ## Output
 
 1. **Structured JSON signal** — emitted via `get_latest_signal` (read-only; signal submission via REST API) to the b1e55ed pipeline
