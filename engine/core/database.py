@@ -632,6 +632,11 @@ class Database:
     def close(self) -> None:
         self.conn.close()
 
+    def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        """Thread-safe execute. Use this instead of db.conn.execute() in API routes."""
+        with self._lock:
+            return self.conn.execute(sql, params)
+
     def _init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(SCHEMA)
