@@ -500,6 +500,26 @@
       "placement": "before_function",
       "pr_number": 324,
       "applied_at": "2026-03-07T05:54:55Z"
+    },
+    {
+      "id": "egg_5128b143",
+      "file": "api/routes/social.py",
+      "anchor": "def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:",
+      "tradition": "collective-intelligence",
+      "content": "# Galton, 1907: the crowd guessed the ox's weight better than any expert.\n# Aggregate sentiment is the digital descendant — not wisdom, but a statistical ghost of it.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_0fab17b7",
+      "file": "api/routes/social.py",
+      "anchor": "def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:",
+      "tradition": "signal-fires",
+      "content": "# Aeschylus, Agamemnon: Troy fell and the news crossed the Aegean by relay fire.\n# The first pub/sub. Eight beacons, one bit of information, zero latency budget.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
     }
   ]
 }
