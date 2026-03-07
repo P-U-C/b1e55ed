@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 from functools import lru_cache
-from pathlib import Path
 
 from fastapi import Request
 
@@ -21,7 +20,7 @@ def _load_config() -> Config:
     user_path = config_dir() / "user.yaml"
     if user_path.exists():
         return Config.from_yaml(user_path)
-    return Config.from_repo_defaults(Path(__file__).resolve().parent.parent)
+    return Config.from_repo_defaults(config_dir().parent)
 
 
 def get_config(request: Request) -> Config:
