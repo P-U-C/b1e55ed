@@ -73,7 +73,24 @@ class CliContext:
 
 
 def _repo_root_from_cwd() -> Path:
-    return Path.cwd()
+    """Return operator data root.
+
+    For dev checkouts (pyproject.toml present in cwd or any parent up to
+    5 levels), returns the repo root so config/default.yaml is found
+    relative to source.
+
+    For production uv tool installs, returns ~/.b1e55ed/ so all operator
+    data (config/, data/, corpus/) lives under the standard dir.
+    """
+    candidate = Path.cwd()
+    for _ in range(5):
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+    return Path.home() / ".b1e55ed"
 
 
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:

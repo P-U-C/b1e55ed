@@ -26,6 +26,9 @@ def _scaffold_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None
     shutil.copy2(src_root / "config" / "default.yaml", repo_root / "config" / "default.yaml")
     shutil.copytree(src_root / "config" / "presets", repo_root / "config" / "presets")
 
+    # Marker so _repo_root_from_cwd detects this as a dev checkout
+    (repo_root / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
+
     # Isolate HOME so _resolve_db_path points to the temp dir.
     home_dir = tmp_path / "home"
     if monkeypatch is not None:
@@ -360,3 +363,41 @@ class TestModuleExecution:
         # --help exits with 0 and prints usage
         assert result.returncode == 0
         assert "usage" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# _repo_root_from_cwd tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepoRootFromCwd:
+    """Verify _repo_root_from_cwd resolves correctly for dev vs production."""
+
+    def test_dev_checkout_returns_repo_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When pyproject.toml exists in cwd, return cwd (dev checkout)."""
+        from engine.cli.main import _repo_root_from_cwd
+
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
+        monkeypatch.chdir(tmp_path)
+        assert _repo_root_from_cwd() == tmp_path
+
+    def test_dev_checkout_parent_pyproject(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When pyproject.toml exists in a parent, return that parent."""
+        from engine.cli.main import _repo_root_from_cwd
+
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
+        sub = tmp_path / "engine" / "cli"
+        sub.mkdir(parents=True)
+        monkeypatch.chdir(sub)
+        assert _repo_root_from_cwd() == tmp_path
+
+    def test_production_returns_dot_b1e55ed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No pyproject.toml anywhere → return ~/.b1e55ed (production)."""
+        from engine.cli.main import _repo_root_from_cwd
+
+        # Create a clean dir with no pyproject.toml
+        prod_dir = tmp_path / "prod_home"
+        prod_dir.mkdir()
+        monkeypatch.chdir(prod_dir)
+        result = _repo_root_from_cwd()
+        assert result == Path.home() / ".b1e55ed"

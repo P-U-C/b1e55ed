@@ -67,7 +67,9 @@ def run_anchor(args: argparse.Namespace, *, repo_root: Path) -> int:
     if db_path_arg:
         db_path = Path(str(db_path_arg))
     else:
-        db_path = repo_root / "data" / "brain.db"
+        from engine.cli.main import _resolve_db_path
+
+        db_path = _resolve_db_path(repo_root)
 
     if not db_path.exists():
         msg = f"anchor: database not found: {db_path}"

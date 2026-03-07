@@ -35,6 +35,8 @@ def test_producer_auto_quarantine_after_failures(tmp_path, monkeypatch):
     # Copy default config from repo is heavy; use defaults via Config() by letting CLI fall back to repo defaults.
     # Easiest: create minimal config/default.yaml in tmp_path.
     (tmp_path / "config" / "default.yaml").write_text("api: {auth_token: 'x'}\nuniverse: {symbols: ['BTC']}\n", encoding="utf-8")
+    # Marker so _repo_root_from_cwd detects this as a dev checkout
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
 
     # Seed DB at new default path
     data_dir = home_dir / ".b1e55ed" / "data"

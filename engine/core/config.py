@@ -216,7 +216,7 @@ class Config(BaseSettings):
         resolved_cfg = config_path.resolve()
         bundled_root = cls._bundled_config_root().resolve()
         if resolved_cfg.is_relative_to(bundled_root):
-            return Path.cwd() / "data" / "learned_weights.yaml"
+            return Path.home() / ".b1e55ed" / "data" / "learned_weights.yaml"
         return config_path.parent.parent / "data" / "learned_weights.yaml"
 
     @classmethod

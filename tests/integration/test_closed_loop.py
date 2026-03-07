@@ -34,6 +34,8 @@ from tests.unit._api_test_client import make_client
 def _init_minimal_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "config" / "presets").mkdir(parents=True)
     (tmp_path / "data").mkdir(parents=True)
+    # Marker so _repo_root_from_cwd detects this as a dev checkout
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
 
     preset_yaml = (
         "weights:\n"
