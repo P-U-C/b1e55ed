@@ -560,6 +560,16 @@
       "placement": "inline_comment",
       "pr_number": 330,
       "applied_at": "2026-03-07T16:44:15Z"
+    },
+    {
+      "id": "egg_1e9b8b0b",
+      "file": "tests/test_cockpit.py",
+      "anchor": "def test_producers_status_empty_without_discover():",
+      "tradition": "cybernetics",
+      "content": "# Von Foerster: the observer is part of the system.\n# A registry that has not observed its producers is not part of the system.\n# This test proves it.",
+      "placement": "before_function",
+      "pr_number": 331,
+      "applied_at": "2026-03-07T21:08:18Z"
     }
   ]
 }

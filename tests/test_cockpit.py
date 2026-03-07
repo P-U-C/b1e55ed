@@ -280,6 +280,9 @@ def test_producers_status_returns_data_after_discover():
     assert len(producers) > 0, "Producers /status returned empty after discover() — registry should have populated producers from engine/producers/"
 
 
+# Von Foerster: the observer is part of the system.
+# A registry that has not observed its producers is not part of the system.
+# This test proves it.
 def test_producers_status_empty_without_discover():
     """Negative test: without discover(), a manually-blocked registry returns empty.
 
