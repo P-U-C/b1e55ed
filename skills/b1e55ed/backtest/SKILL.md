@@ -16,7 +16,7 @@ Converts a natural language strategy description into a Python backtest script, 
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
-  - `get_signals_bulk_export` — historical signal data
+  - `get_signal_history(producer_name, limit=90)` — historical signal data
 - **Sandbox Python environment** with:
   - `json`, `datetime`, `statistics` (stdlib)
   - `matplotlib` (for chart generation)
@@ -57,7 +57,7 @@ If critical parameters are ambiguous, make reasonable assumptions and document t
 
 ### Step 2: Export Historical Signals
 
-Call `get_signals_bulk_export` with:
+Call `get_signal_history(producer_name, limit=90)` with:
 - `domain`: `{domain_filter}` (or omit for all domains)
 - `symbol`: `{ASSET}`
 - `from_ts`: `{lookback_days ago as ISO timestamp}`
@@ -340,8 +340,8 @@ Style with dark mode CSS (same palette as other b1e55ed skills).
 
 | Failure | Action |
 |---------|--------|
-| `get_signals_bulk_export` returns < 10 signals | Produce partial report. Note "⚠️ Insufficient data — only {N} signals available. Results are not statistically significant." |
-| `get_signals_bulk_export` fails | Report cannot proceed. Return error message with suggestion to check MCP configuration. |
+| `get_signal_history(producer_name, limit=90)` returns < 10 signals | Produce partial report. Note "⚠️ Insufficient data — only {N} signals available. Results are not statistically significant." |
+| `get_signal_history(producer_name, limit=90)` fails | Report cannot proceed. Return error message with suggestion to check MCP configuration. |
 | Python script execution fails | Read error output. Fix common issues (import errors, data format). Retry once. If still fails, report the error with the script for manual debugging. |
 | matplotlib not available | Skip chart generation. Note in report that equity curve visualization is unavailable. |
 | No trades generated | Report this explicitly. Suggest adjusting confidence threshold or strategy conditions. |

@@ -16,9 +16,9 @@ Evaluates a specific investment thesis on a token with structured multi-dimensio
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
-  - `get_regime_status` — current market regime
-  - `get_top_signals` — existing signals for the token
-  - `submit_research_signal` — conviction signal emission
+  - `list_producers` + `get_latest_signal("regime_detector")` — current market regime
+  - `list_producers` + `get_latest_signal` per producer — existing signals for the token
+  - `get_latest_signal` (read-only; signal submission via REST API) — conviction signal emission
 - **operator_node_id** — your forge node ID (find via `b1e55ed identity show`)
 
 ## Input
@@ -41,7 +41,7 @@ If the thesis statement is vague, ask the user to be specific before proceeding.
 
 ### Step 1: Get Regime Context
 
-Call `get_regime_status` to retrieve:
+Call `list_producers` + `get_latest_signal("regime_detector")` to retrieve:
 - Current regime classification
 - Trend direction
 - Kill switch status
@@ -50,7 +50,7 @@ Regime context affects thesis viability — a bullish thesis in a risk-off regim
 
 ### Step 2: Retrieve Existing Signals
 
-Call `get_top_signals` with parameters:
+Call `list_producers` + `get_latest_signal` per producer with parameters:
 - `symbol`: `{TOKEN}`
 - No domain filter (all domains)
 
@@ -124,7 +124,7 @@ Clamp result to 0-10 range. Map to confidence for signal submission:
 
 ### Step 9: Determine Horizon
 
-Based on the thesis nature and evidence:
+Given thesis nature and evidence:
 
 | Horizon | Timeframe | When to Use |
 |---------|-----------|-------------|
@@ -134,7 +134,7 @@ Based on the thesis nature and evidence:
 
 ### Step 10: Submit Conviction Signal
 
-Call `submit_research_signal` with:
+Call `get_latest_signal` (read-only; signal submission via REST API) with:
 
 ```json
 {
@@ -224,13 +224,13 @@ Style with dark mode CSS (same palette as other b1e55ed skills):
 
 | Failure | Action |
 |---------|--------|
-| `submit_research_signal` fails | Log error. Write artifact with "⚠️ Signal submission failed" banner. |
-| `get_regime_status` fails | Retry once. If still fails, score without regime context. Note gap in artifact. |
-| `get_top_signals` fails | Retry once. If still fails, score on-chain dimension as "N/A — data unavailable". |
+| `get_latest_signal` (read-only; signal submission via REST API) fails | Log error. Write artifact with "⚠️ Signal submission failed" banner. |
+| `list_producers` + `get_latest_signal("regime_detector")` fails | Retry once. If still fails, score without regime context. Note gap in artifact. |
+| `list_producers` + `get_latest_signal` per producer fails | Retry once. If still fails, score on-chain dimension as "N/A — data unavailable". |
 | Web search returns no evidence FOR | Note weak bull case. This should lower narrative score. |
 | Web search returns no evidence AGAINST | Note absence of bear case evidence. This does NOT mean no risk — flag as potential blind spot. |
 
 ## Output
 
-1. **Conviction signal** — emitted via `submit_research_signal` with `signal_class=conviction`
+1. **Conviction signal** — emitted via `get_latest_signal` (read-only; signal submission via REST API) with `signal_class=conviction`
 2. **HTML artifact** — `thesis_{TOKEN}_{YYYY-MM-DD}.html` written to sandbox

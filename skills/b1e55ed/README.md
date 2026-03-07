@@ -12,6 +12,21 @@ Institutional-grade crypto research and analysis skills for [DeerFlow](https://g
 | **watchlist** | Parallel multi-token scan → ranked conviction output | "scan watchlist", "rank SOL ETH HYPE BTC" |
 | **backtest** | Natural language strategy → sandbox backtest → formatted report | "backtest momentum on SOL 90 days" |
 
+
+## Current MCP API
+
+b1e55ed exposes three MCP tools (port 7337, started via `b1e55ed start`):
+
+| Tool | Description |
+|------|-------------|
+| `list_producers()` | Returns all registered producers with latest signal state |
+| `get_latest_signal(producer_name)` | Returns the most recent signal from a specific producer |
+| `get_signal_history(producer_name, limit=10)` | Returns signal history for a producer |
+
+**Producer names** (use as `producer_name`): `regime_detector`, `onchain_scanner`, `social_intel`, `curator`, and others — call `list_producers()` to enumerate.
+
+> **Note:** Higher-level tools (`get_regime_status`, `get_top_signals`, `submit_research_signal`) are planned for a future MCP extension. Until then, the skills in this pack use `list_producers` + `get_latest_signal` to compose equivalent functionality.
+
 ## Installation
 
 ### Option 1: Copy to DeerFlow Skills Directory
