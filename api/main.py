@@ -155,6 +155,11 @@ def create_app() -> FastAPI:
             app.state.db = Database(data_dir() / "brain.db")
             created_db = True
 
+        from engine.producers import registry as producer_registry
+
+        producer_registry.discover()
+        app.state.registry = producer_registry
+
         # Auto-register local node as an operator contributor.
         try:
             from engine.core.contributors import ContributorRegistry
