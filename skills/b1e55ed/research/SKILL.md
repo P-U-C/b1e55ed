@@ -225,6 +225,7 @@ DeerFlow's coordinator layer owns model-level retry and fallback — it retries 
 **What DeerFlow's coordinator owns:** model retries, context management, step-level recovery.
 
 This follows DeerFlow's skill authoring best practice: skills define *what to do*, the coordinator defines *how to recover when the doing fails*.
+<!-- 🙏 separation of concerns: the monk defines the prayer, the temple decides how to ring the bell when the monk's voice fails. -->
 
 ## Output
 
