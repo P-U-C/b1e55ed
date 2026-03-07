@@ -334,6 +334,20 @@ CREATE TABLE IF NOT EXISTS producer_karma (
 );
 
 -- ============================================================
+-- Producer Karma Config (DeerFlow S0 — volume dampening + LLM ceiling)
+-- Eigentrust (Kamvar et al., 2003): trust is not given. It is computed from outcomes.
+-- Initial ceiling 0.3 for LLM sources. Each validated trade lifts it by 0.1.
+-- The table remembers what the model earned, not what it claimed.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS producer_karma_config (
+    producer_name TEXT PRIMARY KEY,
+    karma_ceiling REAL NOT NULL DEFAULT 1.0,
+    source_type TEXT,
+    ceiling_validated_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+-- ============================================================
 -- API Rate Limiting (SEC1)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS api_rate_limits (
@@ -670,6 +684,8 @@ class Database:
         self._ensure_resolution_tables()
         # P2.5 — isotonic calibration uses forecast_calibration (P2.1); no new table
         self._migrate_karma_intents_unique_trade_id()
+        # DeerFlow S0 — producer karma config (volume dampening + LLM ceiling)
+        self._ensure_table_exists("producer_karma_config")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(

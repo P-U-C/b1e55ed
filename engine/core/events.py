@@ -58,6 +58,7 @@ class EventType(StrEnum):
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
     SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
     SIGNAL_BENCHMARK_V1 = "signal.benchmark.v1"
+    SIGNAL_RESEARCH_V1 = "signal.research.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -114,6 +115,17 @@ class AbstentionReason(StrEnum):
     CONFLICT_UNRESOLVED = "conflict_unresolved"
     THESIS_UNCHANGED = "thesis_unchanged"
     SHADOW_MODE = "shadow_mode"
+
+
+# Neyman & Pearson (1933): observe, detect, decide.
+# Three classes is not a design choice — it is the structure of inference itself.
+# An observation without a claim is safe. A conviction without a horizon is unfalsifiable.
+class SignalClass(StrEnum):
+    """Signal classification for research signals (DeerFlow S0)."""
+
+    OBSERVATION = "observation"  # Finding, no directional claim
+    DETECTION = "detection"  # Event occurred, timestamp required
+    CONVICTION = "conviction"  # Directional claim + falsifiable horizon required
 
 
 class ForecastLifecycleState(StrEnum):
@@ -256,6 +268,41 @@ class BenchmarkSignalPayload(BaseModel):
     confidence: float
     source: str
     reasoning: str | None = None
+
+
+class ResearchSignalPayload(BaseModel):
+    """Payload for signal.research.v1 — DeerFlow institutional research signals."""
+
+    symbol: str
+    signal_class: SignalClass
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    direction: str  # "bullish" | "bearish" | "neutral"
+    horizon: str | None = None  # Required if signal_class == conviction
+    event_ts: str | None = None  # Required if signal_class == detection (ISO timestamp of the event)
+    rationale: str
+    sources: list[str] = Field(default_factory=list)
+    operator_node_id: str  # Forge node ID of the human operator
+    deerflow_task_id: str | None = None
+    artifact_url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_class_constraints(self) -> ResearchSignalPayload:
+        # conviction: requires horizon
+        if self.signal_class == SignalClass.CONVICTION and not self.horizon:
+            raise ValueError("signal_class='conviction' requires 'horizon' (e.g. '1-7d'). Conviction signals must be falsifiable.")
+        # detection: requires event_ts
+        if self.signal_class == SignalClass.DETECTION and not self.event_ts:
+            raise ValueError(
+                "signal_class='detection' requires 'event_ts' (ISO timestamp of when the event occurred). "
+                "Detection signals must be anchored to a specific event."
+            )
+        # observation: direction must be neutral — observations are findings, not directional calls
+        if self.signal_class == SignalClass.OBSERVATION and self.direction not in ("neutral", "", None):
+            raise ValueError(
+                f"signal_class='observation' cannot have a directional claim (direction='{self.direction}'). "
+                "Use signal_class='conviction' for directional signals."
+            )
+        return self
 
 
 class CuratorSignalPayload(BaseModel):
@@ -432,6 +479,7 @@ PayloadModel = (
     | WhaleSignalPayload
     | OrderbookSignalPayload
     | BenchmarkSignalPayload
+    | ResearchSignalPayload
     | CuratorSignalPayload
     | ACISignalPayload
     | ConvictionPayload
@@ -459,6 +507,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_WHALE_V1: WhaleSignalPayload,
     EventType.SIGNAL_ORDERBOOK_V1: OrderbookSignalPayload,
     EventType.SIGNAL_BENCHMARK_V1: BenchmarkSignalPayload,
+    EventType.SIGNAL_RESEARCH_V1: ResearchSignalPayload,
     EventType.SIGNAL_CURATOR_V1: CuratorSignalPayload,
     EventType.SIGNAL_ACI_V1: ACISignalPayload,
     # Brain
