@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes import (
+    artifacts,
     benchmarks,
     brain,
     cockpit,
@@ -51,5 +52,6 @@ def get_api_router() -> APIRouter:
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
     router.include_router(mcp.router, tags=["mcp"])
+    router.include_router(artifacts.router, tags=["artifacts"])
 
     return router

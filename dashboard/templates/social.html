@@ -85,6 +85,62 @@
   </div>
 </div>
 
+<!-- Research Artifacts -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Research Artifacts</span>
+    <a href="/artifacts" style="font-size:0.7rem; color:var(--blue);">view all →</a>
+  </div>
+  {% if recent_artifacts %}
+    {% for a in recent_artifacts[:5] %}
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+      <span style="flex:1; font-weight:400; color:var(--text-bright);">{{ a.filename }}</span>
+      <span class="text-dim" style="font-size:0.7rem;">{{ a.source or '—' }}</span>
+      {% if a.permalink %}
+      <a href="{{ a.permalink }}" target="_blank" style="font-size:0.7rem; color:var(--blue);">view ↗</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">No artifacts yet. Run DeerFlow research to generate.</div>
+  {% endif %}
+</div>
+
+<!-- Source Health -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Source Health</span>
+  </div>
+  {% if sources %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Status</th>
+        <th>Last Hit</th>
+        <th style="text-align:right;">Signals/24h</th>
+        <th>Quality</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td class="text-bright" style="font-weight:400;">{{ s.name }}</td>
+        <td><span class="dot {{ 'dot-ok' if s.status == 'ok' else ('dot-degraded' if s.status == 'degraded' else 'dot-error') }}"></span>{{ s.status | upper }}</td>
+        <td class="text-dim">{{ s.last_hit }}</td>
+        <td style="text-align:right;">{{ s.signals_24h }}</td>
+        <td>
+          {% if s.quality %}
+          <div class="conviction-bar" style="width:4rem; display:inline-block; vertical-align:middle;">
+            <div class="conviction-bar-fill long" style="width:{{ (s.quality * 100) | int }}%;"></div>
+          </div>
+          <span class="text-dim" style="font-size:0.7rem;">{{ '%.2f' | format(s.quality) }}</span>
+          {% else %}
+          <span class="text-dim">—</span>
+          {% endif %}
+        </td>
+      </tr>
+
 <div class="grid" style="margin-bottom:1rem;">
 
   <!-- Panel 5: Alerts -->

@@ -426,6 +426,10 @@ def social_page(request: Request) -> HTMLResponse:
     sources = src_res.data.get("items") if (src_res.ok and isinstance(src_res.data, dict)) else []
     curator_signals = cur_res.data.get("items") if (cur_res.ok and isinstance(cur_res.data, dict)) else []
 
+    # Recent artifacts for the Research Artifacts panel
+    art_res = client.get_artifacts(limit=5)
+    recent_artifacts = art_res.data.get("items") if (art_res.ok and isinstance(art_res.data, dict)) else []
+
     # Extract diagnostic info from status endpoint
     pipeline_status = str(status_data.get("pipeline_status", "unknown"))
     pipeline_active = bool(status_data.get("pipeline_active", False))
@@ -474,6 +478,22 @@ def social_page(request: Request) -> HTMLResponse:
             "curator_signals": curator_signals if isinstance(curator_signals, list) else [],
             "sources": sources if isinstance(sources, list) else [],
             "source_warnings": [],
+            "recent_artifacts": recent_artifacts if isinstance(recent_artifacts, list) else [],
+        },
+    )
+
+
+@app.get("/artifacts", response_class=HTMLResponse)
+def artifacts_page(request: Request) -> HTMLResponse:
+    client = _api(request)
+    art_res = client.get_artifacts(limit=50)
+    artifacts = art_res.data.get("items") if (art_res.ok and isinstance(art_res.data, dict)) else []
+
+    return templates.TemplateResponse(
+        "artifacts.html",
+        {
+            **_shell(request, "artifacts"),
+            "artifacts": artifacts if isinstance(artifacts, list) else [],
         },
     )
 
