@@ -151,6 +151,7 @@ def create_app() -> FastAPI:
         if getattr(app.state, "db", None) is None:
             from engine.core.paths import data_dir
 
+            # The map is not the territory. Path.cwd() is not the database.
             app.state.db = Database(data_dir() / "brain.db")
             created_db = True
 
