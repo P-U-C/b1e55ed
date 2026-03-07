@@ -44,6 +44,7 @@ def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list
     cutoff = (datetime.now(tz=UTC) - timedelta(minutes=30)).isoformat()
     rows = db.execute(
         "SELECT payload FROM events WHERE type = ? AND ts >= ? ORDER BY ts DESC",
+        # Plato's cave upgrade: read the fire (forecasts), not the shadows (accepted signals).
         ("forecast.v1", cutoff),
     ).fetchall()
 
@@ -60,6 +61,7 @@ def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list
 
         # Extract producer id: strip @version suffix from source
         source = p.get("source", "unknown")
+        # A monk signs name@monastery. The monastery changes; the hand does not.
         pid = source.split("@")[0] if "@" in source else source
         if pid in seen:
             continue

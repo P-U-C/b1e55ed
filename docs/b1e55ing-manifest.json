@@ -540,6 +540,26 @@
       "placement": "inline_comment",
       "pr_number": 328,
       "applied_at": "2026-03-07T07:09:25Z"
+    },
+    {
+      "id": "egg_f73ac6a5",
+      "file": "api/routes/cockpit.py",
+      "anchor": "forecast.v1",
+      "tradition": "philosophy",
+      "content": "# Plato's cave upgrade: read the fire (forecasts), not the shadows (accepted signals).",
+      "placement": "inline_comment",
+      "pr_number": 330,
+      "applied_at": "2026-03-07T16:44:15Z"
+    },
+    {
+      "id": "egg_026f2fe9",
+      "file": "api/routes/cockpit.py",
+      "anchor": "pid = source.split(\"@\")[0]",
+      "tradition": "history",
+      "content": "# A monk signs name@monastery. The monastery changes; the hand does not.",
+      "placement": "inline_comment",
+      "pr_number": 330,
+      "applied_at": "2026-03-07T16:44:15Z"
     }
   ]
 }
