@@ -38,6 +38,25 @@ class DummyApiClient:
     def get_karma_receipts(self) -> _Res:
         return _Res({"items": []}, False)
 
+    def get_social_status(self) -> _Res:
+        return _Res(
+            {
+                "pipeline_status": "active",
+                "diagnosis": "Running",
+                "producers": [],
+                "watchlist": [],
+                "watchlist_count": 0,
+                "sources_configured": 0,
+                "seeded": False,
+                "actions_available": ["run_now"],
+                "pipeline_active": True,
+            },
+            False,
+        )
+
+    def get_social_watchlist(self) -> _Res:
+        return _Res({"watchlist": [], "count": 0}, False)
+
     def get_social_sentiment(self) -> _Res:
         return _Res({"items": []}, False)
 
