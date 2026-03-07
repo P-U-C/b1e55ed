@@ -16,14 +16,18 @@ def _repo_root() -> Path:
     override = os.environ.get("B1E55ED_REPO_ROOT")
     if override:
         return Path(override)
-    return Path.cwd()
+    from engine.core.paths import b1e55ed_dir
+
+    return b1e55ed_dir()
 
 
 def _identity_path() -> Path:
     override = os.getenv("B1E55ED_IDENTITY_PATH")
     if override:
         return Path(override)
-    return _repo_root() / ".b1e55ed" / "identity.json"
+    from engine.core.paths import identity_dir
+
+    return identity_dir() / "identity.json"
 
 
 @dataclass(frozen=True)
@@ -95,7 +99,10 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get("/identity", response_class=HTMLResponse)
     def identity_page(request: Request) -> HTMLResponse:
         identity = _load_identity()
-        cfg = Config.from_repo_defaults(repo_root=_repo_root())
+        try:
+            cfg = Config.from_repo_defaults(repo_root=_repo_root())
+        except Exception:
+            cfg = Config.from_repo_defaults(repo_root=None)
         eas = _eas_status(cfg)
 
         return templates.TemplateResponse(

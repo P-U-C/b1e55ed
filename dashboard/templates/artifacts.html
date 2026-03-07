@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Artifacts — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Research Artifacts</span>
+    <span class="panel-age">{{ artifacts | length }} total</span>
+  </div>
+
+  {% if artifacts %}
+  <div style="overflow-x:auto;">
+    <table class="data-table" style="width:100%; font-size:0.8125rem;">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Source</th>
+          <th>Type</th>
+          <th>Size</th>
+          <th>Created</th>
+          <th>Event</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in artifacts %}
+        <tr>
+          <td style="font-weight:400; color:var(--text-bright);">{{ a.filename }}</td>
+          <td><span class="text-dim">{{ a.source or '—' }}</span></td>
+          <td><span class="text-dim">{{ a.content_type }}</span></td>
+          <td><span class="text-dim">{{ '%.1f' | format(a.size_bytes / 1024) }}KB</span></td>
+          <td><span class="text-dim">{{ a.created_at[:16] }}</span></td>
+          <td>
+            {% if a.event_id %}
+            <span class="text-dim" title="{{ a.event_id }}">{{ a.event_id[:12] }}…</span>
+            {% else %}
+            <span class="text-dim">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if a.permalink %}
+            <a href="{{ a.permalink }}" target="_blank" style="color:var(--blue);">view ↗</a>
+            {% else %}
+            <span class="text-dim">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No artifacts yet. Run DeerFlow research to generate.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

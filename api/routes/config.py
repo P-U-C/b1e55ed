@@ -43,17 +43,10 @@ def _redact(obj: Any) -> Any:
     return obj
 
 
-def _repo_root() -> Path:
-    here = Path(__file__).resolve()
-    for p in [Path.cwd(), here.parent.parent.parent]:
-        if (p / "config" / "default.yaml").exists():
-            return p
-    return Path.cwd()
-
-
 def _config_path() -> Path:
-    root = _repo_root()
-    p = root / "config" / "user.yaml"
+    from engine.core.paths import config_dir
+
+    p = config_dir() / "user.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
