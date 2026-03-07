@@ -140,6 +140,7 @@
           {% endif %}
         </td>
       </tr>
+      {# A loop that does not close is not a loop. It is a leak. — Dijkstra knew. #}
       {% endfor %}
     </tbody>
   </table>
