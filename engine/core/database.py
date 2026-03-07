@@ -632,11 +632,8 @@ class Database:
     def close(self) -> None:
         self.conn.close()
 
-<<<<<<< HEAD
     # Seventy-one voices, one gate. The lock does not slow the crowd;
     # it keeps the crowd from becoming a mob.
-=======
->>>>>>> 5bfe4c1 (fix: SQLite thread safety + brain/run endpoint URL)
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         """Thread-safe execute. Use this instead of db.conn.execute() in API routes."""
         with self._lock:

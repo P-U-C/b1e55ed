@@ -186,3 +186,64 @@ def test_cockpit_htmx_refresh_endpoint():
     client = _make_dashboard_client()
     resp = client.get("/partials/cockpit-content")
     assert resp.status_code == 200
+
+
+def test_producer_breakdown_field_mapping(db):
+    """forecast.v1 payload fields map correctly: source→producer_id, asset→domain, action→direction."""
+    now = datetime.now(tz=UTC)
+    payload = {
+        "forecast_id": "f-fieldmap-330",
+        "source": "whale-tracker@1.0.0",  # producer_id = "whale-tracker" (strip @version)
+        "asset": "ETH",  # domain = "ETH"
+        "horizon": "24h",
+        "action": "short",  # direction = "short"
+        "confidence": 0.77,
+        "regime_tag": "bear",
+        "abstention_reason": None,
+        "lifecycle_state": "new",
+    }
+    db.append_event(
+        event_type=EventType.FORECAST_V1,
+        payload=payload,
+        source="test",
+        ts=now,
+    )
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    signals = resp.json()["producer_signals"]
+    assert len(signals) >= 1, "Expected at least one signal from forecast.v1 event"
+
+    signal = next((s for s in signals if s["producer_id"] == "whale-tracker"), None)
+    assert signal is not None, "producer_id 'whale-tracker' not found — source→producer_id mapping broken"
+    assert signal["direction"] == "short", f"Expected direction='short' from action='short', got {signal['direction']}"
+    assert signal["domain"] == "ETH", f"Expected domain='ETH' from asset='ETH', got {signal['domain']}"
+    assert signal["confidence"] == 0.77
+
+
+def test_producer_breakdown_does_not_query_old_event_type(db):
+    """
+    Regression guard: cockpit must NOT fall back to attribution.signal_accepted.v1.
+
+    Seeds ONLY old-style events. If the pre-fix code path is active, signals
+    would be non-empty. Correct (post-fix) behaviour: empty list.
+    """
+    now = datetime.now(tz=UTC)
+    for i in range(3):
+        db.append_event(
+            event_type="attribution.signal_accepted.v1",
+            payload={
+                "producer_id": f"old-producer-{i}",
+                "direction": "long",
+                "confidence": 0.8,
+            },
+            source="test",
+            ts=now,
+        )
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    signals = resp.json()["producer_signals"]
+    assert signals == [], f"Cockpit queried attribution.signal_accepted.v1! Got {len(signals)} signal(s). Only forecast.v1 should populate the breakdown."

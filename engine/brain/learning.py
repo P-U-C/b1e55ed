@@ -141,7 +141,6 @@ class LearningLoop:
             return self._current_domain_weights()
         from engine.core.paths import b1e55ed_dir
 
-
         base = Config.from_preset(preset, repo_root=b1e55ed_dir())
         return {k: float(v) for k, v in base.weights.model_dump().items()}
 
