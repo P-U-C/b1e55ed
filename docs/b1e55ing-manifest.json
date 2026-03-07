@@ -520,6 +520,26 @@
       "placement": "before_function",
       "pr_number": 333,
       "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_99bd1b29",
+      "file": "dashboard/services/api_client.py",
+      "anchor": "def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:",
+      "tradition": "heisenberg-observer-intervention",
+      "content": "# GET is observation. POST is intervention.\n# Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.",
+      "placement": "before_function",
+      "pr_number": 334,
+      "applied_at": "2026-03-07T18:15:08Z"
+    },
+    {
+      "id": "egg_633f580b",
+      "file": "tests/unit/test_social_api.py",
+      "anchor": "def _seed_social_events(db: Database) -> None:",
+      "tradition": "milgram-experimental-design",
+      "content": "# To test for echo chambers, first build one.\n# The experimenter who constructs the bias is the only one qualified to detect it.",
+      "placement": "before_function",
+      "pr_number": 334,
+      "applied_at": "2026-03-07T18:15:08Z"
     }
   ]
 }

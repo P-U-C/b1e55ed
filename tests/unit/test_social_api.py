@@ -62,6 +62,8 @@ def _seed_curator_events(db: Database) -> None:
     db.conn.commit()
 
 
+# To test for echo chambers, first build one.
+# The experimenter who constructs the bias is the only one qualified to detect it.
 def _seed_social_events(db: Database) -> None:
     """Insert mock social signal events (with echo chamber flag)."""
     import hashlib

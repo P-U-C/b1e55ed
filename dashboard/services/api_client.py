@@ -39,6 +39,8 @@ class ApiClient:
         except Exception:
             return ApiResult(None, False)
 
+    # GET is observation. POST is intervention.
+    # Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.
     def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:
         url = f"{self.base_url}{path}"
         try:
