@@ -470,6 +470,16 @@
       "placement": "inline_comment",
       "pr_number": 322,
       "applied_at": "2026-03-07T05:09:09Z"
+    },
+    {
+      "id": "egg_77cc048e",
+      "file": "engine/cli/main.py",
+      "anchor": "# contributors register --node-id bypasses identity gate (explicit identity provided)",
+      "tradition": "symbolic-cosmology",
+      "content": "# contributors register --node-id bypasses identity gate (explicit identity provided)\n    # Wittgenstein: whereof one cannot speak, thereof one must be silent.\n    # But you spoke. You gave us the node_id. The gate opens.",
+      "placement": "inline_comment",
+      "pr_number": 324,
+      "applied_at": "2026-03-07T05:50:05Z"
     }
   ]
 }

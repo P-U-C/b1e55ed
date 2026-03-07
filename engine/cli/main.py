@@ -3251,6 +3251,9 @@ def main(argv: list[str] | None = None) -> int:
     cmd = getattr(args, "command", None)
 
     # contributors register --node-id bypasses identity gate (explicit identity provided)
+    # Wittgenstein: whereof one cannot speak, thereof one must be silent.
+    # But you spoke. You gave us the node_id. The gate opens.
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
     _contributors_register_with_node_id = (
         cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
     )
