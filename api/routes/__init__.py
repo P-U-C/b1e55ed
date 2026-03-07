@@ -22,6 +22,7 @@ from api.routes import (
     regime,
     signals,
     signals_validate,
+    social,
     trace,
 )
 
@@ -45,6 +46,7 @@ def get_api_router() -> APIRouter:
     router.include_router(contributors.router, tags=["contributors"])
     router.include_router(config.router, tags=["config"])
     router.include_router(karma.router, tags=["karma"])
+    router.include_router(social.router, tags=["social"])
     router.include_router(trace.router, tags=["trace"])
 
     # Oracle: public-facing provenance endpoint (no auth dependency)

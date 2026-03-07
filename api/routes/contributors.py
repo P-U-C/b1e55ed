@@ -85,7 +85,7 @@ def list_contributors(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[ContributorResponse]:
-    rows = db.conn.execute(
+    rows = db.execute(
         "SELECT id, node_id, name, role, registered_at, metadata FROM contributors ORDER BY registered_at ASC LIMIT ? OFFSET ?",
         (limit, offset),
     ).fetchall()
@@ -212,7 +212,7 @@ def list_contributor_signals(
     query += " ORDER BY cs.created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
-    rows = db.conn.execute(query, params).fetchall()
+    rows = db.execute(query, params).fetchall()
     return {
         "contributor_id": contributor_id,
         "signals": [dict(r) for r in rows],

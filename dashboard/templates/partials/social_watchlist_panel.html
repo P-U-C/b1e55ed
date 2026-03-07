@@ -1,0 +1,26 @@
+<div id="social-watchlist-panel">
+  <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+    {% if watchlist %}
+      {% for symbol in watchlist %}
+      <span style="display:inline-block; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.06); border-radius:12px; font-size:0.75rem; font-weight:400; color:var(--text-bright);">
+        {{ symbol }}
+      </span>
+      {% endfor %}
+    {% else %}
+      <span class="text-dim" style="font-size:0.75rem;">No tokens in watchlist.</span>
+    {% endif %}
+  </div>
+  <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:0.5rem;">{{ watchlist_count }} tokens tracked</div>
+
+  <form hx-post="/social/action/add-to-watchlist"
+        hx-target="#social-watchlist-panel"
+        hx-swap="outerHTML"
+        style="display:flex; gap:0.5rem; align-items:center;">
+    <input type="text" name="symbol" placeholder="Add token (e.g. AVAX)"
+           style="font-size:0.75rem; padding:0.25rem 0.5rem; background:var(--bg); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; width:8rem;">
+    <button type="submit"
+            style="font-size:0.7rem; padding:0.25rem 0.5rem; background:rgba(255,255,255,0.08); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; cursor:pointer;">
+      Add
+    </button>
+  </form>
+</div>

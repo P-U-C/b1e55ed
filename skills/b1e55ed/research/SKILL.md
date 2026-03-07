@@ -7,14 +7,16 @@ description: Deep research on a single token producing a structured conviction s
 
 ## Overview
 
+<!-- Shannon: information is the resolution of uncertainty.
+     Four sources. One signal. The research is not the reading — it is the compression. -->
 Conducts deep, multi-source research on a single token and produces a structured conviction signal submitted to the b1e55ed signal pipeline. Combines regime context, on-chain signals, social signals, and web research into a comprehensive analysis with institutional-grade output.
 
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
-  - `get_regime_status` — current market regime
-  - `get_top_signals` — filtered signal retrieval
-  - `submit_research_signal` — signal emission
+  - `list_producers` + `get_latest_signal("regime_detector")` — current market regime
+  - `list_producers` + `get_latest_signal` per producer — filtered signal retrieval
+  - `get_latest_signal` (read-only; signal submission via REST API) — signal emission
 - **operator_node_id** — your forge node ID (find via `b1e55ed identity show`)
 - **Memory keys** (optional, for delta analysis):
   - `{TOKEN}_last_regime` — regime at last research
@@ -45,7 +47,7 @@ If no prior memory exists, this is a first-time research. Note that in the outpu
 
 ### Step 2: Get Regime Context
 
-Call `get_regime_status` to retrieve:
+Call `list_producers` + `get_latest_signal("regime_detector")` to retrieve:
 - Current regime classification (risk-on, risk-off, neutral, etc.)
 - Kill switch status
 - Trend direction
@@ -54,7 +56,7 @@ Store the full response — this frames all subsequent analysis.
 
 ### Step 3: Retrieve Existing On-Chain Signals
 
-Call `get_top_signals` with parameters:
+Call `list_producers` + `get_latest_signal` per producer with parameters:
 - `domain`: `onchain`
 - `symbol`: `{TOKEN}`
 
@@ -62,7 +64,7 @@ Record: signal count, latest signal timestamp, dominant signal direction, any wh
 
 ### Step 4: Retrieve Existing Social Signals
 
-Call `get_top_signals` with parameters:
+Call `list_producers` + `get_latest_signal` per producer with parameters:
 - `domain`: `social`
 - `symbol`: `{TOKEN}`
 
@@ -119,7 +121,7 @@ Synthesis output:
 
 ### Step 10: Submit Research Signal
 
-Call `submit_research_signal` with all required fields:
+Call `get_latest_signal` (read-only; signal submission via REST API) with all required fields:
 
 ```json
 {
@@ -205,9 +207,9 @@ Write the following memory keys:
 
 | Failure | Action |
 |---------|--------|
-| `submit_research_signal` fails | Log error. Still write HTML artifact. Add "⚠️ Signal submission failed" banner to artifact. |
-| `get_regime_status` fails | Retry once. If still fails, note "Regime data unavailable" in artifact and proceed without regime context. |
-| `get_top_signals` fails | Retry once. If still fails, note which signal domain is missing in the artifact. Proceed with available data. |
+| `get_latest_signal` (read-only; signal submission via REST API) fails | Log error. Still write HTML artifact. Add "⚠️ Signal submission failed" banner to artifact. |
+| `list_producers` + `get_latest_signal("regime_detector")` fails | Retry once. If still fails, note "Regime data unavailable" in artifact and proceed without regime context. |
+| `list_producers` + `get_latest_signal` per producer fails | Retry once. If still fails, note which signal domain is missing in the artifact. Proceed with available data. |
 | Web search returns no results | Try alternative query phrasing. If still empty, note the gap explicitly in the relevant artifact section. |
 | Memory read fails | Treat as first-time research. Skip delta section or note "No prior data available." |
 
@@ -215,6 +217,6 @@ Write the following memory keys:
 
 ## Output
 
-1. **Structured JSON signal** — emitted via `submit_research_signal` to the b1e55ed pipeline
+1. **Structured JSON signal** — emitted via `get_latest_signal` (read-only; signal submission via REST API) to the b1e55ed pipeline
 2. **HTML artifact** — `research_{TOKEN}_{YYYY-MM-DD}.html` written to sandbox
 3. **Memory updates** — four keys persisted for delta analysis on next run

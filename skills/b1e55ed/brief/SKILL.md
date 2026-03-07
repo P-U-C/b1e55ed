@@ -7,14 +7,16 @@ description: Daily investment committee brief — institutional-grade morning re
 
 ## Overview
 
+<!-- Stafford Beer's daily algedonic signal: one nerve impulse from operations to identity.
+     The brief is System 5 checking whether the organism is in pain or pleasure. -->
 Produces an institutional-grade daily investment committee brief combining regime status, top signals, live portfolio, and market context. Designed for daily consumption — concise, actionable, delta-focused.
 
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
-  - `get_regime_status` — current market regime
-  - `get_top_signals` — signal retrieval
-  - `get_open_positions` — live portfolio
+  - `list_producers` + `get_latest_signal("regime_detector")` — current market regime
+  - `list_producers` + `get_latest_signal` per producer — signal retrieval
+  - `list_producers` (position data via portfolio producer) — live portfolio
 - **Memory keys** (optional, for delta analysis):
   - `brief_last_summary` — prior brief summary
   - `brief_last_regime` — regime at last brief
@@ -32,7 +34,7 @@ Produces an institutional-grade daily investment committee brief combining regim
 
 ### Step 1: Get Regime Status
 
-Call `get_regime_status` to retrieve:
+Call `list_producers` + `get_latest_signal("regime_detector")` to retrieve:
 - Current regime classification
 - Kill switch status
 - Trend direction and strength
@@ -41,7 +43,7 @@ This is the framing context for the entire brief.
 
 ### Step 2: Get Top Signals
 
-Call `get_top_signals` with parameters:
+Call `list_producers` + `get_latest_signal` per producer with parameters:
 - No domain filter (all domains)
 - `limit`: `10`
 
@@ -49,7 +51,7 @@ Record the top 10 signals across all domains — these represent the system's cu
 
 ### Step 3: Get Open Positions
 
-Call `get_open_positions` to retrieve:
+Call `list_producers` (position data via portfolio producer) to retrieve:
 - All live positions with current P&L
 - Entry prices and current prices
 - Position sizes and directions
@@ -179,9 +181,9 @@ Write the following memory keys:
 
 | Failure | Action |
 |---------|--------|
-| `get_open_positions` fails | Produce brief WITHOUT portfolio section. Add "⚠️ Portfolio data unavailable" note. Continue with all other sections. |
-| `get_regime_status` fails | Retry once. If still fails, note "Regime data unavailable" and produce brief with market context only. |
-| `get_top_signals` fails | Retry once. If still fails, note "Signal data unavailable" in Top Signals section. |
+| `list_producers` (position data via portfolio producer) fails | Produce brief WITHOUT portfolio section. Add "⚠️ Portfolio data unavailable" note. Continue with all other sections. |
+| `list_producers` + `get_latest_signal("regime_detector")` fails | Retry once. If still fails, note "Regime data unavailable" and produce brief with market context only. |
+| `list_producers` + `get_latest_signal` per producer fails | Retry once. If still fails, note "Signal data unavailable" in Top Signals section. |
 | Web search fails | Try alternative queries. Note any gaps in Market Context section. |
 | Memory read fails | Skip delta analysis. Note "No prior brief for comparison" in Key Changes section. |
 

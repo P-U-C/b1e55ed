@@ -7,14 +7,16 @@ description: Parallel coverage of multiple tokens with ranked conviction output.
 
 ## Overview
 
+<!-- Gamelan: no single player has the complete melody.
+     The ranking emerges from interlocking patterns, not any single assessment. -->
 Scans multiple tokens in parallel, produces brief conviction assessments for each, ranks them by conviction-adjusted score, and triggers full research on the top picks. Designed for efficient periodic coverage of a token universe.
 
 ## Prerequisites
 
 - **b1e55ed MCP tools** configured in `extensions_config.json`:
-  - `get_regime_status` — current market regime
-  - `get_top_signals` — filtered signal retrieval
-  - `submit_research_signal` — observation signal emission
+  - `list_producers` + `get_latest_signal("regime_detector")` — current market regime
+  - `list_producers` + `get_latest_signal` per producer — filtered signal retrieval
+  - `get_latest_signal` (read-only; signal submission via REST API) — observation signal emission
 - **operator_node_id** — your forge node ID (find via `b1e55ed identity show`)
 - **Memory keys** (optional):
   - `watchlist` — JSON array of token symbols (used if no tokens provided in prompt)
@@ -40,7 +42,7 @@ If neither the prompt nor memory contains a token list, ask the user to specify 
 
 ### Step 1: Get Regime Context
 
-Call `get_regime_status` to retrieve:
+Call `list_producers` + `get_latest_signal("regime_detector")` to retrieve:
 - Current regime classification
 - Trend direction
 - Kill switch status
@@ -60,7 +62,7 @@ For each token in the list, perform the following steps. The coordinator should 
 
 #### Step 3a: Retrieve Existing Signals
 
-Call `get_top_signals` with:
+Call `list_producers` + `get_latest_signal` per producer with:
 - `symbol`: `{TOKEN}`
 
 Record: signal count, dominant direction, latest signal domain.
@@ -127,7 +129,7 @@ If fewer than 2 tokens in the watchlist, research all of them.
 
 ### Step 7: Submit Observation Signals
 
-For **each token** in the watchlist, call `submit_research_signal`:
+For **each token** in the watchlist, call `get_latest_signal` (read-only; signal submission via REST API):
 
 ```json
 {
@@ -202,15 +204,15 @@ Write the following memory keys:
 
 | Failure | Action |
 |---------|--------|
-| `get_top_signals` fails for a token | Skip signal data for that token. Score based on web research only. Note gap in output. |
+| `list_producers` + `get_latest_signal` per producer fails for a token | Skip signal data for that token. Score based on web research only. Note gap in output. |
 | Web search fails for a token | Score that token as "insufficient data". Rank it last. Note gap. |
-| `submit_research_signal` fails | Log error. Continue with other tokens. Note which submissions failed in artifact. |
+| `get_latest_signal` (read-only; signal submission via REST API) fails | Log error. Continue with other tokens. Note which submissions failed in artifact. |
 | Research skill trigger fails for top picks | Note in artifact that full research was not completed. The observation signal still stands. |
 | Memory read fails | Treat all tokens as new coverage. Skip delta detection. |
 
 ## Output
 
-1. **Observation signals** — one per token via `submit_research_signal`
+1. **Observation signals** — one per token via `get_latest_signal` (read-only; signal submission via REST API)
 2. **Full research** — triggered for top 2 tokens (produces their own artifacts and conviction signals)
 3. **HTML artifact** — `watchlist_{YYYY-MM-DD}.html` written to sandbox
 4. **Memory updates** — conviction per token and last run timestamp
