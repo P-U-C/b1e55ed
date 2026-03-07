@@ -109,7 +109,7 @@ Compare current findings to prior memory for this token:
 
 ### Step 9: Determine Signal Classification
 
-Based on synthesis:
+Synthesis output:
 
 | Condition | Signal Class |
 |-----------|-------------|

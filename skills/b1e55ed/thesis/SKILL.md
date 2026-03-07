@@ -124,7 +124,7 @@ Clamp result to 0-10 range. Map to confidence for signal submission:
 
 ### Step 9: Determine Horizon
 
-Based on the thesis nature and evidence:
+Given thesis nature and evidence:
 
 | Horizon | Timeframe | When to Use |
 |---------|-----------|-------------|
