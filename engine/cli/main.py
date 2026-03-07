@@ -21,6 +21,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from engine.core.paths import b1e55ed_dir, data_dir
+
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
     from engine.core.contributors import ContributorRegistry
@@ -90,7 +92,7 @@ def _repo_root_from_cwd() -> Path:
         if parent == candidate:
             break
         candidate = parent
-    return Path.home() / ".b1e55ed"
+    return b1e55ed_dir()
 
     # Droste effect eliminated — one level of nesting is enough for anyone
 
@@ -107,14 +109,14 @@ def _identity_dir(ctx: CliContext) -> Path:
 
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
     """Derive brain.db path from config.data_dir, falling back to ~/.b1e55ed/data."""
-    default = Path.home() / ".b1e55ed" / "data"
+    default = data_dir()
     if config is not None:
-        data_dir = getattr(config, "data_dir", None)
-        if data_dir is not None:
-            data_dir = Path(data_dir)
-            if not data_dir.is_absolute():
-                data_dir = Path.home() / ".b1e55ed" / data_dir
-            return data_dir / "brain.db"
+        cfg_data_dir = getattr(config, "data_dir", None)
+        if cfg_data_dir is not None:
+            cfg_data_dir = Path(cfg_data_dir)
+            if not cfg_data_dir.is_absolute():
+                cfg_data_dir = b1e55ed_dir() / cfg_data_dir
+            return cfg_data_dir / "brain.db"
     return default / "brain.db"
 
 
@@ -624,9 +626,9 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     identity = ensure_identity()
 
     # Initialize database
-    data_dir = Path.home() / ".b1e55ed" / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "brain.db"
+    dd = data_dir()
+    dd.mkdir(parents=True, exist_ok=True)
+    db_path = dd / "brain.db"
     _ = Database(db_path)
 
     print("\nStatus summary")

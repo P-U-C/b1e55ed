@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from engine.core.paths import b1e55ed_dir, logs_dir
+
 if TYPE_CHECKING:
     from engine.cli.main import CliContext
 
@@ -110,9 +112,9 @@ def _persist_env_file(lines: list[str]) -> None:
     interactive shells pick up the variables too.
     """
     try:
-        env_dir = Path.home() / ".b1e55ed"
+        env_dir = b1e55ed_dir()
         env_dir.mkdir(parents=True, exist_ok=True)
-        (env_dir / "logs").mkdir(parents=True, exist_ok=True)
+        logs_dir().mkdir(parents=True, exist_ok=True)
 
         env_file = env_dir / "env"
         env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -352,9 +354,9 @@ def _step1_environment(repo_root: Path) -> bool:
 
     # Create ~/.b1e55ed/ directories
     try:
-        b1e55ed_dir = Path.home() / ".b1e55ed"
-        b1e55ed_dir.mkdir(parents=True, exist_ok=True)
-        (b1e55ed_dir / "logs").mkdir(parents=True, exist_ok=True)
+        _bd = b1e55ed_dir()
+        _bd.mkdir(parents=True, exist_ok=True)
+        logs_dir().mkdir(parents=True, exist_ok=True)
         print(f"  {_ok('~/.b1e55ed/ directory ready')}")
     except Exception as e:  # noqa: BLE001
         print(f"  {yellow('⚠')} Could not create ~/.b1e55ed/: {e}")
