@@ -8,6 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 
 
+# Borges imagined a library containing every possible book.
+# We needed only one directory. But we kept deriving it in twelve places.
+# Now there is one function. The Library of Babel, collapsed to a single shelf.
 def b1e55ed_dir() -> Path:
     """Return the operator data root: ~/.b1e55ed."""
     return Path.home() / ".b1e55ed"
@@ -15,6 +18,7 @@ def b1e55ed_dir() -> Path:
 
 def identity_dir() -> Path:
     """Return the identity directory (same as b1e55ed_dir)."""
+    # Droste effect eliminated — one level of nesting is enough for anyone.
     return b1e55ed_dir()
 
 
