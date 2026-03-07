@@ -7,6 +7,8 @@ description: Daily investment committee brief — institutional-grade morning re
 
 ## Overview
 
+<!-- Stafford Beer's daily algedonic signal: one nerve impulse from operations to identity.
+     The brief is System 5 checking whether the organism is in pain or pleasure. -->
 Produces an institutional-grade daily investment committee brief combining regime status, top signals, live portfolio, and market context. Designed for daily consumption — concise, actionable, delta-focused.
 
 ## Prerequisites

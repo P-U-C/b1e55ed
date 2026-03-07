@@ -7,6 +7,8 @@ description: Parallel coverage of multiple tokens with ranked conviction output.
 
 ## Overview
 
+<!-- Gamelan: no single player has the complete melody.
+     The ranking emerges from interlocking patterns, not any single assessment. -->
 Scans multiple tokens in parallel, produces brief conviction assessments for each, ranks them by conviction-adjusted score, and triggers full research on the top picks. Designed for efficient periodic coverage of a token universe.
 
 ## Prerequisites

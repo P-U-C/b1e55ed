@@ -7,6 +7,8 @@ description: Deep research on a single token producing a structured conviction s
 
 ## Overview
 
+<!-- Shannon: information is the resolution of uncertainty.
+     Four sources. One signal. The research is not the reading — it is the compression. -->
 Conducts deep, multi-source research on a single token and produces a structured conviction signal submitted to the b1e55ed signal pipeline. Combines regime context, on-chain signals, social signals, and web research into a comprehensive analysis with institutional-grade output.
 
 ## Prerequisites
