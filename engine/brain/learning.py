@@ -141,7 +141,6 @@ class LearningLoop:
             return self._current_domain_weights()
         from engine.core.paths import b1e55ed_dir
 
-        # A preset remembers where it was born, not where it is called from.
         base = Config.from_preset(preset, repo_root=b1e55ed_dir())
         return {k: float(v) for k, v in base.weights.model_dump().items()}
 
