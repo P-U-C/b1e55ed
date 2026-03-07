@@ -105,9 +105,9 @@ def create_app() -> FastAPI:
     from engine.core.paths import config_dir
 
     # In production installs, user config lives in ~/.b1e55ed/config/user.yaml.
-    # In dev checkouts, it lives relative to the repo root (Path.cwd()).
-    # Always prefer the canonical production path; fall back to cwd for dev.
-    root = Path.cwd()
+    # In dev checkouts, it lives relative to the repo root.
+    # Use __file__-relative path (not cwd) so tests work regardless of working directory.
+    root = Path(__file__).resolve().parent.parent
     user_path = config_dir() / "user.yaml"
     if not user_path.exists():
         user_path = root / "config" / "user.yaml"
@@ -151,8 +151,14 @@ def create_app() -> FastAPI:
         if getattr(app.state, "db", None) is None:
             from engine.core.paths import data_dir
 
+            # The map is not the territory. Path.cwd() is not the database.
             app.state.db = Database(data_dir() / "brain.db")
             created_db = True
+
+        from engine.producers import registry as producer_registry
+
+        producer_registry.discover()
+        app.state.registry = producer_registry
 
         # Auto-register local node as an operator contributor.
         try:

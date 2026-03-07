@@ -333,7 +333,7 @@ TOOLS: list[dict[str, Any]] = [
 def _tool_get_brain_status(db: Database, params: dict) -> dict:
     regime = None
     regime_at = None
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.regime_change.v1",),
     ).fetchone()
@@ -344,7 +344,7 @@ def _tool_get_brain_status(db: Database, params: dict) -> dict:
 
     ks_level = 0
     ks_reason = None
-    ks_row = db.conn.execute(
+    ks_row = db.execute(
         "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
     ).fetchone()
@@ -355,7 +355,7 @@ def _tool_get_brain_status(db: Database, params: dict) -> dict:
 
     last_cycle_id = None
     last_cycle_at = None
-    cy_row = db.conn.execute(
+    cy_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.cycle.v1",),
     ).fetchone()
@@ -381,12 +381,12 @@ def _tool_get_recent_signals(db: Database, params: dict) -> list[dict]:
     if domain:
         # Match on the type prefix
         pattern = f"{domain}%"
-        rows = db.conn.execute(
+        rows = db.execute(
             "SELECT id, type, ts, source, payload FROM events WHERE type LIKE ? ORDER BY ts DESC LIMIT ?",
             (pattern, limit),
         ).fetchall()
     else:
-        rows = db.conn.execute(
+        rows = db.execute(
             "SELECT id, type, ts, source, payload FROM events WHERE type LIKE 'signal.%' ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -406,7 +406,7 @@ def _tool_get_recent_signals(db: Database, params: dict) -> list[dict]:
 
 
 def _tool_get_open_positions(db: Database, params: dict) -> list[dict]:
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage,
                stop_loss, take_profit, opened_at, status, realized_pnl
@@ -442,7 +442,7 @@ def _tool_get_signal_attribution(db: Database, params: dict) -> dict:
     if not signal_id:
         raise ValueError("signal_id is required")
 
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT id, type, ts, source, contributor_id, trace_id, payload FROM events WHERE id = ?",
         (signal_id,),
     ).fetchone()
@@ -462,7 +462,7 @@ def _tool_get_signal_attribution(db: Database, params: dict) -> dict:
 
     # Attribution: look up contributor info if available
     if row[4]:
-        contrib_row = db.conn.execute(
+        contrib_row = db.execute(
             "SELECT node_id, name, role FROM contributors WHERE id = ?",
             (row[4],),
         ).fetchone()

@@ -35,14 +35,14 @@ def _parse_dt(ts: str | None) -> datetime | None:
 
 
 def _ensure_endpoint_column(db: Database) -> None:
-    cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
+    cols = [str(r[1]) for r in db.execute("PRAGMA table_info(producer_health)").fetchall()]
     with db.conn:
         if "endpoint" not in cols:
-            db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+            db.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
         if "quarantined_until" not in cols:
-            db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+            db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
         if "quarantined_reason" not in cols:
-            db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
+            db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
 
 class ProducerRegistration(BaseModel):
@@ -96,7 +96,7 @@ def producer_status(
     out: dict[str, ProducerHealth] = {}
 
     for name in names:
-        row = db.conn.execute(
+        row = db.execute(
             """
             SELECT name, domain, schedule, endpoint, quarantined_until, quarantined_reason, last_run_at, last_success_at, last_error,
                    consecutive_failures, events_produced, avg_duration_ms, expected_interval_ms, updated_at
@@ -167,7 +167,7 @@ def register_producer(reg: ProducerRegistration, db: Database = Depends(get_db))
 
     now = datetime.now(tz=UTC).isoformat()
 
-    existing = db.conn.execute(
+    existing = db.execute(
         "SELECT name FROM producer_health WHERE name = ?",
         (reg.name,),
     ).fetchone()
@@ -180,7 +180,7 @@ def register_producer(reg: ProducerRegistration, db: Database = Depends(get_db))
         )
 
     with db.conn:
-        db.conn.execute(
+        db.execute(
             """
             INSERT INTO producer_health (name, domain, schedule, endpoint, updated_at)
             VALUES (?, ?, ?, ?, ?)
@@ -202,7 +202,7 @@ def deregister_producer(name: str, db: Database = Depends(get_db)) -> dict[str, 
     _ensure_endpoint_column(db)
 
     with db.conn:
-        cur = db.conn.execute(
+        cur = db.execute(
             "DELETE FROM producer_health WHERE name = ?",
             (name,),
         )
@@ -222,7 +222,7 @@ def deregister_producer(name: str, db: Database = Depends(get_db)) -> dict[str, 
 def list_producers(db: Database = Depends(get_db)) -> dict[str, Any]:
     _ensure_endpoint_column(db)
 
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT name, domain, schedule, endpoint, updated_at
         FROM producer_health
@@ -301,7 +301,7 @@ def producer_capabilities(
     """
     _ensure_endpoint_column(db)
 
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT name, domain, last_success_at, consecutive_failures,
                last_run_at, quarantined_until, updated_at
@@ -343,7 +343,7 @@ def producer_capabilities(
 
         if not signal_type_names:
             # Look up event types this producer has actually emitted
-            type_rows = db.conn.execute(
+            type_rows = db.execute(
                 "SELECT DISTINCT type FROM events WHERE source = ? AND type LIKE 'signal.%' LIMIT 20",
                 (name,),
             ).fetchall()
