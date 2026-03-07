@@ -165,6 +165,8 @@ class Config(BaseSettings):
 
     # Paths — use default_factory so Path.home() is evaluated at construction
     # time, not import time (allows tests to monkeypatch HOME).
+    # Lambda defers evaluation: Path.home() is resolved at construction, not import.
+    # Tests may monkeypatch HOME; module-level constants would miss them.
     data_dir: Path = Field(default_factory=lambda: _data_dir())
 
     config_dir: Path = Path("config")

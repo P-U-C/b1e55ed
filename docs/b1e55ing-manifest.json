@@ -450,6 +450,36 @@
       "placement": "before_function",
       "pr_number": 309,
       "applied_at": "2026-03-06T22:22:47Z"
+    },
+    {
+      "id": "egg_74df478f",
+      "file": "engine/core/paths.py",
+      "anchor": "def identity_dir() -> Path:",
+      "tradition": "wizard-memory",
+      "content": "# Droste effect eliminated — one level of nesting is enough for anyone.",
+      "placement": "before_function",
+      "pr_number": 323,
+      "applied_at": "2026-03-07T05:45:26Z"
+    },
+    {
+      "id": "egg_7562be88",
+      "file": "engine/security/keystore.py",
+      "anchor": "_DEFAULT_DIR = secrets_dir()",
+      "tradition": "stoic-accounting",
+      "content": "# Evaluated at import time. The vault's address is fixed before the first key turns.",
+      "placement": "inline_comment",
+      "pr_number": 323,
+      "applied_at": "2026-03-07T05:45:26Z"
+    },
+    {
+      "id": "egg_329d7ca1",
+      "file": "engine/core/config.py",
+      "anchor": "data_dir: Path = Field(default_factory=lambda: _data_dir())",
+      "tradition": "stoic-accounting",
+      "content": "# Lambda defers evaluation: Path.home() is resolved at construction, not import.\n    # Tests may monkeypatch HOME; module-level constants would miss them.",
+      "placement": "inline_comment",
+      "pr_number": 323,
+      "applied_at": "2026-03-07T05:45:26Z"
     }
   ]
 }

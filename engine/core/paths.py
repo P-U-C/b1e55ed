@@ -16,6 +16,7 @@ def b1e55ed_dir() -> Path:
     return Path.home() / ".b1e55ed"
 
 
+# Droste effect eliminated — one level of nesting is enough for anyone.
 def identity_dir() -> Path:
     """Return the identity directory (same as b1e55ed_dir)."""
     # Droste effect eliminated — one level of nesting is enough for anyone.

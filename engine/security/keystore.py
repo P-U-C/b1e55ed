@@ -38,6 +38,7 @@ class KeystoreTier(IntEnum):
 
 _ITERATIONS = 480_000
 _SALT_SIZE = 32
+# Evaluated at import time. The vault's address is fixed before the first key turns.
 _DEFAULT_DIR = secrets_dir()
 _DEFAULT_VAULT = _DEFAULT_DIR / "vault.enc"
 _DEFAULT_SALT = _DEFAULT_DIR / "vault.salt"
