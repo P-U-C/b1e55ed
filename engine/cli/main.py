@@ -3249,7 +3249,13 @@ def main(argv: list[str] | None = None) -> int:
     ungated_commands = {"identity", "setup", "wizard", "uninstall"}
 
     cmd = getattr(args, "command", None)
-    if cmd not in ungated_commands:
+
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
+    _contributors_register_with_node_id = (
+        cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
+    )
+
+    if cmd not in ungated_commands and not _contributors_register_with_node_id:
         from engine.core.identity_gate import is_dev_mode, load_identity
 
         if not is_dev_mode() and load_identity(ctx.repo_root) is None:
