@@ -3246,10 +3246,21 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup", "wizard", "uninstall"}
+    # Process supervisors (daemon, start) are ungated — identity is checked by sub-processes
+    # The conductor doesn't audition. The orchestra does.
+    ungated_commands = {"identity", "setup", "wizard", "uninstall", "daemon", "start"}
 
     cmd = getattr(args, "command", None)
-    if cmd not in ungated_commands:
+
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
+    # Wittgenstein: whereof one cannot speak, thereof one must be silent.
+    # But you spoke. You gave us the node_id. The gate opens.
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
+    _contributors_register_with_node_id = (
+        cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
+    )
+
+    if cmd not in ungated_commands and not _contributors_register_with_node_id:
         from engine.core.identity_gate import is_dev_mode, load_identity
 
         if not is_dev_mode() and load_identity(ctx.repo_root) is None:
