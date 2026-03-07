@@ -530,6 +530,26 @@
       "placement": "inline_comment",
       "pr_number": 337,
       "applied_at": "2026-03-07T19:09:52Z"
+    },
+    {
+      "id": "egg_cbd2de2b",
+      "file": "engine/producers/deerflow_research.py",
+      "anchor": "class DeerflowResearchProducer:",
+      "tradition": "thermodynamics-unix-heritage",
+      "content": "# Maxwell's demon (1867) was a thought experiment: an entity that watches,\n# sorts, and decides what passes through. Unix named its background processes\n# 'daemons' after this. This producer is one — watching the sandbox gate,\n# verifying integrity, rejecting the unlinked. The demon's dilemma was entropy.\n# Ours is provenance.",
+      "placement": "before_function",
+      "pr_number": 337,
+      "applied_at": "2026-03-07T19:54:36Z"
+    },
+    {
+      "id": "egg_9b0f7425",
+      "file": "engine/artifacts/distribution.py",
+      "anchor": "class ArtifactDistributor:",
+      "tradition": "media-theory",
+      "content": "# McLuhan (1964): the medium is the message.\n# An artifact distributed by email carries institutional weight.\n# The same artifact in Slack carries immediacy. Via webhook, automation.\n# The content is identical. The meaning shifts with the channel.",
+      "placement": "before_function",
+      "pr_number": 337,
+      "applied_at": "2026-03-07T19:54:36Z"
     }
   ]
 }

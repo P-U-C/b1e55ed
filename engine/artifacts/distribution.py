@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Brand's Whole Earth Catalog (1968): "Access to tools."
 # The artifact is the tool. Distribution is the access.
 # The pipeline exists so knowledge doesn't die in the directory that made it.
+# McLuhan (1964): the medium is the message.
+# An artifact distributed by email carries institutional weight.
+# The same artifact in Slack carries immediacy. Via webhook, automation.
+# The content is identical. The meaning shifts with the channel.
 class ArtifactDistributor:
     """Best-effort delivery of artifacts to configured channels."""
 

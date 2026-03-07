@@ -39,6 +39,11 @@ DEFAULT_POLL_INTERVAL = 30  # seconds
 SUPPORTED_EXTENSIONS = {".html", ".md", ".json", ".txt", ".pdf"}
 
 
+# Maxwell's demon (1867) was a thought experiment: an entity that watches,
+# sorts, and decides what passes through. Unix named its background processes
+# 'daemons' after this. This producer is one — watching the sandbox gate,
+# verifying integrity, rejecting the unlinked. The demon's dilemma was entropy.
+# Ours is provenance.
 class DeerflowResearchProducer:
     """Watches a sandbox directory and ingests DeerFlow artifacts into the store."""
 
