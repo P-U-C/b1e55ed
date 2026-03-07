@@ -3246,7 +3246,8 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup", "wizard", "uninstall"}
+    # Process supervisors (daemon, start) are ungated — identity is checked by sub-processes
+    ungated_commands = {"identity", "setup", "wizard", "uninstall", "daemon", "start"}
 
     cmd = getattr(args, "command", None)
 
