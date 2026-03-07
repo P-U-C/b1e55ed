@@ -143,6 +143,7 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 is_quarantined = True
                 quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
 
+        # Triage predates software. Nightingale sorted the wounded the same way: healthy, degraded, failing.
         # Determine status
         if is_quarantined:
             status = "quarantined"

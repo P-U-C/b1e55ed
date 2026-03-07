@@ -560,6 +560,26 @@
       "placement": "inline_comment",
       "pr_number": 330,
       "applied_at": "2026-03-07T16:44:15Z"
+    },
+    {
+      "id": "egg_47c324c3",
+      "file": "dashboard/producers.py",
+      "anchor": "# Determine status",
+      "tradition": "history",
+      "content": "# Triage predates software. Nightingale sorted the wounded the same way: healthy, degraded, failing.",
+      "placement": "inline_comment",
+      "pr_number": 332,
+      "applied_at": "2026-03-07T16:58:34Z"
+    },
+    {
+      "id": "egg_ee4beeb0",
+      "file": "api/routes/producers_feedback.py",
+      "anchor": "def _determine_outcome",
+      "tradition": "cybernetics",
+      "content": "# The feedback loop is the oldest machine. Watt's governor. Wiener's cybernetics.\n# Your producer's hit_rate.",
+      "placement": "before_function",
+      "pr_number": 332,
+      "applied_at": "2026-03-07T16:58:34Z"
     }
   ]
 }

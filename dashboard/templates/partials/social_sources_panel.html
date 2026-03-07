@@ -1,0 +1,49 @@
+<div id="social-sources-panel">
+  {% if sources %}
+  <table class="data-table" style="font-size:0.75rem;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Value</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td class="text-bright" style="font-weight:400;">{{ s.name }}</td>
+        <td class="text-dim">{{ s.type }}</td>
+        <td>{{ s.value }}</td>
+        <td>
+          <span class="dot {{ 'dot-ok' if s.enabled else 'dot-error' }}"></span>
+          {{ 'ON' if s.enabled else 'OFF' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-dim" style="font-size:0.75rem; margin-bottom:0.5rem;">No sources configured.</div>
+  {% endif %}
+
+  <form hx-post="/social/action/add-source"
+        hx-target="#social-sources-panel"
+        hx-swap="outerHTML"
+        style="display:flex; gap:0.5rem; align-items:center; margin-top:0.5rem; flex-wrap:wrap;">
+    <input type="text" name="name" placeholder="Source name"
+           style="font-size:0.7rem; padding:0.2rem 0.4rem; background:var(--bg); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; width:7rem;">
+    <select name="type"
+            style="font-size:0.7rem; padding:0.2rem 0.4rem; background:var(--bg); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px;">
+      <option value="twitter_account">Twitter Account</option>
+      <option value="keyword">Keyword</option>
+      <option value="subreddit">Subreddit</option>
+    </select>
+    <input type="text" name="value" placeholder="@handle or keyword"
+           style="font-size:0.7rem; padding:0.2rem 0.4rem; background:var(--bg); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; width:8rem;">
+    <button type="submit"
+            style="font-size:0.65rem; padding:0.2rem 0.4rem; background:rgba(255,255,255,0.08); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; cursor:pointer;">
+      Add Source
+    </button>
+  </form>
+</div>
