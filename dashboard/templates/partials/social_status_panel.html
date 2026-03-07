@@ -1,0 +1,74 @@
+<div id="social-status-panel">
+  <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; font-size:0.8125rem; margin-bottom:0.75rem;">
+    <div>
+      Pipeline:
+      <span class="dot {{ 'dot-ok' if pipeline_status == 'active' else ('dot-degraded' if pipeline_status == 'degraded' else ('dot-error' if pipeline_status == 'down' else '')) }}"></span>
+      <span class="{{ 'text-bull' if pipeline_status == 'active' else ('text-warn' if pipeline_status == 'degraded' else 'text-bear') }}" style="font-weight:500;">
+        {{ pipeline_status | upper }}
+      </span>
+    </div>
+    <div class="text-dim">Last run: {{ pipeline_last_run | default('never') }}</div>
+  </div>
+
+  <!-- Diagnosis -->
+  <div style="font-size:0.8125rem; color:var(--text); margin-bottom:0.75rem; padding:0.5rem; background:rgba(255,255,255,0.02); border-radius:4px;">
+    <span style="font-weight:400; color:var(--text-dim);">Diagnosis:</span>
+    <span style="color:var(--text-bright);">{{ diagnosis | default('—') }}</span>
+  </div>
+
+  <!-- Action buttons -->
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+    {% if 'seed_default_watchlist' in actions_available %}
+    <button class="btn btn-sm"
+            hx-post="/social/action/seed"
+            hx-target="#social-status-panel"
+            hx-swap="outerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--green); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Seed Watchlist
+    </button>
+    {% endif %}
+    {% if 'reset_failures' in actions_available %}
+    <button class="btn btn-sm"
+            hx-post="/social/action/reset-failures"
+            hx-target="#social-status-panel"
+            hx-swap="outerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--amber); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Reset Failures
+    </button>
+    {% endif %}
+    <button class="btn btn-sm"
+            hx-post="/social/action/run-now"
+            hx-target="#run-now-result"
+            hx-swap="innerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--blue); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Run Now
+    </button>
+    <span id="run-now-result"></span>
+  </div>
+
+  <!-- Per-producer health -->
+  {% if producer_health %}
+  <div style="font-size:0.75rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.5rem;">
+    {% for p in producer_health %}
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.35rem;">
+      <span class="dot {{ 'dot-ok' if p.healthy else 'dot-error' }}"></span>
+      <span style="width:10rem; color:var(--text-bright); font-weight:400;">{{ p.name }}</span>
+      <span class="text-dim">{{ p.consecutive_failures }} failures</span>
+      <span class="text-dim">events: {{ p.events_produced }}</span>
+      {% if p.last_success_at %}
+      <span class="text-dim">last success: {{ p.last_success_at }}</span>
+      {% endif %}
+      {% if p.last_error %}
+      <span style="color:var(--red); font-size:0.65rem;">{{ p.last_error[:60] }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not seeded %}
+  <div style="margin-top:0.75rem; padding:0.75rem; background:rgba(255,200,0,0.05); border:1px solid rgba(255,200,0,0.15); border-radius:4px; font-size:0.8125rem; color:var(--amber);">
+    ⚠ Seed the default watchlist to start the social pipeline. Click "Seed Watchlist" above or POST to <code>/api/v1/social/seed</code>.
+  </div>
+  {% endif %}
+</div>
