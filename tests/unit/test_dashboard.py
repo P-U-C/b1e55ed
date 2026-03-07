@@ -53,6 +53,9 @@ class DummyApiClient:
     def get_curator_feed(self) -> _Res:
         return _Res({"items": []}, False)
 
+    def get_artifacts(self, limit: int = 20) -> _Res:
+        return _Res({"items": []}, False)
+
     # used by config_page
     def _get_json(self, path: str, params: dict | None = None) -> _Res:
         return _Res({}, False)
