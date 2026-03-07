@@ -286,6 +286,8 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
 
 
 @router.get("/sentiment", response_model=SentimentResponse)
+# Galton, 1907: the crowd guessed the ox's weight better than any expert.
+# Aggregate sentiment is the digital descendant — not wisdom, but a statistical ghost of it.
 def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:
     """Sentiment data from social signal events."""
     rows = db.conn.execute(
@@ -326,6 +328,8 @@ def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:
 
 
 @router.get("/alerts", response_model=AlertsResponse)
+# Aeschylus, Agamemnon: Troy fell and the news crossed the Aegean by relay fire.
+# The first pub/sub. Eight beacons, one bit of information, zero latency budget.
 def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:
     """Echo chamber and velocity alerts from social events."""
     rows = db.conn.execute(

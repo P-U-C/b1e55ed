@@ -76,7 +76,7 @@
       "file": "engine/brain/calibration_curves.py",
       "anchor": "# Shannon: information is the resolution of uncertainty.",
       "tradition": "shannon-information",
-      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative — just not in the direction claimed.",
+      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative \u2014 just not in the direction claimed.",
       "placement": "inline_comment",
       "pr_number": 241,
       "applied_at": "2026-03-03T00:05:48Z"
@@ -126,7 +126,7 @@
       "file": "engine/brain/isotonic.py",
       "anchor": "def _fit_isotonic_fallback",
       "tradition": "zadrozny-elkan-2002",
-      "content": "# Pool Adjacent Violators — Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
+      "content": "# Pool Adjacent Violators \u2014 Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
       "placement": "before_function",
       "pr_number": 245,
       "applied_at": "2026-03-03T01:16:00Z"
@@ -236,7 +236,7 @@
       "file": "scripts/validate_code_deps.py",
       "anchor": "def check_circular_deps",
       "tradition": "cybernetics",
-      "content": "# Königsberg, 1736. Euler proved you cannot cross all seven bridges exactly once.\n# Graph theory was born from a walk that couldn't be taken.\n# Every cycle detector since is a footnote to that proof.",
+      "content": "# K\u00f6nigsberg, 1736. Euler proved you cannot cross all seven bridges exactly once.\n# Graph theory was born from a walk that couldn't be taken.\n# Every cycle detector since is a footnote to that proof.",
       "placement": "before_function",
       "pr_number": 278,
       "applied_at": "2026-03-04T13:17:23Z"
@@ -256,7 +256,7 @@
       "file": "docs/whitepaper-technical.md",
       "anchor": "**Current architecture**: append-only, hash-linked, application-layer enforcement.",
       "tradition": "Wittgenstein",
-      "content": "<!-- Wovon man nicht sprechen kann, darüber muss man schweigen. — Tractatus 7 -->",
+      "content": "<!-- Wovon man nicht sprechen kann, dar\u00fcber muss man schweigen. \u2014 Tractatus 7 -->",
       "placement": "after_anchor",
       "pr_number": 282,
       "applied_at": "2026-03-04T20:44:05Z"
@@ -266,7 +266,7 @@
       "file": "docs/whitepaper-summary.md",
       "anchor": "a lightweight directional EMA tracker",
       "tradition": "Strunk & White",
-      "content": "<!-- Vigorous writing is concise. — Strunk & White, III.17 -->",
+      "content": "<!-- Vigorous writing is concise. \u2014 Strunk & White, III.17 -->",
       "placement": "after_anchor",
       "pr_number": 282,
       "applied_at": "2026-03-04T20:44:05Z"
@@ -336,7 +336,7 @@
       "file": "engine/cli/commands/wizard.py",
       "anchor": "def _step_register_contributor(repo_root: Path) -> None:",
       "tradition": "rfc-409-remembrance",
-      "content": "# RFC 7231 §6.5.9 defines 409 as \"conflict with the current state of the target resource.\"\n# Translation: you are already here.  The ledger does not need a second entry.",
+      "content": "# RFC 7231 \u00a76.5.9 defines 409 as \"conflict with the current state of the target resource.\"\n# Translation: you are already here.  The ledger does not need a second entry.",
       "placement": "before_function",
       "pr_number": 289,
       "applied_at": "2026-03-05T06:07:27Z"
@@ -346,7 +346,7 @@
       "file": "engine/cli/commands/wizard.py",
       "anchor": "def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:",
       "tradition": "wizard-memory",
-      "content": "# A wizard that repeats steps the initiate has already passed is not wise — it is forgetful.",
+      "content": "# A wizard that repeats steps the initiate has already passed is not wise \u2014 it is forgetful.",
       "placement": "before_function",
       "pr_number": 289,
       "applied_at": "2026-03-05T06:07:27Z"
@@ -396,7 +396,7 @@
       "file": "engine/cli/commands/daemon.py",
       "anchor": "class Supervisor:",
       "tradition": "symbolic-cosmology",
-      "content": "# Δαίμων (daimon): a spirit between gods and mortals, attending to tasks\n# humans should not have to. Maxwell imagined one sorting molecules. We sort processes.",
+      "content": "# \u0394\u03b1\u03af\u03bc\u03c9\u03bd (daimon): a spirit between gods and mortals, attending to tasks\n# humans should not have to. Maxwell imagined one sorting molecules. We sort processes.",
       "placement": "before_function",
       "pr_number": 297,
       "applied_at": "2026-03-05T17:44:37Z"
@@ -436,7 +436,7 @@
       "file": "engine/cli/main.py",
       "anchor": "b1e55ed is already running",
       "tradition": "hex-blessing",
-      "content": "# 0xb1e55ed — the port is bound, the oracle breathes",
+      "content": "# 0xb1e55ed \u2014 the port is bound, the oracle breathes",
       "placement": "inline_comment",
       "pr_number": 306,
       "applied_at": "2026-03-06T07:24:35Z"
@@ -446,7 +446,7 @@
       "file": "tests/integration/test_contributor_flow.py",
       "anchor": "def _make_app(tmp_path: Path):",
       "tradition": "purification",
-      "content": "# 🧹 the cache remembers what the test must forget",
+      "content": "# \ud83e\uddf9 the cache remembers what the test must forget",
       "placement": "before_function",
       "pr_number": 309,
       "applied_at": "2026-03-06T22:22:47Z"
@@ -455,7 +455,7 @@
       "id": "egg_8706cea1",
       "file": "tests/unit/test_identity_cli.py",
       "anchor": "test_identity_file_read_write",
-      "tradition": "Library of Babel — Borges' infinite recursive library. The bug was paths nesting into themselves.",
+      "tradition": "Library of Babel \u2014 Borges' infinite recursive library. The bug was paths nesting into themselves.",
       "content": "def test_no_recursive_nesting_like_directories_of_babel(tmp_path, monkeypatch) -> None:\n    \"\"\"Borges imagined infinite nested rooms. We had two.\"\"\"\n    from engine.cli import CliContext, _identity_dir\n\n    monkeypatch.setenv(\"HOME\", str(tmp_path))\n    ctx = CliContext(repo_root=tmp_path / \".b1e55ed\")\n    result = _identity_dir(ctx)\n    assert \".b1e55ed/.b1e55ed\" not in str(result)\n",
       "placement": "before_function",
       "pr_number": 322,
@@ -465,8 +465,8 @@
       "id": "egg_15635e83",
       "file": "engine/cli/main.py",
       "anchor": "_identity_dir",
-      "tradition": "Droste effect — the recursive visual of the cocoa tin containing an image of itself.",
-      "content": "    # Droste effect eliminated — one level of nesting is enough for anyone\n",
+      "tradition": "Droste effect \u2014 the recursive visual of the cocoa tin containing an image of itself.",
+      "content": "    # Droste effect eliminated \u2014 one level of nesting is enough for anyone\n",
       "placement": "inline_comment",
       "pr_number": 322,
       "applied_at": "2026-03-07T05:09:09Z"
@@ -497,6 +497,46 @@
       "anchor": "def load_identity",
       "tradition": "philosophy",
       "content": "# Identity is not where you stand. It is where it was forged.\n# Path.cwd() changes with the caller. The forge does not.",
+      "placement": "before_function",
+      "pr_number": 324,
+      "applied_at": "2026-03-07T05:54:55Z"
+    },
+    {
+      "id": "egg_5128b143",
+      "file": "api/routes/social.py",
+      "anchor": "def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:",
+      "tradition": "collective-intelligence",
+      "content": "# Galton, 1907: the crowd guessed the ox's weight better than any expert.\n# Aggregate sentiment is the digital descendant \u2014 not wisdom, but a statistical ghost of it.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_0fab17b7",
+      "file": "api/routes/social.py",
+      "anchor": "def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:",
+      "tradition": "signal-fires",
+      "content": "# Aeschylus, Agamemnon: Troy fell and the news crossed the Aegean by relay fire.\n# The first pub/sub. Eight beacons, one bit of information, zero latency budget.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_99bd1b29",
+      "file": "dashboard/services/api_client.py",
+      "anchor": "def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:",
+      "tradition": "heisenberg-observer-intervention",
+      "content": "# GET is observation. POST is intervention.\n# Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.",
+      "placement": "before_function",
+      "pr_number": 334,
+      "applied_at": "2026-03-07T18:15:08Z"
+    },
+    {
+      "id": "egg_633f580b",
+      "file": "tests/unit/test_social_api.py",
+      "anchor": "def _seed_social_events(db: Database) -> None:",
+      "tradition": "milgram-experimental-design",
+      "content": "# To test for echo chambers, first build one.\n# The experimenter who constructs the bias is the only one qualified to detect it.",
       "placement": "before_function",
       "pr_number": 327,
       "applied_at": "2026-03-07T06:50:24Z"

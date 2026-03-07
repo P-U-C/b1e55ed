@@ -588,6 +588,9 @@ def _step3_identity(repo_root: Path) -> None:
             try:
                 import shutil as _shutil
 
+                # Shannon: information is the resolution of uncertainty.
+                # which(b1e55ed) resolves whether we are in production or dev.
+                # The forge that can find itself is already running correctly.
                 _b1e55ed = _shutil.which("b1e55ed")
                 _forge_cmd: list[str] = [_b1e55ed, "identity", "forge"] if _b1e55ed is not None else [sys.executable, "-m", "engine.cli", "identity", "forge"]
 
