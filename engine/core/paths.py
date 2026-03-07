@@ -32,6 +32,8 @@ def logs_dir() -> Path:
     return b1e55ed_dir() / "logs"
 
 
+# /etc, /var, /tmp — the ancients understood:
+# name the directory once, reference it everywhere.
 def secrets_dir() -> Path:
     """Return the secrets directory: ~/.b1e55ed/secrets."""
     return b1e55ed_dir() / "secrets"

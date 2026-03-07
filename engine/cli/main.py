@@ -3247,6 +3247,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Commands that don't require forged identity
     # Process supervisors (daemon, start) are ungated — identity is checked by sub-processes
+    # The conductor doesn't audition. The orchestra does.
     ungated_commands = {"identity", "setup", "wizard", "uninstall", "daemon", "start"}
 
     cmd = getattr(args, "command", None)
