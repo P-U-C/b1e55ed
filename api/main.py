@@ -79,11 +79,9 @@ class IdentityGateMiddleware(BaseHTTPMiddleware):
         if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
             return await call_next(request)
 
-        from pathlib import Path
-
         from engine.core.identity_gate import load_identity
 
-        identity = load_identity(Path.cwd())
+        identity = load_identity()
         if identity is None:
             return JSONResponse(
                 status_code=403,
@@ -151,10 +149,9 @@ def create_app() -> FastAPI:
 
         created_db = False
         if getattr(app.state, "db", None) is None:
-            from pathlib import Path
+            from engine.core.paths import data_dir
 
-            root = Path.cwd()
-            app.state.db = Database(root / "data" / "brain.db")
+            app.state.db = Database(data_dir() / "brain.db")
             created_db = True
 
         # Auto-register local node as an operator contributor.
