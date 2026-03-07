@@ -103,7 +103,7 @@ def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> S
     )
 
     with db.conn:
-        db.conn.execute(
+        db.execute(
             """
             INSERT INTO contributor_signals (contributor_id, event_id, signal_direction, signal_score, signal_asset)
             VALUES (?, ?, ?, ?, ?)
@@ -155,7 +155,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     import json as _json
 
     # Look up the signal event
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT id, type, ts, source, contributor_id, payload FROM events WHERE id = ?",
         (signal_id,),
     ).fetchone()
@@ -171,7 +171,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     contributor_id: str | None = row["contributor_id"]
 
     if contributor_id is not None:
-        contrib_row = db.conn.execute(
+        contrib_row = db.execute(
             "SELECT name, metadata FROM contributors WHERE id = ?",
             (contributor_id,),
         ).fetchone()
@@ -199,7 +199,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     emitted_at: str | None = str(row["ts"]) if row["ts"] else None
 
     # --- Linked trades via contributor_signals join → positions ---
-    cs_row = db.conn.execute(
+    cs_row = db.execute(
         "SELECT id FROM contributor_signals WHERE event_id = ? LIMIT 1",
         (signal_id,),
     ).fetchone()
@@ -211,7 +211,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
         # Look for any closed positions that might have been opened around the same signal time
         # The OMS doesn't directly link signals to positions, so we do a best-effort lookup:
         # find positions opened after this signal's ts and closed (realized_pnl not null).
-        pos_rows = db.conn.execute(
+        pos_rows = db.execute(
             """
             SELECT id, realized_pnl, closed_at FROM positions
             WHERE status = 'closed' AND realized_pnl IS NOT NULL
@@ -249,13 +249,13 @@ def list_signals(
     if domain:
         like = f"signal.{domain}.%"
 
-    total_row = db.conn.execute(
+    total_row = db.execute(
         "SELECT COUNT(1) FROM events WHERE type LIKE ?",
         (like,),
     ).fetchone()
     total = int(total_row[0]) if total_row is not None else 0
 
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, type, ts, source, payload
         FROM events

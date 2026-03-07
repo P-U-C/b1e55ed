@@ -15,22 +15,13 @@ from engine.security import ensure_identity
 
 
 @lru_cache
-def _repo_root() -> Path:
-    # Assume running from repo root (uvicorn started there). Fallback to parent of this file.
-    here = Path(__file__).resolve()
-    for p in [Path.cwd(), here.parent.parent]:
-        if (p / "config" / "default.yaml").exists():
-            return p
-    return Path.cwd()
-
-
-@lru_cache
 def _load_config() -> Config:
-    root = _repo_root()
-    user_path = root / "config" / "user.yaml"
+    from engine.core.paths import config_dir
+
+    user_path = config_dir() / "user.yaml"
     if user_path.exists():
         return Config.from_yaml(user_path)
-    return Config.from_repo_defaults(root)
+    return Config.from_repo_defaults(Path(__file__).resolve().parent.parent)
 
 
 def get_config(request: Request) -> Config:
@@ -42,8 +33,9 @@ def get_db(request: Request) -> Database:
     db = getattr(request.app.state, "db", None)
     if db is not None:
         return db
-    root = _repo_root()
-    return Database(root / "data" / "brain.db")
+    from engine.core.paths import data_dir
+
+    return Database(data_dir() / "brain.db")
 
 
 def get_registry(request: Request):

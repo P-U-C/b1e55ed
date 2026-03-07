@@ -42,7 +42,7 @@ def health(request: Request, db: Database = Depends(get_db)) -> JSONResponse:
 
     # 1. DB connectivity test
     try:
-        db.conn.execute("SELECT 1").fetchone()
+        db.execute("SELECT 1").fetchone()
         db_ok = True
         db_error = None
     except Exception as e:  # noqa: BLE001
@@ -52,7 +52,7 @@ def health(request: Request, db: Database = Depends(get_db)) -> JSONResponse:
     # 2. Last brain cycle recency
     cycle_age_minutes = None
     try:
-        last_cycle = db.conn.execute("SELECT ts FROM events WHERE type = 'brain.cycle.v1' ORDER BY ts DESC LIMIT 1").fetchone()
+        last_cycle = db.execute("SELECT ts FROM events WHERE type = 'brain.cycle.v1' ORDER BY ts DESC LIMIT 1").fetchone()
         if last_cycle:
             from datetime import datetime
 
@@ -73,7 +73,7 @@ def health(request: Request, db: Database = Depends(get_db)) -> JSONResponse:
     # 3. Kill switch state
     kill_switch_level = 0
     try:
-        ks_row = db.conn.execute("SELECT payload FROM events WHERE type = 'system.kill_switch.v1' ORDER BY ts DESC LIMIT 1").fetchone()
+        ks_row = db.execute("SELECT payload FROM events WHERE type = 'system.kill_switch.v1' ORDER BY ts DESC LIMIT 1").fetchone()
         if ks_row:
             ks = json.loads(ks_row[0])
             kill_switch_level = int(ks.get("level", 0))
