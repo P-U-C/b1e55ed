@@ -66,7 +66,7 @@ def _insert_signal_event(db, symbol="BTC", domain="ta", source="test_producer", 
             {
                 "signal_class": signal_class or "observation",
                 "confidence": 0.8,
-                "direction": "bullish",
+                "direction": "neutral",
                 "rationale": "test",
                 "operator_node_id": "node-test",
             }
@@ -186,7 +186,7 @@ async def test_submit_observation_signal(db_and_app):
                     "symbol": "BTC",
                     "signal_class": "observation",
                     "confidence": 0.7,
-                    "direction": "bullish",
+                    "direction": "neutral",
                     "rationale": "Whale accumulation",
                     "operator_node_id": "node-abc",
                 },
@@ -305,7 +305,7 @@ async def test_bulk_export_with_time_range(db_and_app):
 
 
 def test_research_payload_conviction_without_horizon():
-    with pytest.raises(ValueError, match="conviction requires horizon"):
+    with pytest.raises(ValueError, match="requires.*horizon"):
         ResearchSignalPayload(
             symbol="BTC",
             signal_class=SignalClass.CONVICTION,
@@ -388,6 +388,140 @@ def test_bump_karma_ceiling(temp_dir):
         assert new_ceiling == pytest.approx(0.5, abs=0.01)
     finally:
         db.close()
+
+
+# --- Signal class constraint enforcement (S0 gap fix) ---
+
+
+@pytest.mark.anyio
+async def test_submit_observation_with_direction_fails(db_and_app):
+    """observation signals cannot make directional claims."""
+    db, app = db_and_app
+    async with make_client(app) as ac:
+        r = await ac.post(
+            "/mcp",
+            json=_call_tool(
+                "submit_research_signal",
+                {
+                    "symbol": "BTC",
+                    "signal_class": "observation",
+                    "confidence": 0.6,
+                    "direction": "bullish",
+                    "rationale": "price looks strong",
+                    "operator_node_id": "op-node-123",
+                },
+            ),
+            headers=_HEADERS,
+        )
+    data = r.json()
+    assert "error" in data
+
+
+@pytest.mark.anyio
+async def test_submit_observation_neutral_direction_ok(db_and_app):
+    """observation signals with neutral direction are accepted."""
+    db, app = db_and_app
+    async with make_client(app) as ac:
+        r = await ac.post(
+            "/mcp",
+            json=_call_tool(
+                "submit_research_signal",
+                {
+                    "symbol": "BTC",
+                    "signal_class": "observation",
+                    "confidence": 0.7,
+                    "direction": "neutral",
+                    "rationale": "Whale accumulation observed",
+                    "operator_node_id": "op-node-456",
+                },
+            ),
+            headers=_HEADERS,
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["result"]["isError"] is False
+    result = json.loads(data["result"]["content"][0]["text"])
+    assert result["event_id"]
+    assert result["signal_class"] == "observation"
+
+
+@pytest.mark.anyio
+async def test_submit_detection_without_event_ts_fails(db_and_app):
+    """detection signals require event_ts."""
+    db, app = db_and_app
+    async with make_client(app) as ac:
+        r = await ac.post(
+            "/mcp",
+            json=_call_tool(
+                "submit_research_signal",
+                {
+                    "symbol": "ETH",
+                    "signal_class": "detection",
+                    "confidence": 0.9,
+                    "direction": "neutral",
+                    "rationale": "large transfer detected",
+                    "operator_node_id": "op-node-789",
+                },
+            ),
+            headers=_HEADERS,
+        )
+    data = r.json()
+    assert "error" in data
+
+
+@pytest.mark.anyio
+async def test_submit_detection_with_event_ts_ok(db_and_app):
+    """detection signals with event_ts are accepted."""
+    db, app = db_and_app
+    async with make_client(app) as ac:
+        r = await ac.post(
+            "/mcp",
+            json=_call_tool(
+                "submit_research_signal",
+                {
+                    "symbol": "ETH",
+                    "signal_class": "detection",
+                    "confidence": 0.85,
+                    "direction": "neutral",
+                    "rationale": "Large whale transfer detected on-chain",
+                    "operator_node_id": "op-node-101",
+                    "event_ts": "2026-03-07T10:00:00Z",
+                },
+            ),
+            headers=_HEADERS,
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["result"]["isError"] is False
+    result = json.loads(data["result"]["content"][0]["text"])
+    assert result["event_id"]
+    assert result["signal_class"] == "detection"
+
+
+def test_research_signal_payload_observation_rejects_directional():
+    """Unit test: ResearchSignalPayload raises on observation + directional."""
+    with pytest.raises(ValueError, match="directional claim"):
+        ResearchSignalPayload(
+            symbol="BTC",
+            signal_class=SignalClass.OBSERVATION,
+            confidence=0.6,
+            direction="bullish",
+            rationale="price looks strong",
+            operator_node_id="op-node-123",
+        )
+
+
+def test_research_signal_payload_detection_rejects_missing_event_ts():
+    """Unit test: ResearchSignalPayload raises on detection without event_ts."""
+    with pytest.raises(ValueError, match="event_ts"):
+        ResearchSignalPayload(
+            symbol="ETH",
+            signal_class=SignalClass.DETECTION,
+            confidence=0.9,
+            direction="neutral",
+            rationale="large transfer detected",
+            operator_node_id="op-node-123",
+        )
 
 
 def test_non_llm_producer_ceiling(temp_dir):

@@ -278,6 +278,7 @@ class ResearchSignalPayload(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
     direction: str  # "bullish" | "bearish" | "neutral"
     horizon: str | None = None  # Required if signal_class == conviction
+    event_ts: str | None = None  # Required if signal_class == detection (ISO timestamp of the event)
     rationale: str
     sources: list[str] = Field(default_factory=list)
     operator_node_id: str  # Forge node ID of the human operator
@@ -286,8 +287,21 @@ class ResearchSignalPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_class_constraints(self) -> ResearchSignalPayload:
+        # conviction: requires horizon
         if self.signal_class == SignalClass.CONVICTION and not self.horizon:
-            raise ValueError("signal_class=conviction requires horizon (e.g. '1-7d')")
+            raise ValueError("signal_class='conviction' requires 'horizon' (e.g. '1-7d'). Conviction signals must be falsifiable.")
+        # detection: requires event_ts
+        if self.signal_class == SignalClass.DETECTION and not self.event_ts:
+            raise ValueError(
+                "signal_class='detection' requires 'event_ts' (ISO timestamp of when the event occurred). "
+                "Detection signals must be anchored to a specific event."
+            )
+        # observation: direction must be neutral — observations are findings, not directional calls
+        if self.signal_class == SignalClass.OBSERVATION and self.direction not in ("neutral", "", None):
+            raise ValueError(
+                f"signal_class='observation' cannot have a directional claim (direction='{self.direction}'). "
+                "Use signal_class='conviction' for directional signals."
+            )
         return self
 
 

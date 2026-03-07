@@ -280,7 +280,14 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "submit_research_signal",
-        "description": "Validates and emits a signal.research.v1 event from a DeerFlow research task.",
+        "description": (
+            "Validates and emits a signal.research.v1 event. "
+            "Signal class constraints (schema-enforced): "
+            "observation: direction MUST be 'neutral' — no directional claims allowed. "
+            "detection: event_ts required (ISO timestamp of when the event occurred). "
+            "conviction: horizon required (e.g. '1-7d') — must be falsifiable. "
+            "operator_node_id is required. Karma flows to this node."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -291,6 +298,7 @@ TOOLS: list[dict[str, Any]] = [
                 "rationale": {"type": "string", "description": "Reasoning behind the signal"},
                 "operator_node_id": {"type": "string", "description": "Forge node ID of the human operator"},
                 "horizon": {"type": "string", "description": "REQUIRED for conviction signals (e.g. '1-7d')"},
+                "event_ts": {"type": "string", "description": "REQUIRED for detection signals. ISO timestamp of when the event occurred."},
                 "sources": {"type": "array", "items": {"type": "string"}},
                 "deerflow_task_id": {"type": "string"},
                 "artifact_url": {"type": "string"},
@@ -709,7 +717,7 @@ def _tool_submit_research_signal(db: Database, params: dict) -> dict:
         "rationale": params["rationale"],
         "operator_node_id": operator_node_id,
     }
-    for opt in ("horizon", "deerflow_task_id", "artifact_url"):
+    for opt in ("horizon", "event_ts", "deerflow_task_id", "artifact_url"):
         if params.get(opt):
             payload_data[opt] = params[opt]
     if params.get("sources"):
