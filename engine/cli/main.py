@@ -93,6 +93,16 @@ def _repo_root_from_cwd() -> Path:
     return Path.home() / ".b1e55ed"
 
 
+def _identity_dir(ctx: CliContext) -> Path:
+    """Return the directory where identity files are stored.
+
+    Always ~/.b1e55ed/ — identity is user-scoped regardless of dev vs production.
+    In dev checkouts, repo_root is the repo dir (no .b1e55ed suffix).
+    In production, repo_root IS ~/.b1e55ed, so we must not append .b1e55ed again.
+    """
+    return Path.home() / ".b1e55ed"
+
+
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
     """Derive brain.db path from config.data_dir, falling back to ~/.b1e55ed/data."""
     default = Path.home() / ".b1e55ed" / "data"
@@ -1970,7 +1980,7 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
             eth_private_key=eth_key_hex,
         )
 
-        identity_path = ctx.repo_root / ".b1e55ed" / "identity.key"
+        identity_path = _identity_dir(ctx) / "identity.key"
         identity.save(identity_path)
 
     except Exception as e:  # noqa: BLE001
@@ -2017,7 +2027,7 @@ def _format_elapsed(seconds: float) -> str:
 def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
     use_json = bool(getattr(args, "json", False))
 
-    identity_path = ctx.repo_root / ".b1e55ed" / "identity.json"
+    identity_path = _identity_dir(ctx) / "identity.json"
     if not identity_path.exists():
         if use_json:
             print(_json_dumps({"ok": False, "error": "identity_not_found"}))
@@ -2223,7 +2233,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     candidates = _safe_int(result.get("candidates"))
     elapsed_ms = _safe_int(result.get("elapsed_ms"))
 
-    identity_dir = ctx.repo_root / ".b1e55ed"
+    identity_dir = _identity_dir(ctx)
     identity_dir.mkdir(exist_ok=True)
 
     identity_data = {

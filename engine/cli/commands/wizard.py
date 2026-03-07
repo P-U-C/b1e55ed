@@ -546,7 +546,7 @@ def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
 
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    identity_path = Path.home() / ".b1e55ed" / "identity.json"
 
     if identity_path.exists():
         try:
@@ -874,7 +874,7 @@ def _step_register_contributor(repo_root: Path) -> None:
 
     _section("[4b] Contributor registration")
 
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    identity_path = Path.home() / ".b1e55ed" / "identity.json"
     if not identity_path.exists():
         print(f"  {dim('No identity — skipping registration.')}")
         return
