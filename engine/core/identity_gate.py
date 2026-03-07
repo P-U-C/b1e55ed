@@ -26,6 +26,8 @@ class ForgedIdentity:
     public_key: str = ""  # Ed25519 derived public key
 
 
+# Identity is not where you stand. It is where it was forged.
+# Path.cwd() changes with the caller. The forge does not.
 def load_identity(repo_root: Path | None = None) -> ForgedIdentity | None:
     """Load forged identity from ~/.b1e55ed/identity.json. Returns None if not forged.
 

@@ -53,7 +53,7 @@ def list_positions(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[PositionResponse]:
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage, margin_type,
                stop_loss, take_profit, opened_at, closed_at, status, realized_pnl, conviction_id,
@@ -72,7 +72,7 @@ def get_position(
     position_id: str = Path(..., description="Position id"),
     db: Database = Depends(get_db),
 ) -> PositionResponse:
-    r = db.conn.execute(
+    r = db.execute(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage, margin_type,
                stop_loss, take_profit, opened_at, closed_at, status, realized_pnl, conviction_id,

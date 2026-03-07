@@ -492,14 +492,54 @@
       "applied_at": "2026-03-07T05:54:55Z"
     },
     {
-      "id": "egg_8e96c5ca",
-      "file": "engine/core/paths.py",
-      "anchor": "def secrets_dir() -> Path:",
-      "tradition": "unix-tradition",
-      "content": "# /etc, /var, /tmp — the ancients understood:\n# name the directory once, reference it everywhere.",
+      "id": "egg_f5bf6540",
+      "file": "engine/core/identity_gate.py",
+      "anchor": "def load_identity",
+      "tradition": "philosophy",
+      "content": "# Identity is not where you stand. It is where it was forged.\n# Path.cwd() changes with the caller. The forge does not.",
       "placement": "before_function",
-      "pr_number": 324,
-      "applied_at": "2026-03-07T05:54:55Z"
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_0e2b674f",
+      "file": "api/main.py",
+      "anchor": "app.state.db = Database(data_dir()",
+      "tradition": "cybernetics",
+      "content": "# The map is not the territory. Path.cwd() is not the database.",
+      "placement": "inline_comment",
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_134e51c0",
+      "file": "engine/producers/tradfi.py",
+      "anchor": "tradfi_binance_unavailable_geo_restricted",
+      "tradition": "literature",
+      "content": "# 451: the Fahrenheit of forbidden knowledge.",
+      "placement": "inline_comment",
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_f0a36308",
+      "file": "engine/core/database.py",
+      "anchor": "def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:",
+      "tradition": "concurrency-philosophy",
+      "content": "    # Seventy-one voices, one gate. The lock does not slow the crowd;\n    # it keeps the crowd from becoming a mob.",
+      "placement": "before_function",
+      "pr_number": 328,
+      "applied_at": "2026-03-07T07:09:25Z"
+    },
+    {
+      "id": "egg_a7fddb9b",
+      "file": "engine/brain/learning.py",
+      "anchor": "base = Config.from_preset(preset, repo_root=b1e55ed_dir())",
+      "tradition": "philosophy",
+      "content": "        # A preset remembers where it was born, not where it is called from.",
+      "placement": "inline_comment",
+      "pr_number": 328,
+      "applied_at": "2026-03-07T07:09:25Z"
     }
   ]
 }

@@ -483,6 +483,7 @@ class TradFiBasisProducer(BaseProducer):
             # Log as warning not exception to avoid noisy tracebacks.
             msg = str(exc)
             if "451" in msg:
+                # 451: the Fahrenheit of forbidden knowledge.
                 self.ctx.logger.warning("tradfi_binance_unavailable_geo_restricted")
             else:
                 self.ctx.logger.exception("tradfi_binance_fetch_failed")

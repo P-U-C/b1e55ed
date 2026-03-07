@@ -87,7 +87,7 @@ def _determine_outcome(signal_ts: str, db: Database) -> str:
     window_start = (sig_dt - timedelta(seconds=300)).isoformat()
     window_end = (sig_dt + timedelta(seconds=300)).isoformat()
 
-    pos_row = db.conn.execute(
+    pos_row = db.execute(
         """
         SELECT payload FROM events
         WHERE type = 'execution.position_opened.v1'
@@ -107,7 +107,7 @@ def _determine_outcome(signal_ts: str, db: Database) -> str:
         return "no_fill"
 
     # Check realized PnL
-    pnl_row = db.conn.execute(
+    pnl_row = db.execute(
         "SELECT realized_pnl FROM positions WHERE id = ? LIMIT 1",
         (position_id,),
     ).fetchone()
@@ -146,7 +146,7 @@ def producer_feedback(
 
     # Fetch signals emitted by this producer within the window.
     # The source field is set to the producer name during ingestion.
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, type, ts, payload
         FROM events
