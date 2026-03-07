@@ -44,18 +44,29 @@ def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list
     cutoff = (datetime.now(tz=UTC) - timedelta(minutes=30)).isoformat()
     rows = db.execute(
         "SELECT payload FROM events WHERE type = ? AND ts >= ? ORDER BY ts DESC",
-        ("attribution.signal_accepted.v1", cutoff),
+        ("forecast.v1", cutoff),
     ).fetchall()
 
     seen: dict[str, dict[str, Any]] = {}
     for r in rows:
         p = json.loads(r[0]) if isinstance(r[0], str) else r[0]
-        pid = p.get("producer_id", "unknown")
+
+        action = p.get("action", "no_forecast")
+        abstention = p.get("abstention_reason")
+
+        # Skip abstention rows (action=no_forecast + abstention_reason set)
+        if action == "no_forecast" and abstention is not None:
+            continue
+
+        # Extract producer id: strip @version suffix from source
+        source = p.get("source", "unknown")
+        pid = source.split("@")[0] if "@" in source else source
         if pid in seen:
             continue
-        direction = p.get("direction", "neutral")
+
+        direction = "neutral" if action == "no_forecast" else action
         confidence = float(p.get("confidence", 0.0))
-        domain = p.get("domain", "unknown")
+        domain = p.get("asset", "unknown")
 
         # Lookup karma
         karma_row = db.execute("SELECT karma_score FROM producer_karma WHERE producer_id = ?", (pid,)).fetchone()

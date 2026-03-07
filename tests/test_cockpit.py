@@ -78,15 +78,18 @@ def test_cockpit_state_producer_breakdown_sorted_by_confidence(db):
     now = datetime.now(tz=UTC)
     for pid, conf in [("producer-a", 0.8), ("producer-b", 0.5)]:
         payload = {
-            "trade_id": f"t-{pid}",
-            "producer_id": pid,
-            "domain": "ta",
-            "signal_event_id": "evt-1",
-            "direction": "long",
+            "forecast_id": f"f-{pid}",
+            "source": f"{pid}@0.0.1",
+            "asset": "BTC",
+            "horizon": "24h",
+            "action": "long",
             "confidence": conf,
+            "regime_tag": "unknown",
+            "abstention_reason": None,
+            "lifecycle_state": "new",
         }
         db.append_event(
-            event_type=EventType.SIGNAL_ACCEPTED_V1,
+            event_type=EventType.FORECAST_V1,
             payload=payload,
             source="test",
             ts=now,
