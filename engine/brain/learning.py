@@ -501,12 +501,19 @@ class LearningLoop:
                 "skills_archived": corpus_fb.skills_archived,
             },
         }
-        self.db.append_event(
-            event_type=EventType.LEARNING_REPORT_V1,
-            payload=payload,
-            source="learning",
-            dedupe_key=f"learning:report:{utc_now().strftime('%Y%m%d%H')}",
-        )
+        import contextlib
+
+        from engine.core.exceptions import DedupeConflictError
+
+        # brain and brain-full run concurrently and may both write the same
+        # hourly learning report. First writer wins; second is discarded.
+        with contextlib.suppress(DedupeConflictError):
+            self.db.append_event(
+                event_type=EventType.LEARNING_REPORT_V1,
+                payload=payload,
+                source="learning",
+                dedupe_key=f"learning:report:{utc_now().strftime('%Y%m%d%H')}",
+            )
 
         return LearningResult(
             outcome_attributions=attributions,

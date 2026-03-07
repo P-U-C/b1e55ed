@@ -71,9 +71,21 @@ async def _identity_gate(request: Request, call_next):
 
 @app.on_event("startup")
 def _startup() -> None:
+    from engine.core.config import Config
+    from engine.core.paths import config_dir
+
     base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050/api/v1")
+    # Prefer explicit env var; fall back to user config so the dashboard
+    # works out of the box without extra env wiring.
     token = os.getenv("B1E55ED_API_TOKEN")
-    app.state.api_client = ApiClient(base_url=base_url, token=token)
+    if not token:
+        try:
+            user_path = config_dir() / "user.yaml"
+            cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(config_dir().parent)
+            token = str(getattr(cfg.api, "auth_token", "") or "")
+        except Exception:
+            pass
+    app.state.api_client = ApiClient(base_url=base_url, token=token or None)
 
 
 def _api(request: Request) -> ApiClient:

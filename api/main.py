@@ -104,8 +104,15 @@ def create_app() -> FastAPI:
     # Security check: refuse to start with empty auth_token unless explicitly overridden
     from pathlib import Path
 
+    from engine.core.paths import config_dir
+
+    # In production installs, user config lives in ~/.b1e55ed/config/user.yaml.
+    # In dev checkouts, it lives relative to the repo root (Path.cwd()).
+    # Always prefer the canonical production path; fall back to cwd for dev.
     root = Path.cwd()
-    user_path = root / "config" / "user.yaml"
+    user_path = config_dir() / "user.yaml"
+    if not user_path.exists():
+        user_path = root / "config" / "user.yaml"
     if user_path.exists():
         config = Config.from_yaml(user_path)
     else:
