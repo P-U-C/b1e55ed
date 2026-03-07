@@ -105,9 +105,9 @@ def create_app() -> FastAPI:
     from engine.core.paths import config_dir
 
     # In production installs, user config lives in ~/.b1e55ed/config/user.yaml.
-    # In dev checkouts, it lives relative to the repo root (Path.cwd()).
-    # Always prefer the canonical production path; fall back to cwd for dev.
-    root = Path.cwd()
+    # In dev checkouts, it lives relative to the repo root.
+    # Use __file__-relative path (not cwd) so tests work regardless of working directory.
+    root = Path(__file__).resolve().parent.parent
     user_path = config_dir() / "user.yaml"
     if not user_path.exists():
         user_path = root / "config" / "user.yaml"
