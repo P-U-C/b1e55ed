@@ -65,12 +65,40 @@ class DeerflowResearchProducer:
         self._processed_dir = self._sandbox_dir / "processed"
         self._rejected_dir = self._sandbox_dir / "rejected"
         self._running = False
+        # size_cache: path → (size, monotonic_ts) for write-stability detection
+        self._size_cache: dict[Path, tuple[int, float]] = {}
 
     def setup(self) -> None:
         """Create sandbox directory structure."""
         self._sandbox_dir.mkdir(parents=True, exist_ok=True)
         self._processed_dir.mkdir(exist_ok=True)
         self._rejected_dir.mkdir(exist_ok=True)
+
+    def _is_stable(self, path: Path) -> bool:
+        """Return True only if the file size has been unchanged since the last poll.
+
+        Two-poll write-stability check: first sighting records (size, ts); second
+        poll with the same size clears the entry and returns True. This ensures we
+        never read a file DeerFlow is still actively writing, without requiring any
+        DeerFlow-side convention (no tmp rename, no sentinel file needed).
+        """
+        try:
+            current_size = path.stat().st_size
+        except FileNotFoundError:
+            self._size_cache.pop(path, None)
+            return False
+
+        now = time.monotonic()
+        prev = self._size_cache.get(path)
+
+        if prev is None or prev[0] != current_size:
+            # First sight, or size changed — record and wait another poll
+            self._size_cache[path] = (current_size, now)
+            return False
+
+        # Size stable across two polls — safe to ingest
+        self._size_cache.pop(path)
+        return True
 
     def _load_meta(self, artifact_path: Path) -> dict[str, Any]:
         """Load sidecar .meta.json if present."""
@@ -213,11 +241,19 @@ class DeerflowResearchProducer:
         Returns list of result dicts for successfully ingested artifacts.
         """
         results = []
+        current_paths = set()
         for path in sorted(self._sandbox_dir.iterdir()):
+            current_paths.add(path)
+        # Evict cache entries for files no longer in sandbox (deleted/moved)
+        self._size_cache = {p: v for p, v in self._size_cache.items() if p in current_paths}
+        for path in sorted(current_paths):
             if not path.is_file():
                 continue
             if path.suffix == ".json" and path.stem.endswith(".meta"):
                 continue  # skip sidecar files
+            if not self._is_stable(path):
+                logger.debug("Skipping %s — not yet stable (write in progress?)", path.name)
+                continue
             result = self.ingest_one(path)
             if result:
                 results.append(result)
