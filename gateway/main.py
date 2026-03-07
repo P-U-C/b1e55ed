@@ -69,12 +69,12 @@ ROLE_HIERARCHY: dict[str, set[str]] = {
 ROLE_HIERARCHY["pm"] = ROLE_HIERARCHY["analyst"] | {
     "get_open_positions",
     "get_signal_attribution",
+    "submit_research_signal",  # queued for admin approval; not forwarded directly
 }
 ROLE_HIERARCHY["risk"] = ROLE_HIERARCHY["pm"] | {
     "b1e55ed_provenance_check",
 }
 ROLE_HIERARCHY["admin"] = ROLE_HIERARCHY["risk"] | {
-    "submit_research_signal",
     "emit_producer_signal",
 }
 

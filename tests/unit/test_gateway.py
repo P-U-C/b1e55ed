@@ -100,8 +100,7 @@ def test_analyst_blocked_from_submit_research_signal(client):
 
 
 def test_pm_signal_queued_not_forwarded(client):
-    """PM calling submit_research_signal gets queued, not forwarded."""
-    # PM doesn't have submit_research_signal — should be denied
+    """PM calling submit_research_signal is queued for admin approval, not forwarded."""
     resp = client.post(
         "/mcp/call",
         json=_mcp_body("submit_research_signal", {"signal": "alpha"}),
@@ -109,9 +108,10 @@ def test_pm_signal_queued_not_forwarded(client):
     )
     assert resp.status_code == 200
     body = resp.json()
-    # PM role doesn't include submit_research_signal, so it's denied
-    assert "error" in body
-    assert "cannot call" in body["error"]["message"]
+    # PM role has submit_research_signal but calls are queued, not forwarded directly
+    assert "result" in body
+    assert body["result"]["queued"] is True
+    assert "signal_id" in body["result"]
 
 
 def test_audit_log_written(client, tmp_path):
