@@ -25,8 +25,11 @@ class ForgedIdentity:
 
 
 def load_identity(repo_root: Path) -> ForgedIdentity | None:
-    """Load forged identity from .b1e55ed/identity.json. Returns None if not forged."""
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    """Load forged identity from ~/.b1e55ed/identity.json. Returns None if not forged."""
+    # Identity is always stored in ~/.b1e55ed/ (user-scoped).
+    # Do NOT use repo_root / ".b1e55ed" — in production repo_root IS ~/.b1e55ed,
+    # which would produce ~/.b1e55ed/.b1e55ed/ (double nesting).
+    identity_path = Path.home() / ".b1e55ed" / "identity.json"
     if not identity_path.exists():
         return None
     try:
