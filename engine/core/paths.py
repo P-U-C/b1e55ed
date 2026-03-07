@@ -38,6 +38,8 @@ def secrets_dir() -> Path:
     return b1e55ed_dir() / "secrets"
 
 
+# "El jardín de senderos que se bifurcan" — Borges wrote of paths that fork
+# endlessly. We had seven. Now they converge here.
 def config_dir() -> Path:
     """Return the config directory: ~/.b1e55ed/config."""
     return b1e55ed_dir() / "config"

@@ -27,6 +27,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+# The vault keeper no longer needs to remember the way home.
 from engine.core.paths import secrets_dir
 
 

@@ -480,6 +480,26 @@
       "placement": "inline_comment",
       "pr_number": 323,
       "applied_at": "2026-03-07T05:45:26Z"
+    },
+    {
+      "id": "egg_ca37baa3",
+      "file": "engine/core/paths.py",
+      "anchor": "def config_dir",
+      "tradition": "literary",
+      "content": "# \"El jardín de senderos que se bifurcan\" — Borges wrote of paths that fork\n# endlessly. We had seven. Now they converge here.",
+      "placement": "before_function",
+      "pr_number": 323,
+      "applied_at": "2026-03-07T05:46:24Z"
+    },
+    {
+      "id": "egg_cd958fb8",
+      "file": "engine/security/keystore.py",
+      "anchor": "from engine.core.paths import secrets_dir",
+      "tradition": "architectural",
+      "content": "# The vault keeper no longer needs to remember the way home.",
+      "placement": "inline_comment",
+      "pr_number": 323,
+      "applied_at": "2026-03-07T05:46:24Z"
     }
   ]
 }
