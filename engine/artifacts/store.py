@@ -92,6 +92,9 @@ class ArtifactStore:
     ) -> ArtifactRecord:
         """Hash content, store to disk, record in DB. Returns ArtifactRecord.
 
+        # Maturana & Varela: autopoiesis — a system that produces its own components.
+        # The hash produces the address. The address produces the lookup. The lookup produces the artifact.
+        # The store is self-referencing by design.
         Idempotent: storing the same content twice returns the same record
         without creating duplicate files or rows.
         """
