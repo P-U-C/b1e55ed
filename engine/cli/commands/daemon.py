@@ -24,6 +24,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from engine.core.paths import logs_dir
+
 # ---------------------------------------------------------------------------
 # Logging helpers
 # ---------------------------------------------------------------------------
@@ -380,7 +382,7 @@ def _show_status() -> int:
         print("\n(pgrep not available)")
 
     # Check log directory
-    log_dir = Path.home() / ".b1e55ed" / "logs"
+    log_dir = logs_dir()
     if log_dir.exists():
         print(f"\nLog directory: {log_dir}")
         for f in sorted(log_dir.glob("*.log")):
@@ -406,7 +408,7 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     if not b1e55ed_bin:
         b1e55ed_bin = sys.executable + " -m engine.cli"
 
-    log_dir = Path.home() / ".b1e55ed" / "logs"
+    log_dir = logs_dir()
 
     # Read intervals from config (with safe defaults)
     daemon_cfg = getattr(config, "daemon", None)

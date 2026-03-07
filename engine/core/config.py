@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 from engine.core.exceptions import ConfigError
+from engine.core.paths import data_dir as _data_dir
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -164,7 +165,8 @@ class Config(BaseSettings):
 
     # Paths — use default_factory so Path.home() is evaluated at construction
     # time, not import time (allows tests to monkeypatch HOME).
-    data_dir: Path = Field(default_factory=lambda: Path.home() / ".b1e55ed" / "data")
+    data_dir: Path = Field(default_factory=lambda: _data_dir())
+
     config_dir: Path = Path("config")
 
     # Preset selection
@@ -216,7 +218,7 @@ class Config(BaseSettings):
         resolved_cfg = config_path.resolve()
         bundled_root = cls._bundled_config_root().resolve()
         if resolved_cfg.is_relative_to(bundled_root):
-            return Path.home() / ".b1e55ed" / "data" / "learned_weights.yaml"
+            return _data_dir() / "learned_weights.yaml"
         return config_path.parent.parent / "data" / "learned_weights.yaml"
 
     @classmethod
