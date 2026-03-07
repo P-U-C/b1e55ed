@@ -278,3 +278,135 @@ class TestArtifactDistributor:
 
         delivered = distributor.distribute(record, "http://example.com/artifacts/abc123")
         assert delivered == []
+
+
+# ── DeerflowResearchProducer Tests ─────────────────────────────────
+
+
+class TestDeerflowResearchProducer:
+    def test_ingest_artifact_with_sidecar_meta(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """Producer ingests artifact with sidecar .meta.json."""
+        from engine.producers.deerflow_research import DeerflowResearchProducer
+
+        sandbox = tmp_path / "sandbox"
+        sandbox.mkdir()
+
+        producer = DeerflowResearchProducer(store=store, sandbox_dir=sandbox, require_event_id=True)
+        producer.setup()
+
+        content = b"<html>research brief</html>"
+        sha256 = hashlib.sha256(content).hexdigest()
+
+        (sandbox / "brief.html").write_bytes(content)
+        import json
+
+        (sandbox / "brief.meta.json").write_text(json.dumps({"event_id": "evt-123", "sha256": sha256}))
+
+        results = producer.scan_once()
+        assert len(results) == 1
+        assert results[0]["artifact_id"] == sha256
+        assert results[0]["event_id"] == "evt-123"
+        assert "permalink" in results[0]
+
+    def test_reject_artifact_without_event_id(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """Producer rejects artifact with no event_id when require_event_id=True."""
+        from engine.producers.deerflow_research import DeerflowResearchProducer
+
+        sandbox = tmp_path / "sandbox"
+        sandbox.mkdir()
+
+        producer = DeerflowResearchProducer(store=store, sandbox_dir=sandbox, require_event_id=True)
+        producer.setup()
+
+        (sandbox / "orphan.html").write_bytes(b"<html>no event</html>")
+
+        results = producer.scan_once()
+        assert results == []  # rejected, not ingested
+        assert (sandbox / "rejected" / "orphan.html").exists()
+
+    def test_integrity_check_rejects_tampered_content(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """Producer rejects artifact when sha256 in sidecar doesn't match content."""
+        import json
+
+        from engine.producers.deerflow_research import DeerflowResearchProducer
+
+        sandbox = tmp_path / "sandbox"
+        sandbox.mkdir()
+
+        producer = DeerflowResearchProducer(store=store, sandbox_dir=sandbox, require_event_id=False)
+        producer.setup()
+
+        (sandbox / "tampered.html").write_bytes(b"<html>tampered content</html>")
+        (sandbox / "tampered.meta.json").write_text(
+            json.dumps(
+                {
+                    "event_id": "evt-999",
+                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }
+            )
+        )
+
+        results = producer.scan_once()
+        assert results == []
+        assert (sandbox / "rejected" / "tampered.html").exists()
+
+    def test_idempotent_ingestion(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """Same content ingested twice produces same artifact_id."""
+        import json
+
+        from engine.producers.deerflow_research import DeerflowResearchProducer
+
+        sandbox = tmp_path / "sandbox"
+        sandbox.mkdir()
+
+        producer = DeerflowResearchProducer(store=store, sandbox_dir=sandbox, require_event_id=False)
+        producer.setup()
+
+        content = b"<html>same content</html>"
+        (sandbox / "first.html").write_bytes(content)
+        (sandbox / "first.meta.json").write_text(json.dumps({"event_id": "evt-1"}))
+
+        results1 = producer.scan_once()
+
+        (sandbox / "second.html").write_bytes(content)
+        (sandbox / "second.meta.json").write_text(json.dumps({"event_id": "evt-2"}))
+
+        results2 = producer.scan_once()
+
+        assert results1[0]["artifact_id"] == results2[0]["artifact_id"]
+
+
+class TestIngestEndpointRejection:
+    @pytest.mark.anyio()
+    async def test_ingest_without_event_id_rejected_by_default(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """POST /artifacts/ingest with require_event_id=true (default) and no event_id → 422."""
+        test_app = _make_test_app(store)
+
+        content = base64.b64encode(b"<html>orphan</html>").decode()
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+            resp = await client.post(
+                "/artifacts/ingest",
+                json={"content_base64": content, "filename": "orphan.html"},
+            )
+
+        assert resp.status_code == 422
+        assert resp.json()["error"] == "missing_event_id"
+
+    @pytest.mark.anyio()
+    async def test_ingest_without_event_id_allowed_when_disabled(self, store: ArtifactStore, tmp_path: Path) -> None:
+        """POST /artifacts/ingest with require_event_id=false allows missing event_id."""
+        test_app = _make_test_app(store)
+
+        content = base64.b64encode(b"<html>non-deerflow</html>").decode()
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+            resp = await client.post(
+                "/artifacts/ingest",
+                json={
+                    "content_base64": content,
+                    "filename": "manual.html",
+                    "require_event_id": False,
+                },
+            )
+
+        assert resp.status_code == 200
+        assert "artifact_id" in resp.json()

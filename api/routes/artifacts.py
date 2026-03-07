@@ -138,12 +138,28 @@ def get_artifact_meta(
 def ingest_artifact(
     body: dict[str, Any],
     store: ArtifactStore = Depends(_get_store),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     content_b64 = body.get("content_base64", "")
     filename = body.get("filename", "unnamed")
     content_type = body.get("content_type", "application/octet-stream")
     source = body.get("source", "deerflow")
     event_id = body.get("event_id")
+    require_event_id = body.get("require_event_id", True)
+
+    # DeerFlow artifacts must be linked to a source signal
+    if require_event_id and not event_id:
+        return JSONResponse(
+            {
+                "error": "missing_event_id",
+                "message": (
+                    "Artifacts from DeerFlow must be linked to a source "
+                    "signal.research.v1 event. Provide 'event_id' in the "
+                    "request body. Pass require_event_id=false to skip "
+                    "(non-DeerFlow sources only)."
+                ),
+            },
+            status_code=422,
+        )
 
     content = base64.b64decode(content_b64)
 
@@ -159,4 +175,5 @@ def ingest_artifact(
     return {
         "artifact_id": record.id,
         "permalink": store.get_permalink(record.id, base),
+        "event_id": event_id,
     }
