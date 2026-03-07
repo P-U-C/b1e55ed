@@ -1,16 +1,14 @@
-# DeerFlow × b1e55ed — Integration Plan (v2)
+# DeerFlow × b1e55ed — Integration Plan (v3)
 
-> **Status:** Planning — 2026-03-07 (revised after dual model analysis)
-> **Models consulted:** Opus 4.6 × 2 (independent research sessions)
+> **Status:** Planning — 2026-03-07 (revised after external DeerFlow-perspective review)
+> **Analysis:** Opus 4.6 dual-session + external review against DeerFlow 2.0 actual architecture
 > **Branch strategy:** `feat/deerflow` → `develop`
 
 ---
 
-## Corrected Framing
+## Framing
 
-b1e55ed is harness-agnostic. The event core, brain, MCP server — none of it cares what's on top.
-
-Two harnesses. Different institutional roles.
+b1e55ed is harness-agnostic. Two harnesses. Different institutional roles.
 
 ```
                          b1e55ed
@@ -25,154 +23,165 @@ Two harnesses. Different institutional roles.
      Real-time, reactive             Autonomous, systematic
      Conversational                  Long-running (minutes→hours)
      High trust, direct control      Artifact-producing
-     Telegram alerts                 IC-ready reports, PDFs, dashboards
-     Heartbeats, positions           Scheduled research pipelines
-     "What do I do right now?"       "Give me full coverage on 30 tokens"
+     "What do I do right now?"       "Cover 30 tokens, IC brief by 7AM"
 ```
 
-**There is no retail layer.** That's a separate product category with regulatory implications b1e55ed isn't positioned for. Kill S4 (Retail UI Wrapper) — it's strategically incoherent. If retail emerges, it's a third-party wrapper consuming the Oracle API, not b1e55ed shipping a chat UI.
-
----
-
-## What DeerFlow Actually Opens Up
-
-### 1. Systematic Token Coverage at Scale
-A 3-person fund managing $100M can't research 30 tokens manually. DeerFlow parallelizes: one sub-agent per token, all running concurrently, synthesized into a ranked conviction output. The research throughput of an 8-person team, automated.
-
-This didn't exist before. Not in OpenClaw (synchronous, operator-initiated), not in any competitor (platforms give data, not synthesis).
-
-### 2. Investment Committee Artifacts
-IC prep is currently manual everywhere. DeerFlow generates: regime overview + top signals + position rationale + risk summary → HTML brief or PDF. Scheduled. Shareable. Timestamped. Tied to b1e55ed's hash chain.
-
-One genuine gap: **distribution**. Artifacts sitting in a Docker volume are worthless. See Sprint S1.5 below.
-
-### 3. Sandboxed Quant Execution
-"Backtest SOL momentum for 90 days using b1e55ed's signal history" → DeerFlow writes and executes the Python in a Docker sandbox, returns results as a formatted report. b1e55ed's backtest engine already exists. DeerFlow wraps it in natural language and returns a shareable artifact.
-
-### 4. Skills as Producer Templates
-DeerFlow's SKILL.md system maps to b1e55ed producers. Any analyst can write a skill file (no Python) and become a signal producer. Opens the contributor surface massively without requiring engineering.
-
-### 5. LP/Investor Reporting
-Quarterly LP updates are currently labor-intensive at small funds. DeerFlow generates structured performance attribution, strategy narrative, and forward outlook — all grounded in b1e55ed's hash-chained event history. Audit-defensible by construction.
-
-### 6. Local Model Support for Compliance
-TradFi desks entering crypto need on-premise models for compliance. DeerFlow supports local models (Ollama, etc.). b1e55ed's MCP server is model-agnostic. Together: a fully self-hostable institutional intelligence stack. No data leaves the building.
+No retail layer. That's a separate product with regulatory implications b1e55ed isn't positioned for. If retail emerges, it's a third-party wrapper on the Oracle API.
 
 ---
 
 ## Target Customer
 
-Not Bloomberg Terminal customers. Not Paradigm (they build proprietary). Not retail.
+3-10 person crypto fund, $50-200M AUM, conviction-based strategy, no dedicated quant team. They have capital and edge but are drowning in information. DeerFlow gives them research throughput. b1e55ed gives them systematic synthesis and a hash-chained audit trail.
 
-**The beachhead:** 3-10 person crypto fund, $50-200M AUM, conviction-based strategy, no dedicated quant team. They have capital and edge but are drowning in information. DeerFlow gives them research throughput. b1e55ed gives them systematic synthesis. Together: the infrastructure they couldn't afford to build.
-
-Secondary: Crypto-native research shops (Delphi-tier) needing a content production pipeline with signal provenance.
+Secondary: Crypto-native research shops (Delphi-tier) running content production pipelines where signal provenance matters.
 
 ---
 
-## Competitive Differentiation
+## What DeerFlow Opens Up
 
-| Capability | Messari | Nansen | Kaito | The Tie | b1e55ed+DeerFlow |
-|-----------|---------|--------|-------|---------|-----------------|
-| Data breadth | ✅ | ✅ | ✅ | ✅ | ❌ (your producers) |
-| Research quality | ✅ Human | ⚠️ Data only | ⚠️ LLM | ✅ Human+quant | ⚠️ LLM (honest) |
-| **Sovereignty** | ❌ Platform | ❌ Platform | ❌ Platform | ❌ Platform | ✅ **Own your stack** |
-| **Signal synthesis** | ❌ Manual | ❌ Manual | ❌ Manual | ❌ Manual | ✅ **Brain is unique** |
-| **Provenance chain** | ❌ | ❌ | ❌ | ❌ | ✅ **Hash chain** |
-| **Automation** | ❌ | ❌ | ❌ | ❌ | ✅ **End-to-end** |
-| Cost | $25K+/yr | $10K+/yr | $5K+/yr | $30K+/yr | Self-hosted |
+**Systematic token coverage at scale.** A 3-person fund can't research 30 tokens manually. DeerFlow's coordinator decomposes a research task, executes sub-steps sequentially or in parallel via its planner, synthesizes into a ranked conviction output. Research throughput of an 8-person team, automated.
 
-Three genuine moats: **sovereignty** (you own it, your alpha doesn't leak), **automated synthesis** (Brain is nowhere else), **cryptographic audit trail** (no competitor can answer "why did we enter 6 months ago?" with a hash chain).
+**IC-ready artifacts.** Regime overview + top signals + position rationale + risk summary → HTML brief or PDF. Scheduled. Shareable. Timestamped. Tied to b1e55ed's hash chain.
 
-Don't compete on data breadth — you'll lose. Compete on synthesis, sovereignty, and provenance.
+**Persistent research memory.** DeerFlow 2.0 has long-term memory across sessions. A 6h research cycle remembers what it found last cycle — regime shifts, conviction changes, prior signals. Research evolves rather than restarting cold.
+
+**LP/investor reporting.** Quarterly performance attribution, strategy narrative, forward outlook — grounded in b1e55ed's hash-chained event history. Audit-defensible by construction.
+
+**Sandboxed quant execution.** Backtest runs via DeerFlow sandbox (isolated Python environment). Pulls data via MCP, executes script, returns formatted artifact. b1e55ed's backtest engine does the heavy lifting; DeerFlow wraps it in natural language.
+
+**Local model support for compliance.** TradFi desks need on-premise models. DeerFlow supports local models. b1e55ed's MCP server is model-agnostic. Together: fully self-hostable institutional intelligence stack.
 
 ---
 
 ## Critical Architecture Decisions
 
-### Signal Trust — The Drowning Problem
+### How DeerFlow Actually Uses MCP Tools
 
-DeerFlow could generate 50+ research signals/day. The karma/flywheel system was designed for sparse, high-quality on-chain signals. High-volume LLM-generated research will corrupt Brain conviction if not architected correctly.
+**Important correction from v2:** DeerFlow does NOT auto-discover MCP tools and use them autonomously at runtime. Tool selection is driven by the `extensions_config.json` registration and — more importantly — by the **skill file itself**. The SKILL.md file tells the coordinator which tools to call and in what order. The coordinator doesn't scan tool descriptions and decide; it follows the skill's structured workflow.
 
-**Required before S3:**
+**Implication:** S0's "rewrite MCP tool descriptions for LLM discoverability" is misplaced effort. The descriptions matter for human understanding, not for DeerFlow's planner. Put the writing effort into the SKILL.md files — that's what actually controls tool usage.
 
-**Signal class taxonomy** — explicit tiers, different brain weights:
-- `signal.observation` — "here's what I found" (DeerFlow research, social scans). Low weight. Informs.
-- `signal.detection` — "something happened" (on-chain events, price movement). Medium weight. Triggers.
-- `signal.conviction` — "I believe X with evidence" (scored thesis, validated by outcome). High weight. Drives.
+### How Sub-Agent Orchestration Works
 
-**Volume-dampened karma** — karma per signal is inversely proportional to signal frequency. A producer emitting 50/day earns less karma per signal than one emitting 3/day. Basic information theory: high-frequency signals carry less information per unit.
+**Important correction from v2:** DeerFlow's sub-agent system works through the coordinator's task decomposition — you define the research goal and the planner breaks it into steps. You don't imperatively "spawn named sub-agents for specific data domains." The skill file describes the workflow as a structured plan; the coordinator decomposes and executes.
 
-**LLM karma ceiling** — DeerFlow signals have a hard karma cap until validated by outcomes. Prevents a well-configured DeerFlow from dominating Brain conviction before it's earned it.
+**Implication:** Skill files must be written as structured research plans, not as imperative sub-agent assignments. Read DeerFlow's existing `skills/public/` skill files before writing ours — they follow a specific structure the coordinator parses.
 
-### Sub-Agent Model → Producer Model
+### Composable MCP Tools — Not a Monolith
 
-Don't map DeerFlow sub-agents 1:1 to b1e55ed producers. That breaks both models.
+**`get_narrator_context` (pre-packaged context block) is an anti-pattern.** DeerFlow's coordinator is designed to compose context from multiple tool calls. A monolithic context block prevents adaptation: the brief skill needs positions, the thesis skill needs signals, the backtest skill needs neither.
 
-**The right pattern:** One DeerFlow task = one b1e55ed event. The aggregator pattern.
+**Replace with three composable tools:**
+- `get_regime_status` — current regime + kill switch level
+- `get_top_signals` — recent signals, domain-filtered, paginated
+- `get_open_positions` — live book with P&L
+
+Let the coordinator call what it needs for each task.
+
+### Sub-Agent → Producer: Aggregator Pattern
+
+One DeerFlow task = one b1e55ed event. The aggregator pattern.
 
 ```
 DeerFlow Skill: "Research $TOKEN"
-    ├── Sub-agent: gather on-chain data
-    ├── Sub-agent: analyze social/CT sentiment
-    ├── Sub-agent: review tokenomics + narrative
-    └── Coordinator: synthesize → ResearchSignalPayload
-                         │
-                         ▼
-          signal.research.v1 → b1e55ed (one event)
-          + Artifact (PDF/HTML) → storage + distribution
+    Coordinator decomposes into steps:
+    ├── Step: gather on-chain data (MCP: get_top_signals domain=onchain)
+    ├── Step: web search social/CT sentiment
+    ├── Step: tokenomics/narrative review
+    └── Step: synthesize → ResearchSignalPayload
+                     │
+                     ▼
+      signal.research.v1 → b1e55ed (one event)
+      Artifact file → sandbox filesystem
+                     │
+                     ▼
+      deerflow_research.py picks up artifact,
+      hashes it, stores it, triggers distribution
 ```
 
-`deerflow_research.py` in b1e55ed is a thin async trigger-and-wait wrapper. It calls DeerFlow, polls for completion, ingests the final synthesized output. Sub-agent internals are DeerFlow's problem. The `sources[]` array on the signal payload provides provenance without polluting the event stream.
+Sub-agent internals are DeerFlow's problem. b1e55ed sees the synthesized output only. The `sources[]` array provides provenance without polluting the event stream.
+
+### Signal Trust — Schema-Enforced Taxonomy
+
+Signal class taxonomy enforced at the **payload schema level**, not the honor system.
+
+| Class | Schema Requirement | Brain Weight | Use |
+|-------|--------------------|-------------|-----|
+| `observation` | No directional claim allowed | Low | DeerFlow research findings, social scans |
+| `detection` | Event timestamp required | Medium | On-chain events, price alerts |
+| `conviction` | Falsifiable prediction + time horizon required | High | Scored thesis, validated call |
+
+`submit_research_signal` validates class at ingestion time. A DeerFlow synthesis that makes a directional claim must declare itself `conviction` and provide a horizon — or it's rejected.
+
+**Volume-dampened karma — per token, not per producer.** Frequency penalty is per (producer, symbol) pair. A watchlist skill covering 30 tokens is treated as 30 independent signal sources, not one high-frequency producer. Prevents the perverse incentive of splitting one watchlist skill into 30 separate skills.
+
+**LLM karma ceiling.** DeerFlow-sourced signals have a hard karma cap until validated by outcomes. Rises automatically as outcome validation accumulates.
 
 ### Identity and Attribution
 
-When DeerFlow emits a signal into b1e55ed, who earns karma?
+When DeerFlow emits a signal into b1e55ed, karma flows to the **human operator who configured and deployed the skill** — their forge node ID.
 
-**Wrong answers:** DeerFlow the system (a tool doesn't have agency), the sub-agent (ephemeral, no continuity), the model (can't be held accountable).
-
-**Right answer: the human operator who configured and deployed the DeerFlow skill.** They made the judgment call to run this skill on this watchlist at this schedule. They own the outcome.
-
-**Architecture:**
-- DeerFlow skills must carry `operator_node_id` — the b1e55ed forge identity of the human who set it up
-- `submit_research_signal` requires `operator_node_id` as a signed field
-- Karma flows to that node, not to "deerflow" as a system actor
+- `submit_research_signal` requires a signed `operator_node_id` field (not optional)
+- DeerFlow doesn't have its own identity system; the operator is the accountable party
 - This preserves flywheel integrity: human judgment → outcome → karma → weight
 
-### Multi-Tenancy
+### Multi-Tenancy — Harness-Agnostic Gateway
 
-b1e55ed is single-operator. Institutional teams need role separation.
+Build `gateway/` at the b1e55ed level, not `integrations/deerflow/gateway/`. Any client — DeerFlow, OpenClaw, a future harness, a direct API consumer — goes through the same gateway. Coupling access control to one integration creates parallel maintenance burden.
 
-**Don't build RBAC into b1e55ed core** — it would take 6 months and complicate the protocol.
-
-**Build a lightweight API gateway** (< 500 LOC, FastAPI) between DeerFlow and b1e55ed's MCP server:
+Gateway scope (< 500 LOC, FastAPI):
 - Per-user API keys with permission scopes (analyst: read+submit, PM: read+approve, risk: read+veto)
 - Signal approval workflow: analyst submits → PM approves → Brain ingests
 - Audit log per user action
-- Role-filtered MCP tool exposure
+- Harness-agnostic: sits in front of b1e55ed's MCP server regardless of what's calling it
 
-b1e55ed stays sovereign and single-operator. The gateway mediates institutional access. Add to S2.
+### Artifact Distribution — b1e55ed Scope, Not DeerFlow Scope
+
+**Correction from v2:** SendGrid/SES, Slack webhooks, permalink generation — none of this is DeerFlow's responsibility. DeerFlow writes artifacts to its sandbox filesystem. b1e55ed's producer picks them up.
+
+**The right boundary:**
+1. DeerFlow writes artifact file to sandbox
+2. `deerflow_research.py` picks it up, hashes it, stores it in b1e55ed's artifact store
+3. b1e55ed's artifact pipeline handles distribution (email, webhook, permalink)
+
+This is a b1e55ed sprint, not a DeerFlow integration sprint. Renamed accordingly.
+
+### Deployment Topology
+
+Don't try to nest Docker compositions. DeerFlow 2.0 has its own Docker setup with sandbox provisioner and frontend — nesting creates port conflicts, volume mount complexity, and operational overhead.
+
+**Instead:** Document how to point a standalone DeerFlow instance at b1e55ed's MCP endpoint via `extensions_config.json`. Operators manage their own deployment topology. The integration is a config file, not a docker-compose.
 
 ---
 
-## Sprint Plan (Revised)
+## Sprint Plan (v3)
 
-### S0 — MCP Hardening + Signal Architecture
+### S0 — MCP API + Signal Architecture
 **Branch:** `feat/deerflow/s0`
-**Prerequisite for everything else.**
+**Prerequisite for everything else. Signal trust layer before any producer.**
 
-- [ ] Signal class taxonomy: add `signal_class` field (observation/detection/conviction) to event schema
-- [ ] Volume-dampened karma: frequency penalty in karma calculation
-- [ ] LLM signal karma ceiling: configurable max karma for `source_type: llm_research`
-- [ ] New MCP tools:
-  - `get_signals_by_domain` with cursor-based pagination
-  - `get_regime_history` (7-day trend, not just current state)
-  - `submit_research_signal` — typed, validated, requires `operator_node_id`
-  - `get_narrator_context` — pre-packaged LLM context block (regime + top 3 signals + positions, < 500 tokens)
-- [ ] Rewrite all MCP tool descriptions for LLM discoverability (DeerFlow auto-discovers at runtime)
-- [ ] New event type: `signal.research.v1` with `ResearchSignalPayload`
+- [ ] Signal class taxonomy: add `signal_class` field to event schema with schema-level validation
+  - `observation`: directional claim forbidden in schema
+  - `detection`: event timestamp required
+  - `conviction`: falsifiable prediction + time horizon required
+- [ ] Volume-dampened karma: frequency penalty per (producer, symbol) pair — not per producer globally
+- [ ] LLM karma ceiling: configurable max karma for `source_type: llm_research`, rises with outcome validation
+- [ ] New composable MCP tools (replacing monolithic narrator context):
+  - `get_regime_status` — current regime, kill switch, trend direction
+  - `get_top_signals` — recent signals, domain-filtered, cursor-paginated
+  - `get_open_positions` — live book with P&L
+  - `get_signals_by_domain` with bulk historical export support (for backtest use cases — not just pagination)
+  - `get_regime_history` — 7-day regime trend
+  - `submit_research_signal` — typed, validated, requires signed `operator_node_id`, enforces signal_class schema
+- [ ] New event type: `signal.research.v1` with `ResearchSignalPayload`:
+  - `symbol`, `confidence` (0-1), `direction`, `horizon`, `rationale`, `sources[]`
+  - `signal_class` (observation/detection/conviction)
+  - `operator_node_id` (signed)
+  - `deerflow_task_id` (for artifact linkage)
+- [ ] Test bulk historical data export at scale (90 days of signal history via paginated MCP — measure latency)
 
-**Why signal architecture is in S0:** Build the producer before the trust layer and you'll corrupt the Brain from day one.
+**What's explicitly NOT in S0:** MCP tool description rewrites for LLM discoverability. That effort belongs in skill files (S1), not tool descriptions.
 
 ---
 
@@ -181,110 +190,132 @@ b1e55ed stays sovereign and single-operator. The gateway mediates institutional 
 
 `skills/b1e55ed/` directory — installable as DeerFlow custom skills.
 
-**`research/SKILL.md`** — Core skill. Given symbol(s):
-1. `get_brain_status` → current regime context
-2. Parallel sub-agents: on-chain data, social/CT sentiment, tokenomics/narrative
-3. Synthesize → `ResearchSignalPayload`
-4. `submit_research_signal` with `operator_node_id`
-5. Generate research artifact (HTML, structured)
+**Before writing:** Read DeerFlow's existing `skills/public/` files. Follow their exact structure. The coordinator parses a specific format — don't invent a new one.
+
+**Model selection in all skills:** Specify coordinator model (strong — Claude Sonnet or equivalent) and data-gathering steps (cheap — flash/haiku equivalent). Don't run Opus for every sub-step.
+
+**Error handling in all skills:** Each MCP call has explicit retry (2x) and fallback behavior (log failure, produce partial artifact with gap noted, don't silently skip). Define what a degraded output looks like.
+
+**Memory configuration in all skills:** Define what DeerFlow should persist to long-term memory after each run (prior regime, prior conviction per symbol, prior signals used). Research should evolve across cycles, not restart cold.
+
+---
+
+**`research/SKILL.md`** — Core skill. Structured research plan:
+1. `get_regime_status` → current context (persist to memory if changed)
+2. `get_top_signals` (domain=onchain) → existing on-chain signals for symbol
+3. Web search: price action, CT sentiment, news, on-chain highlights
+4. Synthesize: compare current findings to prior cycle memory (delta analysis)
+5. `submit_research_signal` with `operator_node_id`, `signal_class` per schema
+6. Write artifact to sandbox filesystem (structured HTML)
+7. Persist to memory: regime, conviction, key findings
 
 **`brief/SKILL.md`** — Daily IC brief:
-1. `get_narrator_context` → regime + signals
-2. `get_open_positions` → live book
-3. Web search: top 24h news
-4. Synthesize → polished HTML brief (dark mode, b1e55ed aesthetic)
-5. Write to sandbox → hand off to distribution pipeline (S1.5)
+1. `get_regime_status` → regime context
+2. `get_top_signals` → top signals across domains
+3. `get_open_positions` → live book
+4. Web search: top 24h news
+5. Delta vs. prior memory: what changed since yesterday's brief
+6. Synthesize → polished HTML brief
+7. Write to sandbox filesystem (b1e55ed producer picks it up)
+8. Persist to memory: brief summary for next cycle delta
 
 **`thesis/SKILL.md`** — Structured thesis evaluation:
 1. Accept token + thesis text
-2. Research via web + `get_recent_signals`
-3. Score: narrative / on-chain / technical / risk
-4. `submit_research_signal` with `signal_class: conviction`
-5. Return formatted evaluation
+2. `get_top_signals` for symbol
+3. Web research: evidence for/against
+4. Score: narrative / on-chain / technical / risk (0-10 each)
+5. `submit_research_signal` with `signal_class: conviction`, falsifiable horizon
+6. Return formatted evaluation with score breakdown
 
 **`backtest/SKILL.md`** — Natural language backtest:
 1. Parse strategy description → parameters
-2. `get_signals_by_domain` for historical signal data
-3. Write + execute Python in DeerFlow sandbox
-4. Return formatted results + artifact
+2. `get_signals_by_domain` bulk export for historical data (via new bulk endpoint)
+3. Write Python backtest script to sandbox
+4. Execute in DeerFlow sandbox (isolated — can only access b1e55ed via MCP, not direct import)
+5. Return results as formatted report + artifact
 
 **`watchlist/SKILL.md`** — Parallel coverage:
-1. Accept watchlist (from DeerFlow memory or explicit)
-2. Spawn parallel research sub-agents (one per token)
-3. Rank by conviction
-4. Return ranked list with rationale + trigger brief skill for top picks
+1. Accept watchlist from DeerFlow memory or explicit list
+2. Coordinator decomposes into sequential/parallel research steps per token
+3. Per-token: research skill workflow (condensed)
+4. Rank by conviction delta (vs. prior memory)
+5. Return ranked list + trigger brief skill for top picks
+6. Persist updated per-token conviction to memory
 
 ---
 
-### S1.5 — Artifact Distribution Pipeline
+### S1.5 — b1e55ed Artifact Pipeline (renamed from "distribution")
 **Branch:** `feat/deerflow/s1.5`
-**NEW — not in original plan. Critical for institutional value.**
+**b1e55ed scope, not DeerFlow scope.**
 
-Artifacts sitting in a Docker volume are worthless. Institutions need delivery.
-
-- [ ] Email delivery: SendGrid/SES integration — brief lands in PM inbox at 7:00 AM local
-- [ ] Webhook: Slack/Teams compatible — brief posts to team channel
-- [ ] Permalink: every generated artifact gets a unique URL, stored in b1e55ed event chain with hash
-- [ ] Artifact template system: configurable logo, branding, risk category labels (no code change required)
-- [ ] Retention: artifacts linked to the events that generated them — "why did we write this?" is answerable
-
-Without this sprint, S1 is a content engine with no audience.
+- [ ] `deerflow_research.py` producer picks up artifact from DeerFlow sandbox (via API or mounted volume)
+- [ ] Hash artifact, store in b1e55ed artifact store, permalink generation
+- [ ] Artifact event: every artifact linked to the `signal.research.v1` event that generated it
+- [ ] Distribution triggers from b1e55ed side: email (SendGrid/SES), Slack/Teams webhook
+- [ ] Artifact template config: logo, branding, risk category labels — configurable without code changes
+- [ ] Retrieval: artifact permalink stored in event payload → "why did we write this 6 months ago?" answerable
 
 ---
 
-### S2 — Integration Config + API Gateway
+### S2 — Integration Config + Harness-Agnostic Gateway
 **Branch:** `feat/deerflow/s2`
 
-- [ ] `integrations/deerflow/extensions_config.json` — ready-to-use DeerFlow MCP config with b1e55ed endpoint + auth
-- [ ] `integrations/deerflow/gateway/` — lightweight FastAPI API gateway (< 500 LOC):
+- [ ] `gateway/` at b1e55ed root (not under integrations/deerflow):
+  - FastAPI, < 500 LOC
   - Per-user API keys (analyst/PM/risk roles)
   - Role-based MCP tool filtering
-  - Signal approval workflow (analyst submits → PM approves → b1e55ed ingests)
+  - Signal approval workflow
   - Audit log per user action
-- [ ] `integrations/deerflow/docker-compose.yml` — b1e55ed + DeerFlow + gateway side by side
-- [ ] `integrations/deerflow/setup.sh` — one-command setup
-- [ ] `docs/deerflow.md` — Operator guide
+  - Harness-agnostic: any client routes through it
+- [ ] `integrations/deerflow/extensions_config.json` — ready-to-use DeerFlow MCP config pointing at b1e55ed endpoint
+- [ ] `docs/deerflow.md` — Operator guide: how to point a standalone DeerFlow at b1e55ed (config file, not docker-compose)
 - [ ] Mintlify nav update
+
+**Explicitly dropped:** `docker-compose.yml` bundling b1e55ed + DeerFlow together. Too complex, wrong boundary. Operators manage deployment topology.
 
 ---
 
 ### S3 — Research Producer
 **Branch:** `feat/deerflow/s3`
-**Depends on S0 (signal architecture), S1 (skill pack), S2 (connection config).**
+**Depends on S0 (signal architecture), S1 (skill pack), S2 (connection + gateway).**
 
-- [ ] `engine/producers/deerflow_research.py` — async trigger-and-wait producer
-  - Schedule: `0 */6 * * *` (6h)
+- [ ] `engine/producers/deerflow_research.py` — async trigger-and-wait producer:
+  - Schedule: `0 */6 * * *`
   - Reads active universe from brain (top tokens by conviction activity)
   - Calls DeerFlow watchlist skill via API
   - Polls for completion (timeout: 30 min)
+  - Picks up artifact from sandbox
+  - Hashes + stores artifact (S1.5 pipeline)
   - Ingests final synthesized signal as `signal.research.v1`
   - Logs artifact permalink to event payload
+- [ ] Degradation handling: if DeerFlow MCP calls fail mid-cycle → partial artifact flagged, cycle logged, no silent skip
 - [ ] Dashboard: `signal.research.v1` in signals page domain filter
 - [ ] Dashboard: research artifact preview panel (link to permalink)
-- [ ] Provenance: `operator_node_id` required, karma flows to operator
 
 ---
 
 ## Sprint Order and Dependencies
 
 ```
-S0 (MCP hardening + signal architecture)
-    │   ← DO THIS FIRST. Signal trust layer before any producer.
-    ▼
-S1 (skill pack) ──────────────── S1.5 (artifact distribution)
+S0 (MCP API + signal architecture)
+    │   ← Signal trust layer first. No exceptions.
+    │
+    ├─────────────────────────────────────┐
+    ▼                                     ▼
+S1 (skill pack)                    S1.5 (artifact pipeline — b1e55ed side)
     │                                     │
-    └──────────────┬───────────────────────┘
+    └──────────────┬──────────────────────┘
                    ▼
-               S2 (integration config + gateway)
+            S2 (integration config + gateway)
                    │
                    ▼
-               S3 (research producer)
+            S3 (research producer)
                    │
                    ▼
-         [end-to-end validation:
-          DeerFlow watchlist → parallel research →
-          signal.research.v1 in b1e55ed →
-          brief artifact → email delivery]
+     [end-to-end: DeerFlow watchlist →
+      parallel research (evolving from memory) →
+      signal.research.v1 + artifact →
+      distribution pipeline]
 ```
 
 S1 and S1.5 can run in parallel (no shared files).
@@ -292,27 +323,40 @@ S0 must complete before S3 starts.
 
 ---
 
-## Kill List (Things Removed from Original Plan)
+## Kill List
 
-| Item | Why Removed |
-|------|-------------|
-| **S4 — Retail UI Wrapper** | Strategically wrong. Retail ≠ DeerFlow's user. Regulatory risk. Dilutes moat. |
-| **"Retail-accessible UX" as goal** | Replaced with: institutional research desk automation |
-| **get_narrator_context returning "retail-friendly" summaries** | Reframed: pre-packaged LLM context for analyst workflows |
+| Item | Why Killed |
+|------|-----------|
+| **S4 — Retail UI Wrapper** | Strategically wrong. Regulatory risk. Dilutes moat. |
+| **`get_narrator_context` monolith** | Anti-pattern for DeerFlow's composable coordinator |
+| **MCP description rewrites for "LLM discoverability"** | Misunderstood how DeerFlow selects tools — skill files drive this, not tool descriptions |
+| **`integrations/deerflow/gateway/`** | Gateway is harness-agnostic — lives at `gateway/` root |
+| **docker-compose bundling** | Wrong boundary. Operators manage topology. Config file is the integration. |
+
+---
+
+## Competitive Differentiation
+
+Three genuine moats:
+1. **Sovereignty** — you own the stack, your alpha doesn't leak to a vendor's other clients
+2. **Automated synthesis** — the Brain synthesizes multi-domain signals into regime-conditioned conviction; no competitor does this
+3. **Cryptographic audit trail** — hash chain answers "why did we make this trade 6 months ago?" — no competitor can
+
+Don't compete on data breadth. Compete on synthesis, sovereignty, and provenance.
 
 ---
 
 ## Success Metrics
 
-- [ ] DeerFlow `tools/list` shows all b1e55ed MCP tools with institutional-grade descriptions
-- [ ] Signal class taxonomy active — Brain weights observation/detection/conviction differently
-- [ ] DeerFlow research skill produces valid `signal.research.v1` with `operator_node_id`
-- [ ] Daily brief artifact delivered via email/Slack without manual intervention
-- [ ] Artifact permalink stored in b1e55ed event chain (retrievable 6 months later)
-- [ ] Research producer running 6h schedule, covering active universe
-- [ ] API gateway handling analyst/PM role separation
-- [ ] `b1e55ed start` + `setup.sh` = 2-command institutional deployment
+- [ ] Composable MCP tools working: DeerFlow coordinator calls get_regime_status + get_top_signals + get_open_positions independently per task need
+- [ ] Signal class taxonomy enforced at schema level — observation cannot contain directional claim
+- [ ] DeerFlow research skill produces valid `signal.research.v1` with signed `operator_node_id`
+- [ ] Research memory persists across 6h cycles — delta analysis working (not cold-start each run)
+- [ ] Daily brief artifact delivered via email/Slack from b1e55ed artifact pipeline
+- [ ] Artifact permalink stored in event chain, retrievable 6 months later
+- [ ] Gateway handling analyst/PM role separation for any harness
+- [ ] Degradation handling: partial artifact produced and flagged when MCP calls fail mid-cycle
 
 ---
 
-*DeerFlow gives b1e55ed a research surface it can't build itself. b1e55ed gives DeerFlow's research economic teeth — signal attribution, karma, provenance, and a conviction engine that learns. Neither works as well alone.*
+*Three versions. External DeerFlow-perspective review applied. The integration surface is right: skills + composable MCP + aggregated signals. The execution plan now reflects how DeerFlow 2.0 actually works.*
