@@ -7,18 +7,22 @@ from pathlib import Path
 import pytest
 
 
-def test_load_identity_returns_none_when_missing(tmp_path: Path) -> None:
+def test_load_identity_returns_none_when_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.core.identity_gate as gate
+
+    monkeypatch.setattr(gate, "identity_dir", lambda: tmp_path)
     from engine.core.identity_gate import load_identity
 
-    assert load_identity(tmp_path) is None
+    assert load_identity() is None
 
 
-def test_load_identity_returns_identity(tmp_path: Path) -> None:
+def test_load_identity_returns_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.core.identity_gate as gate
+
+    monkeypatch.setattr(gate, "identity_dir", lambda: tmp_path)
     from engine.core.identity_gate import load_identity
 
-    ident_dir = tmp_path / ".b1e55ed"
-    ident_dir.mkdir(parents=True, exist_ok=True)
-    (ident_dir / "identity.json").write_text(
+    (tmp_path / "identity.json").write_text(
         json.dumps(
             {
                 "address": "0xb1e55ed00000000000000000000000000000000",
@@ -31,17 +35,20 @@ def test_load_identity_returns_identity(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    ident = load_identity(tmp_path)
+    ident = load_identity()
     assert ident is not None
     assert ident.address.lower().startswith("0xb1e55ed")
     assert ident.node_id.startswith("eth:")
 
 
-def test_require_identity_raises(tmp_path: Path) -> None:
+def test_require_identity_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.core.identity_gate as gate
+
+    monkeypatch.setattr(gate, "identity_dir", lambda: tmp_path)
     from engine.core.identity_gate import IdentityRequired, require_identity
 
     with pytest.raises(IdentityRequired):
-        _ = require_identity(tmp_path)
+        _ = require_identity()
 
 
 def test_cli_gate_blocks_commands_without_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys) -> None:

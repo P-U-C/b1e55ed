@@ -13,6 +13,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from engine.core.paths import identity_dir
+
 
 @dataclass(frozen=True)
 class ForgedIdentity:
@@ -24,9 +26,17 @@ class ForgedIdentity:
     public_key: str = ""  # Ed25519 derived public key
 
 
-def load_identity(repo_root: Path) -> ForgedIdentity | None:
-    """Load forged identity from .b1e55ed/identity.json. Returns None if not forged."""
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+def load_identity(repo_root: Path | None = None) -> ForgedIdentity | None:
+    """Load forged identity from ~/.b1e55ed/identity.json. Returns None if not forged.
+
+    Always reads from the canonical identity_dir() (~/.b1e55ed/identity.json).
+    The repo_root parameter is accepted for backward compatibility but ignored.
+
+    Previously this derived the path as ``repo_root / ".b1e55ed" / "identity.json"``,
+    which double-nested in production where repo_root IS ~/.b1e55ed, causing
+    the daemon to look for ~/.b1e55ed/.b1e55ed/identity.json (not found).
+    """
+    identity_path = identity_dir() / "identity.json"
     if not identity_path.exists():
         return None
     try:
@@ -43,7 +53,7 @@ def load_identity(repo_root: Path) -> ForgedIdentity | None:
         return None
 
 
-def require_identity(repo_root: Path) -> ForgedIdentity:
+def require_identity(repo_root: Path | None = None) -> ForgedIdentity:
     """Load identity or raise with clear message."""
     identity = load_identity(repo_root)
     if identity is None:
