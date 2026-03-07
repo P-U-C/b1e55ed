@@ -75,7 +75,8 @@
           "operations/daily",
           "operations/cli-reference",
           "operations/config-reference",
-          "operations/troubleshooting"
+          "operations/troubleshooting",
+          "deerflow"
         ]
       },
       {
