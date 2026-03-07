@@ -620,6 +620,56 @@
       "placement": "before_function",
       "pr_number": 332,
       "applied_at": "2026-03-07T16:58:34Z"
+    },
+    {
+      "id": "egg_e9328c22",
+      "file": "skills/b1e55ed/thesis/SKILL.md",
+      "anchor": "Deliberately steelmans both the bull and bear case.",
+      "tradition": "philosophy-structural-wisdom",
+      "content": "<!-- Talmudic reasoning: every argument contains its counterargument.\n     Two opposing views can both be valid without resolution.\n     The steelman is not advocacy. It is epistemology. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:52:35Z"
+    },
+    {
+      "id": "egg_f7f2b24b",
+      "file": "skills/b1e55ed/backtest/SKILL.md",
+      "anchor": "Signal-based backtesting \u2014 not price-based.",
+      "tradition": "markets-decision-theory",
+      "content": "<!-- Popper: a theory that explains everything explains nothing.\n     The backtest is not the trade. The map is not the territory.\n     But a map that has never been checked against territory is not a map \u2014 it is a wish. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:52:35Z"
+    },
+    {
+      "id": "egg_c56df5d4",
+      "file": "skills/b1e55ed/research/SKILL.md",
+      "anchor": "Conducts deep, multi-source research on a single token",
+      "tradition": "markets-decision-theory",
+      "content": "<!-- Shannon: information is the resolution of uncertainty.\n     Four sources. One signal. The research is not the reading \u2014 it is the compression. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
+    },
+    {
+      "id": "egg_cb9f4fdb",
+      "file": "skills/b1e55ed/watchlist/SKILL.md",
+      "anchor": "Scans multiple tokens in parallel",
+      "tradition": "music-art-subculture",
+      "content": "<!-- Gamelan: no single player has the complete melody.\n     The ranking emerges from interlocking patterns, not any single assessment. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
+    },
+    {
+      "id": "egg_9ce6c59f",
+      "file": "skills/b1e55ed/brief/SKILL.md",
+      "anchor": "Produces an institutional-grade daily investment committee brief",
+      "tradition": "cybernetics-systems-theory",
+      "content": "<!-- Stafford Beer's daily algedonic signal: one nerve impulse from operations to identity.\n     The brief is System 5 checking whether the organism is in pain or pleasure. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
     }
   ]
 }
