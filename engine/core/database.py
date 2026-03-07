@@ -335,6 +335,9 @@ CREATE TABLE IF NOT EXISTS producer_karma (
 
 -- ============================================================
 -- Producer Karma Config (DeerFlow S0 — volume dampening + LLM ceiling)
+-- Eigentrust (Kamvar et al., 2003): trust is not given. It is computed from outcomes.
+-- Initial ceiling 0.3 for LLM sources. Each validated trade lifts it by 0.1.
+-- The table remembers what the model earned, not what it claimed.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS producer_karma_config (
     producer_name TEXT PRIMARY KEY,

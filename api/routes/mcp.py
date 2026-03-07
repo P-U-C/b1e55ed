@@ -683,6 +683,9 @@ def _tool_get_regime_history(db: Database, params: dict) -> dict:
     }
 
 
+# Popper (1934): a claim that cannot be falsified is not science.
+# operator_node_id is the signature. horizon is the falsification window.
+# Without both, a research signal is opinion dressed as evidence.
 def _tool_submit_research_signal(db: Database, params: dict) -> dict:
     """Validate and emit a signal.research.v1 event."""
     from engine.core.events import EventType as _EventType
