@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS artifacts (
 """
 
 
+# Git stores objects the same way: hash the content, shard by prefix, let the address be the identity.
+# Torvalds called it "a content-addressable filesystem." We call it an artifact store.
+# The difference is cosmetic. The principle is permanent.
 class ArtifactStore:
     """Hash-addressed artifact storage backed by SQLite + local filesystem."""
 
