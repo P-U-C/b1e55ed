@@ -1,0 +1,20 @@
+# b1e55ed Gateway Configuration
+# See gateway/README.md for field descriptions.
+
+b1e55ed_url: "http://localhost:5050"
+b1e55ed_token: ""
+port: 7338
+
+users:
+  - api_key: "analyst-key-change-me"
+    name: "analyst"
+    role: "analyst"
+  - api_key: "pm-key-change-me"
+    name: "pm"
+    role: "pm"
+  - api_key: "risk-key-change-me"
+    name: "risk"
+    role: "risk"
+  - api_key: "admin-key-change-me"
+    name: "admin"
+    role: "admin"

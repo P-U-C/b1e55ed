@@ -698,3 +698,11 @@ docs/whitepaper-onepager.md (standalone — no internal deps)
 ```text
 docs/DEERFLOW_PLAN.md (standalone — integration plan, no internal deps)
 ```
+
+## DeerFlow Operator Guide
+
+```text
+docs/deerflow.md (standalone — setup, tool reference, troubleshooting)
+  → gateway/README.md
+  → integrations/deerflow/extensions_config.json
+```
