@@ -58,8 +58,8 @@
       var color = cv < 3 ? 'var(--red)' : (cv < 7 ? 'var(--amber)' : 'var(--green)');
       var label = cv < 3 ? 'BEAR' : (cv < 7 ? 'NEUTRAL' : 'BULL');
 
-      // Needle: angle maps 0→180° (left=0, right=10)
-      var angle = (cv / 10) * 180;
+      // Needle: angle maps cv=0→180° (left/bear), cv=10→0° (right/bull)
+      var angle = 180 - (cv / 10) * 180;
       var rad = angle * Math.PI / 180;
       var nx = 100 + 65 * Math.cos(rad);
       var ny = 100 - 65 * Math.sin(rad);

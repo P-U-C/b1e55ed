@@ -44,10 +44,7 @@
     <span class="panel-title">Signal Timeline</span>
     <span class="panel-age cursor-blink">24h</span>
   </div>
-  <div id="beeswarm-container"
-       hx-get="/partials/signal-history{% if active_domain %}?domain={{ active_domain }}{% endif %}"
-       hx-trigger="every 30s"
-       hx-swap="innerHTML">
+  <div id="beeswarm-container">
     {% if signals %}
     <!-- Beeswarm data injected via JS below -->
     <div id="beeswarm-timeline" style="width:100%; overflow-x:auto; position:relative;">
@@ -88,19 +85,10 @@
     unknown:   '#6B7280'
   };
 
-  // Parse signal data from the rendered page
-  var signals = [
-    {% for s in signals %}
-    {
-      ts: "{{ s.ts }}",
-      domain: "{{ s.domain }}",
-      asset: "{{ s.asset }}",
-      desc: "{{ s.desc | replace('"', '\\"') }}",
-      score: {{ s.score | default(0) }},
-      direction: "{{ s.direction }}"
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-  ];
+  // Parse signal data from the rendered page (safe server-side JSON serialization)
+  {% set signal_data = [] %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  var signals = {{ signal_data | tojson }};
 
   if (!signals.length) return;
 
