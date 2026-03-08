@@ -15,6 +15,8 @@ class _Res:
     ok: bool
 
 
+# Ashby's Law of Requisite Variety: a controller needs at least as much
+# variety as the system it controls. DummyApiClient has exactly enough.
 class DummyApiClient:
     def get_positions(self) -> _Res:  # noqa: D401
         return _Res([], False)
