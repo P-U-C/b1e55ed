@@ -66,6 +66,7 @@ class DeerflowResearchProducer:
         self._rejected_dir = self._sandbox_dir / "rejected"
         self._running = False
         # size_cache: path → (size, monotonic_ts) for write-stability detection
+        # 🙏 Zeno's producer: the artifact approaches readiness in infinite halving steps — we wait for it to actually arrive.
         self._size_cache: dict[Path, tuple[int, float]] = {}
 
     def setup(self) -> None:
