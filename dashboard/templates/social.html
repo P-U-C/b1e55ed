@@ -3,6 +3,53 @@
 
 {% block content %}
 
+<!-- Sentiment Horizon Charts -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Sentiment Horizon</span>
+    <span class="panel-age">24 pts</span>
+  </div>
+  {% if sentiment_horizons %}
+  <div style="display:flex; flex-direction:column; gap:0.25rem;">
+    {% for h in sentiment_horizons %}
+    <div style="display:flex; align-items:center; gap:0.75rem; padding:0.25rem 0;">
+      <span style="width:8rem; font-size:0.75rem; color:var(--text-bright); font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ h.name }}">{{ h.name }}</span>
+      <div class="horizon-row" style="display:flex; flex:1; gap:1px; height:20px; align-items:flex-end;">
+        {% for score in h.scores %}
+        {% set cell_height = (score * 100) | int %}
+        {% if score < 0.4 %}
+          {% set cell_color = 'var(--red)' %}
+        {% elif score < 0.6 %}
+          {% set cell_color = 'var(--amber)' %}
+        {% else %}
+          {% set cell_color = 'var(--green)' %}
+        {% endif %}
+        <div style="flex:1; height:{{ cell_height if cell_height > 2 else 2 }}%; background:{{ cell_color }}; opacity:{{ 0.4 + score * 0.6 }}; border-radius:1px; min-width:0;" title="{{ '%.2f' | format(score) }}"></div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="display:flex; justify-content:space-between; margin-top:0.5rem; font-size:0.6rem; color:var(--text-dim);">
+    <span style="display:flex; gap:0.75rem;">
+      <span><span style="display:inline-block; width:8px; height:8px; background:var(--red); border-radius:1px; vertical-align:middle;"></span> bear &lt;0.4</span>
+      <span><span style="display:inline-block; width:8px; height:8px; background:var(--amber); border-radius:1px; vertical-align:middle;"></span> neutral</span>
+      <span><span style="display:inline-block; width:8px; height:8px; background:var(--green); border-radius:1px; vertical-align:middle;"></span> bull &gt;0.6</span>
+    </span>
+    <span>height = magnitude</span>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding:1.5rem; text-align:center;">
+    <div style="display:flex; gap:1px; justify-content:center; margin-bottom:0.5rem;">
+      {% for i in range(24) %}
+      <div style="width:12px; height:{{ [4, 8, 12, 6, 10, 14, 8, 16, 10, 6, 12, 8, 14, 10, 6, 12, 8, 10, 14, 8, 6, 12, 10, 8][i] }}px; background:var(--border); border-radius:1px; opacity:0.5;"></div>
+      {% endfor %}
+    </div>
+    <div style="color:var(--text-dim); font-size:0.8rem;">No sentiment data yet</div>
+  </div>
+  {% endif %}
+</div>
+
 <!-- Panel 1: Pipeline Status (expanded diagnostic) -->
 <div class="panel" style="margin-bottom:1rem;" hx-get="/partials/social-status" hx-trigger="every 30s" hx-swap="innerHTML">
   <div class="panel-header">

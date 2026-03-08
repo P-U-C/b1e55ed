@@ -2,8 +2,79 @@
 {% set signals = state.get('producer_signals', []) if state else [] %}
 {% set benchmarks = state.get('benchmarks', []) if state else [] %}
 {% set sys = state.get('system', {}) if state else {} %}
+{% set conviction = state.get('conviction', None) if state else None %}
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; min-height:calc(100vh - 6rem);">
+<!-- CONVICTION GAUGE — prominent at top -->
+<div class="panel" style="margin-bottom:1rem; text-align:center; padding:1rem;">
+  <div class="panel-header" style="justify-content:center;">
+    <span class="panel-title">CONVICTION</span>
+  </div>
+  <div style="display:flex; justify-content:center; align-items:center; padding:0.5rem 0;">
+    <svg id="conviction-gauge" width="200" height="120" viewBox="0 0 200 120"></svg>
+    <div id="conviction-value" style="margin-top:-0.25rem;"></div>
+    <script>
+    (function(){
+      var cv = {{ conviction | default('null') }};
+      var svg = document.getElementById('conviction-gauge');
+      var valDiv = document.getElementById('conviction-value');
+      if (!svg) return;
+
+      function arcPath(cx, cy, r, startAngle, endAngle) {
+        var s = startAngle * Math.PI / 180;
+        var e = endAngle * Math.PI / 180;
+        var x1 = cx + r * Math.cos(s), y1 = cy - r * Math.sin(s);
+        var x2 = cx + r * Math.cos(e), y2 = cy - r * Math.sin(e);
+        var large = (endAngle - startAngle > 180) ? 1 : 0;
+        return 'M ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 0 ' + x2 + ' ' + y2;
+      }
+
+      function svgEl(tag, attrs) {
+        var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (var k in attrs) el.setAttribute(k, attrs[k]);
+        return el;
+      }
+
+      // Background arc
+      svg.appendChild(svgEl('path', {d: arcPath(100,100,80,0,180), fill:'none', stroke:'rgba(255,255,255,0.06)', 'stroke-width':'12', 'stroke-linecap':'round'}));
+
+      // Zone arcs: red 0-3 (0°-54°), amber 3-7 (54°-126°), green 7-10 (126°-180°)
+      svg.appendChild(svgEl('path', {d: arcPath(100,100,80,126,180), fill:'none', stroke:'rgba(220,38,38,0.25)', 'stroke-width':'12'}));
+      svg.appendChild(svgEl('path', {d: arcPath(100,100,80,54,126), fill:'none', stroke:'rgba(245,158,11,0.25)', 'stroke-width':'12'}));
+      svg.appendChild(svgEl('path', {d: arcPath(100,100,80,0,54), fill:'none', stroke:'rgba(34,197,94,0.25)', 'stroke-width':'12'}));
+
+      // Scale labels
+      svg.appendChild(svgEl('text', {x:'15', y:'115', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '0';
+      svg.appendChild(svgEl('text', {x:'100', y:'12', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '5';
+      svg.appendChild(svgEl('text', {x:'185', y:'115', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '10';
+
+      if (cv === null || cv === undefined) {
+        // Ghost state
+        svg.querySelector('path').setAttribute('stroke-dasharray', '8,6');
+        svg.appendChild(svgEl('text', {x:'100', y:'65', 'text-anchor':'middle', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'10'})).textContent = 'awaiting data';
+        return;
+      }
+
+      cv = parseFloat(cv);
+      var color = cv < 3 ? 'var(--red)' : (cv < 7 ? 'var(--amber)' : 'var(--green)');
+      var label = cv < 3 ? 'BEAR' : (cv < 7 ? 'NEUTRAL' : 'BULL');
+
+      // Needle: angle maps 0→180° (left=0, right=10)
+      var angle = (cv / 10) * 180;
+      var rad = angle * Math.PI / 180;
+      var nx = 100 + 65 * Math.cos(rad);
+      var ny = 100 - 65 * Math.sin(rad);
+
+      svg.appendChild(svgEl('line', {x1:'100', y1:'100', x2:nx, y2:ny, stroke:color, 'stroke-width':'2', 'stroke-linecap':'round'}));
+      svg.appendChild(svgEl('circle', {cx:'100', cy:'100', r:'4', fill:color}));
+
+      valDiv.innerHTML = '<span style="font-size:1.5rem; font-weight:600; font-family:var(--mono); color:' + color + ';">' + cv.toFixed(1) + '</span>' +
+        '<div style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em;">' + label + '</div>';
+    })();
+    </script>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; min-height:calc(100vh - 14rem);">
 
   <!-- TOP LEFT — THE CALL -->
   <div class="panel" style="display:flex; flex-direction:column;">

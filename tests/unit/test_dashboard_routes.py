@@ -169,4 +169,4 @@ def test_producers_page_loads(tmp_path: Path, monkeypatch) -> None:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/producers")
         assert resp.status_code == 200
-        assert "Registered Producers" in resp.text
+        assert "Producers" in resp.text

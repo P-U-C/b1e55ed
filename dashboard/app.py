@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sqlite3
 import time as _time
 from datetime import datetime
 
@@ -184,6 +185,85 @@ def _age_str(ts: datetime | None) -> tuple[str, int]:
         return f"{mins}m ago", mins
     hrs = mins // 60
     return f"{hrs}h ago", mins
+
+
+def _get_sentiment_horizons() -> list[dict[str, Any]]:
+    """Query brain.db for recent social signal scores grouped by producer (last 24 data points)."""
+    try:
+        override = os.environ.get("B1E55ED_REPO_ROOT")
+        if override:
+            db_path = Path(override) / "data" / "brain.db"
+        else:
+            from engine.core.paths import b1e55ed_dir
+
+            db_path = b1e55ed_dir() / "data" / "brain.db"
+
+        db_override = os.getenv("B1E55ED_DB_PATH")
+        if db_override:
+            db_path = Path(db_override)
+
+        if not db_path.exists():
+            return []
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        # Check if signal_log table exists
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "signal_log" not in tables:
+            conn.close()
+            return []
+
+        # Get columns to check for domain/producer_id fields
+        cols = [str(r[1]) for r in conn.execute("PRAGMA table_info(signal_log)").fetchall()]
+
+        producer_col = "producer_id" if "producer_id" in cols else ("source" if "source" in cols else None)
+        score_col = "score" if "score" in cols else ("confidence" if "confidence" in cols else None)
+
+        if not producer_col or not score_col:
+            conn.close()
+            return []
+
+        # Filter to social-domain signals if domain column exists
+        domain_filter = ""
+        if "domain" in cols:
+            domain_filter = " AND domain IN ('social', 'sentiment') "
+
+        # Query: last 24 data points per producer, ordered by time
+        query = f"""
+            SELECT {producer_col} AS producer, {score_col} AS score, created_at
+            FROM signal_log
+            WHERE {score_col} IS NOT NULL {domain_filter}
+            ORDER BY created_at DESC
+            LIMIT 500
+        """
+        rows = conn.execute(query).fetchall()
+        conn.close()
+
+        if not rows:
+            return []
+
+        # Group by producer, keep last 24 per producer
+        by_producer: dict[str, list[float]] = {}
+        for r in rows:
+            p = str(r["producer"])
+            if p not in by_producer:
+                by_producer[p] = []
+            if len(by_producer[p]) < 24:
+                by_producer[p].append(float(r["score"]))
+
+        # Reverse so oldest first
+        horizons = []
+        for name, scores in by_producer.items():
+            scores.reverse()
+            # Normalize scores to 0-1 range if they're on 0-10 scale
+            normalized = [s / 10.0 if s > 1.0 else s for s in scores]
+            horizons.append({"name": name, "scores": normalized})
+
+        return horizons
+
+    except Exception:
+        return []
 
 
 def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, regime: str | None = None) -> dict[str, Any]:
@@ -561,6 +641,9 @@ def social_page(request: Request) -> HTMLResponse:
             except Exception:
                 pass
 
+    # Sentiment horizon data: recent social signal scores grouped by producer
+    sentiment_horizons = _get_sentiment_horizons()
+
     return templates.TemplateResponse(
         "social.html",
         {
@@ -589,6 +672,7 @@ def social_page(request: Request) -> HTMLResponse:
             "sources": sources if isinstance(sources, list) else [],
             "source_warnings": [],
             "recent_artifacts": recent_artifacts if isinstance(recent_artifacts, list) else [],
+            "sentiment_horizons": sentiment_horizons,
         },
     )
 
