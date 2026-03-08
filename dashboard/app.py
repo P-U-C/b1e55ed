@@ -390,6 +390,7 @@ def signals_page(request: Request, domain: str | None = None) -> HTMLResponse:
         {"id": "sentiment", "label": "Sentiment"},
         {"id": "events", "label": "Events"},
         {"id": "aci", "label": "ACI"},
+        {"id": "research", "label": "Research"},
     ]
 
     total = res.data.get("total") if (res.ok and isinstance(res.data, dict)) else 0
