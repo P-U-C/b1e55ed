@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -390,7 +391,64 @@ async def test_social_run_now(_app_and_headers):
         assert r.status_code == 200
         js = r.json()
         assert js["triggered"] is True
+        assert js["already_running"] is False
         assert "message" in js
+
+
+@pytest.mark.anyio
+async def test_social_run_now_already_running(_app_and_headers):
+    """Returns already_running=True and triggered=False when producer is in-flight."""
+    import api.routes.social as social_mod
+
+    app, headers, db = _app_and_headers
+    _seed_social_producers(db)
+
+    # Simulate a producer mid-run
+    social_mod._RUNNING_PRODUCERS.add("social-intel")
+    try:
+        async with make_client(app) as ac:
+            r = await ac.post("/api/v1/social/run-now", headers=headers, json={})
+        assert r.status_code == 200
+        js = r.json()
+        assert js["already_running"] is True
+        assert js["triggered"] is False
+        assert "in-flight" in js["message"]
+    finally:
+        social_mod._RUNNING_PRODUCERS.discard("social-intel")
+
+
+@pytest.mark.anyio
+async def test_social_run_now_force_quarantines_unresponsive(_app_and_headers):
+    """Unresponsive producers (high failures + stale last_run_at) get force-quarantined."""
+    from datetime import UTC  # noqa: PLC0415
+
+    app, headers, db = _app_and_headers
+    _seed_social_producers(db)
+
+    # Insert a stale producer_health row (200 seconds ago, 5 failures)
+    stale_ts = datetime(2020, 1, 1, tzinfo=UTC).isoformat()
+    with db.conn:
+        db.conn.execute(
+            """
+            INSERT OR REPLACE INTO producer_health
+            (name, domain, consecutive_failures, last_run_at, last_success_at, last_error, events_produced)
+            VALUES ('social-intel', 'social', 5, ?, NULL, 'timeout', 0)
+            """,
+            (stale_ts,),
+        )
+
+    async with make_client(app) as ac:
+        r = await ac.post("/api/v1/social/run-now", headers=headers, json={})
+    assert r.status_code == 200
+    js = r.json()
+    assert "message" in js
+
+    # Verify quarantine was set
+    row = db.conn.execute(
+        "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = 'social-intel'",
+    ).fetchone()
+    if row and row[0]:
+        assert row[1] == "unresponsive_force_quarantine"
 
 
 # ---------------------------------------------------------------------------
