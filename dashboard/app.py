@@ -39,42 +39,37 @@ templates = Jinja2Templates(directory=_HERE / "templates")
 # ---- Jinja2 custom filters ------------------------------------------------
 
 
+def _parse_dt(value: Any) -> datetime | None:
+    """Parse ISO-8601, Unix timestamp, or datetime to a tz-aware datetime."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    s = str(value).strip()
+    dt: datetime | None = None
+    with contextlib.suppress(ValueError, OSError):
+        epoch = float(s)
+        if epoch > 1e9:  # plausible Unix timestamp
+            dt = datetime.fromtimestamp(epoch, tz=UTC)
+    if dt is None:
+        with contextlib.suppress(ValueError, TypeError):
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt is not None and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
 def _timeago_filter(value: Any) -> str:
     """Convert ISO-8601, Unix timestamp, or datetime to relative string."""
     if value is None or value == "" or value == "—":
         return "—"
 
-    dt: datetime | None = None
-
-    # Already a datetime
-    if isinstance(value, datetime):
-        dt = value
-    else:
-        s = str(value).strip()
-        # Try Unix timestamp (pure digits or float)
-        try:
-            epoch = float(s)
-            if epoch > 1e9:  # plausible Unix timestamp
-                dt = datetime.fromtimestamp(epoch, tz=UTC)
-        except (ValueError, OSError):
-            pass
-        # Try ISO-8601
-        if dt is None:
-            with contextlib.suppress(ValueError, TypeError):
-                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-
+    dt = _parse_dt(value)
     if dt is None:
         return str(value)
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
 
     now = datetime.now(tz=UTC)
     delta = now - dt
     secs = int(delta.total_seconds())
 
-    if secs < 0:
-        return "just now"
     if secs < 60:
         return "just now"
     mins = secs // 60
@@ -96,22 +91,7 @@ def _fmt_iso_filter(value: Any) -> str:
     """Return full ISO string for tooltip display."""
     if value is None or value == "" or value == "—":
         return ""
-
-    dt: datetime | None = None
-    if isinstance(value, datetime):
-        dt = value
-    else:
-        s = str(value).strip()
-        try:
-            epoch = float(s)
-            if epoch > 1e9:
-                dt = datetime.fromtimestamp(epoch, tz=UTC)
-        except (ValueError, OSError):
-            pass
-        if dt is None:
-            with contextlib.suppress(ValueError, TypeError):
-                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-
+    dt = _parse_dt(value)
     if dt is None:
         return str(value)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1240,9 +1220,20 @@ def social_sources_partial_get(request: Request) -> HTMLResponse:
 
 @app.get("/api/dashboard/version")
 def dashboard_version_endpoint() -> dict:
-    """Return dashboard version info."""
+    """Return dashboard version info including git SHA."""
+    import subprocess  # noqa: PLC0415
+
+    git_sha: str | None = None
+    with contextlib.suppress(Exception):
+        git_sha = subprocess.check_output(  # noqa: S603, S607
+            ["git", "rev-parse", "--short", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+
     return {
         "version": DASHBOARD_VERSION,
+        "git_sha": git_sha,
         "changelog_url": "https://github.com/P-U-C/b1e55ed/blob/develop/dashboard/CHANGELOG.md",
     }
 
