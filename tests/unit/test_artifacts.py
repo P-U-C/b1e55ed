@@ -302,6 +302,7 @@ class TestDeerflowResearchProducer:
 
         (sandbox / "brief.meta.json").write_text(json.dumps({"event_id": "evt-123", "sha256": sha256}))
 
+        producer.scan_once()  # prime stability cache
         results = producer.scan_once()
         assert len(results) == 1
         assert results[0]["artifact_id"] == sha256
@@ -320,6 +321,7 @@ class TestDeerflowResearchProducer:
 
         (sandbox / "orphan.html").write_bytes(b"<html>no event</html>")
 
+        producer.scan_once()  # prime stability cache
         results = producer.scan_once()
         assert results == []  # rejected, not ingested
         assert (sandbox / "rejected" / "orphan.html").exists()
@@ -346,6 +348,7 @@ class TestDeerflowResearchProducer:
             )
         )
 
+        producer.scan_once()  # prime stability cache
         results = producer.scan_once()
         assert results == []
         assert (sandbox / "rejected" / "tampered.html").exists()
@@ -366,11 +369,13 @@ class TestDeerflowResearchProducer:
         (sandbox / "first.html").write_bytes(content)
         (sandbox / "first.meta.json").write_text(json.dumps({"event_id": "evt-1"}))
 
+        producer.scan_once()  # prime stability cache
         results1 = producer.scan_once()
 
         (sandbox / "second.html").write_bytes(content)
         (sandbox / "second.meta.json").write_text(json.dumps({"event_id": "evt-2"}))
 
+        producer.scan_once()  # prime stability cache for second.html
         results2 = producer.scan_once()
 
         assert results1[0]["artifact_id"] == results2[0]["artifact_id"]
