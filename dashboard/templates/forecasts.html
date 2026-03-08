@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Forecasts — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+  <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Forecasts</h1>
+  <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
+    {% for a in assets %}
+    <a href="/forecasts?asset={{ a }}&horizon={{ active_horizon or '' }}&status={{ active_status }}" class="badge" style="padding:4px 10px; {% if active_asset == a %}outline:1px solid var(--border-active);{% endif %}">{{ a }}</a>
+    {% endfor %}
+    <a href="/forecasts?horizon={{ active_horizon or '' }}&status={{ active_status }}" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_asset %}outline:1px solid var(--border-active);{% endif %}">All</a>
+    <span style="color:var(--border); margin:0 0.25rem;">|</span>
+    {% for h in horizons %}
+    <a href="/forecasts?asset={{ active_asset or '' }}&horizon={{ h }}&status={{ active_status }}" class="badge" style="padding:4px 10px; {% if active_horizon == h %}outline:1px solid var(--border-active);{% endif %}">{{ h }}</a>
+    {% endfor %}
+    <a href="/forecasts?asset={{ active_asset or '' }}&status={{ active_status }}" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_horizon %}outline:1px solid var(--border-active);{% endif %}">All</a>
+    <span style="color:var(--border); margin:0 0.25rem;">|</span>
+    {% for st in ['pending', 'resolved', 'all'] %}
+    <a href="/forecasts?asset={{ active_asset or '' }}&horizon={{ active_horizon or '' }}&status={{ st }}" class="badge" style="padding:4px 10px; {% if active_status == st %}outline:1px solid var(--border-active);{% endif %}">{{ st | capitalize }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Summary Bar -->
+<div class="grid" style="grid-template-columns:repeat(4, 1fr); margin-bottom:1rem;">
+  <div class="panel" style="text-align:center; padding:1rem;">
+    <div style="font-size:1.5rem; font-weight:600; color:var(--text-bright);">{{ stats.total }}</div>
+    <div style="font-size:0.75rem; color:var(--text-dim);">Total</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:1rem;">
+    <div style="font-size:1.5rem; font-weight:600; color:var(--warn);">{{ stats.pending }}</div>
+    <div style="font-size:0.75rem; color:var(--text-dim);">Pending</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:1rem;">
+    <div style="font-size:1.5rem; font-weight:600; color:var(--green);">{{ stats.resolved }}</div>
+    <div style="font-size:0.75rem; color:var(--text-dim);">Resolved</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:1rem;">
+    <div style="font-size:1.5rem; font-weight:600; {% if stats.mean_brier is not none %}{% if stats.mean_brier <= 0.25 %}color:var(--green);{% elif stats.mean_brier <= 0.5 %}color:var(--warn);{% else %}color:var(--red);{% endif %}{% else %}color:var(--text-dim);{% endif %}">
+      {% if stats.mean_brier is not none %}{{ '%.3f' | format(stats.mean_brier) }}{% else %}—{% endif %}
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-dim);">Mean Brier</div>
+  </div>
+</div>
+
+<!-- Forecasts Table -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Forecast Log</span>
+    <span class="panel-age">{{ forecasts | length }} shown</span>
+  </div>
+  <div id="forecasts-table" hx-get="/partials/forecasts-table?asset={{ active_asset or '' }}&horizon={{ active_horizon or '' }}&status={{ active_status }}" hx-trigger="every 60s" hx-swap="innerHTML">
+    {% include "partials/forecasts_table_inner.html" %}
+  </div>
+</div>
+
+<!-- Per-Producer Breakdown -->
+{% if producer_stats %}
+<div style="margin-top:1rem;">
+  <h2 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim); margin-bottom:0.75rem;">By Producer</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));">
+    {% for p in producer_stats %}
+    <div class="panel" style="padding:0.75rem;">
+      <div style="font-size:0.875rem; font-weight:500; color:var(--text-bright); margin-bottom:0.5rem;">{{ p.name }}</div>
+      <div style="font-size:0.8125rem; display:grid; grid-template-columns:1fr 1fr; gap:0.25rem 1rem;">
+        <span class="text-dim">Forecasts</span><span>{{ p.total }}</span>
+        <span class="text-dim">Resolved</span><span>{{ p.resolved }}</span>
+        <span class="text-dim">Accuracy</span><span>{% if p.accuracy is not none %}{{ '%.0f' | format(p.accuracy) }}%{% else %}—{% endif %}</span>
+        <span class="text-dim">Mean Brier</span>
+        <span style="{% if p.mean_brier is not none %}{% if p.mean_brier <= 0.25 %}color:var(--green);{% elif p.mean_brier <= 0.5 %}color:var(--warn);{% else %}color:var(--red);{% endif %}{% endif %}">
+          {% if p.mean_brier is not none %}{{ '%.3f' | format(p.mean_brier) }}{% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

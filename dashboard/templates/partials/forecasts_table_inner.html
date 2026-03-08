@@ -1,0 +1,55 @@
+{% if forecasts %}
+<div style="overflow-x:auto;">
+  <table style="width:100%; border-collapse:collapse; font-size:0.8125rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border); color:var(--text-dim); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;">
+        <th style="padding:6px 8px; text-align:left;">ID</th>
+        <th style="padding:6px 8px; text-align:left;">Producer</th>
+        <th style="padding:6px 8px; text-align:left;">Asset</th>
+        <th style="padding:6px 8px; text-align:left;">Direction</th>
+        <th style="padding:6px 8px; text-align:right;">Confidence</th>
+        <th style="padding:6px 8px; text-align:left;">Horizon</th>
+        <th style="padding:6px 8px; text-align:left;">Status</th>
+        <th style="padding:6px 8px; text-align:right;">Brier</th>
+        <th style="padding:6px 8px; text-align:left;">Emitted</th>
+        <th style="padding:6px 8px; text-align:left;">Resolved</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in forecasts %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px 8px; font-family:var(--mono); font-size:0.75rem; color:var(--text-dim);">{{ f.forecast_id[:8] }}</td>
+        <td style="padding:6px 8px;">{{ f.producer_name }}</td>
+        <td style="padding:6px 8px; font-weight:500; color:var(--text-bright);">{{ f.asset }}</td>
+        <td style="padding:6px 8px;">
+          <span style="color:{% if f.direction == 'bullish' %}var(--green){% elif f.direction == 'bearish' %}var(--red){% else %}var(--text-dim){% endif %};">
+            {{ f.direction }}
+          </span>
+        </td>
+        <td style="padding:6px 8px; text-align:right;">{{ '%.0f' | format((f.confidence or 0) * 100) }}%</td>
+        <td style="padding:6px 8px;">{{ f.horizon }}</td>
+        <td style="padding:6px 8px;">
+          {% if f.outcome is none %}
+            <span class="badge" style="background:var(--warn); color:#000; font-size:0.7rem;">pending</span>
+          {% elif f.outcome == 'correct' or f.outcome == 1 %}
+            <span class="badge" style="background:var(--green); color:#000; font-size:0.7rem;">correct</span>
+          {% else %}
+            <span class="badge" style="background:var(--red); color:#fff; font-size:0.7rem;">wrong</span>
+          {% endif %}
+        </td>
+        <td style="padding:6px 8px; text-align:right;
+          {% if f.brier_score is not none %}
+            {% if f.brier_score <= 0.25 %}color:var(--green);{% elif f.brier_score <= 0.5 %}color:var(--warn);{% else %}color:var(--red);{% endif %}
+          {% else %}color:var(--text-dim);{% endif %}">
+          {% if f.brier_score is not none %}{{ '%.3f' | format(f.brier_score) }}{% else %}—{% endif %}
+        </td>
+        <td style="padding:6px 8px; font-size:0.75rem; color:var(--text-dim);">{{ f.emitted_at[:16] if f.emitted_at else '—' }}</td>
+        <td style="padding:6px 8px; font-size:0.75rem; color:var(--text-dim);">{{ f.resolved_at[:16] if f.resolved_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state" style="padding:2rem; text-align:center;">No forecasts match the current filters.</div>
+{% endif %}

@@ -172,3 +172,47 @@ def test_producers_page_loads(tmp_path: Path, monkeypatch) -> None:
         resp = client.get("/producers")
         assert resp.status_code == 200
         assert "Producers" in resp.text
+
+
+def test_forecasts_page(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    # Add forecast_calibration table
+    conn = sqlite3.connect(db_path)
+    conn.execute("""CREATE TABLE IF NOT EXISTS forecast_calibration (
+        id INTEGER PRIMARY KEY, forecast_id TEXT, producer_name TEXT, asset TEXT,
+        regime TEXT, horizon TEXT, direction TEXT, confidence REAL, calibrated INTEGER,
+        outcome TEXT, brier_score REAL, price_at_emit REAL, price_at_resolve REAL,
+        emitted_at TEXT, resolved_at TEXT, created_at TEXT
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS discretionary_signals (
+        id TEXT PRIMARY KEY, symbol TEXT, direction TEXT, confidence REAL,
+        reasoning TEXT, created_at TEXT, expires_at TEXT
+    )""")
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/forecasts")
+        assert resp.status_code == 200
+        assert "Forecasts" in resp.text
+
+
+def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("""CREATE TABLE IF NOT EXISTS forecast_calibration (
+        id INTEGER PRIMARY KEY, forecast_id TEXT, producer_name TEXT, asset TEXT,
+        regime TEXT, horizon TEXT, direction TEXT, confidence REAL, calibrated INTEGER,
+        outcome TEXT, brier_score REAL, price_at_emit REAL, price_at_resolve REAL,
+        emitted_at TEXT, resolved_at TEXT, created_at TEXT
+    )""")
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/forecasts-table")
+        assert resp.status_code == 200
