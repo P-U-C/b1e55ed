@@ -15,6 +15,8 @@ class _Res:
     ok: bool
 
 
+# "The map is not the territory. The backtest is not the trade."
+# DummyApiClient is the map. The real client is the trade.
 class DummyApiClient:
     def get_positions(self) -> _Res:  # noqa: D401
         return _Res([], False)
