@@ -693,6 +693,16 @@ docs/whitepaper-summary.md (standalone — no internal deps)
 docs/whitepaper-onepager.md (standalone — no internal deps)
 ```
 
+## DeerFlow Research Trigger
+
+```text
+engine/producers/deerflow_research_trigger.py
+  → engine/core/events.py (ResearchSignalPayload, SignalClass)
+  → engine/core/database.py (Database)
+  → engine/producers/deerflow_research.py (DeerflowResearchProducer)
+  → engine/artifacts/store.py (ArtifactStore)
+```
+
 ## DeerFlow Integration Plan
 
 ```text
