@@ -111,6 +111,7 @@ def test_dashboard_routes_200() -> None:
             "/partials/karma-intents",
             "/partials/signal-history",
             "/partials/signal-history?domain=ta",
+            "/api/market-ticker",
         ]
 
         for r in routes:

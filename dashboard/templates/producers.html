@@ -18,6 +18,12 @@
     {% set failing_count = producers | selectattr('status', 'equalto', 'failing') | list | length %}
     {% set quarantined_count = producers | selectattr('status', 'equalto', 'quarantined') | list | length %}
     {% set unknown_count = producers | length - healthy_count - degraded_count - failing_count - quarantined_count %}
+    {% set non_healthy = producers | length - healthy_count %}
+    {% if producers | length > 0 and non_healthy * 2 >= producers | length %}
+    <div class="producer-urgency-banner">
+      ⚠ {{ non_healthy }} of {{ producers | length }} producers failing — system degraded
+    </div>
+    {% endif %}
     <div style="margin-bottom:0.75rem; font-size:0.85rem;" class="text-dim">
       {{ producers | length }} producers —
       <span class="text-bull">{{ healthy_count }} healthy</span> ·
@@ -108,7 +114,7 @@
 
       <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
         <label class="text-dim" for="endpoint">Endpoint URL</label>
-        <input class="input" id="endpoint" name="endpoint" placeholder="http://127.0.0.1:8000/signals" required>
+        <input class="input" id="endpoint" name="endpoint" placeholder="/api/v1/producers/your-producer/signals" required>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">

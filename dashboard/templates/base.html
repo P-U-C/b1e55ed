@@ -45,6 +45,16 @@
     </div>
 
     <div class="nav-right">
+      <!-- Live Market Ticker -->
+      <div id="market-ticker"
+           class="market-ticker"
+           hx-get="/api/market-ticker"
+           hx-trigger="load, every 60s"
+           hx-swap="innerHTML"
+           hx-target="#market-ticker-inner">
+        <span id="market-ticker-inner" class="ticker-coins">—</span>
+      </div>
+
       <div class="kill-dot level-{{ kill_switch_level | default(0) }}"
            title="Kill switch: level {{ kill_switch_level | default(0) }}"
            hx-get="/partials/kill-dot"
@@ -68,6 +78,43 @@
   <!-- Neural mesh background -->
   <script src="/static/synapses.js"></script>
 
+  <!-- Market ticker HTMX handler -->
+  <script>
+  document.addEventListener('htmx:beforeSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'market-ticker-inner') {
+      try {
+        var data = JSON.parse(e.detail.xhr.responseText);
+        var html = '';
+        if (data.coins && data.coins.length) {
+          data.coins.forEach(function(c, i) {
+            var dir = c.change_24h >= 0 ? 'bull' : 'bear';
+            var sign = c.change_24h >= 0 ? '+' : '';
+            var price = c.price >= 1000 ? c.price.toLocaleString('en-US', {maximumFractionDigits:0}) : c.price.toFixed(2);
+            html += '<span class="ticker-coin">';
+            html += '<span class="ticker-sym">' + c.symbol + '</span>';
+            html += ' $' + price + ' ';
+            html += '<span class="ticker-' + dir + '">' + sign + c.change_24h.toFixed(1) + '%</span>';
+            html += '</span>';
+            if (i < data.coins.length - 1) html += '<span class="ticker-sep">\u00b7</span>';
+          });
+        } else {
+          html = '\u2014';
+        }
+        e.detail.target.innerHTML = html;
+        e.detail.shouldSwap = false;
+      } catch(err) { /* let HTMX handle as text */ }
+    }
+  });
+  </script>
+
   {% block scripts %}{% endblock %}
+
+  <!-- Footer -->
+  <footer style="position:fixed; bottom:0; left:0; right:0; height:24px; background:rgba(10,10,10,0.95); border-top:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:space-between; padding:0 16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#3a3630; z-index:50; backdrop-filter:blur(4px);">
+    <span>b1e55<span style="color:#22C55E;">ed</span> &nbsp;·&nbsp; dashboard <span style="color:#5a5650;">v{{ dashboard_version }}</span></span>
+    <span style="color:#2a2620;">permanentupperclass.com</span>
+  </footer>
+  <!-- push content above fixed footer -->
+  <style>main.page { padding-bottom: 32px; }</style>
 </body>
 </html>

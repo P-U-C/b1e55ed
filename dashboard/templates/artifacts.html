@@ -30,7 +30,7 @@
           <td><span class="text-dim">{{ a.source or '—' }}</span></td>
           <td><span class="text-dim">{{ a.content_type }}</span></td>
           <td><span class="text-dim">{{ '%.1f' | format(a.size_bytes / 1024) }}KB</span></td>
-          <td><span class="text-dim">{{ a.created_at[:16] }}</span></td>
+          <td><span class="text-dim" title="{{ a.created_at | fmt_iso }}">{{ a.created_at | timeago }}</span></td>
           <td>
             {% if a.event_id %}
             <span class="text-dim" title="{{ a.event_id }}">{{ a.event_id[:12] }}…</span>
