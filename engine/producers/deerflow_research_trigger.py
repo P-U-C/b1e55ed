@@ -30,8 +30,11 @@ import httpx
 
 from engine.artifacts.store import ArtifactStore
 from engine.core.database import Database
-from engine.core.events import ResearchSignalPayload, SignalClass
+from engine.core.events import EventType, ResearchSignalPayload, SignalClass
+from engine.core.types import ProducerHealth, ProducerResult
+from engine.producers.base import BaseProducer
 from engine.producers.deerflow_research import DeerflowResearchProducer
+from engine.producers.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -135,18 +138,38 @@ async def poll_for_artifact(
     watcher: DeerflowResearchProducer,
     timeout: int,
     poll_interval: int,
+    triggered_at: datetime | None = None,
 ) -> dict[str, Any] | None:
     """Poll sandbox for new artifacts until timeout.
 
-    Returns the first ingested artifact result dict or None on timeout.
+    Returns the first ingested artifact result dict that was produced *after*
+    ``triggered_at`` (if provided), or None on timeout.  The ``triggered_at``
+    guard prevents a stale sandbox artifact from a prior cycle from being
+    mistaken for the current cycle's result.
     """
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         try:
             results = watcher.scan_once()
-            if results:
-                logger.info("Artifact ingested: %s", results[0].get("artifact_id", "?"))
-                return results[0]
+            for artifact in results:
+                # Timestamp guard: skip artifacts predating the trigger.
+                if triggered_at is not None:
+                    raw_ts = artifact.get("ingested_at") or artifact.get("created_at")
+                    if raw_ts:
+                        try:
+                            art_ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+                            if art_ts < triggered_at:
+                                logger.debug(
+                                    "Skipping stale artifact %s (ingested_at=%s < triggered_at=%s)",
+                                    artifact.get("artifact_id", "?"),
+                                    raw_ts,
+                                    triggered_at.isoformat(),
+                                )
+                                continue
+                        except (ValueError, TypeError):
+                            pass  # can't parse timestamp — allow through
+                logger.info("Artifact ingested: %s", artifact.get("artifact_id", "?"))
+                return artifact
         except Exception:
             logger.exception("Error during artifact scan")
         await asyncio.sleep(poll_interval)
@@ -213,7 +236,8 @@ async def run_cycle(
         logger.error("Trigger failed for cycle %s", cycle_id)
         return _cycle_result(cycle_id, started_at, "trigger_failed", universe)
 
-    # 3. Poll for artifact
+    # 3. Poll for artifact — pass triggered_at so stale sandbox artifacts are skipped
+    triggered_at = datetime.now(UTC)
     watcher = DeerflowResearchProducer(
         store=store,
         sandbox_dir=t_sandbox,
@@ -221,26 +245,32 @@ async def run_cycle(
     )
     watcher.setup()
 
-    artifact = await poll_for_artifact(watcher, t_timeout, t_poll)
+    artifact = await poll_for_artifact(watcher, t_timeout, t_poll, triggered_at=triggered_at)
     if artifact is None:
         logger.warning("Artifact poll timed out for cycle %s", cycle_id)
         return _cycle_result(cycle_id, started_at, "artifact_timeout", universe)
 
     # 4. Emit signal
-    tags = ["deerflow", "watchlist", "scheduled"]
     signal_event_id = artifact.get("event_id")
-    if not signal_event_id:
-        tags.append("partial")
 
     try:
         payload = build_signal_payload(universe, artifact)
+        db.append_event(
+            event_type=EventType.SIGNAL_RESEARCH_V1,
+            payload=payload.model_dump(),
+            ts=datetime.now(UTC),
+            observed_at=datetime.now(UTC),
+            source="scheduled:deerflow-trigger",
+            dedupe_key=f"deerflow:cycle:{cycle_id}",
+        )
         logger.info(
-            "Research signal emitted for cycle %s: %s",
+            "Research signal emitted for cycle %s: symbol=%s artifact=%s",
             cycle_id,
             payload.symbol,
+            artifact.get("artifact_id", "?"),
         )
     except Exception:
-        logger.exception("Failed to build signal payload for cycle %s", cycle_id)
+        logger.exception("Failed to build/emit signal payload for cycle %s", cycle_id)
         return _cycle_result(cycle_id, started_at, "ingest_failed", universe, artifact=artifact)
 
     return _cycle_result(
@@ -251,3 +281,56 @@ async def run_cycle(
         artifact=artifact,
         signal_event_id=signal_event_id,
     )
+
+
+@register("deerflow-trigger", domain="events")
+class DeerflowTriggerProducer(BaseProducer):
+    """Registered producer wrapper so the engine scheduler can auto-discover
+    and invoke the DeerFlow research cycle via the standard producer registry.
+
+    The heavy lifting is in ``run_cycle()``; this class provides the
+    ``collect / normalize / run`` contract required by ``BaseProducer``.
+    """
+
+    schedule = SCHEDULE
+
+    def collect(self) -> list[dict[str, Any]]:
+        return []  # cycle result surfaced via run()
+
+    def normalize(self, raw: list[dict[str, Any]]) -> list[Any]:
+        return []
+
+    def run(self) -> ProducerResult:
+        import time
+
+        start = time.monotonic()
+        store = ArtifactStore(db=self.ctx.db)
+        try:
+            result = asyncio.run(run_cycle(self.ctx.db, store))
+            duration_ms = int((time.monotonic() - start) * 1000)
+            status = result.get("status", "unknown")
+            if status == "success":
+                return ProducerResult(
+                    events_published=1,
+                    errors=[],
+                    duration_ms=duration_ms,
+                    timestamp=datetime.now(UTC),
+                    health=ProducerHealth.OK,
+                )
+            return ProducerResult(
+                events_published=0,
+                errors=[f"cycle_status:{status}"],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(UTC),
+                health=ProducerHealth.DEGRADED,
+            )
+        except Exception as exc:  # noqa: BLE001
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.exception("DeerflowTriggerProducer.run() failed")
+            return ProducerResult(
+                events_published=0,
+                errors=[str(exc)],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(UTC),
+                health=ProducerHealth.ERROR,
+            )

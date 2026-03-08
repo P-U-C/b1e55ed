@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from engine.producers.deerflow_research_trigger import (
+    DeerflowTriggerProducer,
     poll_for_artifact,
     resolve_universe,
     run_cycle,
@@ -107,6 +109,38 @@ async def test_poll_returns_first_artifact():
     assert result == artifact
 
 
+@pytest.mark.anyio
+async def test_poll_skips_stale_artifact():
+    """Artifacts ingested before the trigger timestamp must be skipped."""
+    triggered_at = datetime.now(UTC)
+    stale_ts = (triggered_at - timedelta(minutes=5)).isoformat()
+    fresh_ts = (triggered_at + timedelta(seconds=1)).isoformat()
+
+    stale = {"artifact_id": "stale", "permalink": "/a/stale", "ingested_at": stale_ts}
+    fresh = {"artifact_id": "fresh", "permalink": "/a/fresh", "ingested_at": fresh_ts}
+
+    watcher = MagicMock()
+    watcher.scan_once.return_value = [stale, fresh]
+
+    result = await poll_for_artifact(watcher, timeout=10, poll_interval=1, triggered_at=triggered_at)
+    assert result is not None
+    assert result["artifact_id"] == "fresh"
+
+
+@pytest.mark.anyio
+async def test_poll_all_stale_returns_none():
+    """If all available artifacts are stale, poll should time out."""
+    triggered_at = datetime.now(UTC)
+    stale_ts = (triggered_at - timedelta(minutes=10)).isoformat()
+    stale = {"artifact_id": "old", "permalink": "/a/old", "ingested_at": stale_ts}
+
+    watcher = MagicMock()
+    watcher.scan_once.return_value = [stale]
+
+    result = await poll_for_artifact(watcher, timeout=2, poll_interval=1, triggered_at=triggered_at)
+    assert result is None
+
+
 # --- Full cycle ---
 
 
@@ -138,6 +172,43 @@ async def test_full_cycle_success(mock_db, mock_store, tmp_path):
     assert result["universe"] == ["BTC", "ETH"]
     assert result["artifact"] == artifact
     assert result["signal_event_id"] == "e1"
+    # Signal must be emitted to DB
+    mock_db.append_event.assert_called_once()
+    call_kwargs = mock_db.append_event.call_args.kwargs
+    assert call_kwargs["event_type"].value == "signal.research.v1"
+    assert "BTC" in call_kwargs["payload"]["symbol"]
+    assert call_kwargs["dedupe_key"].startswith("deerflow:cycle:")
+
+
+@pytest.mark.anyio
+async def test_full_cycle_triggered_at_passed_to_poll(mock_db, mock_store, tmp_path):
+    """run_cycle must pass triggered_at to poll_for_artifact to prevent stale-artifact race."""
+    mock_db.execute.return_value.fetchall.return_value = [("SOL",)]
+    artifact = {"artifact_id": "b1", "permalink": "/a/b1", "event_id": "e2"}
+
+    with (
+        patch("engine.producers.deerflow_research_trigger.trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
+        patch("engine.producers.deerflow_research_trigger.poll_for_artifact", new_callable=AsyncMock) as mock_poll,
+        patch("engine.producers.deerflow_research_trigger.DeerflowResearchProducer") as mock_watcher_cls,
+    ):
+        mock_trigger.return_value = True
+        mock_poll.return_value = artifact
+        mock_watcher_cls.return_value.setup = MagicMock()
+
+        await run_cycle(mock_db, mock_store, gateway_url="http://localhost:7338", sandbox_dir=tmp_path)
+
+    _, poll_kwargs = mock_poll.call_args
+    assert "triggered_at" in poll_kwargs
+    assert isinstance(poll_kwargs["triggered_at"], datetime)
+
+
+def test_deerflow_trigger_producer_is_registered():
+    """DeerflowTriggerProducer must be discoverable via the producer registry."""
+    from engine.producers.registry import get_producer
+
+    cls = get_producer("deerflow-trigger")
+    assert cls is DeerflowTriggerProducer
+    assert cls.schedule == "0 */6 * * *"
 
 
 @pytest.mark.anyio
