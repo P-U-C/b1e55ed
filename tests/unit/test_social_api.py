@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -38,7 +39,6 @@ def _seed_social_producers(db: Database) -> None:
 def _seed_curator_events(db: Database) -> None:
     """Insert mock curator signal events."""
     import hashlib
-    from datetime import datetime
 
     for i, (symbol, direction) in enumerate([("BTC", "bullish"), ("ETH", "bearish"), ("SOL", "bullish")]):
         ts = datetime(2025, 7, 1, 12, i, 0, tzinfo=UTC).isoformat()
@@ -67,7 +67,6 @@ def _seed_curator_events(db: Database) -> None:
 def _seed_social_events(db: Database) -> None:
     """Insert mock social signal events (with echo chamber flag)."""
     import hashlib
-    from datetime import datetime
 
     for i, (symbol, score, echo) in enumerate([("BTC", 0.8, False), ("ETH", -0.3, True), ("SOL", 0.5, False)]):
         ts = datetime(2025, 7, 1, 14, i, 0, tzinfo=UTC).isoformat()
@@ -390,7 +389,72 @@ async def test_social_run_now(_app_and_headers):
         assert r.status_code == 200
         js = r.json()
         assert js["triggered"] is True
+        assert js["already_running"] is False
         assert "message" in js
+
+
+@pytest.mark.anyio
+async def test_social_run_now_already_running(_app_and_headers):
+    """Returns already_running=True and triggered=False when producer is in-flight."""
+    import api.routes.social as social_mod
+
+    app, headers, db = _app_and_headers
+    _seed_social_producers(db)
+
+    # Simulate a producer mid-run
+    social_mod._RUNNING_PRODUCERS.add("social-intel")
+    try:
+        async with make_client(app) as ac:
+            r = await ac.post("/api/v1/social/run-now", headers=headers, json={})
+        assert r.status_code == 200
+        js = r.json()
+        assert js["already_running"] is True
+        assert js["triggered"] is False
+        assert "in-flight" in js["message"]
+    finally:
+        social_mod._RUNNING_PRODUCERS.discard("social-intel")
+
+
+@pytest.mark.anyio
+async def test_social_run_now_force_quarantines_unresponsive(_app_and_headers):
+    """Producers in _RUNNING_PRODUCERS past the timeout are force-quarantined."""
+    import time
+
+    import api.routes.social as social_mod
+
+    app, headers, db = _app_and_headers
+    _seed_social_producers(db)
+
+    # Seed a producer_health row so the quarantine UPDATE has a row to hit.
+    with db.conn:
+        db.conn.execute(
+            """
+            INSERT OR REPLACE INTO producer_health
+            (name, domain, consecutive_failures, last_run_at, last_success_at, last_error, events_produced)
+            VALUES ('social-intel', 'social', 0, NULL, NULL, NULL, 0)
+            """,
+        )
+
+    # Simulate a producer that has been in-flight longer than the timeout.
+    social_mod._RUNNING_PRODUCERS.add("social-intel")
+    social_mod._PRODUCER_RUN_START["social-intel"] = time.time() - (social_mod._PRODUCER_RUN_TIMEOUT_SECONDS + 10)
+    try:
+        async with make_client(app) as ac:
+            r = await ac.post("/api/v1/social/run-now", headers=headers, json={})
+        assert r.status_code == 200
+        js = r.json()
+        assert "message" in js
+
+        # Verify quarantine was applied.
+        row = db.conn.execute(
+            "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = 'social-intel'",
+        ).fetchone()
+        assert row is not None, "producer_health row should exist after force-quarantine"
+        assert row[0] is not None, "quarantined_until should be set for unresponsive producer"
+        assert row[1] == "unresponsive_force_quarantine"
+    finally:
+        social_mod._RUNNING_PRODUCERS.discard("social-intel")
+        social_mod._PRODUCER_RUN_START.pop("social-intel", None)
 
 
 # ---------------------------------------------------------------------------

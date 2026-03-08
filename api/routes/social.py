@@ -174,6 +174,7 @@ class ResetResponse(BaseModel):
 
 class RunNowResponse(BaseModel):
     triggered: bool
+    already_running: bool = False
     message: str
 
 
@@ -508,37 +509,143 @@ def reset_failures(db: Database = Depends(get_db)) -> ResetResponse:
     return ResetResponse(reset=True, producers_reset=cur.rowcount)
 
 
+# In-process set tracking which social producers are currently mid-run.
+# Written by the run_now endpoint itself; cleared on completion or timeout.
+#
+# ⚠️  SINGLE-PROCESS ASSUMPTION: this set is module-level and only visible
+# within one worker process.  Multi-worker deployments (gunicorn/uvicorn
+# --workers N) give each worker its own copy, so duplicate-run detection will
+# silently fail across workers.  This is acceptable for the current
+# single-worker dashboard deployment; revisit with a DB advisory-lock if that
+# changes.
+_RUNNING_PRODUCERS: set[str] = set()
+# Wall-clock time (time.time()) when each producer was added to _RUNNING_PRODUCERS.
+# Used to detect producers that have been in-flight longer than the timeout.
+_PRODUCER_RUN_START: dict[str, float] = {}
+_PRODUCER_RUN_TIMEOUT_SECONDS = 120
+
+
 @router.post("/run-now", response_model=RunNowResponse)
 def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
-    """Trigger an immediate social pipeline run (best-effort)."""
-    # Reset quarantine so producers can run
+    """Trigger an immediate social pipeline run.
+
+    Returns ``already_running: true`` if a producer is currently in-flight.
+    Force-quarantines producers that have been running longer than
+    ``_PRODUCER_RUN_TIMEOUT_SECONDS`` without completing (unresponsive).
+    """
+    import threading
+    import time
+
+    # --- 1. Resolve social producer names from registry ---
+    social_producers: list[str] = []
+    try:
+        from engine.producers import registry  # noqa: PLC0415
+
+        social_producers = [n for n in registry.list_producers() if "social" in n.lower() or "sentiment" in n.lower()]
+    except Exception:
+        pass
+
+    # --- 2. Evict timed-out (unresponsive) producers before checking in-flight ---
+    # Check _PRODUCER_RUN_START first so timed-out producers are evicted from
+    # _RUNNING_PRODUCERS and don't falsely block a new run (step 3 below).
+    # We use _PRODUCER_RUN_START (set when a run begins in this process) to
+    # distinguish "currently stuck mid-run" from "ran, failed, and completed".
+    # DB timestamps cannot make this distinction.
+    unresponsive: list[str] = []
+    current_time = time.time()
+    for name in list(_RUNNING_PRODUCERS):
+        started_at = _PRODUCER_RUN_START.get(name)
+        if started_at is not None and (current_time - started_at) > _PRODUCER_RUN_TIMEOUT_SECONDS:
+            unresponsive.append(name)
+            # Evict from in-flight tracking so they don't block the new run.
+            _RUNNING_PRODUCERS.discard(name)
+            _PRODUCER_RUN_START.pop(name, None)
+
+    # Force-quarantine unresponsive producers
+    if unresponsive:
+        quarantine_until = datetime.fromtimestamp(time.time() + 300, tz=UTC).isoformat()
+        with db.conn:
+            for name in unresponsive:
+                db.conn.execute(
+                    """
+                    UPDATE producer_health
+                    SET quarantined_until = ?, quarantined_reason = 'unresponsive_force_quarantine'
+                    WHERE name = ? AND domain = 'social'
+                    """,
+                    (quarantine_until, name),
+                )
+        logger.warning(
+            "run-now: force-quarantined unresponsive social producers: %s",
+            unresponsive,
+        )
+
+    # --- 3. Check in-flight state (after unresponsive eviction) ---
+    already_running = bool(_RUNNING_PRODUCERS & set(social_producers)) if social_producers else False
+
+    if already_running:
+        running_names = ", ".join(sorted(_RUNNING_PRODUCERS & set(social_producers)))
+        return RunNowResponse(
+            triggered=False,
+            already_running=True,
+            message=f"Producer(s) already in-flight: {running_names}. Wait for completion or check health.",
+        )
+
+    # --- 4. Clear quarantine for healthy/recoverable producers ---
     with db.conn:
         db.conn.execute(
             """
             UPDATE producer_health
             SET quarantined_until = NULL, quarantined_reason = NULL
             WHERE domain = 'social'
-            """
+              AND (quarantined_reason IS NULL OR quarantined_reason != 'unresponsive_force_quarantine')
+            """,
         )
 
-    # Best-effort: try to invoke the producer via registry
-    try:
-        from engine.producers import registry
+    # --- 5. Mark producers as in-flight and fire on a background thread ---
+    if social_producers:
+        for name in social_producers:
+            _RUNNING_PRODUCERS.add(name)
+            _PRODUCER_RUN_START[name] = time.time()
 
-        names = registry.list_producers()
-        social_producers = [n for n in names if "social" in n.lower() or "sentiment" in n.lower()]
-        if social_producers:
-            return RunNowResponse(
-                triggered=True,
-                message=f"Quarantine cleared for social producers. Next scheduler tick will run: {', '.join(social_producers)}",
-            )
-    except Exception:
-        pass
+        def _run_producers(names: list[str]) -> None:
+            try:
+                from engine.producers import registry  # noqa: PLC0415
 
-    return RunNowResponse(
-        triggered=True,
-        message="Social producer quarantine cleared. Producers will run on next scheduler tick.",
-    )
+                for name in names:
+                    try:
+                        # get_producer() returns the class; instantiate before calling run().
+                        producer_cls = registry.get_producer(name)
+                        producer_cls().run()
+                    except Exception:
+                        logger.exception("run-now: producer %s raised during run()", name)
+                    finally:
+                        _RUNNING_PRODUCERS.discard(name)
+                        _PRODUCER_RUN_START.pop(name, None)
+            except Exception:
+                logger.exception("run-now: background thread failed")
+            finally:
+                for name in names:
+                    _RUNNING_PRODUCERS.discard(name)
+                    _PRODUCER_RUN_START.pop(name, None)
+
+        thread = threading.Thread(
+            target=_run_producers,
+            args=(list(social_producers),),
+            daemon=True,
+            name="social-run-now",
+        )
+        thread.start()
+
+        msg = f"Triggered: {', '.join(social_producers)}"
+        if unresponsive:
+            msg += f". Force-quarantined unresponsive: {', '.join(unresponsive)}"
+        return RunNowResponse(triggered=True, already_running=False, message=msg)
+
+    # No producers found — still clear quarantine
+    msg = "Social producer quarantine cleared. No producers registered in registry."
+    if unresponsive:
+        msg += f" Force-quarantined unresponsive: {', '.join(unresponsive)}"
+    return RunNowResponse(triggered=True, already_running=False, message=msg)
 
 
 @router.post("/watchlist/add", response_model=AddWatchlistResponse)
