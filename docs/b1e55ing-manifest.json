@@ -710,6 +710,16 @@
       "placement": "inline_comment",
       "pr_number": 348,
       "applied_at": "2026-03-08T20:12:24Z"
+    },
+    {
+      "id": "egg_4bea6349",
+      "file": "tests/unit/test_dashboard.py",
+      "anchor": "class DummyApiClient:",
+      "tradition": "markets_decision_theory",
+      "content": "# \"The map is not the territory. The backtest is not the trade.\"\n# DummyApiClient is the map. The real client is the trade.",
+      "placement": "before_function",
+      "pr_number": 346,
+      "applied_at": "2026-03-08T20:17:35Z"
     }
   ]
 }

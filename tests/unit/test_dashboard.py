@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,8 @@ class _Res:
     ok: bool
 
 
+# "The map is not the territory. The backtest is not the trade."
+# DummyApiClient is the map. The real client is the trade.
 class DummyApiClient:
     def get_positions(self) -> _Res:  # noqa: D401
         return _Res([], False)
@@ -80,8 +84,12 @@ class DummyApiClient:
         return _Res({}, False)
 
 
+_FAKE_TICKER = b'{"bitcoin":{"usd":80000,"usd_24h_change":1.5},"ethereum":{"usd":3000,"usd_24h_change":-0.5},"solana":{"usd":150,"usd_24h_change":2.1}}'
+
+
 def test_dashboard_routes_200() -> None:
-    with TestClient(app) as client:
+    mock_resp = io.BytesIO(_FAKE_TICKER)
+    with patch("urllib.request.urlopen", return_value=mock_resp), TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
 
         routes = [
