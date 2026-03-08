@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -80,8 +82,12 @@ class DummyApiClient:
         return _Res({}, False)
 
 
+_FAKE_TICKER = b'{"bitcoin":{"usd":80000,"usd_24h_change":1.5},"ethereum":{"usd":3000,"usd_24h_change":-0.5},"solana":{"usd":150,"usd_24h_change":2.1}}'
+
+
 def test_dashboard_routes_200() -> None:
-    with TestClient(app) as client:
+    mock_resp = io.BytesIO(_FAKE_TICKER)
+    with patch("urllib.request.urlopen", return_value=mock_resp), TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
 
         routes = [
