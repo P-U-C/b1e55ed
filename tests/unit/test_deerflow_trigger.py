@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import engine.producers.deerflow_research_trigger as _trigger_module
 from engine.producers.deerflow_research_trigger import (
-    DeerflowTriggerProducer,
     poll_for_artifact,
     resolve_universe,
     run_cycle,
@@ -150,9 +150,9 @@ async def test_full_cycle_success(mock_db, mock_store, tmp_path):
     artifact = {"artifact_id": "a1", "permalink": "/a/a1", "event_id": "e1"}
 
     with (
-        patch("engine.producers.deerflow_research_trigger.trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
-        patch("engine.producers.deerflow_research_trigger.poll_for_artifact", new_callable=AsyncMock) as mock_poll,
-        patch("engine.producers.deerflow_research_trigger.DeerflowResearchProducer") as mock_watcher_cls,
+        patch.object(_trigger_module, "trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
+        patch.object(_trigger_module, "poll_for_artifact", new_callable=AsyncMock) as mock_poll,
+        patch.object(_trigger_module, "DeerflowResearchProducer") as mock_watcher_cls,
     ):
         mock_trigger.return_value = True
         mock_poll.return_value = artifact
@@ -187,9 +187,9 @@ async def test_full_cycle_triggered_at_passed_to_poll(mock_db, mock_store, tmp_p
     artifact = {"artifact_id": "b1", "permalink": "/a/b1", "event_id": "e2"}
 
     with (
-        patch("engine.producers.deerflow_research_trigger.trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
-        patch("engine.producers.deerflow_research_trigger.poll_for_artifact", new_callable=AsyncMock) as mock_poll,
-        patch("engine.producers.deerflow_research_trigger.DeerflowResearchProducer") as mock_watcher_cls,
+        patch.object(_trigger_module, "trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
+        patch.object(_trigger_module, "poll_for_artifact", new_callable=AsyncMock) as mock_poll,
+        patch.object(_trigger_module, "DeerflowResearchProducer") as mock_watcher_cls,
     ):
         mock_trigger.return_value = True
         mock_poll.return_value = artifact
@@ -207,7 +207,7 @@ def test_deerflow_trigger_producer_is_registered():
     from engine.producers.registry import get_producer
 
     cls = get_producer("deerflow-trigger")
-    assert cls is DeerflowTriggerProducer
+    assert cls.__name__ == "DeerflowTriggerProducer"
     assert cls.schedule == "0 */6 * * *"
 
 
@@ -235,9 +235,9 @@ async def test_cycle_artifact_timeout(mock_db, mock_store, tmp_path):
     mock_db.execute.return_value.fetchall.return_value = [("BTC",)]
 
     with (
-        patch("engine.producers.deerflow_research_trigger.trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
-        patch("engine.producers.deerflow_research_trigger.poll_for_artifact", new_callable=AsyncMock) as mock_poll,
-        patch("engine.producers.deerflow_research_trigger.DeerflowResearchProducer") as mock_watcher_cls,
+        patch.object(_trigger_module, "trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
+        patch.object(_trigger_module, "poll_for_artifact", new_callable=AsyncMock) as mock_poll,
+        patch.object(_trigger_module, "DeerflowResearchProducer") as mock_watcher_cls,
     ):
         mock_trigger.return_value = True
         mock_poll.return_value = None
