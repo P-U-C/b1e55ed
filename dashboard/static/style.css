@@ -576,3 +576,34 @@ a:hover { color: var(--green); }
 /* HTMX indicator */
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator { display: inline-block; }
+
+/* ── Market Ticker ───────────────────────── */
+.market-ticker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  margin-right: 0.75rem;
+}
+.ticker-coin { margin: 0 0.15rem; }
+.ticker-sym { color: var(--text-bright); font-weight: 500; }
+.ticker-bull { color: var(--green, #22c55e); }
+.ticker-bear { color: var(--red, #ef4444); }
+.ticker-sep { color: var(--border); margin: 0 0.25rem; }
+
+@media (max-width: 768px) {
+  .market-ticker { display: none; }
+}
+
+/* ── Producer failure urgency banner ────── */
+.producer-urgency-banner {
+  background: var(--red, #ef4444);
+  color: #fff;
+  font-weight: 500;
+  font-size: 0.8125rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+}

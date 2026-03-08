@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import time as _time
 from datetime import datetime
 
 try:
@@ -20,10 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from dashboard.__version__ import VERSION as DASHBOARD_VERSION
 from dashboard.services.api_client import ApiClient
 
 _HERE = Path(__file__).resolve().parent
@@ -32,6 +34,97 @@ app = FastAPI(title="b1e55ed dashboard", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 
 templates = Jinja2Templates(directory=_HERE / "templates")
+
+
+# ---- Jinja2 custom filters ------------------------------------------------
+
+
+def _timeago_filter(value: Any) -> str:
+    """Convert ISO-8601, Unix timestamp, or datetime to relative string."""
+    if value is None or value == "" or value == "—":
+        return "—"
+
+    dt: datetime | None = None
+
+    # Already a datetime
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        # Try Unix timestamp (pure digits or float)
+        try:
+            epoch = float(s)
+            if epoch > 1e9:  # plausible Unix timestamp
+                dt = datetime.fromtimestamp(epoch, tz=UTC)
+        except (ValueError, OSError):
+            pass
+        # Try ISO-8601
+        if dt is None:
+            with contextlib.suppress(ValueError, TypeError):
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+    if dt is None:
+        return str(value)
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+
+    now = datetime.now(tz=UTC)
+    delta = now - dt
+    secs = int(delta.total_seconds())
+
+    if secs < 0:
+        return "just now"
+    if secs < 60:
+        return "just now"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hrs = mins // 60
+    if hrs < 24:
+        return f"{hrs}h ago"
+    days = hrs // 24
+    if days < 30:
+        return f"{days}d ago"
+    months = days // 30
+    if months < 12:
+        return f"{months}mo ago"
+    return f"{days // 365}y ago"
+
+
+def _fmt_iso_filter(value: Any) -> str:
+    """Return full ISO string for tooltip display."""
+    if value is None or value == "" or value == "—":
+        return ""
+
+    dt: datetime | None = None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        try:
+            epoch = float(s)
+            if epoch > 1e9:
+                dt = datetime.fromtimestamp(epoch, tz=UTC)
+        except (ValueError, OSError):
+            pass
+        if dt is None:
+            with contextlib.suppress(ValueError, TypeError):
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+    if dt is None:
+        return str(value)
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+templates.env.filters["timeago"] = _timeago_filter
+templates.env.filters["fmt_iso"] = _fmt_iso_filter
+
+
+# ---- Market ticker cache ---------------------------------------------------
+
+_ticker_cache: dict[str, Any] = {"data": None, "fetched_at": 0.0}
+templates.env.globals["dashboard_version"] = DASHBOARD_VERSION
 
 
 def _repo_root() -> Path:
@@ -257,6 +350,42 @@ def _regime_banner_context(regime_payload: Any, *, stale: bool) -> dict[str, Any
         "regime_confidence": conf_str,
         "regime_age": age,
     }
+
+
+# ---- Market ticker -------------------------------------------------------
+
+
+@app.get("/api/market-ticker")
+def market_ticker() -> JSONResponse:
+    """BTC/ETH/SOL prices with 24h change. Cached 60s."""
+    import json as _json
+    import urllib.request
+
+    now = _time.time()
+    if _ticker_cache["data"] is not None and (now - _ticker_cache["fetched_at"]) < 60:
+        return JSONResponse(_ticker_cache["data"])
+
+    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed-dashboard/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            raw = _json.loads(resp.read())
+    except Exception:
+        if _ticker_cache["data"] is not None:
+            return JSONResponse(_ticker_cache["data"])
+        return JSONResponse({"coins": []})
+
+    coins = []
+    for cg_id, symbol in [("bitcoin", "BTC"), ("ethereum", "ETH"), ("solana", "SOL")]:
+        info = raw.get(cg_id, {})
+        price = info.get("usd", 0)
+        change = info.get("usd_24h_change", 0)
+        coins.append({"symbol": symbol, "price": price, "change_24h": round(change, 2) if change else 0})
+
+    result = {"coins": coins}
+    _ticker_cache["data"] = result
+    _ticker_cache["fetched_at"] = now
+    return JSONResponse(result)
 
 
 # ---- Page routes -------------------------------------------------------
@@ -1104,6 +1233,18 @@ def social_watchlist_partial_get(request: Request) -> HTMLResponse:
 @app.get("/partials/social-sources", response_class=HTMLResponse)
 def social_sources_partial_get(request: Request) -> HTMLResponse:
     return _social_sources_partial(request)
+
+
+# ---- Dashboard version API endpoint -----------------------------------
+
+
+@app.get("/api/dashboard/version")
+def dashboard_version_endpoint() -> dict:
+    """Return dashboard version info."""
+    return {
+        "version": DASHBOARD_VERSION,
+        "changelog_url": "https://github.com/P-U-C/b1e55ed/blob/develop/dashboard/CHANGELOG.md",
+    }
 
 
 # ---- Optional pages backed by local DB --------------------------------
