@@ -190,19 +190,9 @@ def _age_str(ts: datetime | None) -> tuple[str, int]:
 def _get_sentiment_horizons() -> list[dict[str, Any]]:
     """Query brain.db for recent social signal scores grouped by producer (last 24 data points)."""
     try:
-        override = os.environ.get("B1E55ED_REPO_ROOT")
-        if override:
-            db_path = Path(override) / "data" / "brain.db"
-        else:
-            from engine.core.paths import b1e55ed_dir
+        db_path = _get_brain_db()
 
-            db_path = b1e55ed_dir() / "data" / "brain.db"
-
-        db_override = os.getenv("B1E55ED_DB_PATH")
-        if db_override:
-            db_path = Path(db_override)
-
-        if not db_path.exists():
+        if not db_path:
             return []
 
         conn = sqlite3.connect(str(db_path))
@@ -558,7 +548,7 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
 
 
 def _get_brain_db() -> Path | None:
-    """Resolve path to brain.db using same logic as _get_sentiment_horizons."""
+    """Resolve path to brain.db — shared helper used by all DB-querying functions."""
     override = os.environ.get("B1E55ED_REPO_ROOT")
     if override:
         db_path = Path(override) / "data" / "brain.db"

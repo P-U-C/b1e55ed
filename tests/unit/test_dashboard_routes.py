@@ -216,3 +216,25 @@ def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/partials/forecasts-table")
         assert resp.status_code == 200
+
+
+def test_discretionary_signals_partial(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("""CREATE TABLE IF NOT EXISTS discretionary_signals (
+        id TEXT PRIMARY KEY, symbol TEXT, direction TEXT, confidence REAL,
+        reasoning TEXT, created_at TEXT, expires_at TEXT
+    )""")
+    conn.execute("""INSERT INTO discretionary_signals VALUES (
+        'sig-001', 'BTC', 'long', 0.8, 'strong on-chain accumulation',
+        datetime('now'), datetime('now', '+7 days')
+    )""")
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/discretionary-signals")
+        assert resp.status_code == 200
+        assert "BTC" in resp.text

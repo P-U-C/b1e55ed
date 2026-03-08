@@ -24,7 +24,7 @@
         {% else %}
           {% set cell_color = 'var(--green)' %}
         {% endif %}
-        <div style="flex:1; height:{{ cell_height if cell_height > 2 else 2 }}%; background:{{ cell_color }}; opacity:{{ 0.4 + score * 0.6 }}; border-radius:1px; min-width:0;" title="{{ '%.2f' | format(score) }}"></div>
+        <div style="flex:1; height:{{ cell_height if cell_height > 2 else 2 }}px; background:{{ cell_color }}; opacity:{{ 0.4 + score * 0.6 }}; border-radius:1px; min-width:0;" title="{{ '%.2f' | format(score) }}"></div>
         {% endfor %}
       </div>
     </div>
