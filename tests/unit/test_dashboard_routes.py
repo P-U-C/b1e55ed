@@ -57,8 +57,15 @@ class DummyApiClient:
     def get_curator_feed(self) -> _Res:
         return _Res({"items": []}, False)
 
+    def get_artifacts(self, limit: int = 20) -> _Res:
+        return _Res([], False)
+
     def _get_json(self, path: str, params: dict | None = None) -> _Res:
         _ = (path, params)
+        return _Res({}, False)
+
+    def _post_json(self, path: str, body: dict | None = None) -> _Res:
+        _ = (path, body)
         return _Res({}, False)
 
 
@@ -238,3 +245,47 @@ def test_discretionary_signals_partial(tmp_path: Path, monkeypatch) -> None:
         resp = client.get("/partials/discretionary-signals")
         assert resp.status_code == 200
         assert "BTC" in resp.text
+
+
+def test_settings_page(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    monkeypatch.setenv("B1E55ED_IDENTITY_PATH", str(tmp_path / "identity.json"))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert "Trading Mode" in resp.text or "Settings" in resp.text
+
+
+def test_artifact_preview_partial(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    monkeypatch.setenv("B1E55ED_IDENTITY_PATH", str(tmp_path / "identity.json"))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/artifact-preview/test-id")
+        assert resp.status_code == 200
+
+
+def test_settings_trading_mode_toggle(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.post("/api/settings/trading-mode", data={"mode": "live"})
+        assert resp.status_code == 200
+        assert "LIVE MODE" in resp.text
+
+
+def test_producer_restart(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.post("/api/producers/test-producer/restart")
+        assert resp.status_code == 200
