@@ -441,6 +441,24 @@ def market_ticker() -> JSONResponse:
 # ---- Page routes -------------------------------------------------------
 
 
+def _is_new_operator() -> bool:
+    """Returns True if no signals have been processed yet."""
+    try:
+        db_path = _get_brain_db()
+        if not db_path or not db_path.exists():
+            return True
+        conn = sqlite3.connect(str(db_path))
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "conviction_scores" not in tables:
+            conn.close()
+            return True
+        count = conn.execute("SELECT COUNT(*) FROM conviction_scores").fetchone()[0]
+        conn.close()
+        return count == 0
+    except Exception:
+        return False
+
+
 @app.get("/home", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     # kept for backward-compat with early shell
@@ -522,6 +540,8 @@ def brain_overview(request: Request) -> HTMLResponse:
             "uptime": "—",
             "karma_pending": karma_pending,
             "disc_signals": _query_discretionary_signals(),
+            "regime_history": _query_regime_history_for_brain(),
+            "is_new_operator": _is_new_operator(),
         },
     )
 
@@ -565,6 +585,39 @@ def _get_brain_db() -> Path | None:
         db_path = Path(db_override)
 
     return db_path if db_path.exists() else None
+
+
+def _query_regime_history_for_brain() -> list[dict[str, Any]]:
+    """Regime history for brain home page."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return []
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    results: list[dict[str, Any]] = []
+    if "events" in tables:
+        raw = conn.execute("SELECT payload, ts FROM events WHERE event_type LIKE '%regime%' OR event_type LIKE '%REGIME%' ORDER BY ts DESC LIMIT 20").fetchall()
+        if raw:
+            import json as _json  # noqa: PLC0415
+
+            for r in raw:
+                d = dict(r)
+                # Try to parse payload for regime name
+                regime = "unknown"
+                with contextlib.suppress(Exception):
+                    p = _json.loads(d.get("payload", "{}"))
+                    regime = p.get("regime") or p.get("new_regime") or p.get("name") or "unknown"
+                results.append({"regime": regime, "ts": d.get("ts", ""), "first_seen": None, "last_seen": None, "cycles": None})
+            conn.close()
+            return results
+    if "conviction_scores" in tables:
+        raw = conn.execute(
+            "SELECT regime, MIN(ts) as first_seen, MAX(ts) as last_seen, COUNT(*) as cycles FROM conviction_scores GROUP BY regime ORDER BY last_seen DESC"
+        ).fetchall()
+        results = [dict(r) for r in raw]
+    conn.close()
+    return results
 
 
 def _query_forecasts(asset: str | None = None, horizon: str | None = None, status: str = "pending") -> dict[str, Any]:
@@ -930,145 +983,6 @@ def system_page(request: Request) -> HTMLResponse:
             "uptime": "—",
         },
     )
-
-
-@app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request) -> HTMLResponse:
-    client = _api(request)
-    cfg_res = client._get_json("/config")
-    cfg = cfg_res.data if (cfg_res.ok and isinstance(cfg_res.data, dict)) else {}
-
-    risk = cfg.get("risk", {})
-    trading_mode = cfg.get("execution", {}).get("mode", "paper")
-
-    risk_fields = [
-        {"key": "max_daily_loss", "label": "Max Daily Loss (USD)", "value": risk.get("max_daily_loss", 500), "step": "50"},
-        {"key": "max_position_size", "label": "Max Position Size (%)", "value": risk.get("max_position_size", 10), "step": "1"},
-        {"key": "max_leverage", "label": "Max Leverage", "value": risk.get("max_leverage", 5), "step": "1"},
-    ]
-
-    api_key_names = [
-        "HYPERLIQUID_PRIVATE_KEY",
-        "NANSEN_API_KEY",
-        "ALLIUM_API_KEY",
-        "OPENAI_API_KEY",
-    ]
-    api_keys = [{"name": k, "configured": bool(os.environ.get(k, "").strip())} for k in api_key_names]
-
-    return templates.TemplateResponse(
-        "settings.html",
-        {
-            **_shell(request, "settings"),
-            "trading_mode": trading_mode,
-            "risk_fields": risk_fields,
-            "api_keys": api_keys,
-        },
-    )
-
-
-@app.post("/api/settings/trading-mode", response_class=HTMLResponse)
-async def settings_trading_mode(request: Request) -> HTMLResponse:
-    form = await request.form()
-    mode = form.get("mode", "paper")
-    if mode == "live":
-        return HTMLResponse(
-            '<div style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.3); '
-            "border-radius:4px; padding:0.5rem 0.75rem; color:var(--red); font-size:0.8rem; "
-            'font-family:var(--mono);">⚠ LIVE MODE — real funds at risk</div>'
-        )
-    return HTMLResponse('<span class="text-dim" style="font-size:0.8rem;">Currently: PAPER — trades are simulated</span>')
-
-
-@app.post("/api/settings/risk/{field}", response_class=HTMLResponse)
-async def settings_risk_field(field: str, request: Request) -> HTMLResponse:
-    _ = await request.form()  # consume form data
-    return HTMLResponse(f'<span class="text-bull" style="font-size:0.7rem;">✓ {field} saved</span>')
-
-
-@app.post("/api/settings/reset-defaults", response_class=HTMLResponse)
-async def settings_reset_defaults(request: Request) -> HTMLResponse:
-    return HTMLResponse('<span class="text-bull">Defaults restored</span>')
-
-
-@app.post("/api/settings/clear-signals", response_class=HTMLResponse)
-async def settings_clear_signals(request: Request) -> HTMLResponse:
-    return HTMLResponse('<span class="text-bull">Signal history cleared</span>')
-
-
-@app.get("/partials/artifact-preview/{artifact_id}", response_class=HTMLResponse)
-def artifact_preview(request: Request, artifact_id: str) -> HTMLResponse:
-    client = _api(request)
-    art_res = client.get_artifacts(limit=200)
-    artifacts = art_res.data if (art_res.ok and isinstance(art_res.data, list)) else []
-
-    artifact = None
-    for a in artifacts:
-        if isinstance(a, dict) and a.get("id") == artifact_id:
-            artifact = a
-            break
-
-    if artifact is None:
-        return HTMLResponse('<div class="text-dim" style="padding:1rem;">Artifact not found.</div>')
-
-    # Try to fetch content for text-based artifacts
-    content = None
-    ct = (artifact.get("content_type") or "").lower()
-    if "json" in ct or "text" in ct or "markdown" in ct or "yaml" in ct:
-        content_res = client._get_json(f"/artifacts/{artifact_id}/content")
-        if content_res.ok:
-            import json as _json
-
-            raw = content_res.data
-            if isinstance(raw, (dict, list)):
-                content = _json.dumps(raw, indent=2)[:5000]
-            elif isinstance(raw, str):
-                content = raw[:5000]
-
-    artifact["content"] = content
-    return templates.TemplateResponse(
-        "partials/artifact_preview.html",
-        {"request": request, "artifact": artifact},
-    )
-
-
-@app.post("/api/producers/{name}/restart", response_class=HTMLResponse)
-async def restart_producer(name: str, request: Request) -> HTMLResponse:
-    client = _api(request)
-    result = client._post_json(f"/producers/{name}/restart", {})
-    if result.ok:
-        return HTMLResponse('<span class="text-bull">✓ Restarted</span>')
-    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
-
-
-@app.post("/api/producers/{name}/reset-failures", response_class=HTMLResponse)
-async def reset_producer_failures(name: str, request: Request) -> HTMLResponse:
-    client = _api(request)
-    result = client._post_json(f"/producers/{name}/reset-failures", {})
-    if result.ok:
-        return HTMLResponse('<span class="text-bull">✓ Failures cleared</span>')
-    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
-
-
-@app.post("/api/positions/{position_id}/adjust-stop", response_class=HTMLResponse)
-async def adjust_stop(position_id: str, request: Request) -> HTMLResponse:
-    form = await request.form()
-    price = float(form.get("price", 0))
-    client = _api(request)
-    result = client._post_json(f"/positions/{position_id}/stop", {"price": price})
-    if result.ok:
-        return HTMLResponse(f'<span class="text-bull">Stop set to ${price:.2f}</span>')
-    return HTMLResponse('<span class="text-bear">Failed to set stop</span>')
-
-
-@app.post("/api/positions/{position_id}/adjust-target", response_class=HTMLResponse)
-async def adjust_target(position_id: str, request: Request) -> HTMLResponse:
-    form = await request.form()
-    price = float(form.get("price", 0))
-    client = _api(request)
-    result = client._post_json(f"/positions/{position_id}/target", {"price": price})
-    if result.ok:
-        return HTMLResponse(f'<span class="text-bull">Target set to ${price:.2f}</span>')
-    return HTMLResponse('<span class="text-bear">Failed to set target</span>')
 
 
 @app.get("/config", response_class=HTMLResponse)
@@ -1621,9 +1535,11 @@ from dashboard.contributors import register as _register_contributors  # noqa: E
 from dashboard.identity import register as _register_identity  # noqa: E402
 from dashboard.producers import register as _register_producers  # noqa: E402
 from dashboard.routes.cockpit import register as _register_cockpit  # noqa: E402
+from dashboard.routes.conviction import register as _register_conviction  # noqa: E402
 from dashboard.webhooks import register as _register_webhooks  # noqa: E402
 
 _register_cockpit(app, templates)
+_register_conviction(app, templates)
 _register_contributors(app, templates)
 _register_identity(app, templates)
 _register_webhooks(app, templates)

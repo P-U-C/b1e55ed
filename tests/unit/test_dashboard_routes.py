@@ -57,15 +57,8 @@ class DummyApiClient:
     def get_curator_feed(self) -> _Res:
         return _Res({"items": []}, False)
 
-    def get_artifacts(self, limit: int = 20) -> _Res:
-        return _Res([], False)
-
     def _get_json(self, path: str, params: dict | None = None) -> _Res:
         _ = (path, params)
-        return _Res({}, False)
-
-    def _post_json(self, path: str, body: dict | None = None) -> _Res:
-        _ = (path, body)
         return _Res({}, False)
 
 
@@ -206,6 +199,55 @@ def test_forecasts_page(tmp_path: Path, monkeypatch) -> None:
         assert "Forecasts" in resp.text
 
 
+def test_conviction_page(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/conviction")
+        assert resp.status_code == 200
+        assert "Conviction" in resp.text
+
+
+def test_conviction_page_symbol_filter(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        for sym in ["BTC", "ETH", "SOL"]:
+            resp = client.get(f"/conviction?symbol={sym}")
+            assert resp.status_code == 200
+
+
+def test_conviction_history_partial(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/conviction-history?symbol=BTC")
+        assert resp.status_code == 200
+
+
+def test_home_page_renders(tmp_path: Path, monkeypatch) -> None:
+    """Ghost charts and onboarding shouldn't break the home page."""
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+
+def test_css_has_inter_font(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/static/style.css")
+        assert resp.status_code == 200
+        assert "Inter" in resp.text
+
+
 def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
     db_path = _make_db(tmp_path)
     conn = sqlite3.connect(db_path)
@@ -222,70 +264,4 @@ def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
     with TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/partials/forecasts-table")
-        assert resp.status_code == 200
-
-
-def test_discretionary_signals_partial(tmp_path: Path, monkeypatch) -> None:
-    db_path = _make_db(tmp_path)
-    conn = sqlite3.connect(db_path)
-    conn.execute("""CREATE TABLE IF NOT EXISTS discretionary_signals (
-        id TEXT PRIMARY KEY, symbol TEXT, direction TEXT, confidence REAL,
-        reasoning TEXT, created_at TEXT, expires_at TEXT
-    )""")
-    conn.execute("""INSERT INTO discretionary_signals VALUES (
-        'sig-001', 'BTC', 'long', 0.8, 'strong on-chain accumulation',
-        datetime('now'), datetime('now', '+7 days')
-    )""")
-    conn.commit()
-    conn.close()
-    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
-
-    with TestClient(app) as client:
-        client.app.state.api_client = DummyApiClient()
-        resp = client.get("/partials/discretionary-signals")
-        assert resp.status_code == 200
-        assert "BTC" in resp.text
-
-
-def test_settings_page(tmp_path: Path, monkeypatch) -> None:
-    db_path = _make_db(tmp_path)
-    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
-    monkeypatch.setenv("B1E55ED_IDENTITY_PATH", str(tmp_path / "identity.json"))
-
-    with TestClient(app) as client:
-        client.app.state.api_client = DummyApiClient()
-        resp = client.get("/settings")
-        assert resp.status_code == 200
-        assert "Trading Mode" in resp.text or "Settings" in resp.text
-
-
-def test_artifact_preview_partial(tmp_path: Path, monkeypatch) -> None:
-    db_path = _make_db(tmp_path)
-    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
-    monkeypatch.setenv("B1E55ED_IDENTITY_PATH", str(tmp_path / "identity.json"))
-
-    with TestClient(app) as client:
-        client.app.state.api_client = DummyApiClient()
-        resp = client.get("/partials/artifact-preview/test-id")
-        assert resp.status_code == 200
-
-
-def test_settings_trading_mode_toggle(tmp_path: Path, monkeypatch) -> None:
-    db_path = _make_db(tmp_path)
-    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
-
-    with TestClient(app) as client:
-        client.app.state.api_client = DummyApiClient()
-        resp = client.post("/api/settings/trading-mode", data={"mode": "live"})
-        assert resp.status_code == 200
-        assert "LIVE MODE" in resp.text
-
-
-def test_producer_restart(tmp_path: Path, monkeypatch) -> None:
-    db_path = _make_db(tmp_path)
-    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
-
-    with TestClient(app) as client:
-        client.app.state.api_client = DummyApiClient()
-        resp = client.post("/api/producers/test-producer/restart")
         assert resp.status_code == 200
