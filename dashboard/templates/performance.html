@@ -190,7 +190,7 @@
   var trades = [
     {% if trades %}
     {% for t in trades %}
-    { pnl: {{ t.pnl | default(0) }}, ts: "{{ t.exit_ts | default('') }}" }{% if not loop.last %},{% endif %}
+    { pnl: {{ (t.pnl if t.pnl is not none else 0) | tojson }}, ts: "{{ t.exit_ts | default('') }}" }{% if not loop.last %},{% endif %}
     {% endfor %}
     {% endif %}
   ];
