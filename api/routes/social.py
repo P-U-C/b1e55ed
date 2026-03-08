@@ -511,7 +511,17 @@ def reset_failures(db: Database = Depends(get_db)) -> ResetResponse:
 
 # In-process set tracking which social producers are currently mid-run.
 # Written by the run_now endpoint itself; cleared on completion or timeout.
+#
+# ⚠️  SINGLE-PROCESS ASSUMPTION: this set is module-level and only visible
+# within one worker process.  Multi-worker deployments (gunicorn/uvicorn
+# --workers N) give each worker its own copy, so duplicate-run detection will
+# silently fail across workers.  This is acceptable for the current
+# single-worker dashboard deployment; revisit with a DB advisory-lock if that
+# changes.
 _RUNNING_PRODUCERS: set[str] = set()
+# Wall-clock time (time.time()) when each producer was added to _RUNNING_PRODUCERS.
+# Used to detect producers that have been in-flight longer than the timeout.
+_PRODUCER_RUN_START: dict[str, float] = {}
 _PRODUCER_RUN_TIMEOUT_SECONDS = 120
 
 
@@ -526,8 +536,6 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
     import threading
     import time
 
-    now = datetime.now(tz=UTC)
-
     # --- 1. Resolve social producer names from registry ---
     social_producers: list[str] = []
     try:
@@ -537,43 +545,21 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
     except Exception:
         pass
 
-    # --- 2. Check in-flight state ---
-    already_running = bool(_RUNNING_PRODUCERS & set(social_producers)) if social_producers else False
-
-    if already_running:
-        running_names = ", ".join(sorted(_RUNNING_PRODUCERS & set(social_producers)))
-        return RunNowResponse(
-            triggered=False,
-            already_running=True,
-            message=f"Producer(s) already in-flight: {running_names}. Wait for completion or check health.",
-        )
-
-    # --- 3. Check for unresponsive producers (stale last_run_at with no success) ---
+    # --- 2. Evict timed-out (unresponsive) producers before checking in-flight ---
+    # Check _PRODUCER_RUN_START first so timed-out producers are evicted from
+    # _RUNNING_PRODUCERS and don't falsely block a new run (step 3 below).
+    # We use _PRODUCER_RUN_START (set when a run begins in this process) to
+    # distinguish "currently stuck mid-run" from "ran, failed, and completed".
+    # DB timestamps cannot make this distinction.
     unresponsive: list[str] = []
-    try:
-        rows = db.conn.execute(
-            """
-            SELECT name, last_run_at, consecutive_failures
-            FROM producer_health
-            WHERE domain = 'social'
-              AND consecutive_failures > 0
-              AND last_run_at IS NOT NULL
-            """,
-        ).fetchall()
-        for row in rows:
-            name, last_run_at_str, failures = row
-            if last_run_at_str:
-                try:
-                    last_run_at = datetime.fromisoformat(last_run_at_str)
-                    if last_run_at.tzinfo is None:
-                        last_run_at = last_run_at.replace(tzinfo=UTC)
-                    age = (now - last_run_at).total_seconds()
-                    if age > _PRODUCER_RUN_TIMEOUT_SECONDS and failures >= 3:
-                        unresponsive.append(name)
-                except ValueError:
-                    pass
-    except Exception:
-        pass
+    current_time = time.time()
+    for name in list(_RUNNING_PRODUCERS):
+        started_at = _PRODUCER_RUN_START.get(name)
+        if started_at is not None and (current_time - started_at) > _PRODUCER_RUN_TIMEOUT_SECONDS:
+            unresponsive.append(name)
+            # Evict from in-flight tracking so they don't block the new run.
+            _RUNNING_PRODUCERS.discard(name)
+            _PRODUCER_RUN_START.pop(name, None)
 
     # Force-quarantine unresponsive producers
     if unresponsive:
@@ -593,6 +579,17 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
             unresponsive,
         )
 
+    # --- 3. Check in-flight state (after unresponsive eviction) ---
+    already_running = bool(_RUNNING_PRODUCERS & set(social_producers)) if social_producers else False
+
+    if already_running:
+        running_names = ", ".join(sorted(_RUNNING_PRODUCERS & set(social_producers)))
+        return RunNowResponse(
+            triggered=False,
+            already_running=True,
+            message=f"Producer(s) already in-flight: {running_names}. Wait for completion or check health.",
+        )
+
     # --- 4. Clear quarantine for healthy/recoverable producers ---
     with db.conn:
         db.conn.execute(
@@ -608,6 +605,7 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
     if social_producers:
         for name in social_producers:
             _RUNNING_PRODUCERS.add(name)
+            _PRODUCER_RUN_START[name] = time.time()
 
         def _run_producers(names: list[str]) -> None:
             try:
@@ -615,18 +613,20 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
 
                 for name in names:
                     try:
-                        producer = registry.get(name)
-                        if producer is not None and hasattr(producer, "run"):
-                            producer.run()
+                        # get_producer() returns the class; instantiate before calling run().
+                        producer_cls = registry.get_producer(name)
+                        producer_cls().run()
                     except Exception:
                         logger.exception("run-now: producer %s raised during run()", name)
                     finally:
                         _RUNNING_PRODUCERS.discard(name)
+                        _PRODUCER_RUN_START.pop(name, None)
             except Exception:
                 logger.exception("run-now: background thread failed")
             finally:
                 for name in names:
                     _RUNNING_PRODUCERS.discard(name)
+                    _PRODUCER_RUN_START.pop(name, None)
 
         thread = threading.Thread(
             target=_run_producers,
