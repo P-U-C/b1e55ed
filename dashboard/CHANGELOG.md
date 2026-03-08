@@ -1,6 +1,6 @@
 # Dashboard Changelog
 
-## v1.0.0 — 2026-03-08
+## v1.0.0-beta.1 — 2026-03-08
 
 Initial dashboard release. Engineering-first monitoring interface.
 
@@ -30,6 +30,6 @@ Initial dashboard release. Engineering-first monitoring interface.
 
 ---
 
-## v2.0.0 — TBD
+## v1.0.0-beta.2 — TBD
 
 UX overhaul. Sprint 1+2 changes. See `docs/ux/` for full specs.

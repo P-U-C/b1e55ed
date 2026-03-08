@@ -70,7 +70,7 @@
     {% if curator_signals %}
       {% for c in curator_signals %}
       <div class="signal-row">
-        <span class="signal-ts">{{ c.ts }}</span>
+        <span class="signal-ts" title="{{ c.ts | fmt_iso }}">{{ c.ts | timeago }}</span>
         <span style="width:2.5rem; font-size:0.65rem; color:{{ 'var(--green)' if c.source == 'zoz' else 'var(--text-dim)' }};">{{ c.source }}</span>
         <span class="signal-asset">{{ c.asset | default(c.symbol) }}</span>
         <span class="signal-desc">{{ c.desc | default(c.rationale) }}</span>
@@ -127,7 +127,7 @@
       <tr>
         <td class="text-bright" style="font-weight:400;">{{ s.name }}</td>
         <td><span class="dot {{ 'dot-ok' if s.status == 'ok' else ('dot-degraded' if s.status == 'degraded' else 'dot-error') }}"></span>{{ s.status | upper }}</td>
-        <td class="text-dim">{{ s.last_hit }}</td>
+        <td class="text-dim" title="{{ s.last_hit | fmt_iso }}">{{ s.last_hit | timeago }}</td>
         <td style="text-align:right;">{{ s.signals_24h }}</td>
         <td>
           {% if s.quality %}
