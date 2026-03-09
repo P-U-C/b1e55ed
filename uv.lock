@@ -107,7 +107,7 @@ wheels = [
 
 [[package]]
 name = "b1e55ed"
-version = "1.0.0b7"
+version = "1.0.0b8"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -133,6 +133,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "python-multipart" },
     { name = "ruff" },
     { name = "safety" },
     { name = "types-pyyaml" },
@@ -176,6 +177,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "python-multipart", marker = "extra == 'dev'", specifier = ">=0.0.9" },
     { name = "pytrends", marker = "extra == 'social'", specifier = ">=4.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
