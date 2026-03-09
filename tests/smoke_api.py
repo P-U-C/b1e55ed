@@ -40,7 +40,7 @@ def hit(method: str, path: str, data: bytes | None = None, expect_json: bool = T
         with urllib.request.urlopen(req, timeout=15) as resp:
             r.status = resp.status
             r.content_type = resp.headers.get("Content-Type", "")
-            body = resp.read(4096).decode("utf-8", errors="replace")
+            body = resp.read(65536).decode("utf-8", errors="replace")
             r.body_preview = body[:200]
     except urllib.error.HTTPError as e:
         r.status = e.code
@@ -124,7 +124,7 @@ def main() -> int:
     # ── Oracle (parameterized only, skip) ──
 
     # ── Benchmarks (POST-only, send minimal body) ──
-    results.append(hit("POST", "/api/v1/benchmarks/discretionary", data=json.dumps({"signals": []}).encode()))
+    results.append(hit("POST", "/api/v1/benchmarks/discretionary", data=json.dumps({"symbol": "BTC", "direction": "long", "confidence": 0.5}).encode()))
 
     # ── Print ──
     passed = sum(1 for r in results if r.ok)

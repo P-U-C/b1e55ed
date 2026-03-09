@@ -491,6 +491,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--uid", required=True, help="Attestation UID")
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- doctor --
+    p_doctor = sub.add_parser("doctor", help="Run system diagnostics (tiers 0-2)")
+    p_doctor.add_argument("--tier", type=int, default=2, choices=[0, 1, 2], help="Run up to this tier (default: 2)")
+    p_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    p_doctor.add_argument("--fix", action="store_true", help="Auto-remediate fixable issues.")
+
     sub.add_parser("status", help="Print system status")
 
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
@@ -3310,6 +3316,7 @@ def main(argv: list[str] | None = None) -> int:
         "integrity": _cmd_integrity,
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
+        "doctor": lambda ctx, args: __import__("engine.cli.doctor", fromlist=["run_doctor"]).run_doctor(args),
         "anchor": _cmd_anchor,
         "export": _cmd_export,
         "wizard": _cmd_wizard,
