@@ -3,135 +3,202 @@
 
 {% block content %}
 
-<div class="grid" style="margin-bottom:1rem;">
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+  <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Producers</h1>
+  <span class="panel-age">{{ producers | length if producers else 0 }} registered</span>
+</div>
 
-  <!-- Registered Producers -->
-  <div class="panel grid-full">
-    <div class="panel-header">
-      <span class="panel-title">Registered Producers</span>
-      <span class="panel-age">{{ producers | length if producers else 0 }}</span>
+{% if producers %}
+{% set healthy_count = producers | selectattr('status', 'equalto', 'healthy') | list | length %}
+{% set degraded_count = producers | selectattr('status', 'equalto', 'degraded') | list | length %}
+{% set failing_count = producers | selectattr('status', 'equalto', 'failing') | list | length %}
+{% set quarantined_count = producers | selectattr('status', 'equalto', 'quarantined') | list | length %}
+{% set unknown_count = producers | length - healthy_count - degraded_count - failing_count - quarantined_count %}
+{% set non_healthy = producers | length - healthy_count %}
+
+{% if producers | length > 0 and non_healthy * 2 >= producers | length %}
+<div class="producer-urgency-banner">
+  ⚠ {{ non_healthy }} of {{ producers | length }} producers failing — system degraded
+</div>
+{% endif %}
+
+<!-- Status summary bar -->
+<div style="margin-bottom:1rem; font-size:0.8rem;" class="text-dim">
+  <span class="text-bull">{{ healthy_count }} healthy</span> ·
+  <span style="color:var(--amber);">{{ degraded_count }} degraded</span> ·
+  <span class="text-bear">{{ failing_count }} failing</span> ·
+  <span class="text-bear">{{ quarantined_count }} quarantined</span>
+</div>
+
+<!-- Producer Card Grid -->
+<div class="producer-card-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-bottom:1.5rem;">
+  {% for p in producers %}
+  <div class="panel producer-card" style="padding:0.75rem 1rem; display:flex; flex-direction:column; gap:0.5rem;">
+    <!-- Header: name + status -->
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-weight:500; color:var(--text-bright); font-size:0.85rem;">{{ p.name }}</span>
+      {% if p.status == 'healthy' %}
+        <span class="producer-status-badge" style="color:var(--green); border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.08);">✓ healthy</span>
+      {% elif p.status == 'degraded' %}
+        <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ degraded</span>
+      {% elif p.status == 'failing' %}
+        <span class="producer-status-badge" style="color:var(--red); border-color:rgba(220,38,38,0.3); background:rgba(220,38,38,0.08);">✗ failing</span>
+      {% elif p.status == 'quarantined' %}
+        <span class="producer-status-badge" style="color:var(--red); border-color:rgba(220,38,38,0.3); background:rgba(220,38,38,0.08);">⛔ quarantined</span>
+      {% else %}
+        <span class="producer-status-badge" style="color:var(--text-dim); border-color:var(--border); background:rgba(255,255,255,0.03);">? unknown</span>
+      {% endif %}
     </div>
 
-    {% if producers %}
-    {% set healthy_count = producers | selectattr('status', 'equalto', 'healthy') | list | length %}
-    {% set degraded_count = producers | selectattr('status', 'equalto', 'degraded') | list | length %}
-    {% set failing_count = producers | selectattr('status', 'equalto', 'failing') | list | length %}
-    {% set quarantined_count = producers | selectattr('status', 'equalto', 'quarantined') | list | length %}
-    {% set unknown_count = producers | length - healthy_count - degraded_count - failing_count - quarantined_count %}
-    {% set non_healthy = producers | length - healthy_count %}
-    {% if producers | length > 0 and non_healthy * 2 >= producers | length %}
-    <div class="producer-urgency-banner">
-      ⚠ {{ non_healthy }} of {{ producers | length }} producers failing — system degraded
+    <!-- Domain badge -->
+    <div>
+      <span class="badge badge-{{ p.domain }}" style="font-size:0.65rem; padding:2px 6px;">{{ p.domain }}</span>
     </div>
-    {% endif %}
-    <div style="margin-bottom:0.75rem; font-size:0.85rem;" class="text-dim">
-      {{ producers | length }} producers —
-      <span class="text-bull">{{ healthy_count }} healthy</span> ·
-      <span style="color:var(--yellow, #f59e0b);">{{ degraded_count }} degraded</span> ·
-      <span class="text-bear">{{ failing_count }} failing</span> ·
-      <span class="text-bear">{{ quarantined_count }} quarantined</span> ·
-      <span class="text-dim">{{ unknown_count }} unknown</span>
-    </div>
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Domain</th>
-          <th>Endpoint</th>
-          <th>Schedule</th>
-          <th>Last Run</th>
-          <th>Status</th>
-          <th style="text-align:right;">Fails</th>
-          <th>Last Success</th>
-          <th>Issue</th>
-          <th style="text-align:right;">Events Produced</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in producers %}
-        <tr class="{% if p.last_run == '—' %}text-dim{% endif %}">
-          <td class="text-bright" style="font-weight:400;">{{ p.name }}</td>
-          <td class="text-dim">{{ p.domain }}</td>
-          <td class="text-dim mono" style="font-size:0.75rem;">{{ p.endpoint }}</td>
-          <td class="text-dim mono">{{ p.schedule }}</td>
-          <td class="text-dim">{{ p.last_run }}</td>
-          <td>
-            {% if p.status == 'healthy' %}
-              <span class="text-bull">✓ healthy</span>
-            {% elif p.status == 'degraded' %}
-              <span style="color:var(--yellow, #f59e0b);">⚠ degraded</span>
-            {% elif p.status == 'failing' %}
-              <span class="text-bear">✗ failing</span>
-            {% elif p.status == 'quarantined' %}
-              <span class="text-bear">⛔ quarantined</span>
-            {% else %}
-              <span class="text-dim">? unknown</span>
-            {% endif %}
-          </td>
-          <td style="text-align:right;{% if p.consecutive_failures > 0 %} color:var(--bear, #ef4444);{% endif %}">{{ p.consecutive_failures }}</td>
-          <td class="text-dim">{{ p.last_success }}</td>
-          <td style="font-size:0.75rem;">
-            {% if p.quarantined_until %}
-              <span class="text-bear mono">⛔ quarantined until {{ p.quarantined_until }}</span>
-            {% elif p.last_error %}
-              <span class="text-bear mono">{{ p.last_error[:60] }}{% if p.last_error | length > 60 %}…{% endif %}</span>
-            {% elif p.consecutive_failures > 0 %}
-              <span style="color:var(--yellow, #f59e0b);">⚠️ {{ p.consecutive_failures }} consecutive failures</span>
-            {% else %}
-              <span class="text-dim">—</span>
-            {% endif %}
-          </td>
-          <td style="text-align:right;" class="data-live">{{ p.events_produced }}</td>
-        </tr>
+
+    <!-- Sparkline: last 10 runs -->
+    <div style="display:flex; align-items:center; gap:0.25rem;">
+      <span style="font-size:0.65rem; color:var(--text-dim); width:5rem;">last 10 runs</span>
+      <svg width="80" height="12" viewBox="0 0 80 12" style="flex-shrink:0;">
+        {% set fail_count = p.consecutive_failures | default(0) %}
+        {% for i in range(10) %}
+          {% if i < (10 - fail_count) %}
+            <circle cx="{{ 4 + i * 8 }}" cy="6" r="3" fill="var(--green)" fill-opacity="0.7"/>
+          {% else %}
+            <circle cx="{{ 4 + i * 8 }}" cy="6" r="3" fill="var(--red)" fill-opacity="0.7"/>
+          {% endif %}
         {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <div class="empty-state">No producers registered.</div>
-    {% endif %}
-  </div>
-
-  <!-- Registration -->
-  <div class="panel grid-full">
-    <div class="panel-header">
-      <span class="panel-title">Registration</span>
+      </svg>
     </div>
 
-    <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
-      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-        <label class="text-dim" for="name">Name</label>
-        <input class="input" id="name" name="name" placeholder="producer-name" required>
-      </div>
+    <!-- Last run + events -->
+    <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-dim);">
+      <span title="Last run">⏱ {{ p.last_run }}</span>
+      <span title="Events produced" class="data-live" style="font-family:var(--mono);">{{ p.events_produced }} events</span>
+    </div>
 
-      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-        <label class="text-dim" for="domain">Domain</label>
-        <select class="input" id="domain" name="domain" required>
-          {% for d in domains %}
-            <option value="{{ d }}">{{ d }}</option>
-          {% endfor %}
-        </select>
-      </div>
+    <!-- Error snippet (if failing/quarantined) -->
+    {% if p.status in ['failing', 'quarantined'] and p.last_error %}
+    <div style="font-size:0.7rem; color:var(--red); background:var(--red-dim); padding:4px 6px; border-radius:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono);">
+      {{ p.last_error[:80] }}{% if p.last_error | length > 80 %}…{% endif %}
+    </div>
+    {% endif %}
 
-      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-        <label class="text-dim" for="endpoint">Endpoint URL</label>
-        <input class="input" id="endpoint" name="endpoint" placeholder="/api/v1/producers/your-producer/signals" required>
-      </div>
+    {% if p.quarantined_until %}
+    <div style="font-size:0.7rem; color:var(--red); font-family:var(--mono);">
+      ⛔ quarantined until {{ p.quarantined_until }}
+    </div>
+    {% endif %}
 
-      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-        <label class="text-dim" for="schedule">Schedule</label>
-        <input class="input" id="schedule" name="schedule" value="*/15 * * * *" required>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:0.75rem;">
-        <button class="btn" type="submit">Register</button>
-        {% if form_result %}
-          <span class="{% if form_result.ok %}text-bull{% else %}text-warn{% endif %}" style="font-size:0.75rem;">{{ form_result.message }}</span>
-        {% endif %}
-      </div>
-    </form>
-
+    <!-- Run Now button -->
+    <div style="margin-top:auto; padding-top:0.25rem;">
+      <button class="btn btn-sm"
+              style="width:100%; font-size:0.7rem; padding:4px 8px;"
+              hx-post="/api/v1/producers/{{ p.name }}/run-now"
+              hx-swap="none"
+              hx-confirm="Run {{ p.name }} now?">
+        ▶ Run Now
+      </button>
+    </div>
   </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="empty-state" style="padding:2rem; text-align:center;">
+    <svg width="100%" height="80" style="max-width:300px;">
+      <rect x="10" y="10" width="80" height="60" rx="4" fill="none" stroke="var(--border)" stroke-dasharray="4,4"/>
+      <rect x="110" y="10" width="80" height="60" rx="4" fill="none" stroke="var(--border)" stroke-dasharray="4,4"/>
+      <rect x="210" y="10" width="80" height="60" rx="4" fill="none" stroke="var(--border)" stroke-dasharray="4,4"/>
+    </svg>
+    <div style="color:var(--text-dim); margin-top:0.5rem;">No producers registered. Use the form below to add one.</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Registration -->
+<div class="panel grid-full">
+  <div class="panel-header">
+    <span class="panel-title">Registration</span>
+  </div>
+
+  <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="name">Name</label>
+      <input class="input" id="name" name="name" placeholder="producer-name" required>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="domain">Domain</label>
+      <select class="input" id="domain" name="domain" required>
+        {% for d in domains %}
+          <option value="{{ d }}">{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="endpoint">Endpoint URL</label>
+      <input class="input" id="endpoint" name="endpoint" placeholder="/api/v1/producers/your-producer/signals" required>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="schedule">Schedule</label>
+      <input class="input" id="schedule" name="schedule" value="*/15 * * * *" required>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+      <button class="btn" type="submit">Register</button>
+      {% if form_result %}
+        <span class="{% if form_result.ok %}text-bull{% else %}text-warn{% endif %}" style="font-size:0.75rem;">{{ form_result.message }}</span>
+      {% endif %}
+    </div>
+  </form>
 
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* Producer card grid responsive */
+  @media (max-width: 900px) {
+    .producer-card-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  }
+  @media (max-width: 600px) {
+    .producer-card-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+  .producer-status-badge {
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .producer-card {
+    transition: border-color 0.2s ease;
+  }
+  .producer-card:hover {
+    border-color: var(--border-active);
+  }
+  .btn-sm {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--mono);
+  }
+  .btn-sm:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-bright);
+    border-color: var(--border-active);
+  }
+</style>
 {% endblock %}

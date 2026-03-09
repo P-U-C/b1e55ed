@@ -15,6 +15,8 @@ class _Res:
     ok: bool
 
 
+# Ashby's Law of Requisite Variety: a controller needs at least as much
+# variety as the system it controls. DummyApiClient has exactly enough.
 class DummyApiClient:
     def get_positions(self) -> _Res:  # noqa: D401
         return _Res([], False)
@@ -169,4 +171,4 @@ def test_producers_page_loads(tmp_path: Path, monkeypatch) -> None:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/producers")
         assert resp.status_code == 200
-        assert "Registered Producers" in resp.text
+        assert "Producers" in resp.text

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sqlite3
 import time as _time
 from datetime import datetime
 
@@ -184,6 +185,116 @@ def _age_str(ts: datetime | None) -> tuple[str, int]:
         return f"{mins}m ago", mins
     hrs = mins // 60
     return f"{hrs}h ago", mins
+
+
+def _get_sentiment_horizons() -> list[dict[str, Any]]:
+    """Query brain.db for social signal scores bucketed into 24 fixed 1h slots over last 24h."""
+    import time as _time_mod
+
+    try:
+        override = os.environ.get("B1E55ED_REPO_ROOT")
+        if override:
+            db_path = Path(override) / "data" / "brain.db"
+        else:
+            from engine.core.paths import b1e55ed_dir
+
+            db_path = b1e55ed_dir() / "data" / "brain.db"
+
+        db_override = os.getenv("B1E55ED_DB_PATH")
+        if db_override:
+            db_path = Path(db_override)
+
+        if not db_path.exists():
+            return []
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        # Check if signal_log table exists
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "signal_log" not in tables:
+            conn.close()
+            return []
+
+        # Get columns to check for domain/producer_id fields
+        cols = [str(r[1]) for r in conn.execute("PRAGMA table_info(signal_log)").fetchall()]
+
+        producer_col = "producer_id" if "producer_id" in cols else ("source" if "source" in cols else None)
+        score_col = "score" if "score" in cols else ("confidence" if "confidence" in cols else None)
+
+        if not producer_col or not score_col:
+            conn.close()
+            return []
+
+        # Filter to social-domain signals if domain column exists
+        domain_filter = ""
+        if "domain" in cols:
+            domain_filter = " AND domain IN ('social', 'sentiment') "
+
+        # Query all signals from last 24h
+        query = f"""
+            SELECT {producer_col} AS producer, {score_col} AS score, created_at
+            FROM signal_log
+            WHERE {score_col} IS NOT NULL
+              AND created_at >= datetime('now', '-24 hours')
+              {domain_filter}
+            ORDER BY created_at ASC
+        """
+        rows = conn.execute(query).fetchall()
+        conn.close()
+
+        if not rows:
+            return []
+
+        # Build 24 fixed 1h time buckets (oldest → newest)
+        now_ts = _time_mod.time()
+        bucket_size = 3600  # 1 hour in seconds
+        window_start = now_ts - 24 * bucket_size
+
+        def _to_ts(s: str) -> float:
+            """Parse ISO or unix timestamp string to float."""
+            try:
+                return float(s)
+            except (ValueError, TypeError):
+                pass
+            try:
+                import datetime as _dt
+
+                s = str(s).replace("Z", "+00:00")
+                return _dt.datetime.fromisoformat(s).timestamp()
+            except Exception:
+                return 0.0
+
+        # Group by producer → bucket index (0-23)
+        by_producer: dict[str, list[list[float]]] = {}
+        for r in rows:
+            p = str(r["producer"])
+            if p not in by_producer:
+                by_producer[p] = [[] for _ in range(24)]
+            ts = _to_ts(str(r["created_at"]))
+            if ts < window_start:
+                continue
+            bucket = min(23, int((ts - window_start) / bucket_size))
+            score = float(r["score"])
+            by_producer[p][bucket].append(score)
+
+        # Collapse buckets: mean per bucket, None if empty → normalized 0-1
+        horizons = []
+        for name, buckets in by_producer.items():
+            scores = []
+            for bucket in buckets:
+                if bucket:
+                    raw = sum(bucket) / len(bucket)
+                    normalized = raw / 10.0 if raw > 1.0 else raw
+                    scores.append(normalized)
+                else:
+                    scores.append(None)  # gap — no data this hour
+            horizons.append({"name": name, "scores": scores})
+
+        return horizons
+
+    except Exception:
+        return []
 
 
 def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, regime: str | None = None) -> dict[str, Any]:
@@ -561,6 +672,9 @@ def social_page(request: Request) -> HTMLResponse:
             except Exception:
                 pass
 
+    # Sentiment horizon data: recent social signal scores grouped by producer
+    sentiment_horizons = _get_sentiment_horizons()
+
     return templates.TemplateResponse(
         "social.html",
         {
@@ -589,6 +703,7 @@ def social_page(request: Request) -> HTMLResponse:
             "sources": sources if isinstance(sources, list) else [],
             "source_warnings": [],
             "recent_artifacts": recent_artifacts if isinstance(recent_artifacts, list) else [],
+            "sentiment_horizons": sentiment_horizons,
         },
     )
 
