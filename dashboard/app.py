@@ -363,12 +363,39 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
 
 def _build_conviction_ctx(client: Any) -> dict[str, Any]:
-    """Fetch conviction scores from API and return template context."""
+    """Fetch conviction scores — tries API first, falls back to direct DB read."""
+    raw: list[dict] = []
     res = client.get_convictions(limit=20)
-    if not res.ok or not isinstance(res.data, list) or not res.data:
+    if res.ok and isinstance(res.data, list) and res.data:
+        raw = res.data
+    else:
+        # Fallback: read directly from DB (handles older API versions without the endpoint)
+        try:
+            from engine.core.config import data_dir
+
+            db_path = data_dir() / "brain.db"
+            if db_path.exists():
+                import sqlite3
+
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """
+                    SELECT cs.* FROM conviction_scores cs
+                    INNER JOIN (
+                        SELECT symbol, MAX(ts) as max_ts FROM conviction_scores GROUP BY symbol
+                    ) latest ON cs.symbol = latest.symbol AND cs.ts = latest.max_ts
+                    ORDER BY cs.confidence DESC LIMIT 20
+                    """
+                ).fetchall()
+                raw = [dict(r) for r in rows]
+                conn.close()
+        except Exception:
+            pass
+    if not raw:
         return {"convictions": [], "conviction_age": "—"}
     convictions = []
-    for c in res.data:
+    for c in raw:
         ts_str = c.get("ts")
         age = "—"
         if ts_str:
