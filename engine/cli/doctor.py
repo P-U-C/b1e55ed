@@ -116,9 +116,16 @@ def _auto_fix(results: list[CheckResult]) -> list[str]:
                 if db_path.exists():
                     db = Database(db_path)
                     try:
+                        import json as _json
+
+                        _ks_row = db.conn.execute("SELECT payload FROM events WHERE type = 'KILL_SWITCH_V1' ORDER BY ts DESC LIMIT 1").fetchone()
+                        _actual_level = -1
+                        if _ks_row:
+                            _ks_p = _json.loads(_ks_row[0]) if isinstance(_ks_row[0], str) else _ks_row[0]
+                            _actual_level = int(_ks_p.get("level", -1))
                         payload = {
                             "level": 0,
-                            "previous_level": -1,
+                            "previous_level": _actual_level,
                             "reason": "doctor --fix: reset to SAFE",
                             "auto": True,
                             "actor": "doctor",

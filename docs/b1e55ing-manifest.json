@@ -720,6 +720,36 @@
       "placement": "before_function",
       "pr_number": 346,
       "applied_at": "2026-03-08T20:17:35Z"
+    },
+    {
+      "id": "egg_9812523b",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "mid_price = self._resolve_mid_price(sym)",
+      "tradition": "oracles-divination",
+      "content": "                        # Resolve mid_price from DB price events or Binance API",
+      "placement": "inline_comment",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_d08b74b6",
+      "file": "engine/cli/commands/setup.py",
+      "anchor": "def _run_repair() -> int:",
+      "tradition": "stoic-accounting",
+      "content": "# The physician who heals themselves has a fool for a patient.\n# This command is the exception.",
+      "placement": "before_function",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_ac97496f",
+      "file": "tests/e2e/test_execution_e2e.py",
+      "anchor": "RESULTS: list[dict] = []",
+      "tradition": "event-sourcing-fowler",
+      "content": "# The test is the thesis. The results are the proof. The chain is the witness.",
+      "placement": "inline_comment",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
     }
   ]
 }

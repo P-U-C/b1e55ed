@@ -29,6 +29,8 @@ def build_setup_parser(sub: argparse._SubParsersAction) -> argparse.ArgumentPars
     return p
 
 
+# The physician who heals themselves has a fool for a patient.
+# This command is the exception.
 def _run_repair() -> int:
     """Repair operator config: fix /tmp path pollution, reset kill switch."""
     import sys
@@ -60,9 +62,12 @@ def _run_repair() -> int:
         if db_path.exists():
             db = Database(db_path)
             try:
-                evs = db.get_events(event_type=EventType.KILL_SWITCH_V1, limit=1)
-                if evs:
-                    level = int(evs[0].payload.get("level", 0))
+                row = db.conn.execute("SELECT payload FROM events WHERE type = 'KILL_SWITCH_V1' ORDER BY ts DESC LIMIT 1").fetchone()
+                if row:
+                    import json as _json
+
+                    _ks_payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                    level = int(_ks_payload.get("level", 0))
                     if level > 0:
                         db.append_event(
                             event_type=EventType.KILL_SWITCH_V1,

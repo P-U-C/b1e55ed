@@ -877,6 +877,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             preflight=_preflight,
             sizer=_sizer,
             paper_broker=_paper_broker,
+            policy=_policy,
         )
 
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity, oms=_oms)
