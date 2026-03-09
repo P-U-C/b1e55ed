@@ -33,15 +33,18 @@ STAGES: list[dict] = []
 
 
 def stage(name: str, passed: bool, detail: str = "", duration_ms: float = 0.0):
-    STAGES.append({
-        "stage": name,
-        "status": "PASS" if passed else "FAIL",
-        "duration_ms": round(duration_ms, 1),
-        "detail": detail,
-    })
+    STAGES.append(
+        {
+            "stage": name,
+            "status": "PASS" if passed else "FAIL",
+            "duration_ms": round(duration_ms, 1),
+            "detail": detail,
+        }
+    )
 
 
 # ── Setup ─────────────────────────────────────────────────────────────────
+
 
 def _setup(tmp_path: Path):
     from engine.brain.kill_switch import KillSwitch
@@ -66,10 +69,12 @@ def _setup(tmp_path: Path):
 
 # ── Stage 1: TradeIntent ──────────────────────────────────────────────────
 
+
 def stage_trade_intent() -> tuple[bool, object | None]:
     t0 = time.perf_counter()
     try:
         from engine.core.types import TradeIntent
+
         intent = TradeIntent(
             symbol="BTC",
             direction="long",
@@ -85,18 +90,20 @@ def stage_trade_intent() -> tuple[bool, object | None]:
         assert intent.symbol == "BTC"
         assert intent.direction == "long"
         assert 0 < intent.conviction_score <= 1
-        stage("trade_intent_creation", True,
-              f"symbol={intent.symbol} direction={intent.direction} "
-              f"size_pct={intent.size_pct} conviction={intent.conviction_score}",
-              elapsed)
+        stage(
+            "trade_intent_creation",
+            True,
+            f"symbol={intent.symbol} direction={intent.direction} size_pct={intent.size_pct} conviction={intent.conviction_score}",
+            elapsed,
+        )
         return True, intent
     except Exception as e:
-        stage("trade_intent_creation", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("trade_intent_creation", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False, None
 
 
 # ── Stage 2: Preflight ────────────────────────────────────────────────────
+
 
 def stage_preflight(oms, intent) -> bool:
     t0 = time.perf_counter()
@@ -107,17 +114,15 @@ def stage_preflight(oms, intent) -> bool:
         approved = getattr(result, "approved", True)
         reason = getattr(result, "reason", "ok")
         assert approved, f"Preflight rejected: {reason}"
-        stage("oms_preflight", True,
-              f"approved={approved} kill_switch=SAFE policy=pass reason={reason!r}",
-              elapsed)
+        stage("oms_preflight", True, f"approved={approved} kill_switch=SAFE policy=pass reason={reason!r}", elapsed)
         return True
     except Exception as e:
-        stage("oms_preflight", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("oms_preflight", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False
 
 
 # ── Stage 3: PaperBroker fill ─────────────────────────────────────────────
+
 
 def stage_paper_fill(oms, db, intent) -> tuple[bool, str | None]:
     t0 = time.perf_counter()
@@ -127,50 +132,46 @@ def stage_paper_fill(oms, db, intent) -> tuple[bool, str | None]:
         assert result.status == "filled", f"Expected filled, got {result.status}"
         pos_id = result.position_id
 
-        pos = db.conn.execute(
-            "SELECT id, asset, direction, entry_price, size_notional, status "
-            "FROM positions WHERE id = ?", (pos_id,)
-        ).fetchone()
+        pos = db.conn.execute("SELECT id, asset, direction, entry_price, size_notional, status FROM positions WHERE id = ?", (pos_id,)).fetchone()
         assert pos is not None, "No position row in DB"
 
-        stage("paper_broker_fill", True,
-              f"pos_id={pos[0][:8]} asset={pos[1]} dir={pos[2]} "
-              f"entry=${pos[3]:,.0f} notional=${pos[4]:,.2f} status={pos[5]}",
-              elapsed)
+        stage(
+            "paper_broker_fill", True, f"pos_id={pos[0][:8]} asset={pos[1]} dir={pos[2]} entry=${pos[3]:,.0f} notional=${pos[4]:,.2f} status={pos[5]}", elapsed
+        )
         return True, pos_id
     except Exception as e:
-        stage("paper_broker_fill", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("paper_broker_fill", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False, None
 
 
 # ── Stage 4: Unrealized P&L ───────────────────────────────────────────────
 
+
 def stage_unrealized_pnl(db, config, position_id: str) -> bool:
     t0 = time.perf_counter()
     try:
         from engine.execution.pnl import PnLTracker
+
         tracker = PnLTracker(db, config)
         mark = 99_750.0  # +5% from entry $95,000
         pnl = tracker.unrealized_usd(position_id=position_id, mark_price=mark)
         elapsed = (time.perf_counter() - t0) * 1000
         assert pnl is not None and pnl > 0, f"Expected positive P&L, got {pnl}"
-        stage("unrealized_pnl", True,
-              f"entry=$95,000 mark_price=${mark:,.0f} (+5.0%) unrealized=${pnl:,.2f}",
-              elapsed)
+        stage("unrealized_pnl", True, f"entry=$95,000 mark_price=${mark:,.0f} (+5.0%) unrealized=${pnl:,.2f}", elapsed)
         return True
     except Exception as e:
-        stage("unrealized_pnl", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("unrealized_pnl", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False
 
 
 # ── Stage 5: Close + realized P&L ────────────────────────────────────────
 
+
 def stage_realized_pnl(db, config, position_id: str) -> tuple[bool, tuple | None]:
     t0 = time.perf_counter()
     try:
         from engine.execution.pnl import PnLTracker
+
         tracker = PnLTracker(db, config)
         exit_price = 99_750.0
 
@@ -183,8 +184,7 @@ def stage_realized_pnl(db, config, position_id: str) -> tuple[bool, tuple | None
         elapsed = (time.perf_counter() - t0) * 1000
 
         pos = db.conn.execute(
-            "SELECT id, asset, direction, entry_price, realized_pnl, status, closed_at "
-            "FROM positions WHERE id = ?", (position_id,)
+            "SELECT id, asset, direction, entry_price, realized_pnl, status, closed_at FROM positions WHERE id = ?", (position_id,)
         ).fetchone()
         assert pos is not None
 
@@ -192,18 +192,15 @@ def stage_realized_pnl(db, config, position_id: str) -> tuple[bool, tuple | None
         assert rpnl is not None and rpnl > 0, f"realized_pnl not recorded: {rpnl}"
         status = pos[5]
 
-        stage("realized_pnl", True,
-              f"pos_id={pos[0][:8]} entry=${pos[3]:,.0f} exit=${exit_price:,.0f} "
-              f"realized=${rpnl:,.2f} status={status}",
-              elapsed)
+        stage("realized_pnl", True, f"pos_id={pos[0][:8]} entry=${pos[3]:,.0f} exit=${exit_price:,.0f} realized=${rpnl:,.2f} status={status}", elapsed)
         return True, pos
     except Exception as e:
-        stage("realized_pnl", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("realized_pnl", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False, None
 
 
 # ── Stage 6: Orphaned-intent diagnosis ───────────────────────────────────
+
 
 def stage_orphan_diagnosis() -> bool:
     t0 = time.perf_counter()
@@ -216,11 +213,10 @@ def stage_orphan_diagnosis() -> bool:
         prod_db = ROOT / "data" / "brain.db"
         if prod_db.exists():
             import sqlite3
+
             conn = sqlite3.connect(prod_db)
             with contextlib.suppress(Exception):
-                intent_count = conn.execute(
-                    "SELECT COUNT(*) FROM events WHERE type='execution.trade_intent.v1'"
-                ).fetchone()[0]
+                intent_count = conn.execute("SELECT COUNT(*) FROM events WHERE type='execution.trade_intent.v1'").fetchone()[0]
             with contextlib.suppress(Exception):
                 order_count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
             conn.close()
@@ -237,17 +233,15 @@ def stage_orphan_diagnosis() -> bool:
         else:
             root_cause = f"intents={intent_count} orders={order_count}"
 
-        stage("orphan_diagnosis", True,
-              f"oms_now_wired={oms_wired} mid_price_fixed={mid_price_fixed} | {root_cause[:70]}",
-              elapsed)
+        stage("orphan_diagnosis", True, f"oms_now_wired={oms_wired} mid_price_fixed={mid_price_fixed} | {root_cause[:70]}", elapsed)
         return True
     except Exception as e:
-        stage("orphan_diagnosis", False, f"{type(e).__name__}: {e}",
-              (time.perf_counter() - t0) * 1000)
+        stage("orphan_diagnosis", False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
         return False
 
 
 # ── Summary table ─────────────────────────────────────────────────────────
+
 
 def print_summary():
     print()
@@ -257,7 +251,8 @@ def print_summary():
     headers = ["stage", "status", "duration_ms", "detail"]
     col_w = [
         max(len("stage"), max(len(r["stage"]) for r in STAGES)),
-        6, 11,
+        6,
+        11,
         min(76, max(len("detail"), max(len(r["detail"]) for r in STAGES))),
     ]
     sep = "+-" + "-+-".join("-" * w for w in col_w) + "-+"
@@ -268,9 +263,8 @@ def print_summary():
     print(sep)
     for r in STAGES:
         icon = "✅ PASS" if r["status"] == "PASS" else "❌ FAIL"
-        detail = r["detail"][:col_w[3]].ljust(col_w[3])
-        print("| " + r["stage"].ljust(col_w[0]) + " | " + icon.ljust(col_w[1])
-              + " | " + str(r["duration_ms"]).ljust(col_w[2]) + " | " + detail + " |")
+        detail = r["detail"][: col_w[3]].ljust(col_w[3])
+        print("| " + r["stage"].ljust(col_w[0]) + " | " + icon.ljust(col_w[1]) + " | " + str(r["duration_ms"]).ljust(col_w[2]) + " | " + detail + " |")
     print(sep)
     passed = sum(1 for r in STAGES if r["status"] == "PASS")
     failed = sum(1 for r in STAGES if r["status"] == "FAIL")
@@ -282,14 +276,9 @@ def print_db_proof(db):
     print()
     print("── Completed paper trade (DB query) ────────────────────────────────────────")
     headers = ["position_id[:8]", "asset", "direction", "entry_price", "exit_price", "realized_pnl", "status"]
-    rows = db.conn.execute(
-        "SELECT id, asset, direction, entry_price, realized_pnl, status, closed_at "
-        "FROM positions ORDER BY rowid DESC LIMIT 3"
-    ).fetchall()
+    rows = db.conn.execute("SELECT id, asset, direction, entry_price, realized_pnl, status, closed_at FROM positions ORDER BY rowid DESC LIMIT 3").fetchall()
     if rows:
-        fmt_rows = [(r[0][:8], r[1], r[2], f"${r[3]:,.0f}" if r[3] else "N/A",
-                     f"${r[4]:,.2f}" if r[4] else "N/A", r[5],
-                     (r[6] or "")[:19]) for r in rows]
+        fmt_rows = [(r[0][:8], r[1], r[2], f"${r[3]:,.0f}" if r[3] else "N/A", f"${r[4]:,.2f}" if r[4] else "N/A", r[5], (r[6] or "")[:19]) for r in rows]
         headers = ["position_id[:8]", "asset", "direction", "entry_price", "realized_pnl", "status", "closed_at"]
         widths = [max(len(h), max(len(str(r[i])) for r in fmt_rows)) for i, h in enumerate(headers)]
         sep2 = "  +" + "+".join("-" * (w + 2) for w in widths) + "+"
@@ -334,6 +323,7 @@ except ImportError:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
+
 
 def main() -> int:
     print("\nb1e55ed Execution & OMS E2E Test")

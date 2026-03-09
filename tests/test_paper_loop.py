@@ -123,6 +123,7 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
