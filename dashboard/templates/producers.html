@@ -76,17 +76,39 @@
       <span title="Events produced" class="data-live" style="font-family:var(--mono);">{{ p.events_produced }} events</span>
     </div>
 
-    <!-- Error snippet (if failing/quarantined) -->
-    {% if p.status in ['failing', 'quarantined'] and p.last_error %}
-    <div style="font-size:0.7rem; color:var(--red); background:var(--red-dim); padding:4px 6px; border-radius:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono);">
-      {{ p.last_error[:80] }}{% if p.last_error | length > 80 %}…{% endif %}
-    </div>
-    {% endif %}
-
-    {% if p.quarantined_until %}
-    <div style="font-size:0.7rem; color:var(--red); font-family:var(--mono);">
-      ⛔ quarantined until {{ p.quarantined_until }}
-    </div>
+    <!-- Error details (if failing/degraded/quarantined) -->
+    {% if p.status in ['failing', 'quarantined', 'degraded'] %}
+    <details style="font-size:0.7rem;" {% if p.consecutive_failures and p.consecutive_failures > 2 %}open{% endif %}>
+      <summary style="cursor:pointer; color:{% if p.status == 'degraded' %}var(--amber){% else %}var(--red){% endif %}; user-select:none; padding:2px 0;">
+        {% if p.consecutive_failures %}{{ p.consecutive_failures }} failure{{ 's' if p.consecutive_failures != 1 else '' }}{% endif %}
+        {% if p.last_error %} — {{ p.last_error[:60] }}{% if p.last_error | length > 60 %}…{% endif %}{% endif %}
+        {% if not p.last_error and not p.consecutive_failures %}no recent data{% endif %}
+      </summary>
+      <div style="margin-top:4px; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:3px; border-left:2px solid {% if p.status == 'degraded' %}var(--amber){% else %}var(--red){% endif %};">
+        {% if p.last_error %}
+        <div style="font-family:var(--mono); color:var(--text-bright); word-break:break-word; margin-bottom:4px;">{{ p.last_error }}</div>
+        {% endif %}
+        {% if p.quarantined_until %}
+        <div style="color:var(--red); margin-bottom:4px;">⛔ quarantined until {{ p.quarantined_until }}</div>
+        {% endif %}
+        <!-- Fix hints based on error type -->
+        {% if p.last_error and ('401' in p.last_error or 'Unauthorized' in p.last_error or 'auth' in p.last_error|lower) %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: API key expired or missing. Update <code>user.yaml</code> → <code>producers.{{ p.name }}.api_key</code></div>
+        {% elif p.last_error and ('403' in p.last_error or 'Forbidden' in p.last_error) %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: API key lacks permissions or subscription lapsed. Check provider dashboard.</div>
+        {% elif p.last_error and ('404' in p.last_error or 'Not Found' in p.last_error) %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: Endpoint not found. Check <code>user.yaml</code> → <code>producers.{{ p.name }}.endpoint</code></div>
+        {% elif p.last_error and ('connect' in p.last_error|lower or 'timeout' in p.last_error|lower or 'refused' in p.last_error|lower) %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: Network unreachable. Check endpoint URL and network connectivity.</div>
+        {% elif p.last_error and ('key' in p.last_error|lower or 'token' in p.last_error|lower or 'credential' in p.last_error|lower) %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: Missing credential. Set <code>producers.{{ p.name }}.api_key</code> in <code>user.yaml</code></div>
+        {% elif p.consecutive_failures and p.consecutive_failures >= 3 %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: Click Restart to clear quarantine, then Run Now to test.</div>
+        {% else %}
+        <div style="color:var(--text-dim); margin-top:4px;">Run Now to retry, or check <code>b1e55ed doctor</code> for details.</div>
+        {% endif %}
+      </div>
+    </details>
     {% endif %}
 
     <!-- Actions -->
