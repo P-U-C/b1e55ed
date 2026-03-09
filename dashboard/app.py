@@ -188,7 +188,9 @@ def _age_str(ts: datetime | None) -> tuple[str, int]:
 
 
 def _get_sentiment_horizons() -> list[dict[str, Any]]:
-    """Query brain.db for recent social signal scores grouped by producer (last 24 data points)."""
+    """Query brain.db for social signal scores bucketed into 24 fixed 1h slots over last 24h."""
+    import time as _time_mod
+
     try:
         override = os.environ.get("B1E55ED_REPO_ROOT")
         if override:
@@ -229,13 +231,14 @@ def _get_sentiment_horizons() -> list[dict[str, Any]]:
         if "domain" in cols:
             domain_filter = " AND domain IN ('social', 'sentiment') "
 
-        # Query: last 24 data points per producer, ordered by time
+        # Query all signals from last 24h
         query = f"""
             SELECT {producer_col} AS producer, {score_col} AS score, created_at
             FROM signal_log
-            WHERE {score_col} IS NOT NULL {domain_filter}
-            ORDER BY created_at DESC
-            LIMIT 500
+            WHERE {score_col} IS NOT NULL
+              AND created_at >= datetime('now', '-24 hours')
+              {domain_filter}
+            ORDER BY created_at ASC
         """
         rows = conn.execute(query).fetchall()
         conn.close()
@@ -243,22 +246,50 @@ def _get_sentiment_horizons() -> list[dict[str, Any]]:
         if not rows:
             return []
 
-        # Group by producer, keep last 24 per producer
-        by_producer: dict[str, list[float]] = {}
+        # Build 24 fixed 1h time buckets (oldest → newest)
+        now_ts = _time_mod.time()
+        bucket_size = 3600  # 1 hour in seconds
+        window_start = now_ts - 24 * bucket_size
+
+        def _to_ts(s: str) -> float:
+            """Parse ISO or unix timestamp string to float."""
+            try:
+                return float(s)
+            except (ValueError, TypeError):
+                pass
+            try:
+                import datetime as _dt
+
+                s = str(s).replace("Z", "+00:00")
+                return _dt.datetime.fromisoformat(s).timestamp()
+            except Exception:
+                return 0.0
+
+        # Group by producer → bucket index (0-23)
+        by_producer: dict[str, list[list[float]]] = {}
         for r in rows:
             p = str(r["producer"])
             if p not in by_producer:
-                by_producer[p] = []
-            if len(by_producer[p]) < 24:
-                by_producer[p].append(float(r["score"]))
+                by_producer[p] = [[] for _ in range(24)]
+            ts = _to_ts(str(r["created_at"]))
+            if ts < window_start:
+                continue
+            bucket = min(23, int((ts - window_start) / bucket_size))
+            score = float(r["score"])
+            by_producer[p][bucket].append(score)
 
-        # Reverse so oldest first
+        # Collapse buckets: mean per bucket, None if empty → normalized 0-1
         horizons = []
-        for name, scores in by_producer.items():
-            scores.reverse()
-            # Normalize scores to 0-1 range if they're on 0-10 scale
-            normalized = [s / 10.0 if s > 1.0 else s for s in scores]
-            horizons.append({"name": name, "scores": normalized})
+        for name, buckets in by_producer.items():
+            scores = []
+            for bucket in buckets:
+                if bucket:
+                    raw = sum(bucket) / len(bucket)
+                    normalized = raw / 10.0 if raw > 1.0 else raw
+                    scores.append(normalized)
+                else:
+                    scores.append(None)  # gap — no data this hour
+            horizons.append({"name": name, "scores": scores})
 
         return horizons
 
