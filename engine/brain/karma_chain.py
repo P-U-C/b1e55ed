@@ -12,15 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-
-try:
-    from datetime import UTC  # py311+
-except ImportError:  # pragma: no cover
-    from datetime import timezone as _tz
-
-    UTC = _tz.utc
 
 if TYPE_CHECKING:
     from engine.core.database import Database
