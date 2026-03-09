@@ -263,7 +263,9 @@ def print_summary():
     sep = "+-" + "-+-".join("-" * w for w in col_w) + "-+"
     hdr = "| " + " | ".join(h.ljust(col_w[i]) for i, h in enumerate(headers)) + " |"
 
-    print(sep); print(hdr); print(sep)
+    print(sep)
+    print(hdr)
+    print(sep)
     for r in STAGES:
         icon = "✅ PASS" if r["status"] == "PASS" else "❌ FAIL"
         detail = r["detail"][:col_w[3]].ljust(col_w[3])
@@ -334,7 +336,7 @@ except ImportError:
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main() -> int:
-    print(f"\nb1e55ed Execution & OMS E2E Test")
+    print("\nb1e55ed Execution & OMS E2E Test")
     print(f"Started: {datetime.now(UTC).isoformat()}\n")
     print("Running pipeline stages...")
 
@@ -347,12 +349,14 @@ def main() -> int:
         if ok1:
             ok2 = stage_preflight(oms, intent)
         else:
-            stage("oms_preflight", False, "skipped — intent failed", 0); ok2 = False
+            stage("oms_preflight", False, "skipped — intent failed", 0)
+            ok2 = False
 
         if ok2:
             ok3, pos_id = stage_paper_fill(oms, db, intent)
         else:
-            stage("paper_broker_fill", False, "skipped — preflight failed", 0); ok3, pos_id = False, None
+            stage("paper_broker_fill", False, "skipped — preflight failed", 0)
+            ok3, pos_id = False, None
 
         if ok3:
             stage_unrealized_pnl(db, config, pos_id)
