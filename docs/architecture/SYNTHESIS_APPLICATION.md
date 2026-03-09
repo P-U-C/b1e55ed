@@ -29,7 +29,7 @@ The binding constraint that makes it real: **high-confidence forecasts must stat
 **Culturally:** b1e55ed is a codebase with a soul. Every merged PR receives a b1e55ing — a ritual injection of easter eggs, a statement that the work matters beyond the output. The system criticizes itself. The council catches bugs. The karma flows honestly. The tradition is documented, versioned, and on-chain.
 
 **Read the philosophy:** [A Prayer in Hexadecimal](https://hackmd.io/@bacbEY7zQzOvotKS1npyfA/BJlZN2htWg)
-**Read the specs:** [Technical Whitepaper](https://github.com/P-U-C/b1e55ed/blob/main/docs/whitepaper-technical.md) · [Summary Whitepaper](https://github.com/P-U-C/b1e55ed/blob/main/docs/whitepaper-summary.md) · [KARMA-SPEC](https://github.com/P-U-C/b1e55ed/blob/main/docs/KARMA-SPEC.md) · [ERC-8004 Plan](https://github.com/P-U-C/b1e55ed/blob/main/docs/architecture/ERC8004_PLAN.md)
+**Read the specs:** [Technical Whitepaper](../whitepaper-technical.md) · [Summary Whitepaper](../whitepaper-summary.md) · [KARMA-SPEC](../KARMA-SPEC.md) · [ERC-8004 Plan](./ERC8004_PLAN.md)
 
 ---
 
