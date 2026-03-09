@@ -179,8 +179,8 @@ def smoke_test_all_producers() -> list[ProducerTestResult]:
         ]
 
     # Exclude test-only producers registered by unit tests (e.g. fail-prod from quarantine tests)
-    _TEST_ONLY = {"fail-prod"}
-    producers = sorted(k for k in _REGISTRY.keys() if k not in _TEST_ONLY)
+    _test_only = {"fail-prod"}
+    producers = sorted(k for k in _REGISTRY if k not in _test_only)
     ctx = _make_context()
     results: list[ProducerTestResult] = []
 
