@@ -245,14 +245,14 @@ def test_home_page_renders(tmp_path: Path, monkeypatch) -> None:
         assert resp.status_code == 200
 
 
-def test_css_has_inter_font(tmp_path: Path, monkeypatch) -> None:
+def test_css_has_jetbrains_mono_font(tmp_path: Path, monkeypatch) -> None:
     db_path = _make_db(tmp_path)
     monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
     with TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/static/style.css")
         assert resp.status_code == 200
-        assert "Inter" in resp.text
+        assert "JetBrains Mono" in resp.text
 
 
 def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:

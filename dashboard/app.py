@@ -1285,6 +1285,90 @@ def position_partial(request: Request, position_id: str) -> HTMLResponse:
     )
 
 
+@app.get("/partials/vitals-bar", response_class=HTMLResponse)
+def vitals_bar_partial(request: Request) -> HTMLResponse:
+    import datetime as _dt
+
+    db_path = _get_brain_db()
+    last_signal_age = "—"
+    producer_count = 0
+    stale = False
+    mode = "PAPER"
+    if db_path and db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()
+            if row:
+                try:
+                    dt = _dt.datetime.fromisoformat(str(row["ts"]).replace("Z", ""))
+                    age_s = (_dt.datetime.utcnow() - dt).total_seconds()
+                    stale = age_s > 300
+                    if age_s < 60:
+                        last_signal_age = f"{int(age_s)}s"
+                    elif age_s < 3600:
+                        last_signal_age = f"{int(age_s / 60)}m"
+                    else:
+                        last_signal_age = f"{int(age_s / 3600)}h"
+                except Exception:
+                    pass
+            try:
+                r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
+                producer_count = r[0] if r else 0
+            except Exception:
+                pass
+            conn.close()
+        except Exception:
+            pass
+    try:
+        from engine.core.config import load_config
+
+        cfg = load_config()
+        if getattr(getattr(cfg, "execution", None), "paper_trading", True) is False:
+            mode = "LIVE"
+    except Exception:
+        pass
+    return templates.TemplateResponse(
+        "partials/vitals_bar.html",
+        {
+            "request": request,
+            "last_signal_age": last_signal_age,
+            "producer_count": producer_count,
+            "mode": mode,
+            "stale": stale,
+        },
+    )
+
+
+@app.get("/partials/signal-detail/{signal_id}", response_class=HTMLResponse)
+def signal_detail_partial(request: Request, signal_id: str) -> HTMLResponse:
+    db_path = _get_brain_db()
+    signal: dict = {}
+    similar: list = []
+    if db_path and db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("SELECT * FROM signals WHERE id=? LIMIT 1", (signal_id,)).fetchone()
+            if row:
+                signal = dict(row)
+                pid = signal.get("producer_id")
+                if pid:
+                    rows = conn.execute("SELECT * FROM signals WHERE producer_id=? ORDER BY ts DESC LIMIT 5", (pid,)).fetchall()
+                    similar = [dict(r) for r in rows]
+            conn.close()
+        except Exception:
+            pass
+    return templates.TemplateResponse(
+        "partials/signal_detail.html",
+        {
+            "request": request,
+            "signal": signal,
+            "similar": similar,
+        },
+    )
+
+
 @app.get("/partials/signal-feed", response_class=HTMLResponse)
 def signal_feed_partial(request: Request) -> HTMLResponse:
     client = _api(request)

@@ -1,0 +1,19 @@
+<span class="vitals-item">
+  <span class="vitals-label">SIGNAL</span>
+  <span class="vitals-value {% if stale %}vitals-stale{% endif %}">{{ last_signal_age }}</span>
+</span>
+<span class="vitals-sep">·</span>
+<span class="vitals-item">
+  <span class="vitals-label">PRODUCERS</span>
+  <span class="vitals-value">{{ producer_count }}</span>
+</span>
+<span class="vitals-sep">·</span>
+<span class="vitals-item">
+  <span class="vitals-label">MODE</span>
+  <span class="vitals-value vitals-mode--{{ mode | lower }}">{{ mode }}</span>
+</span>
+{% if stale %}
+<span class="vitals-sep">·</span>
+<span class="vitals-stale-label">DATA STALE</span>
+{% endif %}
+<button class="vitals-contrast-toggle" onclick="(function(){var hc=document.documentElement.getAttribute('data-high-contrast')==='true';document.documentElement.setAttribute('data-high-contrast',String(!hc));localStorage.setItem('b1e55ed:hc',String(!hc));})()" title="Toggle high contrast" aria-label="Toggle high contrast">◐</button>

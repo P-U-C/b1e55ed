@@ -8,7 +8,16 @@
   <!-- HTMX -->
   <script src="/static/htmx.min.js"></script>
 
+  <!-- High contrast preference restore -->
+  <script>
+  (function(){
+    if(localStorage.getItem('b1e55ed:hc')==='true') document.documentElement.setAttribute('data-high-contrast','true');
+  })();
+  </script>
+
   <!-- CRT → PUC Aesthetic -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -23,27 +32,28 @@
     <a href="/" class="nav-logo">b1e55<span class="hex">ed</span></a>
 
     <div class="nav-links">
-      <!-- Core -->
       <a href="/" class="nav-link {% if active_page == 'brain' %}active{% endif %}">Brain</a>
       <a href="/cockpit" class="nav-link {% if active_page == 'cockpit' %}active{% endif %}">Cockpit</a>
-      <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
-      <a href="/forecasts" class="nav-link {% if active_page == 'forecasts' %}active{% endif %}">Forecasts</a>
       <a href="/signals" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signals</a>
-      <a href="/social" class="nav-link {% if active_page == 'social' %}active{% endif %}">Social</a>
-      <a href="/artifacts" class="nav-link {% if active_page == 'artifacts' %}active{% endif %}">Artifacts</a>
-
-      <!-- Network -->
-      <a href="/contributors" class="nav-link {% if active_page == 'contributors' %}active{% endif %}">Contributors</a>
       <a href="/producers" class="nav-link {% if active_page == 'producers' %}active{% endif %}">Producers</a>
-      <a href="/webhooks" class="nav-link {% if active_page == 'webhooks' %}active{% endif %}">Webhooks</a>
-
-      <!-- System -->
-      <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Performance</a>
-      <a href="/system" class="nav-link {% if active_page == 'system' %}active{% endif %}">System</a>
-      <a href="/identity" class="nav-link {% if active_page == 'identity' %}active{% endif %}">Identity</a>
+      <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
+      <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Perf</a>
+      <a href="/forecasts" class="nav-link {% if active_page == 'forecasts' %}active{% endif %}">Forecasts</a>
       <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">Settings</a>
-      <a href="/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Config</a>
-      <a href="/treasury" class="nav-link {% if active_page == 'treasury' %}active{% endif %}">Treasury</a>
+      <div class="nav-overflow">
+        <button class="nav-overflow__trigger" id="nav-more-btn" onclick="(function(){var m=document.getElementById('nav-more-menu');m.hidden=!m.hidden;})()" aria-label="More pages">···</button>
+        <div class="nav-overflow__menu" id="nav-more-menu" hidden>
+          <a href="/social">Social</a>
+          <a href="/artifacts">Artifacts</a>
+          <a href="/contributors">Contributors</a>
+          <a href="/webhooks">Webhooks</a>
+          <a href="/system">System</a>
+          <a href="/identity">Identity</a>
+          <a href="/config">Config</a>
+          <a href="/treasury">Treasury</a>
+          <a href="/conviction">Conviction</a>
+        </div>
+      </div>
     </div>
 
     <div class="nav-right">
@@ -72,8 +82,16 @@
     </div>
   </nav>
 
+  <!-- Vitals Bar -->
+  <div id="vitals-bar" class="vitals-bar"
+       hx-get="/partials/vitals-bar"
+       hx-trigger="load, every 15s"
+       hx-swap="innerHTML">
+    <span class="vitals-item"><span class="vitals-label">SIGNAL</span> <span class="vitals-value">—</span></span>
+  </div>
+
   <!-- ── Page Content ─────────────────────────── -->
-  <main class="page">
+  <main class="page" style="padding-top: 80px;">
     {% block content %}{% endblock %}
   </main>
 
@@ -115,6 +133,15 @@
     if (!target) return;
     var status = e.detail.xhr ? e.detail.xhr.status : '?';
     target.innerHTML = '<span class="text-red-400 text-sm">\u2717 Error ' + status + '</span>';
+  });
+
+  // Nav overflow outside-click handler
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('nav-more-menu');
+    var btn = document.getElementById('nav-more-btn');
+    if (menu && !menu.hidden && btn && !menu.contains(e.target) && e.target !== btn) {
+      menu.hidden = true;
+    }
   });
   </script>
 
