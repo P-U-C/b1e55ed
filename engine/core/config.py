@@ -439,6 +439,7 @@ class OnChainConfig(BaseModel):
     identity_registry_address: str = ""
     reputation_registry_address: str = ""
     validation_registry_address: str = ""
+    # Our ERC-8004 tokenId — 0 until the oracle registers on-chain
     system_agent_id: int = 0
 
 

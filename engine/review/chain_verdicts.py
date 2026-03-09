@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger("b1e55ed.review.chain")
 
 
+# The council deliberates. The arbiter decides. The chain remembers.
+# Justice, finally, without appeal.
 class CouncilChainPoster:
     """Posts Review Council verdicts to the on-chain ERC-8004 Validation Registry."""
 

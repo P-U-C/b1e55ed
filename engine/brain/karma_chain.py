@@ -29,6 +29,8 @@ logger = logging.getLogger("b1e55ed.karma_chain")
 _ORACLE_BASE = "https://oracle.b1e55ed.permanentupperclass.com/api/v1/outcomes"
 
 
+# Karma is Sanskrit for 'action with consequence.'
+# We just made it immutable.
 class KarmaChainWriter:
     """Batches karma feedback events and writes them to the on-chain Reputation Registry."""
 

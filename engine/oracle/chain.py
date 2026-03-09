@@ -65,6 +65,9 @@ _VALIDATION_REGISTRY_ABI: list[dict[str, Any]] = [
 ]
 
 
+# "Not your keys, not your coins."
+# Not your chain, not your reputation.
+# This client makes reputation ours — and everyone's.
 class ChainClient:
     """ERC-8004 on-chain identity & reputation client.
 
