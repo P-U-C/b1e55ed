@@ -25,7 +25,8 @@
       </thead>
       <tbody>
         {% for a in artifacts %}
-        <tr>
+        <tr style="cursor:pointer;" hx-get="/partials/artifact-preview/{{ a.id }}" hx-target="#artifact-preview-pane" hx-swap="innerHTML"
+            onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
           <td style="font-weight:400; color:var(--text-bright);">{{ a.filename }}</td>
           <td><span class="text-dim">{{ a.source or '—' }}</span></td>
           <td><span class="text-dim">{{ a.content_type }}</span></td>
@@ -53,6 +54,9 @@
   {% else %}
   <div class="empty-state">No artifacts yet. Run DeerFlow research to generate.</div>
   {% endif %}
+
+  <!-- Preview pane -->
+  <div id="artifact-preview-pane"></div>
 </div>
 
 <!-- Research Cycles -->

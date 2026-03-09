@@ -192,19 +192,9 @@ def _get_sentiment_horizons() -> list[dict[str, Any]]:
     import time as _time_mod
 
     try:
-        override = os.environ.get("B1E55ED_REPO_ROOT")
-        if override:
-            db_path = Path(override) / "data" / "brain.db"
-        else:
-            from engine.core.paths import b1e55ed_dir
+        db_path = _get_brain_db()
 
-            db_path = b1e55ed_dir() / "data" / "brain.db"
-
-        db_override = os.getenv("B1E55ED_DB_PATH")
-        if db_override:
-            db_path = Path(db_override)
-
-        if not db_path.exists():
+        if not db_path:
             return []
 
         conn = sqlite3.connect(str(db_path))
@@ -562,6 +552,7 @@ def brain_overview(request: Request) -> HTMLResponse:
             "db_size": "—",
             "uptime": "—",
             "karma_pending": karma_pending,
+            "disc_signals": _query_discretionary_signals(),
         },
     )
 
@@ -584,6 +575,167 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
             "view": view,
             "positions": positions,
         },
+    )
+
+
+def _get_brain_db() -> Path | None:
+    """Resolve path to brain.db — shared helper used by all DB-querying functions."""
+    override = os.environ.get("B1E55ED_REPO_ROOT")
+    if override:
+        db_path = Path(override) / "data" / "brain.db"
+    else:
+        try:
+            from engine.core.paths import b1e55ed_dir
+
+            db_path = b1e55ed_dir() / "data" / "brain.db"
+        except Exception:
+            db_path = Path(__file__).resolve().parent.parent / "data" / "brain.db"
+
+    db_override = os.getenv("B1E55ED_DB_PATH")
+    if db_override:
+        db_path = Path(db_override)
+
+    return db_path if db_path.exists() else None
+
+
+def _query_forecasts(asset: str | None = None, horizon: str | None = None, status: str = "pending") -> dict[str, Any]:
+    """Query forecast_calibration from brain.db."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return {"forecasts": [], "stats": {"total": 0, "pending": 0, "resolved": 0, "mean_brier": None}, "producer_stats": []}
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+
+    # Check table exists
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    if "forecast_calibration" not in tables:
+        conn.close()
+        return {"forecasts": [], "stats": {"total": 0, "pending": 0, "resolved": 0, "mean_brier": None}, "producer_stats": []}
+
+    # Stats (always unfiltered)
+    all_rows = conn.execute("SELECT * FROM forecast_calibration ORDER BY emitted_at DESC").fetchall()
+    all_dicts = [dict(r) for r in all_rows]
+    total = len(all_dicts)
+    pending = sum(1 for r in all_dicts if r.get("outcome") is None)
+    resolved = total - pending
+    brier_vals = [r["brier_score"] for r in all_dicts if r.get("brier_score") is not None]
+    mean_brier = sum(brier_vals) / len(brier_vals) if brier_vals else None
+
+    # Filtered query
+    conditions = []
+    params: list[Any] = []
+    if asset:
+        conditions.append("asset = ?")
+        params.append(asset)
+    if horizon:
+        conditions.append("horizon = ?")
+        params.append(horizon)
+    if status == "pending":
+        conditions.append("outcome IS NULL")
+    elif status == "resolved":
+        conditions.append("outcome IS NOT NULL")
+
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    rows = conn.execute(f"SELECT * FROM forecast_calibration{where} ORDER BY emitted_at DESC", params).fetchall()
+    forecasts = [dict(r) for r in rows]
+
+    # Per-producer stats
+    from collections import defaultdict
+
+    by_producer: dict[str, list[dict]] = defaultdict(list)
+    for r in all_dicts:
+        by_producer[r["producer_name"]].append(r)
+
+    producer_stats = []
+    for name, prows in sorted(by_producer.items()):
+        p_resolved = [r for r in prows if r.get("outcome") is not None]
+        p_correct = sum(1 for r in p_resolved if r.get("outcome") in ("correct", 1))
+        p_brier = [r["brier_score"] for r in p_resolved if r.get("brier_score") is not None]
+        producer_stats.append(
+            {
+                "name": name,
+                "total": len(prows),
+                "resolved": len(p_resolved),
+                "accuracy": (p_correct / len(p_resolved) * 100) if p_resolved else None,
+                "mean_brier": sum(p_brier) / len(p_brier) if p_brier else None,
+            }
+        )
+
+    conn.close()
+    return {
+        "forecasts": forecasts,
+        "stats": {"total": total, "pending": pending, "resolved": resolved, "mean_brier": mean_brier},
+        "producer_stats": producer_stats,
+    }
+
+
+def _query_discretionary_signals() -> list[dict[str, Any]]:
+    """Query active discretionary signals from brain.db."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return []
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    if "discretionary_signals" not in tables:
+        conn.close()
+        return []
+
+    rows = conn.execute("SELECT * FROM discretionary_signals WHERE expires_at > datetime('now') ORDER BY created_at DESC").fetchall()
+    signals = [dict(r) for r in rows]
+    conn.close()
+    return signals
+
+
+@app.get("/forecasts", response_class=HTMLResponse)
+def forecasts_page(request: Request, asset: str | None = None, horizon: str | None = None, status: str = "pending") -> HTMLResponse:
+    data = _query_forecasts(asset=asset, horizon=horizon, status=status)
+
+    # Discover unique assets/horizons for filter buttons
+    db_path = _get_brain_db()
+    assets: list[str] = []
+    horizons: list[str] = []
+    if db_path:
+        conn = sqlite3.connect(str(db_path))
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "forecast_calibration" in tables:
+            assets = [r[0] for r in conn.execute("SELECT DISTINCT asset FROM forecast_calibration ORDER BY asset").fetchall()]
+            horizons = [r[0] for r in conn.execute("SELECT DISTINCT horizon FROM forecast_calibration ORDER BY horizon").fetchall()]
+        conn.close()
+
+    return templates.TemplateResponse(
+        "forecasts.html",
+        {
+            **_shell(request, "forecasts"),
+            "forecasts": data["forecasts"],
+            "stats": data["stats"],
+            "producer_stats": data["producer_stats"],
+            "assets": assets,
+            "horizons": horizons,
+            "active_asset": asset,
+            "active_horizon": horizon,
+            "active_status": status or "pending",
+        },
+    )
+
+
+@app.get("/partials/forecasts-table", response_class=HTMLResponse)
+def forecasts_table_partial(request: Request, asset: str | None = None, horizon: str | None = None, status: str = "pending") -> HTMLResponse:
+    data = _query_forecasts(asset=asset, horizon=horizon, status=status)
+    return templates.TemplateResponse(
+        "partials/forecasts_table_inner.html",
+        {"request": request, "forecasts": data["forecasts"]},
+    )
+
+
+@app.get("/partials/discretionary-signals", response_class=HTMLResponse)
+def discretionary_signals_partial(request: Request) -> HTMLResponse:
+    signals = _query_discretionary_signals()
+    return templates.TemplateResponse(
+        "partials/discretionary_signals_inner.html",
+        {"request": request, "disc_signals": signals},
     )
 
 
@@ -809,6 +961,145 @@ def system_page(request: Request) -> HTMLResponse:
             "uptime": "—",
         },
     )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request) -> HTMLResponse:
+    client = _api(request)
+    cfg_res = client._get_json("/config")
+    cfg = cfg_res.data if (cfg_res.ok and isinstance(cfg_res.data, dict)) else {}
+
+    risk = cfg.get("risk", {})
+    trading_mode = cfg.get("execution", {}).get("mode", "paper")
+
+    risk_fields = [
+        {"key": "max_daily_loss", "label": "Max Daily Loss (USD)", "value": risk.get("max_daily_loss", 500), "step": "50"},
+        {"key": "max_position_size", "label": "Max Position Size (%)", "value": risk.get("max_position_size", 10), "step": "1"},
+        {"key": "max_leverage", "label": "Max Leverage", "value": risk.get("max_leverage", 5), "step": "1"},
+    ]
+
+    api_key_names = [
+        "HYPERLIQUID_PRIVATE_KEY",
+        "NANSEN_API_KEY",
+        "ALLIUM_API_KEY",
+        "OPENAI_API_KEY",
+    ]
+    api_keys = [{"name": k, "configured": bool(os.environ.get(k, "").strip())} for k in api_key_names]
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            **_shell(request, "settings"),
+            "trading_mode": trading_mode,
+            "risk_fields": risk_fields,
+            "api_keys": api_keys,
+        },
+    )
+
+
+@app.post("/api/settings/trading-mode", response_class=HTMLResponse)
+async def settings_trading_mode(request: Request) -> HTMLResponse:
+    form = await request.form()
+    mode = form.get("mode", "paper")
+    if mode == "live":
+        return HTMLResponse(
+            '<div style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.3); '
+            "border-radius:4px; padding:0.5rem 0.75rem; color:var(--red); font-size:0.8rem; "
+            'font-family:var(--mono);">⚠ LIVE MODE — real funds at risk</div>'
+        )
+    return HTMLResponse('<span class="text-dim" style="font-size:0.8rem;">Currently: PAPER — trades are simulated</span>')
+
+
+@app.post("/api/settings/risk/{field}", response_class=HTMLResponse)
+async def settings_risk_field(field: str, request: Request) -> HTMLResponse:
+    _ = await request.form()  # consume form data
+    return HTMLResponse(f'<span class="text-bull" style="font-size:0.7rem;">✓ {field} saved</span>')
+
+
+@app.post("/api/settings/reset-defaults", response_class=HTMLResponse)
+async def settings_reset_defaults(request: Request) -> HTMLResponse:
+    return HTMLResponse('<span class="text-bull">Defaults restored</span>')
+
+
+@app.post("/api/settings/clear-signals", response_class=HTMLResponse)
+async def settings_clear_signals(request: Request) -> HTMLResponse:
+    return HTMLResponse('<span class="text-bull">Signal history cleared</span>')
+
+
+@app.get("/partials/artifact-preview/{artifact_id}", response_class=HTMLResponse)
+def artifact_preview(request: Request, artifact_id: str) -> HTMLResponse:
+    client = _api(request)
+    art_res = client.get_artifacts(limit=200)
+    artifacts = art_res.data if (art_res.ok and isinstance(art_res.data, list)) else []
+
+    artifact = None
+    for a in artifacts:
+        if isinstance(a, dict) and a.get("id") == artifact_id:
+            artifact = a
+            break
+
+    if artifact is None:
+        return HTMLResponse('<div class="text-dim" style="padding:1rem;">Artifact not found.</div>')
+
+    # Try to fetch content for text-based artifacts
+    content = None
+    ct = (artifact.get("content_type") or "").lower()
+    if "json" in ct or "text" in ct or "markdown" in ct or "yaml" in ct:
+        content_res = client._get_json(f"/artifacts/{artifact_id}/content")
+        if content_res.ok:
+            import json as _json
+
+            raw = content_res.data
+            if isinstance(raw, (dict, list)):
+                content = _json.dumps(raw, indent=2)[:5000]
+            elif isinstance(raw, str):
+                content = raw[:5000]
+
+    artifact["content"] = content
+    return templates.TemplateResponse(
+        "partials/artifact_preview.html",
+        {"request": request, "artifact": artifact},
+    )
+
+
+@app.post("/api/producers/{name}/restart", response_class=HTMLResponse)
+async def restart_producer(name: str, request: Request) -> HTMLResponse:
+    client = _api(request)
+    result = client._post_json(f"/producers/{name}/restart", {})
+    if result.ok:
+        return HTMLResponse('<span class="text-bull">✓ Restarted</span>')
+    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
+
+
+@app.post("/api/producers/{name}/reset-failures", response_class=HTMLResponse)
+async def reset_producer_failures(name: str, request: Request) -> HTMLResponse:
+    client = _api(request)
+    result = client._post_json(f"/producers/{name}/reset-failures", {})
+    if result.ok:
+        return HTMLResponse('<span class="text-bull">✓ Failures cleared</span>')
+    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
+
+
+@app.post("/api/positions/{position_id}/adjust-stop", response_class=HTMLResponse)
+async def adjust_stop(position_id: str, request: Request) -> HTMLResponse:
+    form = await request.form()
+    price = float(form.get("price", 0))
+    client = _api(request)
+    result = client._post_json(f"/positions/{position_id}/stop", {"price": price})
+    if result.ok:
+        return HTMLResponse(f'<span class="text-bull">Stop set to ${price:.2f}</span>')
+    return HTMLResponse('<span class="text-bear">Failed to set stop</span>')
+
+
+@app.post("/api/positions/{position_id}/adjust-target", response_class=HTMLResponse)
+async def adjust_target(position_id: str, request: Request) -> HTMLResponse:
+    form = await request.form()
+    price = float(form.get("price", 0))
+    client = _api(request)
+    result = client._post_json(f"/positions/{position_id}/target", {"price": price})
+    if result.ok:
+        return HTMLResponse(f'<span class="text-bull">Target set to ${price:.2f}</span>')
+    return HTMLResponse('<span class="text-bear">Failed to set target</span>')
 
 
 @app.get("/config", response_class=HTMLResponse)

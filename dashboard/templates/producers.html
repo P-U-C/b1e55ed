@@ -89,8 +89,8 @@
     </div>
     {% endif %}
 
-    <!-- Run Now button -->
-    <div style="margin-top:auto; padding-top:0.25rem;">
+    <!-- Actions -->
+    <div style="margin-top:auto; padding-top:0.25rem; display:flex; flex-direction:column; gap:0.35rem;">
       <button class="btn btn-sm"
               style="width:100%; font-size:0.7rem; padding:4px 8px;"
               hx-post="/api/v1/producers/{{ p.name }}/run-now"
@@ -98,6 +98,26 @@
               hx-confirm="Run {{ p.name }} now?">
         ▶ Run Now
       </button>
+      <div style="display:flex; gap:0.35rem;">
+        <button class="btn btn-sm"
+                style="flex:1; font-size:0.65rem; padding:3px 6px;"
+                hx-post="/api/producers/{{ p.name }}/restart"
+                hx-confirm="Restart {{ p.name }}?"
+                hx-target="#producer-{{ p.name }}-status"
+                hx-swap="innerHTML">
+          ↻ Restart
+        </button>
+        {% if p.consecutive_failures is defined and p.consecutive_failures > 0 %}
+        <button class="btn btn-sm"
+                style="flex:1; font-size:0.65rem; padding:3px 6px;"
+                hx-post="/api/producers/{{ p.name }}/reset-failures"
+                hx-target="#producer-{{ p.name }}-status"
+                hx-swap="innerHTML">
+          ✕ Clear Failures
+        </button>
+        {% endif %}
+      </div>
+      <div id="producer-{{ p.name }}-status" style="font-size:0.7rem;"></div>
     </div>
   </div>
   {% endfor %}

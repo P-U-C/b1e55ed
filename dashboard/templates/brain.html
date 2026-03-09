@@ -147,6 +147,29 @@
     <span id="cycle-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">running...</span>
   </div>
 
+  <!-- Discretionary Signals -->
+  <div class="panel" hx-get="/partials/discretionary-signals" hx-trigger="every 300s" hx-swap="innerHTML">
+    <div class="panel-header">
+      <span class="panel-title">Discretionary Signals</span>
+      <span class="panel-age">active</span>
+    </div>
+    {% if disc_signals %}
+    {% for s in disc_signals %}
+    <div style="display:flex; align-items:center; gap:0.75rem; padding:6px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
+      <span style="width:3rem; font-weight:500; color:var(--text-bright);">{{ s.symbol }}</span>
+      <span style="color:{% if s.direction == 'long' %}var(--green){% elif s.direction == 'short' %}var(--red){% else %}var(--text-dim){% endif %}; width:3rem;">
+        {{ s.direction }}
+      </span>
+      <span style="width:3rem; text-align:right;">{{ '%.0f' | format((s.confidence or 0) * 100) }}%</span>
+      <span style="flex:1; color:var(--text-dim); font-size:0.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ s.reasoning }}</span>
+      <span style="font-size:0.7rem; color:var(--text-dim);">{{ s.expires_at[:16] if s.expires_at else '' }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state" style="padding:1rem; text-align:center;">No active discretionary signals.</div>
+    {% endif %}
+  </div>
+
   <!-- System Status -->
   <div class="panel" hx-get="/partials/system-status" hx-trigger="every 60s" hx-swap="innerHTML">
     <div class="panel-header">

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Settings — b1e55ed{% endblock %}
+
+{% block content %}
+
+<h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim); margin-bottom:1.5rem;">Settings</h1>
+
+<!-- A. Trading Mode Toggle -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <!-- Kwon ran. Operators can walk. This toggle stays honest. -->
+      <span class="panel-title">Trading Mode</span>
+  </div>
+  <div style="padding:0.5rem 0;">
+    <div style="display:flex; align-items:center; gap:1rem; margin-bottom:0.75rem;">
+      <span class="text-dim" style="font-size:0.85rem;">Paper Trading</span>
+      <label style="position:relative; display:inline-block; width:48px; height:24px; cursor:pointer;">
+        <input type="checkbox" id="trading-mode-toggle"
+               {% if trading_mode == 'live' %}checked{% endif %}
+               style="opacity:0; width:0; height:0;"
+               hx-post="/api/settings/trading-mode"
+               hx-vals='js:{"mode": document.getElementById("trading-mode-toggle").checked ? "live" : "paper"}'
+               hx-target="#trading-mode-status"
+               hx-swap="innerHTML">
+        <span style="position:absolute; inset:0; background:var(--border); border-radius:12px; transition:0.3s;"></span>
+        <span style="position:absolute; top:2px; left:2px; width:20px; height:20px; background:var(--text-bright); border-radius:50%; transition:0.3s;"></span>
+      </label>
+      <span class="text-dim" style="font-size:0.85rem;">Live Trading</span>
+    </div>
+    <div id="trading-mode-status">
+      {% if trading_mode == 'live' %}
+      <div style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.3); border-radius:4px; padding:0.5rem 0.75rem; color:var(--red); font-size:0.8rem; font-family:var(--mono);">
+        ⚠ LIVE MODE — real funds at risk
+      </div>
+      {% else %}
+      <span class="text-dim" style="font-size:0.8rem;">Currently: PAPER — trades are simulated</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- B. Risk Limits -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <span class="panel-title">Risk Limits</span>
+  </div>
+  {% for field in risk_fields %}
+  <div style="display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0; border-bottom:1px solid var(--border);">
+    <span style="flex:1; font-size:0.8rem; color:var(--text-dim);">{{ field.label }}</span>
+    <form style="display:flex; gap:0.5rem; align-items:center;"
+          hx-post="/api/settings/risk/{{ field.key }}"
+          hx-target="#risk-{{ field.key }}-status"
+          hx-swap="innerHTML">
+      <input type="number" name="value" value="{{ field.value }}" step="{{ field.step }}"
+             style="width:100px;" class="btn" style="font-family:var(--mono); padding:4px 8px;">
+      <button type="submit" class="btn" style="font-size:0.7rem; padding:4px 8px;">Save</button>
+    </form>
+    <span id="risk-{{ field.key }}-status" style="font-size:0.7rem; min-width:60px;"></span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- C. API Keys Status -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <span class="panel-title">API Keys</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="data-table" style="width:100%; font-size:0.8rem;">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in api_keys %}
+        <tr>
+          <td style="font-family:var(--mono); color:var(--text-bright);">{{ k.name }}</td>
+          <td>
+            {% if k.configured %}
+            <span class="text-bull">✅ configured</span>
+            {% else %}
+            <span class="text-warn">⚠️ not set</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- D. Danger Zone -->
+<div class="panel" style="border-color:rgba(220,38,38,0.3);">
+  <div class="panel-header">
+    <span class="panel-title" style="color:var(--red);">Danger Zone</span>
+  </div>
+  <div style="display:flex; gap:0.75rem; flex-wrap:wrap; padding:0.5rem 0;">
+    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
+            hx-post="/api/settings/reset-defaults"
+            hx-confirm="Reset ALL settings to defaults? This cannot be undone."
+            hx-target="#danger-status" hx-swap="innerHTML">
+      Reset All to Defaults
+    </button>
+    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
+            hx-post="/api/settings/clear-signals"
+            hx-confirm="Clear ALL signal history from brain.db? This cannot be undone."
+            hx-target="#danger-status" hx-swap="innerHTML">
+      Clear Signal History
+    </button>
+    <span id="danger-status" style="font-size:0.75rem; align-self:center;"></span>
+  </div>
+</div>
+
+{% endblock %}

@@ -27,6 +27,7 @@
       <a href="/" class="nav-link {% if active_page == 'brain' %}active{% endif %}">Brain</a>
       <a href="/cockpit" class="nav-link {% if active_page == 'cockpit' %}active{% endif %}">Cockpit</a>
       <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
+      <a href="/forecasts" class="nav-link {% if active_page == 'forecasts' %}active{% endif %}">Forecasts</a>
       <a href="/signals" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signals</a>
       <a href="/social" class="nav-link {% if active_page == 'social' %}active{% endif %}">Social</a>
       <a href="/artifacts" class="nav-link {% if active_page == 'artifacts' %}active{% endif %}">Artifacts</a>
@@ -40,6 +41,7 @@
       <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Performance</a>
       <a href="/system" class="nav-link {% if active_page == 'system' %}active{% endif %}">System</a>
       <a href="/identity" class="nav-link {% if active_page == 'identity' %}active{% endif %}">Identity</a>
+      <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">Settings</a>
       <a href="/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Config</a>
       <a href="/treasury" class="nav-link {% if active_page == 'treasury' %}active{% endif %}">Treasury</a>
     </div>
@@ -104,6 +106,15 @@
         e.detail.shouldSwap = false;
       } catch(err) { /* let HTMX handle as text */ }
     }
+  });
+  </script>
+
+  <script>
+  document.body.addEventListener('htmx:responseError', function(e) {
+    var target = e.detail.target;
+    if (!target) return;
+    var status = e.detail.xhr ? e.detail.xhr.status : '?';
+    target.innerHTML = '<span class="text-red-400 text-sm">\u2717 Error ' + status + '</span>';
   });
   </script>
 
