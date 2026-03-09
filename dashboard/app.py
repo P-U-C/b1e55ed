@@ -1306,7 +1306,7 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
             if row:
                 try:
                     dt = _dt.datetime.fromisoformat(str(row["ts"]).replace("Z", ""))
-                    age_s = (_dt.datetime.utcnow() - dt).total_seconds()
+                    age_s = (_dt.datetime.now(_dt.UTC).replace(tzinfo=None) - dt).total_seconds()
                     stale = age_s > 300
                     if age_s < 60:
                         last_signal_age = f"{int(age_s)}s"
