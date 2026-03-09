@@ -93,6 +93,7 @@ class TradeIntent:
     invalidation: float | None = None
     source_event_ids: list[str] = field(default_factory=list)
     intended_price: float | None = None
+    conviction_id: int | None = None  # Links to conviction_scores.id for outcome attribution
 
 
 @dataclass(frozen=True, slots=True)

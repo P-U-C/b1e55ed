@@ -859,7 +859,23 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             db.close()
             return 1
 
-        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
+        # Bug fix: wire OMS into orchestrator so auto-paper-trade actually submits
+        from engine.execution.oms import OMS, default_sizer_from_config
+        from engine.execution.paper import PaperBroker
+        from engine.execution.preflight import Preflight
+
+        _paper_broker = PaperBroker(db)
+        _sizer = default_sizer_from_config(config)
+        _preflight = Preflight(config=config, db=db)
+        _oms = OMS(
+            config=config,
+            db=db,
+            preflight=_preflight,
+            sizer=_sizer,
+            paper_broker=_paper_broker,
+        )
+
+        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity, oms=_oms)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
         if bool(args.json):

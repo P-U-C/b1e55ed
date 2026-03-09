@@ -57,10 +57,55 @@ def _icon(status: str) -> str:
     return {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}.get(status, "?")
 
 
+def _repair_user_config() -> str | None:
+    """Repair user.yaml by removing /tmp path pollution while preserving valid fields.
+
+    Returns a description of the action taken, or None if no repair was needed.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    from engine.core.paths import config_dir, data_dir
+
+    user_yaml = Path.home() / ".b1e55ed" / "config" / "user.yaml"
+    if not user_yaml.exists():
+        return None
+
+    text = user_yaml.read_text()
+    if "/tmp/" not in text and "/tmp\\" not in text:
+        return None
+
+    try:
+        data = yaml.safe_load(text) or {}
+    except Exception:
+        return None
+
+    # Correct default paths
+    default_data_dir = str(data_dir())
+    default_config_dir = str(config_dir())
+    repaired = False
+
+    if isinstance(data.get("data_dir"), str) and "/tmp/" in data["data_dir"]:
+        data["data_dir"] = default_data_dir
+        repaired = True
+    if isinstance(data.get("config_dir"), str) and "/tmp/" in data["config_dir"]:
+        data["config_dir"] = default_config_dir
+        repaired = True
+
+    if not repaired:
+        return None
+
+    # Write back — preserve all other fields (tokens, presets, etc.)
+    user_yaml.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+    return f"Repaired {user_yaml}: reset /tmp paths to defaults"
+
+
 def _auto_fix(results: list[CheckResult]) -> list[str]:
     """Attempt auto-remediation for known fixable issues."""
     actions: list[str] = []
     for r in results:
+        # Fix: kill switch stuck at non-SAFE level
         if r.name == "kill_switch" and r.status == "warn" and "level" in r.message:
             try:
                 from engine.core.database import Database
@@ -87,6 +132,19 @@ def _auto_fix(results: list[CheckResult]) -> list[str]:
                         db.close()
             except Exception as e:
                 actions.append(f"Kill switch fix failed: {e}")
+
+        # Fix: user.yaml contains /tmp paths from test pollution
+        if r.name == "user_config" and r.status == "warn" and "/tmp" in r.message:
+            try:
+                result = _repair_user_config()
+                if result:
+                    r.status = "pass"
+                    r.message = r.message.replace("(possible test pollution)", "(repaired by --fix)")
+                    r.remediation = None
+                    actions.append(result)
+            except Exception as e:
+                actions.append(f"Config repair failed: {e}")
+
     return actions
 
 

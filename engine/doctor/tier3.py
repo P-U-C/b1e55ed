@@ -12,15 +12,10 @@ Checks:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from engine.doctor.tier0 import CheckResult
-
-try:
-    from datetime import UTC
-except ImportError:  # pragma: no cover
-    UTC = UTC
 
 
 def _http_get(url: str, *, timeout: float = 5.0, headers: dict | None = None) -> tuple[int, str]:
