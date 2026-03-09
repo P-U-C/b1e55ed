@@ -1,0 +1,18 @@
+<div class="panel" style="margin-top:0.75rem; padding:1rem; position:relative;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <span class="panel-title" style="font-size:0.75rem;">{{ artifact.filename }}</span>
+    <button class="btn" style="font-size:0.65rem; padding:2px 8px;"
+            onclick="document.getElementById('artifact-preview-pane').innerHTML=''">✕ Close</button>
+  </div>
+  {% if artifact.content %}
+  <pre style="font-family:var(--mono); font-size:0.75rem; color:var(--text-dim); background:rgba(0,0,0,0.3); padding:0.75rem; border-radius:4px; overflow-x:auto; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;">{{ artifact.content }}</pre>
+  {% else %}
+  <div style="color:var(--text-dim); font-size:0.8rem;">
+    <p>Type: {{ artifact.content_type or 'unknown' }}</p>
+    <p>Size: {{ '%.1f' | format((artifact.size_bytes or 0) / 1024) }} KB</p>
+    {% if artifact.permalink %}
+    <a href="{{ artifact.permalink }}" target="_blank" style="color:var(--blue);">Download ↗</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

@@ -75,10 +75,28 @@
     </div>
 
     <!-- Actions -->
-    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-      <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-stop" hx-confirm="Adjust stop loss?">Adjust Stop</button>
-      <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-target" hx-confirm="Adjust target?">Adjust Target</button>
+    <div id="pos-{{ p.id }}-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+      <button class="btn" onclick="this.style.display='none'; document.getElementById('stop-form-{{ p.id }}').style.display='flex';">Adjust Stop</button>
+      <button class="btn" onclick="this.style.display='none'; document.getElementById('target-form-{{ p.id }}').style.display='flex';">Adjust Target</button>
       <button class="btn btn-danger" hx-post="/api/positions/{{ p.id }}/close" hx-confirm="Close position {{ p.id }}?">Close Position</button>
+
+      <form id="stop-form-{{ p.id }}" style="display:none; gap:0.5rem; align-items:center;"
+            hx-post="/api/positions/{{ p.id }}/adjust-stop"
+            hx-target="#pos-{{ p.id }}-actions"
+            hx-swap="innerHTML">
+        <input type="number" name="price" value="{{ '%.2f' | format(p.stop) }}" step="0.01" style="width:100px; font-family:var(--mono); padding:4px 8px;" class="btn">
+        <button type="submit" class="btn">Set Stop</button>
+        <button type="button" class="btn" onclick="this.closest('form').style.display='none'; this.closest('form').previousElementSibling.previousElementSibling.previousElementSibling.style.display='';">Cancel</button>
+      </form>
+
+      <form id="target-form-{{ p.id }}" style="display:none; gap:0.5rem; align-items:center;"
+            hx-post="/api/positions/{{ p.id }}/adjust-target"
+            hx-target="#pos-{{ p.id }}-actions"
+            hx-swap="innerHTML">
+        <input type="number" name="price" value="{{ '%.2f' | format(p.target) }}" step="0.01" style="width:100px; font-family:var(--mono); padding:4px 8px;" class="btn">
+        <button type="submit" class="btn">Set Target</button>
+        <button type="button" class="btn" onclick="this.closest('form').style.display='none'; this.closest('form').previousElementSibling.previousElementSibling.previousElementSibling.previousElementSibling.style.display='';">Cancel</button>
+      </form>
     </div>
   </div>
   {% endfor %}
