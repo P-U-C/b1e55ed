@@ -29,10 +29,18 @@ class Contributor:
 
 
 class ContributorRegistry:
-    def __init__(self, db: Database, *, eas_client: object | None = None, github_publisher: object | None = None):
+    def __init__(
+        self,
+        db: Database,
+        *,
+        eas_client: object | None = None,
+        github_publisher: object | None = None,
+        chain_client: object | None = None,
+    ):
         self._db = db
         self._eas = eas_client
         self._gh_publisher = github_publisher
+        self._chain_client = chain_client
 
     @staticmethod
     def _row_to_contributor(row: sqlite3.Row) -> Contributor:
@@ -150,6 +158,28 @@ class ContributorRegistry:
                 )
         except sqlite3.IntegrityError as e:
             raise ValueError("contributor.duplicate_node") from e
+
+        # ERC-8004 fire-and-forget: mint on-chain identity NFT after DB write.
+        # Never blocks registration — chain write is best-effort.
+        if self._chain_client is not None:
+            try:
+                manifest_url = f"/api/v1/agents/{node_id}/manifest"
+                agent_id = self._chain_client.register_producer(manifest_url)  # type: ignore[attr-defined]
+                if agent_id is not None:
+                    with self._db.conn:
+                        self._db.conn.execute(
+                            "UPDATE contributors SET agent_id = ? WHERE id = ?",
+                            (agent_id, contributor_id),
+                        )
+                    meta["agent_id"] = agent_id
+            except Exception:
+                import logging
+
+                logging.getLogger("b1e55ed.contributors").warning(
+                    "ERC-8004 chain registration failed for %s — continuing without on-chain identity",
+                    node_id,
+                    exc_info=True,
+                )
 
         return Contributor(
             id=contributor_id,

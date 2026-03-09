@@ -752,6 +752,9 @@ class Database:
         with self.conn:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_position ON signal_stratification(position_id)")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_benchmark ON signal_stratification(benchmark_name)")
+        # ERC-8004 E1 — on-chain identity columns
+        self._ensure_column("contributors", "agent_id", "INTEGER")
+        self._ensure_column("contributors", "chain_tx_hash", "TEXT")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(

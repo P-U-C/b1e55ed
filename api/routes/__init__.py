@@ -58,6 +58,9 @@ def get_api_router() -> APIRouter:
     router.include_router(spi.router, tags=["spi"])
     router.include_router(spi_admin.router, tags=["spi-admin"])
 
+    # ERC-8004 agent manifests
+    router.include_router(agents.router, tags=["agents"])
+
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
     router.include_router(mcp.router, tags=["mcp"])

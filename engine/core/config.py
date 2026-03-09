@@ -428,6 +428,18 @@ class MCPConfig(BaseModel):
     api_keys: list[str] = Field(default_factory=list)
 
 
+class OnChainConfig(BaseModel):
+    """ERC-8004 on-chain identity & reputation layer."""
+
+    enabled: bool = False
+    rpc_url: str = ""
+    private_key: str = ""
+    network: str = "base-sepolia"
+    identity_registry_address: str = ""
+    reputation_registry_address: str = ""
+    validation_registry_address: str = ""
+
+
 class EASConfig(BaseModel):
     enabled: bool = True  # off-chain attestations work without rpc_url; on-chain needs rpc_url
     rpc_url: str = "https://eth.llamarpc.com"  # Free public RPC
@@ -478,6 +490,7 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    onchain: OnChainConfig = Field(default_factory=OnChainConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
     publish: PublishConfig = Field(default_factory=PublishConfig)
     github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
