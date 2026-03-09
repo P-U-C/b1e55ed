@@ -145,6 +145,7 @@ class OMS:
                 stop_loss=stop_loss,
                 take_profit=take_profit,
                 idempotency_key=idem,
+                conviction_id=intent.conviction_id,
             )
 
             # Persist execution events as well (redundant with tables, but useful for the event bus).

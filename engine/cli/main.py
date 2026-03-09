@@ -491,6 +491,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--uid", required=True, help="Attestation UID")
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- doctor --
+    from engine.cli.doctor import build_doctor_parser
+
+    build_doctor_parser(sub)
+
     sub.add_parser("status", help="Print system status")
 
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
@@ -854,7 +859,27 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             db.close()
             return 1
 
-        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
+        # Bug fix: wire OMS into orchestrator so auto-paper-trade actually submits
+        from engine.brain.kill_switch import KillSwitch
+        from engine.core.policy import TradingPolicy, TradingPolicyEngine
+        from engine.execution.oms import OMS, default_sizer_from_config
+        from engine.execution.paper import PaperBroker
+        from engine.execution.preflight import Preflight
+
+        _paper_broker = PaperBroker(db)
+        _sizer = default_sizer_from_config(config)
+        _ks = KillSwitch(config, db)
+        _policy = TradingPolicyEngine(policy=TradingPolicy())
+        _preflight = Preflight(kill_switch=_ks, policy=_policy)
+        _oms = OMS(
+            config=config,
+            db=db,
+            preflight=_preflight,
+            sizer=_sizer,
+            paper_broker=_paper_broker,
+        )
+
+        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity, oms=_oms)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
         if bool(args.json):
@@ -3310,6 +3335,7 @@ def main(argv: list[str] | None = None) -> int:
         "integrity": _cmd_integrity,
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
+        "doctor": lambda ctx, args: __import__("engine.cli.doctor", fromlist=["run_doctor"]).run_doctor(args),
         "anchor": _cmd_anchor,
         "export": _cmd_export,
         "wizard": _cmd_wizard,

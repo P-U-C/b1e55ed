@@ -86,6 +86,7 @@ class PaperBroker:
         take_profit: float | None = None,
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
+        conviction_id: int | None = None,
     ) -> PaperFill:
         sym = str(symbol).upper().strip()
         dirn = str(direction).lower().strip()
@@ -141,8 +142,8 @@ class PaperBroker:
                 """
                 INSERT INTO positions (
                   id, platform, asset, direction, entry_price, size_notional, leverage,
-                  stop_loss, take_profit, opened_at, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+                  stop_loss, take_profit, opened_at, status, conviction_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
                 """,
                 (
                     position_id,
@@ -155,6 +156,7 @@ class PaperBroker:
                     float(stop_loss) if stop_loss is not None else None,
                     float(take_profit) if take_profit is not None else None,
                     now,
+                    int(conviction_id) if conviction_id is not None else None,
                 ),
             )
             self.db.conn.execute(

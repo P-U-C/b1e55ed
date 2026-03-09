@@ -84,6 +84,58 @@ class BrainOrchestrator:
         self.stratification = StratificationTracker(db)
         self._domain_miss_counts: dict[str, int] = {}
 
+    def _resolve_mid_price(self, symbol: str) -> float | None:
+        """Resolve mid price for a symbol.
+
+        Strategy:
+        1. Query most recent PRICE_V1 event from the DB
+        2. Fallback: query Binance public ticker API
+        3. Returns None if no price available (caller should skip the trade)
+        """
+        _log = logging.getLogger("b1e55ed.orchestrator")
+
+        # 1) Try DB: most recent price event for this symbol
+        try:
+            row = self.db.conn.execute(
+                """
+                SELECT payload FROM events
+                WHERE type = 'PRICE_V1'
+                  AND json_extract(payload, '$.symbol') = ?
+                ORDER BY ts DESC LIMIT 1
+                """,
+                (symbol.upper(),),
+            ).fetchone()
+            if row is not None:
+                import json as _json
+
+                payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                price = float(payload.get("price") or payload.get("close") or payload.get("mid") or 0)
+                if price > 0:
+                    _log.debug("mid_price for %s from DB: %.4f", symbol, price)
+                    return price
+        except Exception:
+            _log.debug("DB price lookup failed for %s", symbol, exc_info=True)
+
+        # 2) Fallback: Binance public API (no auth required)
+        try:
+            import urllib.request
+
+            ticker_symbol = f"{symbol.upper()}USDT"
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={ticker_symbol}"
+            req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                import json as _json
+
+                data = _json.loads(resp.read())
+                price = float(data.get("price", 0))
+                if price > 0:
+                    _log.debug("mid_price for %s from Binance: %.4f", symbol, price)
+                    return price
+        except Exception:
+            _log.debug("Binance price lookup failed for %s", symbol, exc_info=True)
+
+        return None
+
     def run_cycle(self, symbols: list[str]) -> CycleResult:
         # Abort immediately if kill switch is active.
         ks_level = self.kill_switch.level
@@ -248,6 +300,25 @@ class BrainOrchestrator:
                 if confidence >= 0.65 and self.kill_switch.level == KillSwitchLevel.SAFE:
                     try:
                         direction = conv.score.direction if conv.score.direction != "neutral" else "long"
+
+                        # Resolve mid_price from DB price events or Binance API
+                        mid_price = self._resolve_mid_price(sym)
+                        if mid_price is None:
+                            _log.warning("auto-paper-trade skipped for %s: no price available", sym)
+                            continue
+
+                        # Look up conviction_id from the most recent conviction_scores row
+                        _conv_id = None
+                        try:
+                            _row = self.db.conn.execute(
+                                "SELECT id FROM conviction_scores WHERE cycle_id = ? AND symbol = ? ORDER BY id DESC LIMIT 1",
+                                (cycle_id, sym),
+                            ).fetchone()
+                            if _row is not None:
+                                _conv_id = int(_row[0])
+                        except Exception:
+                            _log.debug("conviction_id lookup failed for %s", sym, exc_info=True)
+
                         ti = TradeIntent(
                             symbol=sym,
                             direction=direction,
@@ -258,12 +329,14 @@ class BrainOrchestrator:
                             rationale="auto_paper_trade:high_confidence",
                             stop_loss_pct=0.05,
                             take_profit_pct=0.10,
+                            intended_price=mid_price,
+                            conviction_id=_conv_id,
                         )
                         if self._oms is None:
                             _log.warning("auto-paper-trade skipped: no OMS injected")
                             continue
-                        oms_result = self._oms.submit(ti, mid_price=1.0, equity_usd=10000.0)
-                        _log.info("auto-paper-trade: %s %s -> %s", sym, direction, oms_result.status)
+                        oms_result = self._oms.submit(ti, mid_price=mid_price, equity_usd=10000.0)
+                        _log.info("auto-paper-trade: %s %s @ %.2f -> %s", sym, direction, mid_price, oms_result.status)
                     except Exception:
                         _log.exception("auto-paper-trade failed for %s -- brain cycle continues", sym)
                 elif 0.45 <= confidence < 0.65:

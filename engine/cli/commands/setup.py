@@ -8,13 +8,13 @@ import argparse
 def build_setup_parser(sub: argparse._SubParsersAction) -> argparse.ArgumentParser:
     p = sub.add_parser(
         "setup",
-        help="Operator setup: standalone (CLI-only) or connected (OpenClaw + Telegram)",
+        help="Operator setup: standalone (CLI-only) or connected (OpenClaw + Telegram) or repair",
     )
     p.add_argument(
         "mode",
         nargs="?",
-        choices=["standalone", "connected"],
-        help="Deployment mode: 'standalone' (self-contained CLI) or 'connected' (OpenClaw + Telegram orchestration).",
+        choices=["standalone", "connected", "repair"],
+        help="Deployment mode: 'standalone' (self-contained CLI), 'connected' (OpenClaw + Telegram), or 'repair' (fix config issues).",
     )
     p.add_argument(
         "--non-interactive",
@@ -27,6 +27,74 @@ def build_setup_parser(sub: argparse._SubParsersAction) -> argparse.ArgumentPars
         help="Config preset (standalone mode only).",
     )
     return p
+
+
+def _run_repair() -> int:
+    """Repair operator config: fix /tmp path pollution, reset kill switch."""
+    import sys
+
+    print("\nb1e55ed setup repair\n")
+
+    actions: list[str] = []
+
+    # 1) Fix user.yaml /tmp path pollution
+    try:
+        from engine.cli.doctor import _repair_user_config
+
+        result = _repair_user_config()
+        if result:
+            actions.append(result)
+            print(f"  ✅ {result}")
+        else:
+            print("  ✅ user.yaml: no /tmp path pollution detected")
+    except Exception as e:
+        print(f"  ❌ Config repair failed: {e}", file=sys.stderr)
+
+    # 2) Reset kill switch if stuck
+    try:
+        from engine.core.database import Database
+        from engine.core.events import EventType
+        from engine.core.paths import data_dir
+
+        db_path = data_dir() / "brain.db"
+        if db_path.exists():
+            db = Database(db_path)
+            try:
+                evs = db.get_events(event_type=EventType.KILL_SWITCH_V1, limit=1)
+                if evs:
+                    level = int(evs[0].payload.get("level", 0))
+                    if level > 0:
+                        db.append_event(
+                            event_type=EventType.KILL_SWITCH_V1,
+                            payload={
+                                "level": 0,
+                                "previous_level": level,
+                                "reason": "setup repair: reset to SAFE",
+                                "auto": True,
+                                "actor": "setup_repair",
+                            },
+                            source="cli.setup",
+                        )
+                        actions.append(f"Reset kill switch from level {level} to SAFE")
+                        print(f"  ✅ Kill switch reset from level {level} to SAFE")
+                    else:
+                        print("  ✅ Kill switch: already SAFE (level 0)")
+                else:
+                    print("  ✅ Kill switch: SAFE (no events)")
+            finally:
+                db.close()
+        else:
+            print("  ✅ No database yet (nothing to repair)")
+    except Exception as e:
+        print(f"  ❌ Kill switch repair failed: {e}", file=sys.stderr)
+
+    print()
+    if actions:
+        print(f"  Repaired {len(actions)} issue{'s' if len(actions) != 1 else ''}.")
+    else:
+        print("  No issues found — everything looks clean.")
+    print()
+    return 0
 
 
 def run_setup(ctx: object, args: argparse.Namespace) -> int:
@@ -52,6 +120,9 @@ def run_setup(ctx: object, args: argparse.Namespace) -> int:
             except (EOFError, OSError):
                 choice = "1"
             mode = "standalone" if choice in ("1", "standalone", "") else "connected"
+
+    if mode == "repair":
+        return _run_repair()
 
     if mode == "standalone":
         # Use Python implementation (works in CI and installed packages)
