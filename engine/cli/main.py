@@ -492,9 +492,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     # -- doctor --
-    from engine.cli.doctor import build_doctor_parser
-
-    build_doctor_parser(sub)
+    p_doctor = sub.add_parser("doctor", help="Run system diagnostics (tiers 0-2)")
+    p_doctor.add_argument("--tier", type=int, default=2, choices=[0, 1, 2], help="Run up to this tier (default: 2)")
+    p_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    p_doctor.add_argument("--fix", action="store_true", help="Auto-remediate fixable issues.")
 
     sub.add_parser("status", help="Print system status")
 
@@ -859,28 +860,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             db.close()
             return 1
 
-        # Bug fix: wire OMS into orchestrator so auto-paper-trade actually submits
-        from engine.brain.kill_switch import KillSwitch
-        from engine.core.policy import TradingPolicy, TradingPolicyEngine
-        from engine.execution.oms import OMS, default_sizer_from_config
-        from engine.execution.paper import PaperBroker
-        from engine.execution.preflight import Preflight
-
-        _paper_broker = PaperBroker(db)
-        _sizer = default_sizer_from_config(config)
-        _ks = KillSwitch(config, db)
-        _policy = TradingPolicyEngine(policy=TradingPolicy())
-        _preflight = Preflight(kill_switch=_ks, policy=_policy)
-        _oms = OMS(
-            config=config,
-            db=db,
-            preflight=_preflight,
-            sizer=_sizer,
-            paper_broker=_paper_broker,
-            policy=_policy,
-        )
-
-        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity, oms=_oms)
+        orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
         if bool(args.json):

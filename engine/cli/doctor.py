@@ -6,16 +6,11 @@ Runs tiered health checks:
   T0: Preflight (env, deps, config, DB, identity, kill switch)
   T1: Component instantiation (producers, orchestrator, OMS, dashboard)
   T2: Pipeline smoke (signal ingestion, brain cycle, outcomes, learning)
-  T3: Live checks (API health, auth, dashboard, kill switch, staleness)
-  T4: Integration flywheel (temp DB, full cycle, paper trades, karma)
 
 Flags:
-  --tier 0|1|2|3|4  Run up to this tier (default: 2)
-  --json            Machine-readable JSON output
-  --fix             Auto-remediate where possible
-  --api-port        API port for T3 checks (default: 5050)
-  --dashboard-port  Dashboard port for T3 checks (default: 5051)
-  --auth-token      Auth token for T3 API checks
+  --tier 0|1|2  Run up to this tier (default: 2)
+  --json        Machine-readable JSON output
+  --fix         Auto-remediate where possible
 """
 
 from __future__ import annotations
@@ -28,23 +23,6 @@ from typing import Any
 from engine.doctor.tier0 import CheckResult
 
 
-def build_doctor_parser(sub: argparse._SubParsersAction) -> None:
-    """Register the ``doctor`` subcommand on the CLI parser."""
-    p = sub.add_parser("doctor", help="Run system diagnostics (tiers 0-4)")
-    p.add_argument(
-        "--tier",
-        type=int,
-        default=2,
-        choices=[0, 1, 2, 3, 4],
-        help="Maximum tier to run (0=preflight, 1=components, 2=pipeline, 3=live, 4=flywheel). Default: 2",
-    )
-    p.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    p.add_argument("--fix", action="store_true", help="Auto-remediate fixable issues.")
-    p.add_argument("--api-port", type=int, default=5050, help="API port for T3 checks (default: 5050)")
-    p.add_argument("--dashboard-port", type=int, default=5051, help="Dashboard port for T3 checks (default: 5051)")
-    p.add_argument("--auth-token", default=None, help="Auth token for T3 API checks")
-
-
 def _color(text: str, color: str) -> str:
     """ANSI color wrapper. Falls back to plain text if not a TTY."""
     if not sys.stdout.isatty():
@@ -54,58 +32,14 @@ def _color(text: str, color: str) -> str:
 
 
 def _icon(status: str) -> str:
-    return {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}.get(status, "?")
-
-
-def _repair_user_config() -> str | None:
-    """Repair user.yaml by removing /tmp path pollution while preserving valid fields.
-
-    Returns a description of the action taken, or None if no repair was needed.
-    """
-    from pathlib import Path
-
-    import yaml
-
-    from engine.core.paths import config_dir, data_dir
-
-    user_yaml = Path.home() / ".b1e55ed" / "config" / "user.yaml"
-    if not user_yaml.exists():
-        return None
-
-    text = user_yaml.read_text()
-    if "/tmp/" not in text and "/tmp\\" not in text:
-        return None
-
-    try:
-        data = yaml.safe_load(text) or {}
-    except Exception:
-        return None
-
-    # Correct default paths
-    default_data_dir = str(data_dir())
-    default_config_dir = str(config_dir())
-    repaired = False
-
-    if isinstance(data.get("data_dir"), str) and "/tmp/" in data["data_dir"]:
-        data["data_dir"] = default_data_dir
-        repaired = True
-    if isinstance(data.get("config_dir"), str) and "/tmp/" in data["config_dir"]:
-        data["config_dir"] = default_config_dir
-        repaired = True
-
-    if not repaired:
-        return None
-
-    # Write back — preserve all other fields (tokens, presets, etc.)
-    user_yaml.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-    return f"Repaired {user_yaml}: reset /tmp paths to defaults"
+    return {"pass": "\u2705", "warn": "\u26a0\ufe0f ", "fail": "\u274c"}.get(status, "?")
 
 
 def _auto_fix(results: list[CheckResult]) -> list[str]:
-    """Attempt auto-remediation for known fixable issues."""
+    """Attempt auto-remediation for known fixable issues. Returns list of actions taken."""
     actions: list[str] = []
+
     for r in results:
-        # Fix: kill switch stuck at non-SAFE level
         if r.name == "kill_switch" and r.status == "warn" and "level" in r.message:
             try:
                 from engine.core.database import Database
@@ -116,23 +50,16 @@ def _auto_fix(results: list[CheckResult]) -> list[str]:
                 if db_path.exists():
                     db = Database(db_path)
                     try:
-                        import json as _json
-
-                        _ks_row = db.conn.execute("SELECT payload FROM events WHERE type = 'KILL_SWITCH_V1' ORDER BY ts DESC LIMIT 1").fetchone()
-                        _actual_level = -1
-                        if _ks_row:
-                            _ks_p = _json.loads(_ks_row[0]) if isinstance(_ks_row[0], str) else _ks_row[0]
-                            _actual_level = int(_ks_p.get("level", -1))
                         payload = {
                             "level": 0,
-                            "previous_level": _actual_level,
+                            "previous_level": -1,
                             "reason": "doctor --fix: reset to SAFE",
                             "auto": True,
                             "actor": "doctor",
                         }
                         db.append_event(event_type=EventType.KILL_SWITCH_V1, payload=payload, source="cli.doctor")
                         r.status = "pass"
-                        r.message = "Kill switch: SAFE (level 0) — reset by doctor --fix"
+                        r.message = "Kill switch: SAFE (level 0) \u2014 reset by doctor --fix"
                         r.remediation = None
                         actions.append("Reset kill switch to level 0")
                     finally:
@@ -140,23 +67,11 @@ def _auto_fix(results: list[CheckResult]) -> list[str]:
             except Exception as e:
                 actions.append(f"Kill switch fix failed: {e}")
 
-        # Fix: user.yaml contains /tmp paths from test pollution
-        if r.name == "user_config" and r.status == "warn" and "/tmp" in r.message:
-            try:
-                result = _repair_user_config()
-                if result:
-                    r.status = "pass"
-                    r.message = r.message.replace("(possible test pollution)", "(repaired by --fix)")
-                    r.remediation = None
-                    actions.append(result)
-            except Exception as e:
-                actions.append(f"Config repair failed: {e}")
-
     return actions
 
 
 def run_doctor(args: argparse.Namespace) -> int:
-    """Entry point for ``b1e55ed doctor``."""
+    """Entry point for `b1e55ed doctor`."""
     from engine import __version__
 
     tier = int(getattr(args, "tier", 2))
@@ -166,50 +81,34 @@ def run_doctor(args: argparse.Namespace) -> int:
     all_results: dict[str, list[CheckResult]] = {}
     fix_actions: list[str] = []
 
-    # T0 — Preflight
+    # T0
     from engine.doctor.tier0 import run_tier0
 
-    all_results["T0 Preflight"] = run_tier0()
-    if do_fix:
-        fix_actions.extend(_auto_fix(all_results["T0 Preflight"]))
+    t0 = run_tier0()
+    all_results["T0 Preflight"] = t0
 
-    # T1 — Components
+    if do_fix:
+        fix_actions.extend(_auto_fix(t0))
+
+    # T1
     if tier >= 1:
         from engine.doctor.tier1 import run_tier1
 
-        all_results["T1 Components"] = run_tier1()
+        t1 = run_tier1()
+        all_results["T1 Components"] = t1
         if do_fix:
-            fix_actions.extend(_auto_fix(all_results["T1 Components"]))
+            fix_actions.extend(_auto_fix(t1))
 
-    # T2 — Pipeline
+    # T2
     if tier >= 2:
         from engine.doctor.tier2 import run_tier2
 
-        all_results["T2 Pipeline"] = run_tier2()
+        t2 = run_tier2()
+        all_results["T2 Pipeline"] = t2
         if do_fix:
-            fix_actions.extend(_auto_fix(all_results["T2 Pipeline"]))
+            fix_actions.extend(_auto_fix(t2))
 
-    # T3 — Live checks
-    if tier >= 3:
-        from engine.doctor.tier3 import run_tier3
-
-        all_results["T3 Live"] = run_tier3(
-            api_port=int(getattr(args, "api_port", 5050)),
-            dashboard_port=int(getattr(args, "dashboard_port", 5051)),
-            auth_token=getattr(args, "auth_token", None),
-        )
-        if do_fix:
-            fix_actions.extend(_auto_fix(all_results["T3 Live"]))
-
-    # T4 — Integration flywheel
-    if tier >= 4:
-        from engine.doctor.tier4 import run_tier4
-
-        all_results["T4 Flywheel"] = run_tier4()
-        if do_fix:
-            fix_actions.extend(_auto_fix(all_results["T4 Flywheel"]))
-
-    # Score
+    # Compute score
     total = sum(len(v) for v in all_results.values())
     passes = sum(1 for checks in all_results.values() for c in checks if c.status == "pass")
     warns = sum(1 for checks in all_results.values() for c in checks if c.status == "warn")
@@ -235,9 +134,11 @@ def run_doctor(args: argparse.Namespace) -> int:
             ]
         print(json.dumps(output, indent=2, default=str))
     else:
+        # Human-readable output
         print()
         print(f"  {_color('b1e55ed doctor', 'bold')} v{__version__}")
         print()
+
         for tier_name, checks in all_results.items():
             print(f"  {_color(tier_name, 'bold')}")
             for c in checks:
@@ -249,26 +150,29 @@ def run_doctor(args: argparse.Namespace) -> int:
                     msg = _color(msg, "red")
                 print(f"    {icon} {msg}")
                 if c.remediation and c.status != "pass":
-                    print(f"       → {c.remediation}")
+                    print(f"       \u2192 {c.remediation}")
             print()
 
         if fix_actions:
             print(f"  {_color('Auto-fix actions:', 'bold')}")
             for a in fix_actions:
-                print(f"    🔧 {a}")
+                print(f"    \U0001f527 {a}")
             print()
 
-        print("  " + "═" * 42)
+        # Summary bar
+        print("  " + "\u2550" * 42)
         score_str = f"Score: {passes}/{total}"
         detail_parts = []
         if warns > 0:
             detail_parts.append(f"{warns} warning{'s' if warns != 1 else ''}")
         if fails > 0:
             detail_parts.append(f"{fails} error{'s' if fails != 1 else ''}")
-        detail = f" — {', '.join(detail_parts)}" if detail_parts else " — all clear"
+        detail = f" \u2014 {', '.join(detail_parts)}" if detail_parts else " \u2014 all clear"
         print(f"  {score_str}{detail}")
-        if (fails > 0 or warns > 0) and not do_fix:
-            print("  Run with --fix to auto-remediate where possible.")
+
+        if fails > 0 or warns > 0:
+            if not do_fix:
+                print("  Run with --fix to auto-remediate where possible.")
         print()
 
     return 1 if fails > 0 else 0
