@@ -166,6 +166,8 @@ def check_identity() -> CheckResult:
 def check_kill_switch() -> CheckResult:
     """Kill switch level (warn if > 0)."""
     try:
+        import json
+
         from engine.core.database import Database
         from engine.core.events import EventType
         from engine.core.paths import data_dir
@@ -176,10 +178,14 @@ def check_kill_switch() -> CheckResult:
 
         db = Database(db_path)
         try:
-            evs = db.get_events(event_type=EventType.KILL_SWITCH_V1, limit=1)
-            if not evs:
+            row = db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
+                (str(EventType.KILL_SWITCH_V1),),
+            ).fetchone()
+            if not row:
                 return CheckResult("kill_switch", "pass", "Kill switch: SAFE (level 0)")
-            level = int(evs[0].payload.get("level", 0))
+            payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            level = int(payload.get("level", 0))
             if level == 0:
                 return CheckResult("kill_switch", "pass", "Kill switch: SAFE (level 0)")
 

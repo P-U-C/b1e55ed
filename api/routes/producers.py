@@ -366,9 +366,11 @@ def producer_capabilities(
 @router.post("/{name}/restart")
 def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Clear quarantine + failure state so the producer can run again."""
+    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+        raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(
-            "UPDATE producers SET quarantine_until = NULL, consecutive_failures = 0 WHERE name = ?",
+            "UPDATE producer_health SET quarantined_until = NULL, consecutive_failures = 0 WHERE name = ?",
             (name,),
         )
         db.conn.commit()
@@ -380,9 +382,11 @@ def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any
 @router.post("/{name}/reset-failures")
 def reset_producer_failures(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Reset consecutive failure count for a producer."""
+    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+        raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(
-            "UPDATE producers SET consecutive_failures = 0 WHERE name = ?",
+            "UPDATE producer_health SET consecutive_failures = 0 WHERE name = ?",
             (name,),
         )
         db.conn.commit()
@@ -394,9 +398,11 @@ def reset_producer_failures(name: str, db: Database = Depends(get_db)) -> dict[s
 @router.post("/{name}/run-now")
 def run_producer_now(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Trigger an immediate producer run (marks it for next scheduler tick)."""
+    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+        raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(
-            "UPDATE producers SET next_run_at = datetime('now') WHERE name = ?",
+            "UPDATE producer_health SET updated_at = datetime('now') WHERE name = ?",
             (name,),
         )
         db.conn.commit()

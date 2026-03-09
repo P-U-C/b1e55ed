@@ -10,18 +10,14 @@ Uses a temp DB, no network. Validates:
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 from engine.doctor.tier0 import CheckResult
-
-try:
-    from datetime import UTC
-except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
 
 Status = Literal["pass", "warn", "fail"]
 
@@ -95,6 +91,7 @@ def check_signal_ingestion() -> CheckResult:
         return CheckResult("signal_ingestion", "fail", f"Signal ingestion failed: {type(e).__name__}: {e}")
     finally:
         db.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def check_brain_cycle() -> CheckResult:
@@ -144,6 +141,7 @@ def check_brain_cycle() -> CheckResult:
         return CheckResult("brain_cycle", "fail", f"Brain cycle failed: {type(e).__name__}: {e}")
     finally:
         db.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def check_outcome_resolution() -> CheckResult:
@@ -208,6 +206,7 @@ def check_outcome_resolution() -> CheckResult:
         return CheckResult("outcome_resolution", "fail", f"Outcome resolution failed: {type(e).__name__}: {e}")
     finally:
         db.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def check_learning_weights() -> CheckResult:
@@ -235,6 +234,7 @@ def check_learning_weights() -> CheckResult:
         return CheckResult("learning_weights", "fail", f"Learning weights failed: {type(e).__name__}: {e}")
     finally:
         db.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def check_karma_intents() -> CheckResult:
@@ -262,6 +262,7 @@ def check_karma_intents() -> CheckResult:
         return CheckResult("karma_intents", "fail", f"Karma intents failed: {type(e).__name__}: {e}")
     finally:
         db.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def run_tier2() -> list[CheckResult]:

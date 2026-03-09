@@ -12,15 +12,10 @@ Checks:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from engine.doctor.tier0 import CheckResult
-
-try:
-    from datetime import UTC
-except ImportError:  # pragma: no cover
-    UTC = UTC
 
 
 def _http_get(url: str, *, timeout: float = 5.0, headers: dict | None = None) -> tuple[int, str]:
@@ -86,6 +81,8 @@ def check_dashboard(dash_base: str) -> CheckResult:
 def check_kill_switch_live(db_path: Path | None = None) -> CheckResult:
     """Kill switch state from production DB."""
     try:
+        import json
+
         from engine.core.database import Database
         from engine.core.events import EventType
         from engine.core.paths import data_dir
@@ -96,11 +93,15 @@ def check_kill_switch_live(db_path: Path | None = None) -> CheckResult:
 
         db = Database(path)
         try:
-            evs = db.get_events(event_type=EventType.KILL_SWITCH_V1, limit=1)
-            if not evs:
+            row = db.conn.execute(
+                "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
+                (str(EventType.KILL_SWITCH_V1),),
+            ).fetchone()
+            if not row:
                 return CheckResult("kill_switch_live", "pass", "Kill switch: L0 (safe, no events)")
-            level = int(evs[0].payload.get("level", 0))
-            reason = str(evs[0].payload.get("reason", ""))
+            payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            level = int(payload.get("level", 0))
+            reason = str(payload.get("reason", ""))
             if level == 0:
                 return CheckResult("kill_switch_live", "pass", "Kill switch: L0 (safe)")
             return CheckResult(
