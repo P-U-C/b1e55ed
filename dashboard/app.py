@@ -501,6 +501,60 @@ def market_ticker() -> JSONResponse:
 # ---- Page routes -------------------------------------------------------
 
 
+def _system_status_ctx() -> dict[str, Any]:
+    """Returns db_size, uptime, and events_today for System Status panel."""
+    db_size: str = "—"
+    events_today: int = 0
+    uptime: str = "—"
+    try:
+        from engine.core.config import data_dir
+
+        db_path = data_dir() / "brain.db"
+        if db_path.exists():
+            size_bytes = db_path.stat().st_size
+            if size_bytes >= 1_048_576:
+                db_size = f"{size_bytes / 1_048_576:.1f} MB"
+            else:
+                db_size = f"{size_bytes / 1024:.0f} KB"
+            conn = sqlite3.connect(str(db_path))
+            row = conn.execute("SELECT COUNT(*) FROM events WHERE ts >= date('now')").fetchone()
+            events_today = int(row[0]) if row else 0
+            conn.close()
+    except Exception:
+        pass
+    try:
+        import time
+
+        pid_file = Path("/tmp/b1e55ed_start_time")
+        if pid_file.exists():
+            start = float(pid_file.read_text().strip())
+            secs = int(time.time() - start)
+            if secs >= 3600:
+                uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
+            else:
+                uptime = f"{secs // 60}m"
+        else:
+            # Estimate from process start time via /proc
+            import resource
+
+            _ = resource.getrusage(resource.RUSAGE_SELF)
+            proc_stat = Path(f"/proc/{os.getpid()}/stat")
+            if proc_stat.exists():
+                fields = proc_stat.read_text().split()
+                hz = os.sysconf("SC_CLK_TCK")
+                start_ticks = int(fields[21])
+                btime = int(next(line.split()[1] for line in Path("/proc/stat").read_text().splitlines() if line.startswith("btime")))
+                start_epoch = btime + start_ticks / hz
+                secs = int(time.time() - start_epoch)
+                if secs >= 3600:
+                    uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
+                else:
+                    uptime = f"{secs // 60}m"
+    except Exception:
+        pass
+    return {"db_size": db_size, "events_today": events_today, "uptime": uptime}
+
+
 def _is_new_operator() -> bool:
     """Returns True if no signals have been processed yet."""
     try:
@@ -593,9 +647,7 @@ def brain_overview(request: Request) -> HTMLResponse:
             "cycle_age_min": cycle_age_min,
             "producers_healthy": producers_healthy,
             "producers_total": producers_total,
-            "events_today": 0,
-            "db_size": "—",
-            "uptime": "—",
+            **_system_status_ctx(),
             "karma_pending": karma_pending,
             "disc_signals": _query_discretionary_signals(),
             "regime_history": _query_regime_history_for_brain(),
@@ -1033,12 +1085,10 @@ def system_page(request: Request) -> HTMLResponse:
             "kill_switch_label": label,
             "kill_switch_last_change": kill_last_change,
             "events_total": 0,
-            "events_today": 0,
-            "db_size": "—",
+            **_system_status_ctx(),
             "hash_chain_ok": True,
             "event_breakdown": [],
             "resources": [],
-            "uptime": "—",
         },
     )
 
@@ -1506,9 +1556,7 @@ def system_status_partial(request: Request) -> HTMLResponse:
             "cycle_age_min": cycle_age_min,
             "producers_healthy": producers_healthy,
             "producers_total": producers_total,
-            "events_today": 0,
-            "db_size": "—",
-            "uptime": "—",
+            **_system_status_ctx(),
             "karma_pending": karma_pending,
         },
     )
