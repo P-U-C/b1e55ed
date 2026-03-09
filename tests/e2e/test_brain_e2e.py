@@ -264,7 +264,7 @@ def test_kill_switch_blocks_brain_cycle(db, identity, test_config):
 # ===========================================================================
 
 
-@pytest.mark.skip(reason="requires production data/brain.db — not available in CI")
+@pytest.mark.skipif(not Path("data/brain.db").exists(), reason="production DB not present (CI environment)")
 def test_production_kill_switch_state():
     """Check the production DB kill switch state (informational)."""
     name = "production_kill_switch"

@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
-    UTC = UTC  # type: ignore[assignment]
+    from datetime import timezone as _tz
+
+    UTC = _tz.utc
 
 if TYPE_CHECKING:
     from engine.core.database import Database
