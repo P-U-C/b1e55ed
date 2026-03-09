@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Smoke test every producer: import, instantiate, call run().
 
-Results: ✅ PASS / ⚠️ SKIP (missing api key/network) / ❌ FAIL (broken code)
+Classification:
+  PASS — run() returned a valid ProducerResult with health != degraded
+  SKIP — missing API key / credential / endpoint (health=degraded or auth error)
+  FAIL — broken code (unexpected exception unrelated to env)
+
 Saves JSON to /tmp/producer_smoke_results.json
 """
 
@@ -9,6 +13,7 @@ import json
 import logging
 import os
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -93,6 +98,39 @@ def make_mock_ctx():
     return ProducerContext(config=config, db=db, client=client, metrics=metrics, logger=logger)
 
 
+def print_table(rows: list[dict]) -> None:
+    """Print ASCII table with columns: producer_name, status, duration_ms, error_message."""
+    headers = ["producer_name", "status", "duration_ms", "error_message"]
+    col_widths = [len(h) for h in headers]
+
+    for r in rows:
+        col_widths[0] = max(col_widths[0], len(r["producer_name"]))
+        col_widths[1] = max(col_widths[1], len(r["status"]))
+        col_widths[2] = max(col_widths[2], len(str(r["duration_ms"])))
+        col_widths[3] = max(col_widths[3], min(len(r["error_message"]), 60))
+
+    sep = "+-" + "-+-".join("-" * w for w in col_widths) + "-+"
+    header_row = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
+
+    print(sep)
+    print(header_row)
+    print(sep)
+    for r in rows:
+        err = r["error_message"][: col_widths[3]].ljust(col_widths[3])
+        print(
+            "| "
+            + r["producer_name"].ljust(col_widths[0])
+            + " | "
+            + r["status"].ljust(col_widths[1])
+            + " | "
+            + str(r["duration_ms"]).ljust(col_widths[2])
+            + " | "
+            + err
+            + " |"
+        )
+    print(sep)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 
@@ -101,68 +139,94 @@ def main():
     try:
         discover()
     except Exception as e:
-        print(f"❌ Registry discover() failed: {e}")
+        print(f"FAIL: Registry discover() failed: {e}")
         traceback.print_exc()
         sys.exit(1)
 
     producers = sorted(_REGISTRY.keys())
-    print(f"\nFound {len(producers)} registered producers: {', '.join(producers)}\n")
+    print("\nb1e55ed Producer Smoke Test")
+    print(f"Found {len(producers)} registered producers\n")
 
     ctx = make_mock_ctx()
-    results = {}
+    table_rows: list[dict] = []
 
     for name in producers:
         cls = _REGISTRY[name]
-        status = "unknown"
-        detail = ""
+        status = "UNKNOWN"
+        error_message = ""
+        t_start = time.monotonic()
 
         # Phase 1: instantiate
         try:
             instance = cls(ctx)
         except Exception as e:
+            duration_ms = int((time.monotonic() - t_start) * 1000)
             cat = classify_error(e)
-            if cat == "skip":
-                status, detail = "skip", f"instantiate: {type(e).__name__}: {e}"
-            else:
-                status, detail = "fail", f"instantiate: {type(e).__name__}: {e}"
-            results[name] = {"status": status, "detail": detail[:300]}
-            icon = "⚠️ SKIP" if status == "skip" else "❌ FAIL"
-            print(f"  {icon}  {name:20s} — {detail[:120]}")
+            status = "SKIP" if cat == "skip" else "FAIL"
+            error_message = f"{type(e).__name__}: {e}"[:200]
+            table_rows.append(
+                {
+                    "producer_name": name,
+                    "status": status,
+                    "duration_ms": duration_ms,
+                    "error_message": error_message,
+                }
+            )
             continue
 
         # Phase 2: call run()
         try:
             result = instance.run()
-            status, detail = "pass", f"run() returned {type(result).__name__}"
-            if hasattr(result, "events"):
-                detail += f", {len(result.events)} events"
-        except Exception as e:
-            cat = classify_error(e)
-            if cat == "skip":
-                status, detail = "skip", f"run: {type(e).__name__}: {e}"
-            else:
-                status, detail = "fail", f"run: {type(e).__name__}: {e}"
+            duration_ms = int((time.monotonic() - t_start) * 1000)
 
-        results[name] = {"status": status, "detail": detail[:300]}
-        icons = {"pass": "✅ PASS", "skip": "⚠️ SKIP", "fail": "❌ FAIL"}
-        print(f"  {icons[status]}  {name:20s} — {detail[:120]}")
+            # Classify degraded results as SKIP — producer code works but
+            # has no configured endpoint/credentials, so it cannot generate
+            # real signals. This demonstrates the SKIP classification path.
+            health = getattr(result, "health", None)
+            health_str = str(health).lower() if health is not None else ""
+            events = getattr(result, "events", [])
+
+            if health_str == "degraded" or (health is not None and "degraded" in health_str):
+                status = "SKIP"
+                error_message = f"health=degraded, {len(events)} events (missing endpoint/credentials)"
+            else:
+                status = "PASS"
+                error_message = f"{len(events)} events emitted"
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t_start) * 1000)
+            cat = classify_error(e)
+            status = "SKIP" if cat == "skip" else "FAIL"
+            error_message = f"{type(e).__name__}: {e}"[:200]
+
+        table_rows.append(
+            {
+                "producer_name": name,
+                "status": status,
+                "duration_ms": duration_ms,
+                "error_message": error_message,
+            }
+        )
+
+    # Print table
+    print_table(table_rows)
 
     # Summary
-    counts = {"pass": 0, "skip": 0, "fail": 0}
-    for r in results.values():
-        counts[r["status"]] += 1
+    counts = {"PASS": 0, "SKIP": 0, "FAIL": 0}
+    for r in table_rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
 
-    print(f"\n{'=' * 60}")
-    print(f"  ✅ {counts['pass']} passed  |  ⚠️ {counts['skip']} skipped  |  ❌ {counts['fail']} failed")
-    print(f"{'=' * 60}\n")
+    print(f"\nTotals: PASS={counts['PASS']}  SKIP={counts['SKIP']}  FAIL={counts['FAIL']}")
+    total_ms = sum(r["duration_ms"] for r in table_rows)
+    print(f"Total time: {total_ms}ms\n")
 
     # Save JSON
     out_path = "/tmp/producer_smoke_results.json"
     with open(out_path, "w") as f:
-        json.dump({"summary": counts, "results": results}, f, indent=2)
+        json.dump({"summary": counts, "results": table_rows}, f, indent=2, default=str)
     print(f"Results saved to {out_path}")
 
-    return counts["fail"]
+    return counts["FAIL"]
 
 
 if __name__ == "__main__":
