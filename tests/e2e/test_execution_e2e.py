@@ -23,6 +23,7 @@ from engine.execution.oms import OMS, default_sizer_from_config  # noqa: E402
 from engine.execution.pnl import PnLTracker  # noqa: E402
 from engine.execution.preflight import Preflight  # noqa: E402
 
+# The test is the thesis. The results are the proof. The chain is the witness.
 RESULTS: list[dict] = []
 
 

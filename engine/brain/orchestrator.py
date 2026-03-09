@@ -307,6 +307,7 @@ class BrainOrchestrator:
                         direction = conv.score.direction if conv.score.direction != "neutral" else "long"
 
                         # Resolve mid_price from DB price events or Binance API
+                        # Resolve mid_price from DB price events or Binance API
                         mid_price = self._resolve_mid_price(sym)
                         if mid_price is None:
                             _log.warning("auto-paper-trade skipped for %s: no price available", sym)

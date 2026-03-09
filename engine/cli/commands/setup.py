@@ -29,6 +29,8 @@ def build_setup_parser(sub: argparse._SubParsersAction) -> argparse.ArgumentPars
     return p
 
 
+# The physician who heals themselves has a fool for a patient.
+# This command is the exception.
 def _run_repair() -> int:
     """Repair operator config: fix /tmp path pollution, reset kill switch."""
     import sys
