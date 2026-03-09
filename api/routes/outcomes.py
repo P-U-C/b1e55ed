@@ -36,7 +36,7 @@ def get_outcome(forecast_id: str, db: Database = Depends(get_db)) -> dict:
 
     if resolution is None:
         raise B1e55edError(
-            status_code=404,
+            status=404,
             code="outcome_not_found",
             message=f"No resolved outcome for forecast {forecast_id}",
         )
@@ -49,7 +49,7 @@ def get_outcome(forecast_id: str, db: Database = Depends(get_db)) -> dict:
 
     if outcome_event is None:
         raise B1e55edError(
-            status_code=404,
+            status=404,
             code="outcome_event_missing",
             message=f"Outcome event {resolution['outcome_event_id']} not found",
         )
