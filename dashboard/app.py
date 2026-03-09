@@ -362,6 +362,39 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _build_conviction_ctx(client: Any) -> dict[str, Any]:
+    """Fetch conviction scores from API and return template context."""
+    res = client.get_convictions(limit=20)
+    if not res.ok or not isinstance(res.data, list) or not res.data:
+        return {"convictions": [], "conviction_age": "—"}
+    convictions = []
+    for c in res.data:
+        ts_str = c.get("ts")
+        age = "—"
+        if ts_str:
+            try:
+                dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+                age, _ = _age_str(dt)
+            except Exception:
+                pass
+        convictions.append(
+            {
+                "symbol": c.get("symbol", "?"),
+                "direction": c.get("direction", "neutral"),
+                "confidence": round(float(c.get("confidence") or 0), 1),
+                "magnitude": round(float(c.get("magnitude") or 0), 1),
+                "timeframe": c.get("timeframe", "—"),
+                "regime": c.get("regime", "—"),
+                "pcs_score": c.get("pcs_score"),
+                "cts_score": c.get("cts_score"),
+                "age": age,
+            }
+        )
+    # Overall age = age of most-recent score
+    first_age = convictions[0]["age"] if convictions else "—"
+    return {"convictions": convictions, "conviction_age": first_age}
+
+
 def _regime_banner_context(regime_payload: Any, *, stale: bool) -> dict[str, Any]:
     regime = None
     changed_at = None
@@ -525,9 +558,7 @@ def brain_overview(request: Request) -> HTMLResponse:
             **regime_ctx,
             "positions": positions,
             "positions_age": positions_age,
-            # Conviction: not wired yet in API; keep empty.
-            "convictions": [],
-            "conviction_age": "stale",
+            **_build_conviction_ctx(client),
             "domain_weights": [],
             "signals": signals[:12],
             "total_signals": total_signals or 0,
@@ -1216,6 +1247,13 @@ def treasury_page(request: Request) -> HTMLResponse:
 
 
 # ---- Partials ----------------------------------------------------------
+
+
+@app.get("/partials/conviction", response_class=HTMLResponse)
+def conviction_partial(request: Request) -> HTMLResponse:
+    client = _api(request)
+    ctx = _build_conviction_ctx(client)
+    return templates.TemplateResponse("conviction.html", {"request": request, **ctx})
 
 
 @app.get("/partials/kill-dot", response_class=HTMLResponse)
