@@ -438,6 +438,7 @@ class OnChainConfig(BaseModel):
     identity_registry_address: str = ""
     reputation_registry_address: str = ""
     validation_registry_address: str = ""
+    system_agent_id: int = 0
 
 
 class EASConfig(BaseModel):
