@@ -63,18 +63,11 @@
       {% endfor %}
       <div style="font-size:0.75rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</div>
     {% else %}
-      <div class="empty-state ghost-state">
-        <svg width="100%" height="50" viewBox="0 0 300 50" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem;">
-          <rect x="0" y="0" width="140" height="12" rx="2" fill="currentColor"/>
-          <rect x="160" y="0" width="60" height="12" rx="2" fill="currentColor"/>
-          <rect x="240" y="0" width="50" height="12" rx="2" fill="currentColor"/>
-          <rect x="0" y="22" width="140" height="12" rx="2" fill="currentColor"/>
-          <rect x="160" y="22" width="60" height="12" rx="2" fill="currentColor"/>
-          <rect x="240" y="22" width="50" height="12" rx="2" fill="currentColor"/>
-        </svg>
-        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No open positions</div>
-        <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Brain decisions will appear here</div>
-      </div>
+      {% set message = "No open positions" %}
+      {% set status = "Brain decisions will appear here" %}
+      {% set action_text = "Go to Positions" %}
+      {% set action_url = "/positions" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 
@@ -112,31 +105,11 @@
       </div>
       {% endif %}
     {% else %}
-      <div id="onboarding-banner" class="empty-state ghost-state" style="position:relative;">
-        <button id="onboarding-dismiss" aria-label="Dismiss" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:1rem;line-height:1;padding:2px 6px;opacity:0.5;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'">&#x2715;</button>
-        <svg width="100%" height="40" viewBox="0 0 300 40" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem;">
-          <rect x="0" y="2" width="30" height="8" rx="2" fill="currentColor"/>
-          <rect x="40" y="0" width="220" height="12" rx="2" fill="currentColor" opacity="0.5"/>
-          <rect x="270" y="2" width="25" height="8" rx="2" fill="currentColor"/>
-          <rect x="0" y="20" width="30" height="8" rx="2" fill="currentColor"/>
-          <rect x="40" y="18" width="160" height="12" rx="2" fill="currentColor" opacity="0.4"/>
-          <rect x="270" y="20" width="25" height="8" rx="2" fill="currentColor"/>
-        </svg>
-        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No conviction scores yet</div>
-        <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Start a producer to generate signals and run the brain cycle.</div>
-      </div>
-      <script>
-        (function() {
-          var KEY = 'b1e55ed:onboarding-dismissed';
-          var banner = document.getElementById('onboarding-banner');
-          if (!banner) return;
-          if (localStorage.getItem(KEY)) { banner.style.display = 'none'; return; }
-          document.getElementById('onboarding-dismiss').addEventListener('click', function() {
-            localStorage.setItem(KEY, '1');
-            banner.style.display = 'none';
-          });
-        })();
-      </script>
+      {% set message = "No conviction scores yet" %}
+      {% set status = "Waiting for first brain cycle · Start a producer" %}
+      {% set action_text = "Go to Producers" %}
+      {% set action_url = "/producers" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 
@@ -168,18 +141,11 @@
         showing {{ signals | length }} of {{ total_signals | default('?') }} signals today
       </div>
     {% else %}
-      <div class="empty-state ghost-state">
-        <svg width="100%" height="30" viewBox="0 0 400 30" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem;">
-          <circle cx="50" cy="15" r="4" fill="currentColor"/>
-          <circle cx="120" cy="10" r="3" fill="currentColor"/>
-          <circle cx="180" cy="20" r="5" fill="currentColor"/>
-          <circle cx="250" cy="12" r="3" fill="currentColor"/>
-          <circle cx="310" cy="18" r="4" fill="currentColor"/>
-          <circle cx="370" cy="8" r="3" fill="currentColor"/>
-        </svg>
-        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No signals yet</div>
-        <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Waiting for first producer cycle</div>
-      </div>
+      {% set message = "No signals yet" %}
+      {% set status = "Waiting for first producer cycle" %}
+      {% set action_text = "Go to Producers" %}
+      {% set action_url = "/producers" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 </div>
@@ -228,7 +194,9 @@
     </div>
     {% endfor %}
     {% else %}
-    <div class="empty-state" style="padding:1rem; text-align:center;">No active discretionary signals.</div>
+    {% set message = "No active discretionary signals" %}
+    {% set status = "" %}
+    {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 

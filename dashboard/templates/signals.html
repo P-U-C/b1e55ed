@@ -32,7 +32,8 @@
       </div>
       {% endfor %}
     {% else %}
-      <div class="empty-state">No recent signals from this domain.</div>
+      {% set message = "No recent signals from this domain" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
   {% endfor %}
@@ -57,20 +58,11 @@
       {{ signals | length }} signals{% if active_domain %} ({{ active_domain }}){% endif %} · click dot for details
     </div>
     {% else %}
-    <div class="empty-state ghost-state" style="padding:2rem; text-align:center;">
-      <svg width="100%" height="80" viewBox="0 0 400 80" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem; max-width:300px;">
-        <line x1="0" y1="40" x2="400" y2="40" stroke="currentColor" stroke-width="1" stroke-dasharray="4,4"/>
-        <circle cx="40" cy="35" r="5" fill="currentColor"/>
-        <circle cx="100" cy="45" r="4" fill="currentColor"/>
-        <circle cx="150" cy="30" r="6" fill="currentColor"/>
-        <circle cx="210" cy="50" r="3" fill="currentColor"/>
-        <circle cx="270" cy="38" r="5" fill="currentColor"/>
-        <circle cx="330" cy="28" r="4" fill="currentColor"/>
-        <circle cx="380" cy="42" r="3" fill="currentColor"/>
-      </svg>
-      <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No signals yet</div>
-      <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Waiting for first producer cycle</div>
-    </div>
+    {% set message = "No signals yet" %}
+    {% set status = "Waiting for first producer cycle" %}
+    {% set action_text = "Go to Producers" %}
+    {% set action_url = "/producers" %}
+    {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 </div>

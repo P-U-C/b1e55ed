@@ -112,14 +112,9 @@
     </tbody>
   </table>
   {% else %}
-    <div class="empty-state ghost-state">
-      <svg width="100%" height="60" viewBox="0 0 400 60" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem;">
-        <polyline points="0,50 50,45 100,40 150,30 200,20 250,15 300,18 350,12 400,8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <polygon points="0,50 50,45 100,40 150,30 200,20 250,15 300,18 350,12 400,8 400,60 0,60" fill="currentColor" opacity="0.3"/>
-      </svg>
-      <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No closed trades</div>
-      <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Performance data populates after first exit</div>
-    </div>
+    {% set message = "No closed trades" %}
+    {% set status = "Performance data populates after first exit" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 
@@ -150,7 +145,9 @@
     </tbody>
   </table>
   {% else %}
-    <div class="empty-state">Initial weights active. Adjustments begin after 30 days (cold start).</div>
+    {% set message = "Initial weights active" %}
+    {% set status = "Adjustments begin after 30 days (cold start)" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 
@@ -184,7 +181,9 @@
       Total "didn't sell" tax: <span class="{{ 'text-bear' if exit_tax > 0 else '' }}">${{ '%+.0f' | format(exit_tax) }}</span>
     </div>
   {% else %}
-    <div class="empty-state">"Didn't sell" tax: tracks missed exits vs actual. Populates after first closed trade.</div>
+    {% set message = "Didn't sell tax" %}
+    {% set status = "Tracks missed exits vs actual · Populates after first closed trade" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 

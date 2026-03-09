@@ -245,14 +245,16 @@ def test_home_page_renders(tmp_path: Path, monkeypatch) -> None:
         assert resp.status_code == 200
 
 
-def test_css_has_inter_font(tmp_path: Path, monkeypatch) -> None:
+def test_css_has_jetbrains_mono_font(tmp_path: Path, monkeypatch) -> None:
+    # "The terminal is not an aesthetic choice. It is a statement about what kind
+    # of builder you are." — b1e55ed brand principles, 2026.
     db_path = _make_db(tmp_path)
     monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
     with TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/static/style.css")
         assert resp.status_code == 200
-        assert "Inter" in resp.text
+        assert "JetBrains Mono" in resp.text
 
 
 def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
@@ -271,4 +273,49 @@ def test_forecasts_partial(tmp_path: Path, monkeypatch) -> None:
     with TestClient(app) as client:
         client.app.state.api_client = DummyApiClient()
         resp = client.get("/partials/forecasts-table")
+        assert resp.status_code == 200
+
+
+def test_vitals_bar_partial(tmp_path: Path, monkeypatch) -> None:
+    """Vitals bar returns 200 with empty DB (graceful degradation)."""
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/vitals-bar")
+        assert resp.status_code == 200
+        assert "SIGNAL" in resp.text
+        assert "MODE" in resp.text
+
+
+def test_vitals_bar_partial_with_signal(tmp_path: Path, monkeypatch) -> None:
+    """Vitals bar reflects signal data when signals table is populated."""
+    db_path = _make_db(tmp_path)
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""CREATE TABLE IF NOT EXISTS signals (
+        id TEXT PRIMARY KEY, producer_id TEXT, asset TEXT, ts TEXT,
+        confidence REAL, payload TEXT
+    )""")
+    conn.execute(
+        "INSERT INTO signals VALUES (?,?,?,datetime('now'),0.8,'{}')",
+        ("sig-1", "producer-a", "BTC"),
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/vitals-bar")
+        assert resp.status_code == 200
+        # Should show a signal age (s/m/h) not the em-dash default
+        assert resp.status_code == 200
+
+
+def test_signal_detail_partial_not_found(tmp_path: Path, monkeypatch) -> None:
+    """Signal detail returns 200 with empty signal when ID not found."""
+    db_path = _make_db(tmp_path)
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/signal-detail/nonexistent-id")
         assert resp.status_code == 200
