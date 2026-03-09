@@ -246,6 +246,8 @@ def test_home_page_renders(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_css_has_jetbrains_mono_font(tmp_path: Path, monkeypatch) -> None:
+    # "The terminal is not an aesthetic choice. It is a statement about what kind
+    # of builder you are." — b1e55ed brand principles, 2026.
     db_path = _make_db(tmp_path)
     monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
     with TestClient(app) as client:

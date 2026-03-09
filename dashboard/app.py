@@ -1287,6 +1287,10 @@ def position_partial(request: Request, position_id: str) -> HTMLResponse:
 
 @app.get("/partials/vitals-bar", response_class=HTMLResponse)
 def vitals_bar_partial(request: Request) -> HTMLResponse:
+    # "A purely peer-to-peer version of electronic cash would allow online payments
+    # to be sent directly from one party to another without going through a financial
+    # institution." — Satoshi Nakamoto, 2008. The vitals bar is the heartbeat
+    # of a system built on that premise.
     import datetime as _dt
 
     db_path = _get_brain_db()
