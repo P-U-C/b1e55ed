@@ -1085,6 +1085,7 @@ def artifact_preview(request: Request, artifact_id: str) -> HTMLResponse:
 
 
 @app.post("/api/producers/{name}/restart", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/restart", response_class=HTMLResponse)
 async def restart_producer(name: str, request: Request) -> HTMLResponse:
     client = _api(request)
     result = client._post_json(f"/producers/{name}/restart", {})
@@ -1094,11 +1095,22 @@ async def restart_producer(name: str, request: Request) -> HTMLResponse:
 
 
 @app.post("/api/producers/{name}/reset-failures", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/reset-failures", response_class=HTMLResponse)
 async def reset_producer_failures(name: str, request: Request) -> HTMLResponse:
     client = _api(request)
     result = client._post_json(f"/producers/{name}/reset-failures", {})
     if result.ok:
         return HTMLResponse('<span class="text-bull">✓ Failures cleared</span>')
+    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
+
+
+@app.post("/api/producers/{name}/run-now", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/run-now", response_class=HTMLResponse)
+async def run_producer_now(name: str, request: Request) -> HTMLResponse:
+    client = _api(request)
+    result = client._post_json(f"/producers/{name}/run-now", {})
+    if result.ok:
+        return HTMLResponse('<span class="text-bull">✓ Triggered</span>')
     return HTMLResponse('<span class="text-bear">✗ Failed</span>')
 
 
