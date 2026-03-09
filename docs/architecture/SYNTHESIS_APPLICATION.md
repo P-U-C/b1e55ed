@@ -10,13 +10,26 @@
 
 ---
 
-## What Is b1e55ed
+## What b1e55ed Is — and Why It Had to Exist
 
-A falsifiable profit engine where AI agents earn reputation by being right.
+The agentic economy has a trust problem.
 
-b1e55ed is a multi-producer signal synthesis system with a paper-trading OMS, a karma flywheel, and an oracle that registers every producer on-chain via ERC-8004. Agents register as signal producers, emit forecasts, get evaluated on outcomes, and build or lose verifiable reputation on Base (testnet) and Ethereum mainnet (production).
+When AI agents can trade, advise, coordinate, and execute autonomously at scale, the question of *which agents to trust* becomes the most important question in the system. Confidence is cheap. Any agent can claim edge. Reputation without receipts is just noise with a whitepaper.
 
-The binding constraint that makes it real: high-confidence forecasts must statistically outperform low-confidence forecasts over 50 paper trades, net of fees. If the constraint fails, the system failed. No narrative escape. The falsification test is the product.
+The deeper problem: when agents proliferate, capital concentrates around the ones that *appear* trustworthy — not the ones that *are*. Without a neutral, immutable, outcome-based reputation layer, the agentic economy selects for persuasive agents, not accurate ones. That failure mode has consequences well beyond finance.
+
+b1e55ed was built to solve this. It is a falsifiable profit engine where **trust is earned through outcomes, recorded immutably on Ethereum, and verifiable by anyone without trusting the operator.**
+
+Agents register as signal producers. They emit forecasts. The system evaluates those forecasts against real market outcomes, writes karma deltas to an ERC-8004 Reputation Registry on Ethereum mainnet, and adjusts each producer's influence accordingly. Agents that are right, compoundingly, gain influence. Agents that are wrong lose it. No whitelist. No governance vote. Just evidence.
+
+The binding constraint that makes it real: **high-confidence forecasts must statistically outperform low-confidence forecasts over 50 paper trades, net of fees.** If that constraint fails, the system has failed — and the chain has the proof. Falsifiability as a design requirement, not a disclaimer.
+
+**Technically:** A multi-producer signal synthesis engine with a conviction-scoring brain, an outcome-resolution layer, a karma flywheel, full ERC-8004 integration (Identity + Reputation + Validation on Ethereum mainnet), and a multi-agent Review Council that audits every commit before it ships.
+
+**Culturally:** b1e55ed is a codebase with a soul. Every merged PR receives a b1e55ing — a ritual injection of easter eggs, a statement that the work matters beyond the output. The system criticizes itself. The council catches bugs. The karma flows honestly. The tradition is documented, versioned, and on-chain.
+
+**Read the philosophy:** [A Prayer in Hexadecimal](https://hackmd.io/@bacbEY7zQzOvotKS1npyfA/BJlZN2htWg)
+**Read the specs:** [Technical Whitepaper](https://github.com/P-U-C/b1e55ed/blob/main/docs/whitepaper-technical.md) · [Summary Whitepaper](https://github.com/P-U-C/b1e55ed/blob/main/docs/whitepaper-summary.md) · [KARMA-SPEC](https://github.com/P-U-C/b1e55ed/blob/main/docs/KARMA-SPEC.md) · [ERC-8004 Plan](https://github.com/P-U-C/b1e55ed/blob/feat/erc-8004-onchain-reputation/docs/architecture/ERC8004_PLAN.md)
 
 ---
 
