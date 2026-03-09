@@ -57,8 +57,15 @@ class DummyApiClient:
     def get_curator_feed(self) -> _Res:
         return _Res({"items": []}, False)
 
+    def get_artifacts(self, limit: int = 20) -> _Res:
+        return _Res([], False)
+
     def _get_json(self, path: str, params: dict | None = None) -> _Res:
         _ = (path, params)
+        return _Res({}, False)
+
+    def _post_json(self, path: str, body: dict | None = None) -> _Res:
+        _ = (path, body)
         return _Res({}, False)
 
 

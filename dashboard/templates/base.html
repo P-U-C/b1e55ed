@@ -109,6 +109,15 @@
   });
   </script>
 
+  <script>
+  document.body.addEventListener('htmx:responseError', function(e) {
+    var target = e.detail.target;
+    if (!target) return;
+    var status = e.detail.xhr ? e.detail.xhr.status : '?';
+    target.innerHTML = '<span class="text-red-400 text-sm">\u2717 Error ' + status + '</span>';
+  });
+  </script>
+
   {% block scripts %}{% endblock %}
 
   <!-- Footer -->
