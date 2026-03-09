@@ -1,0 +1,129 @@
+name: Doctor
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run b1e55ed doctor (tier 2 — offline)
+        id: doctor
+        run: |
+          set +e
+          OUTPUT=$(uv run python -m engine.cli.main doctor --tier 2 --json 2>/dev/null)
+          EXIT_CODE=$?
+          echo "$OUTPUT" > /tmp/doctor_results.json
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          # Extract score
+          TOTAL=$(echo "$OUTPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['score']['total'])")
+          PASS=$(echo "$OUTPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['score']['pass'])")
+          FAIL=$(echo "$OUTPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['score']['fail'])")
+          WARN=$(echo "$OUTPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['score']['warn'])")
+
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass=$PASS" >> "$GITHUB_OUTPUT"
+          echo "fail=$FAIL" >> "$GITHUB_OUTPUT"
+          echo "warn=$WARN" >> "$GITHUB_OUTPUT"
+
+          # Fail if score < 8/10 (proportional to total checks)
+          THRESHOLD=$(python3 -c "import math; print(math.ceil($TOTAL * 0.8))")
+          echo "threshold=$THRESHOLD" >> "$GITHUB_OUTPUT"
+
+          if [ "$PASS" -lt "$THRESHOLD" ]; then
+            echo "score_ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "score_ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post doctor results as PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('/tmp/doctor_results.json', 'utf8');
+            let data;
+            try {
+              data = JSON.parse(raw);
+            } catch {
+              data = null;
+            }
+
+            const pass_count = '${{ steps.doctor.outputs.pass }}';
+            const total = '${{ steps.doctor.outputs.total }}';
+            const fail_count = '${{ steps.doctor.outputs.fail }}';
+            const warn_count = '${{ steps.doctor.outputs.warn }}';
+            const threshold = '${{ steps.doctor.outputs.threshold }}';
+            const score_ok = '${{ steps.doctor.outputs.score_ok }}' === 'true';
+
+            const icon = score_ok ? '✅' : '❌';
+
+            let body = `## ${icon} b1e55ed doctor — ${pass_count}/${total}\n\n`;
+            body += `| Metric | Value |\n|--------|-------|\n`;
+            body += `| Pass | ${pass_count} |\n`;
+            body += `| Warn | ${warn_count} |\n`;
+            body += `| Fail | ${fail_count} |\n`;
+            body += `| Threshold | ${threshold} |\n\n`;
+
+            if (data && data.tiers) {
+              for (const [tierName, checks] of Object.entries(data.tiers)) {
+                body += `### ${tierName}\n\n`;
+                for (const c of checks) {
+                  const statusIcon = c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌';
+                  body += `- ${statusIcon} **${c.name}**: ${c.message}\n`;
+                  if (c.remediation && c.status !== 'pass') {
+                    body += `  - → ${c.remediation}\n`;
+                  }
+                }
+                body += '\n';
+              }
+            }
+
+            // Find and update existing comment, or create new
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const marker = '## ✅ b1e55ed doctor';
+            const markerFail = '## ❌ b1e55ed doctor';
+            const existing = comments.find(c =>
+              c.body.startsWith(marker) || c.body.startsWith(markerFail)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if doctor score below threshold
+        if: steps.doctor.outputs.score_ok == 'false'
+        run: |
+          echo "❌ Doctor score ${{ steps.doctor.outputs.pass }}/${{ steps.doctor.outputs.total }} is below threshold ${{ steps.doctor.outputs.threshold }}"
+          exit 1

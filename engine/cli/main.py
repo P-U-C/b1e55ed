@@ -492,10 +492,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     # -- doctor --
-    p_doctor = sub.add_parser("doctor", help="Run system diagnostics (tiers 0-2)")
-    p_doctor.add_argument("--tier", type=int, default=2, choices=[0, 1, 2], help="Run up to this tier (default: 2)")
-    p_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    p_doctor.add_argument("--fix", action="store_true", help="Auto-remediate fixable issues.")
+    from engine.cli.doctor import build_doctor_parser
+
+    build_doctor_parser(sub)
 
     sub.add_parser("status", help="Print system status")
 
