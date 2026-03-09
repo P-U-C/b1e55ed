@@ -597,7 +597,7 @@ def _query_regime_history_for_brain() -> list[dict[str, Any]]:
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     results: list[dict[str, Any]] = []
     if "events" in tables:
-        raw = conn.execute("SELECT payload, ts FROM events WHERE event_type LIKE '%regime%' OR event_type LIKE '%REGIME%' ORDER BY ts DESC LIMIT 20").fetchall()
+        raw = conn.execute("SELECT payload, ts FROM events WHERE type LIKE '%regime%' OR type LIKE '%REGIME%' ORDER BY ts DESC LIMIT 20").fetchall()
         if raw:
             import json as _json  # noqa: PLC0415
 
@@ -1143,20 +1143,6 @@ def position_partial(request: Request, position_id: str) -> HTMLResponse:
     return templates.TemplateResponse(
         "partials/position_detail_panel.html",
         {"request": request, "p": p},
-    )
-
-
-@app.get("/partials/conviction", response_class=HTMLResponse)
-def conviction_partial(request: Request) -> HTMLResponse:
-    # API wiring for conviction is not implemented yet; keep graceful empty.
-    return templates.TemplateResponse(
-        "partials/conviction_panel.html",
-        {
-            "request": request,
-            "convictions": [],
-            "conviction_age": "stale",
-            "domain_weights": [],
-        },
     )
 
 
