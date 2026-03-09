@@ -188,9 +188,7 @@ def _age_str(ts: datetime | None) -> tuple[str, int]:
 
 
 def _get_sentiment_horizons() -> list[dict[str, Any]]:
-    """Query brain.db for social signal scores bucketed into 24 fixed 1h slots over last 24h."""
-    import time as _time_mod
-
+    """Query brain.db for recent social signal scores grouped by producer (last 24 data points)."""
     try:
         db_path = _get_brain_db()
 
@@ -221,14 +219,13 @@ def _get_sentiment_horizons() -> list[dict[str, Any]]:
         if "domain" in cols:
             domain_filter = " AND domain IN ('social', 'sentiment') "
 
-        # Query all signals from last 24h
+        # Query: last 24 data points per producer, ordered by time
         query = f"""
             SELECT {producer_col} AS producer, {score_col} AS score, created_at
             FROM signal_log
-            WHERE {score_col} IS NOT NULL
-              AND created_at >= datetime('now', '-24 hours')
-              {domain_filter}
-            ORDER BY created_at ASC
+            WHERE {score_col} IS NOT NULL {domain_filter}
+            ORDER BY created_at DESC
+            LIMIT 500
         """
         rows = conn.execute(query).fetchall()
         conn.close()
@@ -236,50 +233,22 @@ def _get_sentiment_horizons() -> list[dict[str, Any]]:
         if not rows:
             return []
 
-        # Build 24 fixed 1h time buckets (oldest → newest)
-        now_ts = _time_mod.time()
-        bucket_size = 3600  # 1 hour in seconds
-        window_start = now_ts - 24 * bucket_size
-
-        def _to_ts(s: str) -> float:
-            """Parse ISO or unix timestamp string to float."""
-            try:
-                return float(s)
-            except (ValueError, TypeError):
-                pass
-            try:
-                import datetime as _dt
-
-                s = str(s).replace("Z", "+00:00")
-                return _dt.datetime.fromisoformat(s).timestamp()
-            except Exception:
-                return 0.0
-
-        # Group by producer → bucket index (0-23)
-        by_producer: dict[str, list[list[float]]] = {}
+        # Group by producer, keep last 24 per producer
+        by_producer: dict[str, list[float]] = {}
         for r in rows:
             p = str(r["producer"])
             if p not in by_producer:
-                by_producer[p] = [[] for _ in range(24)]
-            ts = _to_ts(str(r["created_at"]))
-            if ts < window_start:
-                continue
-            bucket = min(23, int((ts - window_start) / bucket_size))
-            score = float(r["score"])
-            by_producer[p][bucket].append(score)
+                by_producer[p] = []
+            if len(by_producer[p]) < 24:
+                by_producer[p].append(float(r["score"]))
 
-        # Collapse buckets: mean per bucket, None if empty → normalized 0-1
+        # Reverse so oldest first
         horizons = []
-        for name, buckets in by_producer.items():
-            scores = []
-            for bucket in buckets:
-                if bucket:
-                    raw = sum(bucket) / len(bucket)
-                    normalized = raw / 10.0 if raw > 1.0 else raw
-                    scores.append(normalized)
-                else:
-                    scores.append(None)  # gap — no data this hour
-            horizons.append({"name": name, "scores": scores})
+        for name, scores in by_producer.items():
+            scores.reverse()
+            # Normalize scores to 0-1 range if they're on 0-10 scale
+            normalized = [s / 10.0 if s > 1.0 else s for s in scores]
+            horizons.append({"name": name, "scores": normalized})
 
         return horizons
 
@@ -472,6 +441,24 @@ def market_ticker() -> JSONResponse:
 # ---- Page routes -------------------------------------------------------
 
 
+def _is_new_operator() -> bool:
+    """Returns True if no signals have been processed yet."""
+    try:
+        db_path = _get_brain_db()
+        if not db_path or not db_path.exists():
+            return True
+        conn = sqlite3.connect(str(db_path))
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "conviction_scores" not in tables:
+            conn.close()
+            return True
+        count = conn.execute("SELECT COUNT(*) FROM conviction_scores").fetchone()[0]
+        conn.close()
+        return count == 0
+    except Exception:
+        return False
+
+
 @app.get("/home", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     # kept for backward-compat with early shell
@@ -553,6 +540,8 @@ def brain_overview(request: Request) -> HTMLResponse:
             "uptime": "—",
             "karma_pending": karma_pending,
             "disc_signals": _query_discretionary_signals(),
+            "regime_history": _query_regime_history_for_brain(),
+            "is_new_operator": _is_new_operator(),
         },
     )
 
@@ -596,6 +585,39 @@ def _get_brain_db() -> Path | None:
         db_path = Path(db_override)
 
     return db_path if db_path.exists() else None
+
+
+def _query_regime_history_for_brain() -> list[dict[str, Any]]:
+    """Regime history for brain home page."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return []
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    results: list[dict[str, Any]] = []
+    if "events" in tables:
+        raw = conn.execute("SELECT payload, ts FROM events WHERE type LIKE '%regime%' OR type LIKE '%REGIME%' ORDER BY ts DESC LIMIT 20").fetchall()
+        if raw:
+            import json as _json  # noqa: PLC0415
+
+            for r in raw:
+                d = dict(r)
+                # Try to parse payload for regime name
+                regime = "unknown"
+                with contextlib.suppress(Exception):
+                    p = _json.loads(d.get("payload", "{}"))
+                    regime = p.get("regime") or p.get("new_regime") or p.get("name") or "unknown"
+                results.append({"regime": regime, "ts": d.get("ts", ""), "first_seen": None, "last_seen": None, "cycles": None})
+            conn.close()
+            return results
+    if "conviction_scores" in tables:
+        raw = conn.execute(
+            "SELECT regime, MIN(ts) as first_seen, MAX(ts) as last_seen, COUNT(*) as cycles FROM conviction_scores GROUP BY regime ORDER BY last_seen DESC"
+        ).fetchall()
+        results = [dict(r) for r in raw]
+    conn.close()
+    return results
 
 
 def _query_forecasts(asset: str | None = None, horizon: str | None = None, status: str = "pending") -> dict[str, Any]:
@@ -1263,20 +1285,6 @@ def position_partial(request: Request, position_id: str) -> HTMLResponse:
     )
 
 
-@app.get("/partials/conviction", response_class=HTMLResponse)
-def conviction_partial(request: Request) -> HTMLResponse:
-    # API wiring for conviction is not implemented yet; keep graceful empty.
-    return templates.TemplateResponse(
-        "partials/conviction_panel.html",
-        {
-            "request": request,
-            "convictions": [],
-            "conviction_age": "stale",
-            "domain_weights": [],
-        },
-    )
-
-
 @app.get("/partials/signal-feed", response_class=HTMLResponse)
 def signal_feed_partial(request: Request) -> HTMLResponse:
     client = _api(request)
@@ -1652,9 +1660,11 @@ from dashboard.contributors import register as _register_contributors  # noqa: E
 from dashboard.identity import register as _register_identity  # noqa: E402
 from dashboard.producers import register as _register_producers  # noqa: E402
 from dashboard.routes.cockpit import register as _register_cockpit  # noqa: E402
+from dashboard.routes.conviction import register as _register_conviction  # noqa: E402
 from dashboard.webhooks import register as _register_webhooks  # noqa: E402
 
 _register_cockpit(app, templates)
+_register_conviction(app, templates)
 _register_contributors(app, templates)
 _register_identity(app, templates)
 _register_webhooks(app, templates)

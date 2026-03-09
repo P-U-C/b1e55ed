@@ -102,11 +102,19 @@
   {% endfor %}
 {% else %}
   <div class="panel">
-    <div class="empty-state">
+    <div class="empty-state ghost-state">
+      <svg width="100%" height="50" viewBox="0 0 300 50" preserveAspectRatio="none" style="opacity:0.07; margin-bottom:0.75rem;">
+        <rect x="0" y="0" width="80" height="10" rx="2" fill="currentColor"/>
+        <rect x="0" y="16" width="290" height="6" rx="1" fill="currentColor" opacity="0.4"/>
+        <rect x="0" y="28" width="80" height="10" rx="2" fill="currentColor"/>
+        <rect x="0" y="44" width="200" height="6" rx="1" fill="currentColor" opacity="0.4"/>
+      </svg>
       {% if view == 'closed' %}
-        No closed trades. Performance data populates after first exit.
+        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No closed trades</div>
+        <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Performance data populates after first exit</div>
       {% else %}
-        No open positions. Brain decisions will appear here.
+        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">No open positions</div>
+        <div style="font-size:0.75rem; color:var(--text-dim); opacity:0.6;">Brain decisions will appear here</div>
       {% endif %}
     </div>
   </div>

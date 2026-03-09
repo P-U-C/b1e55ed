@@ -7,7 +7,7 @@
 <div class="panel" style="margin-bottom:1rem;">
   <div class="panel-header">
     <span class="panel-title">Sentiment Horizon</span>
-    <span class="panel-age">24h</span>
+    <span class="panel-age">24 pts</span>
   </div>
   {% if sentiment_horizons %}
   <div style="display:flex; flex-direction:column; gap:0.25rem;">
@@ -16,20 +16,15 @@
       <span style="width:8rem; font-size:0.75rem; color:var(--text-bright); font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ h.name }}">{{ h.name }}</span>
       <div class="horizon-row" style="display:flex; flex:1; gap:1px; height:20px; align-items:flex-end;">
         {% for score in h.scores %}
-        {% if score is none %}
-          {# Gap cell — no data this hour #}
-          <div style="flex:1; height:2px; background:var(--border); border-radius:1px; min-width:0; opacity:0.3;" title="no data"></div>
+        {% set cell_height = (score * 100) | int %}
+        {% if score < 0.4 %}
+          {% set cell_color = 'var(--red)' %}
+        {% elif score < 0.6 %}
+          {% set cell_color = 'var(--amber)' %}
         {% else %}
-          {% set cell_height = (score * 100) | int %}
-          {% if score < 0.4 %}
-            {% set cell_color = 'var(--red)' %}
-          {% elif score < 0.6 %}
-            {% set cell_color = 'var(--amber)' %}
-          {% else %}
-            {% set cell_color = 'var(--green)' %}
-          {% endif %}
-          <div style="flex:1; height:{{ cell_height if cell_height > 2 else 2 }}px; background:{{ cell_color }}; opacity:{{ 0.4 + score * 0.6 }}; border-radius:1px; min-width:0;" title="{{ '%.2f' | format(score) }}"></div>
+          {% set cell_color = 'var(--green)' %}
         {% endif %}
+        <div style="flex:1; height:{{ cell_height if cell_height > 2 else 2 }}px; background:{{ cell_color }}; opacity:{{ 0.4 + score * 0.6 }}; border-radius:1px; min-width:0;" title="{{ '%.2f' | format(score) }}"></div>
         {% endfor %}
       </div>
     </div>
