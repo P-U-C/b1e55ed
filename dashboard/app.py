@@ -1429,7 +1429,11 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
         try:
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
-            row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()
+            _sig_tables = [_r[0] for _r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            if "signals" in _sig_tables:
+                row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()
+            else:
+                row = conn.execute("SELECT ts FROM events WHERE type LIKE 'signal.%' ORDER BY ts DESC LIMIT 1").fetchone()
             if row:
                 try:
                     dt = _dt.datetime.fromisoformat(str(row["ts"]).replace("Z", ""))
@@ -1444,7 +1448,12 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
                 except Exception:
                     pass
             try:
-                r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
+                tables_here = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                if "signals" in tables_here:
+                    r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
+                else:
+                    # Fallback: count active sources from events table
+                    r = conn.execute("SELECT COUNT(DISTINCT source) FROM events WHERE type LIKE 'signal.%' AND ts > datetime('now','-1 hour')").fetchone()
                 producer_count = r[0] if r else 0
             except Exception:
                 pass
