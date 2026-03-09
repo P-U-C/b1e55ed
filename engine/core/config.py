@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 from engine.core.exceptions import ConfigError
@@ -433,8 +433,9 @@ class OnChainConfig(BaseModel):
 
     enabled: bool = False
     rpc_url: str = ""
-    private_key: str = ""
+    private_key: SecretStr = SecretStr("")  # Never logged — use .get_secret_value() when passing to ChainClient
     network: str = "base-sepolia"
+    public_base_url: str = ""  # Fully-qualified external URL (e.g. https://b1e55ed.xyz) for on-chain agentURI minting
     identity_registry_address: str = ""
     reputation_registry_address: str = ""
     validation_registry_address: str = ""
@@ -447,7 +448,7 @@ class EASConfig(BaseModel):
     eas_contract: str = "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
     schema_registry: str = "0xA7b39296258348C78294F95B872b282326A97BDF"
     schema_uid: str = ""  # Set after schema registration
-    attester_private_key: str = ""  # Private key for signing attestations
+    attester_private_key: SecretStr = SecretStr("")  # Never logged — use .get_secret_value() when passing to EAS client
     mode: Literal["onchain", "offchain"] = "offchain"
 
 

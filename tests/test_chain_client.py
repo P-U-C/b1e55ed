@@ -99,7 +99,7 @@ class TestOnChainConfig:
         cfg = OnChainConfig()
         assert cfg.enabled is False
         assert cfg.rpc_url == ""
-        assert cfg.private_key == ""
+        assert cfg.private_key.get_secret_value() == ""
         assert cfg.network == "base-sepolia"
         assert cfg.identity_registry_address == ""
         assert cfg.reputation_registry_address == ""
@@ -171,7 +171,7 @@ class TestManifestEndpoint:
         resp = test_app.get("/api/v1/agents/node-abc123/manifest")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["type"] == "https://eips.ethereum.org/EIPS/eip-8004#registration-v1"
+        assert data["type"] == "https://github.com/P-U-C/b1e55ed/blob/main/docs/specs/erc-8004-agent-registration.md#registration-v1"
         assert data["name"] == "btc-technical-analysis"
         assert data["identity"]["node_id"] == "node-abc123"
         assert data["identity"]["agent_id"] == 42
@@ -192,7 +192,7 @@ class TestWellKnownEndpoint:
         resp = test_app.get("/.well-known/agent-registration.json")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["type"] == "https://eips.ethereum.org/EIPS/eip-8004#registration-v1"
+        assert data["type"] == "https://github.com/P-U-C/b1e55ed/blob/main/docs/specs/erc-8004-agent-registration.md#registration-v1"
         assert data["name"] == "b1e55ed"
         assert "capabilities" in data
         assert data["capabilities"]["signals"] is True
@@ -281,6 +281,11 @@ class TestContributorRegistryChainWiring:
         reg = ContributorRegistry(db, chain_client=mock_chain)
         c = reg.register(node_id="node-onchain", name="onchain-producer", role="agent")
         assert c.node_id == "node-onchain"
+
+        # Chain registration is now asynchronous (background thread); wait briefly.
+        import time
+
+        time.sleep(0.2)
 
         # Verify agent_id was written to DB
         row = db.execute("SELECT agent_id FROM contributors WHERE node_id = ?", ("node-onchain",)).fetchone()

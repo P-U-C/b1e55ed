@@ -80,9 +80,11 @@ class ChainClient:
         identity_registry_address: str | None = None,
         reputation_registry_address: str | None = None,
         validation_registry_address: str | None = None,
+        public_base_url: str = "",
     ) -> None:
         self._rpc_url = rpc_url
         self._private_key = private_key
+        self._public_base_url = public_base_url  # Fully-qualified base URL for on-chain agentURI minting
         self._identity_registry_address = identity_registry_address
         self._reputation_registry_address = reputation_registry_address
         self._validation_registry_address = validation_registry_address
