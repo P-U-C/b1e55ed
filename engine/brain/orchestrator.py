@@ -109,7 +109,12 @@ class BrainOrchestrator:
                 import json as _json
 
                 payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
-                price = float(payload.get("price") or payload.get("close") or payload.get("mid") or 0)
+                price = 0.0
+                for _pk in ("price", "close", "mid"):
+                    _pv = payload.get(_pk)
+                    if _pv is not None:
+                        price = float(_pv)
+                        break
                 if price > 0:
                     _log.debug("mid_price for %s from DB: %.4f", symbol, price)
                     return price
