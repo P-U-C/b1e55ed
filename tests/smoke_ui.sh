@@ -6,7 +6,7 @@ set -euo pipefail
 
 DASH_URL="${DASH_URL:-http://127.0.0.1:5052}"
 API_URL="${API_URL:-http://127.0.0.1:5050}"
-API_TOKEN="${API_TOKEN:-d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE}"
+API_TOKEN="${API_TOKEN:-***REDACTED***}"
 
 PASS=0; FAIL=0; TOTAL=0
 

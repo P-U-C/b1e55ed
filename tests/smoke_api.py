@@ -12,7 +12,7 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 
 API_URL = os.environ.get("API_URL", "http://127.0.0.1:5050")
-API_TOKEN = os.environ.get("API_TOKEN", "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE")
+API_TOKEN = os.environ.get("API_TOKEN", "***REDACTED***")
 RESULTS_PATH = "/tmp/api_smoke_results.json"
 
 
@@ -34,6 +34,7 @@ def hit(method: str, path: str, data: bytes | None = None, expect_json: bool = T
     t0 = time.monotonic()
     try:
         req = urllib.request.Request(url, method=method, data=data)
+        req.add_header("Authorization", f"Bearer {API_TOKEN}")
         if data:
             req.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -55,12 +56,11 @@ def hit(method: str, path: str, data: bytes | None = None, expect_json: bool = T
     elif r.status >= 500:
         r.errors.append(f"Server error: {r.status}")
 
-    if expect_json and r.status == 200:
+    if expect_json and r.status == 200 and "application/json" in r.content_type:
         try:
-            json.loads(r.body_preview if len(r.body_preview) < 4096 else "{}")
-        except json.JSONDecodeError:
-            if "application/json" in r.content_type:
-                r.errors.append("Response claims JSON but failed to parse")
+            json.loads(body)  # noqa: F841
+        except (json.JSONDecodeError, NameError):
+            r.errors.append("Response claims JSON but failed to parse")
 
     r.ok = r.status in (200, 201) and len(r.errors) == 0
     return r
@@ -121,8 +121,7 @@ def main() -> int:
     # ── Cockpit ──
     results.append(hit("GET", "/api/v1/cockpit/state"))
 
-    # ── Oracle ──
-    results.append(hit("GET", "/api/v1/oracle/"))
+    # ── Oracle (parameterized only, skip) ──
 
     # ── Benchmarks (POST-only, send minimal body) ──
     results.append(hit("POST", "/api/v1/benchmarks/discretionary", data=json.dumps({"signals": []}).encode()))
