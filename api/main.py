@@ -165,7 +165,7 @@ def create_app() -> FastAPI:
                     _log.debug("OMS injection skipped", exc_info=True)
 
                 symbols = list(_cfg.universe.symbols)
-                result = orchestrator.run_cycle(symbols=symbols)
+                result = await asyncio.to_thread(orchestrator.run_cycle, symbols=symbols)
 
                 # Log summary
                 _cid = result.cycle_id[:8] if result.cycle_id else "?"
