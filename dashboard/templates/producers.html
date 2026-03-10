@@ -158,12 +158,13 @@
 </div>
 {% endif %}
 
-<!-- Registration -->
-<div class="panel grid-full">
-  <div class="panel-header">
-    <span class="panel-title">Registration</span>
-  </div>
-
+<!-- Registration (collapsed by default — one-time setup) -->
+<details class="panel grid-full" style="padding:0;" {% if not producers %}open{% endif %}>
+  <summary style="cursor:pointer; padding:0.75rem 1rem; display:flex; justify-content:space-between; align-items:center; user-select:none; list-style:none;">
+    <span class="panel-title" style="pointer-events:none;">+ Register Producer</span>
+    <span style="font-size:0.7rem; color:var(--text-dim); font-family:var(--mono); pointer-events:none;">expand to add</span>
+  </summary>
+  <div style="padding:0 1rem 1rem;">
   <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
     <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
       <label class="text-dim" for="name">Name</label>
@@ -196,8 +197,8 @@
       {% endif %}
     </div>
   </form>
-
-</div>
+  </div>
+</details>
 
 {% endblock %}
 
