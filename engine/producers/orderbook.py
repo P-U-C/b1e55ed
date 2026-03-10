@@ -5,8 +5,8 @@ Orderbook Depth Producer.
 Fetches orderbook depth / liquidity-at-top metrics from a configured HTTP endpoint
 and emits :class:`~engine.core.events.EventType.SIGNAL_ORDERBOOK_V1`.
 
-The endpoint is configured via env and unit tests mock the injected
-``context.client``.
+Free fallback uses the Binance Depth public API (no auth required) to compute
+bid/ask depth, imbalance, and LOD score locally.
 
 Easter egg:
 - Liquidity is a mirage until you touch it.
@@ -46,15 +46,23 @@ class OrderbookDepthProducer(BaseProducer):
     schedule = "*/5 * * * *"
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_ORDERBOOK_URL",
+            "label": "Custom Orderbook endpoint",
+            "type": "url",
+            "required": False,
+            "description": "Override the free Binance fallback with a custom orderbook data service",
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_ORDERBOOK_URL") or os.getenv("ORDERBOOK_URL")
 
-    def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
-        if not url:
-            self.ctx.logger.warning("orderbook_endpoint_missing")
-            return []
-
+    def _collect_from_custom(self, url: str) -> list[dict[str, Any]]:
+        """Fetch from a custom POST endpoint (original behaviour)."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
         if isinstance(data, dict) and "data" in data:
@@ -62,6 +70,67 @@ class OrderbookDepthProducer(BaseProducer):
         if not isinstance(data, list):
             return []
         return [row for row in data if isinstance(row, dict)]
+
+    def _collect_free(self) -> list[dict[str, Any]]:
+        """Free public API fallback (Binance Depth). Always available."""
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        results: list[dict[str, Any]] = []
+
+        for sym in symbols[:10]:  # limit to avoid rate limits
+            try:
+                resp = httpx.get(
+                    "https://api.binance.com/api/v3/depth",
+                    params={"symbol": f"{sym}USDT", "limit": 100},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                book = resp.json()
+
+                bids = book.get("bids", [])
+                asks = book.get("asks", [])
+
+                # Compute depth in USD (price * qty summed)
+                bid_depth_usd = sum(float(b[0]) * float(b[1]) for b in bids)
+                ask_depth_usd = sum(float(a[0]) * float(a[1]) for a in asks)
+
+                # Imbalance: positive = more bids (buy pressure), negative = more asks
+                total_depth = bid_depth_usd + ask_depth_usd
+                imbalance = (bid_depth_usd - ask_depth_usd) / total_depth if total_depth > 0 else 0.0
+
+                # LOD score: liquidity-on-demand — how tight the top-of-book is
+                # Higher = more liquid.  Simple heuristic: depth-weighted spread.
+                best_bid = float(bids[0][0]) if bids else 0.0
+                best_ask = float(asks[0][0]) if asks else 0.0
+                mid = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0.0
+                spread_bps = ((best_ask - best_bid) / mid * 10_000) if mid > 0 else 9999.0
+                # Invert spread into a 0-1 score (tighter = higher)
+                lod_score = max(0.0, min(1.0, 1.0 - spread_bps / 100.0))
+
+                results.append(
+                    {
+                        "symbol": sym,
+                        "bid_depth_usd": round(bid_depth_usd, 2),
+                        "ask_depth_usd": round(ask_depth_usd, 2),
+                        "imbalance": round(imbalance, 4),
+                        "lod_score": round(lod_score, 4),
+                        "data_source": "binance_free",
+                    }
+                )
+            except Exception as e:  # noqa: BLE001
+                self.ctx.logger.warning("orderbook_free_symbol_failed symbol=%s error=%s", sym, e)
+                continue
+
+        return results
+
+    def collect(self) -> list[dict[str, Any]]:
+        url = self._custom_endpoint()
+        if url:
+            try:
+                return self._collect_from_custom(url)
+            except Exception:  # noqa: BLE001
+                self.ctx.logger.warning("custom_endpoint_failed_falling_back url=%s", url)
+        # Fall back to free API
+        return self._collect_free()
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)

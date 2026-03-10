@@ -5,8 +5,8 @@ ETF Flows Producer.
 Fetches ETF flow metrics (typically for BTC/ETH spot ETFs) from a configured
 HTTP endpoint and emits :class:`~engine.core.events.EventType.SIGNAL_ETF_V1`.
 
-The endpoint is configured via env and unit tests mock the injected
-``context.client``.
+No reliable free API exists for ETF flows — requires B1E55ED_ETF_FLOWS_URL.
+When unconfigured, the producer reports OK with zero events (not DEGRADED).
 
 Easter egg:
 - Even in an index, someone chose the weights.
@@ -50,13 +50,25 @@ class ETFFlowsProducer(BaseProducer):
     schedule = "0 */1 * * *"  # hourly
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_ETF_FLOWS_URL",
+            "label": "ETF flows data endpoint",
+            "type": "url",
+            "required": True,
+            "description": "Required — no free source available. Provide a URL that returns ETF flow data.",
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_ETF_FLOWS_URL") or os.getenv("ETF_FLOWS_URL")
 
     def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
+        url = self._custom_endpoint()
         if not url:
-            self.ctx.logger.warning("etf_flows_endpoint_missing")
+            self.ctx.logger.info("etf-flows requires B1E55ED_ETF_FLOWS_URL — no free source available")
             return []
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
@@ -107,7 +119,12 @@ class ETFFlowsProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                health = ProducerHealth.DEGRADED
+                if not self._custom_endpoint():
+                    # No source configured — this is expected, not degraded
+                    health = ProducerHealth.OK
+                    errors.append("no_source_configured")
+                else:
+                    health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
         except httpx.HTTPStatusError as e:
