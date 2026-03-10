@@ -93,10 +93,10 @@ def check_kill_switch_live(db_path: Path | None = None) -> CheckResult:
 
         db = Database(path)
         try:
-            row = db.conn.execute(
+            row = db.fetchone(
                 "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
                 (str(EventType.KILL_SWITCH_V1),),
-            ).fetchone()
+            )
             if not row:
                 return CheckResult("kill_switch_live", "pass", "Kill switch: L0 (safe, no events)")
             payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]
@@ -129,10 +129,10 @@ def check_last_brain_cycle(db_path: Path | None = None) -> CheckResult:
 
         db = Database(path)
         try:
-            row = db.conn.execute(
+            row = db.fetchone(
                 "SELECT ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
                 (str(EventType.BRAIN_CYCLE_V1),),
-            ).fetchone()
+            )
 
             if not row:
                 return CheckResult("last_brain_cycle", "warn", "No brain cycle events found")
@@ -175,7 +175,7 @@ def check_producer_health(db_path: Path | None = None) -> CheckResult:
 
         db = Database(path)
         try:
-            rows = db.conn.execute("SELECT name, consecutive_failures, quarantined_until FROM producer_health").fetchall()
+            rows = db.fetchall("SELECT name, consecutive_failures, quarantined_until FROM producer_health")
             total = len(rows)
             if total == 0:
                 return CheckResult("producer_health", "warn", "No producers registered")
@@ -209,11 +209,11 @@ def check_intent_to_order(db_path: Path | None = None) -> CheckResult:
 
         db = Database(path)
         try:
-            intent_row = db.conn.execute(
+            intent_row = db.fetchone(
                 "SELECT COUNT(*) FROM events WHERE type = ?",
                 (str(EventType.TRADE_INTENT_V1),),
-            ).fetchone()
-            order_row = db.conn.execute("SELECT COUNT(*) FROM orders").fetchone()
+            )
+            order_row = db.fetchone("SELECT COUNT(*) FROM orders")
 
             intents = int(intent_row[0]) if intent_row else 0
             orders = int(order_row[0]) if order_row else 0

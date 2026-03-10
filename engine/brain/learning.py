@@ -76,10 +76,10 @@ class LearningLoop:
     # ---------------------------------------------------------------------
 
     def attribute_outcome(self, position_id: str, realized_pnl: float) -> OutcomeAttribution:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT * FROM positions WHERE id = ?",
             (str(position_id),),
-        ).fetchone()
+        )
         if row is None:
             raise ValueError(f"Unknown position_id: {position_id}")
 
@@ -98,16 +98,16 @@ class LearningLoop:
         direction_correct = float(realized_pnl) > 0.0
 
         # Recover domain scores at entry from conviction_log via cycle_id+symbol.
-        score_row = self.db.conn.execute(
+        score_row = self.db.fetchone(
             "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
             (int(conviction_id),),
-        ).fetchone()
+        )
         domain_scores: dict[str, float] = {}
         if score_row is not None:
             cycle_id = score_row["cycle_id"]
             symbol = score_row["symbol"]
             if cycle_id and symbol:
-                cur = self.db.conn.execute(
+                cur = self.db.execute(
                     "SELECT domain, domain_score FROM conviction_log WHERE cycle_id = ? AND symbol = ?",
                     (str(cycle_id), str(symbol)),
                 )
@@ -151,7 +151,7 @@ class LearningLoop:
         return start, end
 
     def _closed_positions_in_window(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT id, asset, direction, opened_at, closed_at, realized_pnl, conviction_id
             FROM positions
@@ -163,7 +163,7 @@ class LearningLoop:
               AND realized_pnl IS NOT NULL
             """,
             (_dt_to_iso(start), _dt_to_iso(end)),
-        ).fetchall()
+        )
 
         out: list[dict[str, Any]] = []
         for r in rows:
@@ -173,7 +173,7 @@ class LearningLoop:
     def _cold_start_state(self, as_of: datetime) -> tuple[bool, str, float]:
         """Returns (blocked, reason, max_delta_for_this_cycle)."""
 
-        first = self.db.conn.execute("SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL").fetchone()
+        first = self.db.fetchone("SELECT MIN(closed_at) AS first_closed FROM positions WHERE status = 'closed' AND closed_at IS NOT NULL")
         if first is None or first["first_closed"] is None:
             return True, "cold_start_no_history", 0.0
 
@@ -221,10 +221,10 @@ class LearningLoop:
         samples: dict[str, list[tuple[float, float]]] = {k: [] for k in previous}
         for p in positions:
             conviction_id = int(p["conviction_id"])
-            score = self.db.conn.execute(
+            score = self.db.fetchone(
                 "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
                 (conviction_id,),
-            ).fetchone()
+            )
             if score is None:
                 continue
 
@@ -234,7 +234,7 @@ class LearningLoop:
                 continue
 
             o = 1.0 if float(p["realized_pnl"]) > 0.0 else -1.0
-            cur = self.db.conn.execute(
+            cur = self.db.execute(
                 "SELECT domain, domain_score FROM conviction_log WHERE cycle_id = ? AND symbol = ?",
                 (str(cycle_id), str(symbol)),
             )
@@ -330,7 +330,7 @@ class LearningLoop:
         else:
             global_acc = 0.0
 
-        rows = self.db.conn.execute("SELECT * FROM producer_health").fetchall()
+        rows = self.db.fetchall("SELECT * FROM producer_health")
         out: dict[str, ProducerScore] = {}
         for r in rows:
             name = str(r["name"])
@@ -370,7 +370,7 @@ class LearningLoop:
 
         # Patterns scored: count pattern_matches rows with outcome in window.
         start, end = self._window_bounds()
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT pattern_id, outcome FROM pattern_matches
             WHERE outcome IS NOT NULL
@@ -378,7 +378,7 @@ class LearningLoop:
               AND outcome_ts >= ? AND outcome_ts <= ?
             """,
             (_dt_to_iso(start), _dt_to_iso(end)),
-        ).fetchall()
+        )
 
         patterns_scored = len(rows)
 
@@ -462,7 +462,7 @@ class LearningLoop:
 
         # Attribute outcomes for any closed positions that haven't been attributed yet.
         # Convention: conviction_scores.outcome is set when attributed.
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT p.id AS position_id, p.realized_pnl AS realized_pnl
             FROM positions p
@@ -472,14 +472,14 @@ class LearningLoop:
               AND cs.outcome IS NULL
             ORDER BY p.closed_at ASC
             """
-        ).fetchall()
+        )
 
         for r in rows:
             attr = self.attribute_outcome(str(r["position_id"]), float(r["realized_pnl"]))
             attributions.append(attr)
             # Write outcome back to conviction_scores.
-            with self.db.conn:
-                self.db.conn.execute(
+            with self.db._lock, self.db.conn:
+                self.db.execute(
                     "UPDATE conviction_scores SET outcome = ?, outcome_ts = ? WHERE id = ?",
                     (float(attr.realized_pnl), utc_now().isoformat(), int(attr.conviction_id)),
                 )
@@ -647,8 +647,8 @@ class StratificationTracker:
 
     def record_signal(self, signal_id: str, symbol: str, confidence: float, direction: str, ts: datetime) -> None:
         bucket = self._bucket(confidence)
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 """INSERT OR IGNORE INTO signal_stratification
                    (signal_id, symbol, confidence, bucket, direction, created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -656,8 +656,8 @@ class StratificationTracker:
             )
 
     def record_outcome(self, signal_id: str, realized_pnl_usd: float, ts: datetime) -> None:
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 """UPDATE signal_stratification
                    SET outcome_pnl_usd = ?, attributed_at = ?
                    WHERE signal_id = ?""",
@@ -668,10 +668,10 @@ class StratificationTracker:
         now = utc_now()
         report: dict = {}
         for bucket in (self.BUCKET_HIGH, self.BUCKET_MID, self.BUCKET_LOW):
-            rows = self.db.conn.execute(
+            rows = self.db.fetchall(
                 "SELECT confidence, outcome_pnl_usd FROM signal_stratification WHERE bucket = ?",
                 (bucket,),
-            ).fetchall()
+            )
             count = len(rows)
             with_outcome = [r for r in rows if r["outcome_pnl_usd"] is not None]
             wo_count = len(with_outcome)

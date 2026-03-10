@@ -86,10 +86,10 @@ class MetaProducer(BaseProducer):
         return f"{self.name}@{self.producer_version}"
 
     def _is_active(self) -> bool:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT COUNT(*) FROM events WHERE type = ?",
             (EventType.FORECAST_OUTCOME_V1.value,),
-        ).fetchone()
+        )
         count = int(row[0] if row else 0)
         return count >= MIN_FORECASTS_FOR_ACTIVATION
 
@@ -99,7 +99,7 @@ class MetaProducer(BaseProducer):
         asset_upper = str(asset).upper()
         cutoff_ts = float(datetime.now(tz=UTC).timestamp()) - (2 * 3600)
 
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT source, ts, payload
             FROM events
@@ -108,7 +108,7 @@ class MetaProducer(BaseProducer):
             LIMIT 5000
             """,
             (EventType.FORECAST_V1.value,),
-        ).fetchall()
+        )
 
         state: dict[str, str] = {}
         for row in rows:
@@ -143,7 +143,7 @@ class MetaProducer(BaseProducer):
         if not ensemble_state:
             return []
 
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT payload
             FROM events
@@ -151,7 +151,7 @@ class MetaProducer(BaseProducer):
             ORDER BY ts ASC
             """,
             (EventType.FORECAST_OUTCOME_V1.value,),
-        ).fetchall()
+        )
 
         # episode key: 2h forecast timestamp bucket
         episodes: dict[int, dict[str, Any]] = defaultdict(lambda: {"actions": {}, "correct": {}, "actual_dir": "flat"})
@@ -161,7 +161,7 @@ class MetaProducer(BaseProducer):
         def _forecast_ts(event_id: str) -> float | None:
             if event_id in forecast_ts_cache:
                 return forecast_ts_cache[event_id]
-            row = self.db.conn.execute("SELECT ts FROM events WHERE id = ?", (event_id,)).fetchone()
+            row = self.db.fetchone("SELECT ts FROM events WHERE id = ?", (event_id,))
             if row is None:
                 forecast_ts_cache[event_id] = None
                 return None

@@ -68,10 +68,10 @@ class PaperBroker:
         return float(mid) * (1.0 - slip)
 
     def _existing_open_position(self, symbol: str) -> dict[str, Any] | None:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT * FROM positions WHERE asset = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
             (symbol,),
-        ).fetchone()
+        )
         return None if row is None else dict(row)
 
     def execute_market(
@@ -113,10 +113,10 @@ class PaperBroker:
         if idem is None:
             idem = str(uuid.uuid4())
 
-        existing = self.db.conn.execute(
+        existing = self.db.fetchone(
             "SELECT id, position_id, fill_price, fill_size, status FROM orders WHERE idempotency_key = ?",
             (idem,),
-        ).fetchone()
+        )
         if existing is not None:
             # Already executed.
             oid = str(existing[0])
@@ -137,8 +137,8 @@ class PaperBroker:
         position_id = str(uuid.uuid4())
 
         # For Sprint 2A we open a new position per intent. Closing is done via PnLTracker.
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 """
                 INSERT INTO positions (
                   id, platform, asset, direction, entry_price, size_notional, leverage,
@@ -159,7 +159,7 @@ class PaperBroker:
                     int(conviction_id) if conviction_id is not None else None,
                 ),
             )
-            self.db.conn.execute(
+            self.db.execute(
                 """
                 INSERT INTO orders (
                   id, position_id, venue, type, side, symbol, size, price,

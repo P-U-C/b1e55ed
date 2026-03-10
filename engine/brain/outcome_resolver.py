@@ -132,8 +132,8 @@ class OutcomeResolver:
                 outcome = self._compute_outcome(forecast_with_prices, float(actual_price))
                 outcome_event_id = self._write_outcome(outcome)
 
-                with self.db.conn:
-                    self.db.conn.execute(
+                with self.db._lock, self.db.conn:
+                    self.db.execute(
                         """
                         INSERT OR IGNORE INTO forecast_resolution_state
                             (forecast_event_id, resolved_at, outcome_event_id)
@@ -152,7 +152,7 @@ class OutcomeResolver:
     def _find_unresolved(self, before_ts: float) -> list[dict]:
         """Find FORECAST_V1 events not yet in forecast_resolution_state."""
 
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT e.id, e.ts, e.source, e.payload
             FROM events e
@@ -162,7 +162,7 @@ class OutcomeResolver:
             ORDER BY e.ts ASC
             """,
             (EventType.FORECAST_V1.value,),
-        ).fetchall()
+        )
 
         out: list[dict] = []
         for row in rows:
@@ -238,7 +238,7 @@ class OutcomeResolver:
 
     def _fetch_from_price_history(self, *, asset: str, target_ts: float, as_millis: bool) -> float | None:
         try:
-            cols = {str(r["name"] if isinstance(r, dict) else r[1]) for r in self.db.conn.execute("PRAGMA table_info(price_history)").fetchall()}
+            cols = {str(r["name"] if isinstance(r, dict) else r[1]) for r in self.db.fetchall("PRAGMA table_info(price_history)")}
         except Exception:
             return None
 
@@ -262,7 +262,7 @@ class OutcomeResolver:
         high = ts_value + tol
 
         try:
-            row = self.db.conn.execute(
+            row = self.db.fetchone(
                 f"""
                 SELECT {price_col} AS close_price, ABS({time_col} - ?) AS delta
                 FROM price_history
@@ -272,7 +272,7 @@ class OutcomeResolver:
                 LIMIT 1
                 """,
                 (ts_value, asset_a, asset_b, low, high),
-            ).fetchone()
+            )
             if row is None:
                 return None
             return float(row[0])

@@ -61,10 +61,10 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     # -----------------------------------------------------------------------
     # 1. Basic event existence check
     # -----------------------------------------------------------------------
-    row = db.conn.execute(
+    row = db.fetchone(
         "SELECT MIN(created_at), MAX(created_at), COUNT(*) FROM events WHERE source = ?",
         (producer_id,),
-    ).fetchone()
+    )
 
     total_events = int(row[2]) if row else 0
 
@@ -82,6 +82,7 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
             note=("No provenance data available. Proceeding without attribution context."),
         )
 
+    assert row is not None  # COUNT(*) always returns a row; guarded by total_events check above
     first_seen: str | None = str(row[0]) if row[0] else None
     last_seen: str | None = str(row[1]) if row[1] else None
 
@@ -90,10 +91,10 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     #    events.contributor_id references contributors.id, each of which has a
     #    unique node_id — so COUNT(DISTINCT contributor_id) ≈ distinct nodes.
     # -----------------------------------------------------------------------
-    cov_row = db.conn.execute(
+    cov_row = db.fetchone(
         "SELECT COUNT(DISTINCT contributor_id) FROM events WHERE source = ?",
         (producer_id,),
-    ).fetchone()
+    )
     operator_coverage = int(cov_row[0]) if cov_row else 0
 
     # -----------------------------------------------------------------------
@@ -119,19 +120,19 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     #    reference producer_id, so we use the conviction_scores outcome as
     #    the canonical signal that outcomes were tracked.
     # -----------------------------------------------------------------------
-    pnl_row = db.conn.execute(
+    pnl_row = db.fetchone(
         "SELECT COUNT(*) FROM conviction_scores WHERE node_id = ? AND outcome IS NOT NULL",
         (producer_id,),
-    ).fetchone()
+    )
     p_and_l_attributed = bool(pnl_row and int(pnl_row[0]) > 0)
 
     # -----------------------------------------------------------------------
     # 5. Total signals (conviction_scores emitted by this producer as node)
     # -----------------------------------------------------------------------
-    sig_row = db.conn.execute(
+    sig_row = db.fetchone(
         "SELECT COUNT(*) FROM conviction_scores WHERE node_id = ?",
         (producer_id,),
-    ).fetchone()
+    )
     total_signals = int(sig_row[0]) if sig_row else 0
 
     # -----------------------------------------------------------------------
@@ -142,7 +143,7 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
         cutoff = datetime.now(UTC) - timedelta(days=days)
         cutoff_iso = cutoff.isoformat()
 
-        w_row = db.conn.execute(
+        w_row = db.fetchone(
             """
             SELECT
                 COUNT(*) AS total,
@@ -153,7 +154,7 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
             WHERE node_id = ? AND ts >= ?
             """,
             (producer_id, cutoff_iso),
-        ).fetchone()
+        )
 
         if w_row is None:
             continue

@@ -41,8 +41,8 @@ class AuditLogger:
 
     def log_action(self, action: str, actor: str | None, details: dict[str, Any] | None = None) -> None:
         payload = json.dumps(details or {}, sort_keys=True)
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 "INSERT INTO audit_log (action, actor, component, details) VALUES (?, ?, ?, ?)",
                 (action, actor, self.component, payload),
             )
@@ -67,7 +67,7 @@ class AuditLogger:
         q += " ORDER BY ts DESC LIMIT ?"
         params.append(limit)
 
-        rows = self.db.conn.execute(q, tuple(params)).fetchall()
+        rows = self.db.fetchall(q, tuple(params))
         out: list[dict[str, Any]] = []
         for r in rows:
             out.append(

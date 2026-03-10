@@ -83,7 +83,7 @@ class DynamicKelly:
         if self.config.lookback > 0:
             query += f" LIMIT {int(self.config.lookback)}"
 
-        rows = self.db.conn.execute(query, params_list).fetchall()
+        rows = self.db.fetchall(query, params_list)
         # Return in chronological order (oldest first) for decay weighting
         return [{"pnl": float(r[0]), "closed_at": str(r[1])} for r in reversed(rows)]
 

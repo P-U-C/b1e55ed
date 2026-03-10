@@ -47,10 +47,10 @@ class PnLTracker:
         self._config = config
 
     def unrealized_usd(self, *, position_id: str, mark_price: float) -> float:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT direction, entry_price, size_notional, status FROM positions WHERE id = ?",
             (str(position_id),),
-        ).fetchone()
+        )
         if row is None:
             return 0.0
         if str(row[3]) != "open":
@@ -69,10 +69,10 @@ class PnLTracker:
     def close_position(self, *, position_id: str, exit_price: float, reason: str = "") -> float:
         """Mark a position closed and store realized_pnl."""
 
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT direction, entry_price, size_notional, status FROM positions WHERE id = ?",
             (str(position_id),),
-        ).fetchone()
+        )
         if row is None:
             raise ValueError("position not found")
         if str(row[3]) != "open":
@@ -87,14 +87,14 @@ class PnLTracker:
         realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 "UPDATE positions SET status = 'closed', closed_at = ?, realized_pnl = ? WHERE id = ?",
                 (now, float(realized), str(position_id)),
             )
             # Optional audit trail
             if reason:
-                self.db.conn.execute(
+                self.db.execute(
                     "INSERT INTO audit_log (action, actor, component, details) VALUES (?, ?, ?, ?)",
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
                 )
@@ -102,10 +102,10 @@ class PnLTracker:
             # KS-1: Consecutive loss tracking
             try:
                 if realized < 0:
-                    row_cl = self.db.conn.execute("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'").fetchone()
+                    row_cl = self.db.fetchone("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'")
                     count = int(row_cl[0]) if row_cl else 0
                     count += 1
-                    self.db.conn.execute(
+                    self.db.execute(
                         "INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', ?, datetime('now'))",
                         (str(count),),
                     )
@@ -116,7 +116,7 @@ class PnLTracker:
                         ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
                         _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
                 else:
-                    self.db.conn.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
+                    self.db.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
             except Exception:
                 _log.warning("KS-1 consecutive loss tracking failed", exc_info=True)
 
@@ -151,20 +151,20 @@ class PnLTracker:
                 # Resolve contributor attribution via conviction_id on the position.
                 contributor_id: str | None = None
                 try:
-                    pos_row = self.db.conn.execute(
+                    pos_row = self.db.fetchone(
                         "SELECT conviction_id FROM positions WHERE id = ?",
                         (str(position_id),),
-                    ).fetchone()
+                    )
                     if pos_row and pos_row["conviction_id"] is not None:
-                        contrib_row = self.db.conn.execute(
+                        contrib_row = self.db.fetchone(
                             "SELECT node_id FROM conviction_scores WHERE id = ?",
                             (pos_row["conviction_id"],),
-                        ).fetchone()
+                        )
                         if contrib_row and contrib_row["node_id"]:
-                            c_row = self.db.conn.execute(
+                            c_row = self.db.fetchone(
                                 "SELECT id FROM contributors WHERE node_id = ?",
                                 (str(contrib_row["node_id"]),),
-                            ).fetchone()
+                            )
                             contributor_id = str(c_row["id"]) if c_row else None
                 except Exception:
                     contributor_id = None  # fail-open
@@ -207,15 +207,15 @@ class PnLTracker:
                 from engine.brain.learning import StratificationTracker
 
                 strat = StratificationTracker(self.db)
-                pos_row2 = self.db.conn.execute(
+                pos_row2 = self.db.fetchone(
                     "SELECT conviction_id FROM positions WHERE id = ?",
                     (str(position_id),),
-                ).fetchone()
+                )
                 if pos_row2 and pos_row2["conviction_id"] is not None:
-                    cs_row = self.db.conn.execute(
+                    cs_row = self.db.fetchone(
                         "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
                         (pos_row2["conviction_id"],),
-                    ).fetchone()
+                    )
                     if cs_row and cs_row["cycle_id"] and cs_row["symbol"]:
                         sig_id = f"{cs_row['cycle_id']}:{cs_row['symbol']}"
                         strat.record_outcome(sig_id, float(realized), _utc_now())
@@ -253,7 +253,7 @@ class PnLTracker:
 
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0
-        for row in self.db.conn.execute("SELECT id, asset FROM positions WHERE status = 'open'").fetchall():
+        for row in self.db.fetchall("SELECT id, asset FROM positions WHERE status = 'open'"):
             pid = str(row[0])
             sym = str(row[1]).upper()
             px = current_prices.get(sym)
@@ -262,7 +262,7 @@ class PnLTracker:
             unreal += self.unrealized_usd(position_id=pid, mark_price=float(px))
 
         realized = 0.0
-        for row in self.db.conn.execute("SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL").fetchall():
+        for row in self.db.fetchall("SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL"):
             realized += float(row[0])
 
         return PnLSnapshot(realized_usd=float(realized), unrealized_usd=float(unreal), total_usd=float(realized + unreal))

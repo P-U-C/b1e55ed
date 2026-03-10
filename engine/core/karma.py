@@ -61,7 +61,7 @@ def frequency_penalty(signals_per_day: float) -> float:
 
 def _compute_daily_rate(db: Database, producer_name: str, symbol: str) -> float:
     """Compute signals-per-day for a (producer, symbol) pair over the last 7 days."""
-    row = db.conn.execute(
+    row = db.fetchone(
         """
         SELECT COUNT(*) * 1.0 / MAX(1, (julianday('now') - julianday(MIN(ts))))
         FROM events
@@ -69,7 +69,7 @@ def _compute_daily_rate(db: Database, producer_name: str, symbol: str) -> float:
         AND json_extract(payload, '$.symbol') = ?
         """,
         (producer_name, symbol),
-    ).fetchone()
+    )
     if row is None or row[0] is None:
         return 0.0
     return float(row[0])
@@ -89,10 +89,10 @@ def karma_weight_for_signal(db: Database, producer_name: str, symbol: str) -> fl
 
     # Check LLM ceiling
     ceiling_mult = 1.0
-    row = db.conn.execute(
+    row = db.fetchone(
         "SELECT karma_ceiling FROM producer_karma_config WHERE producer_name = ?",
         (producer_name,),
-    ).fetchone()
+    )
     if row is not None:
         ceiling_mult = min(float(row[0]), _MAX_CEILING)
 
@@ -116,7 +116,7 @@ def ensure_producer_karma_config(db: Database, producer_name: str, source_type: 
     default_ceiling = _DEFAULT_LLM_KARMA_CEILING if is_llm else _MAX_CEILING
     now_iso = datetime.now(tz=UTC).isoformat()
 
-    db.conn.execute(
+    db.execute(
         """
         INSERT INTO producer_karma_config (producer_name, karma_ceiling, source_type, ceiling_validated_count, updated_at)
         VALUES (?, ?, ?, 0, ?)
@@ -132,7 +132,7 @@ def bump_karma_ceiling(db: Database, producer_name: str) -> float:
     Returns the new ceiling value.
     """
     now_iso = datetime.now(tz=UTC).isoformat()
-    db.conn.execute(
+    db.execute(
         """
         UPDATE producer_karma_config
         SET karma_ceiling = MIN(?, karma_ceiling + ?),
@@ -142,8 +142,8 @@ def bump_karma_ceiling(db: Database, producer_name: str) -> float:
         """,
         (_MAX_CEILING, _CEILING_INCREMENT, now_iso, producer_name),
     )
-    row = db.conn.execute(
+    row = db.fetchone(
         "SELECT karma_ceiling FROM producer_karma_config WHERE producer_name = ?",
         (producer_name,),
-    ).fetchone()
+    )
     return float(row[0]) if row else _MAX_CEILING

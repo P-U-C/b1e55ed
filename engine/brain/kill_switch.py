@@ -62,10 +62,10 @@ class KillSwitch:
         import json as _json
 
         try:
-            row = self.db.conn.execute(
+            row = self.db.fetchone(
                 "SELECT payload FROM events WHERE type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
                 (getattr(EventType.KILL_SWITCH_V1, "value", str(EventType.KILL_SWITCH_V1)),),
-            ).fetchone()
+            )
             if row:
                 data = _json.loads(row[0])
                 persisted = int(data.get("level", 0))

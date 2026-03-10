@@ -62,7 +62,7 @@ def _run_repair() -> int:
         if db_path.exists():
             db = Database(db_path)
             try:
-                row = db.conn.execute("SELECT payload FROM events WHERE type = 'KILL_SWITCH_V1' ORDER BY ts DESC LIMIT 1").fetchone()
+                row = db.fetchone("SELECT payload FROM events WHERE type = 'KILL_SWITCH_V1' ORDER BY ts DESC LIMIT 1")
                 if row:
                     import json as _json
 

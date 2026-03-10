@@ -84,25 +84,25 @@ def _report_cockpit(ctx: Any, args: argparse.Namespace) -> int:
     now = datetime.now(tz=UTC)
     week_ago = (now - timedelta(days=7)).isoformat()
 
-    trades = db.conn.execute("SELECT COUNT(*) as c FROM positions WHERE opened_at >= ?", (week_ago,)).fetchone()
+    trades = db.fetchone("SELECT COUNT(*) as c FROM positions WHERE opened_at >= ?", (week_ago,))
     trade_count = int(trades["c"]) if trades else 0
 
-    pnl_row = db.conn.execute(
+    pnl_row = db.fetchone(
         "SELECT COALESCE(SUM(realized_pnl), 0) as total FROM positions WHERE status = 'closed' AND closed_at >= ?",
         (week_ago,),
-    ).fetchone()
+    )
     realized = float(pnl_row["total"]) if pnl_row else 0.0
 
-    ks_row = db.conn.execute(
+    ks_row = db.fetchone(
         "SELECT COUNT(*) as c FROM events WHERE type = 'brain.kill_switch.v1' AND ts >= ?",
         (week_ago,),
-    ).fetchone()
+    )
     ks_count = int(ks_row["c"]) if ks_row else 0
 
-    hi_row = db.conn.execute(
+    hi_row = db.fetchone(
         "SELECT COUNT(*) as c FROM signal_stratification WHERE bucket = 'high' AND created_at >= ?",
         (week_ago,),
-    ).fetchone()
+    )
     hi_count = int(hi_row["c"]) if hi_row else 0
 
     if getattr(args, "json", False):
