@@ -175,11 +175,11 @@ def _make_dashboard_client():
     return client
 
 
-def test_cockpit_page_returns_200():
+def test_cockpit_page_redirects_to_brain():
     client = _make_dashboard_client()
-    resp = client.get("/cockpit")
-    assert resp.status_code == 200
-    assert "cockpit" in resp.text.lower()
+    resp = client.get("/cockpit", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
 
 
 def test_cockpit_htmx_refresh_endpoint():

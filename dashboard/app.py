@@ -957,28 +957,26 @@ async def submit_discretionary_signal(request: Request) -> HTMLResponse:
         return HTMLResponse('<span class="text-warn">⚠ Brain DB not found</span>')
 
     try:
-        conn = sqlite3.connect(str(db_path))
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        if "discretionary_signals" not in tables:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS discretionary_signals ("
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                "symbol TEXT NOT NULL, "
-                "direction TEXT NOT NULL, "
-                "confidence REAL, "
-                "reasoning TEXT, "
-                "created_at TEXT DEFAULT (datetime('now')), "
-                "expires_at TEXT DEFAULT (datetime('now', '+24 hours')))"
-            )
+        with sqlite3.connect(str(db_path)) as conn:
+            tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            if "discretionary_signals" not in tables:
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS discretionary_signals ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "symbol TEXT NOT NULL, "
+                    "direction TEXT NOT NULL, "
+                    "confidence REAL, "
+                    "reasoning TEXT, "
+                    "created_at TEXT DEFAULT (datetime('now')), "
+                    "expires_at TEXT DEFAULT (datetime('now', '+24 hours')))"
+                )
 
-        conn.execute(
-            "INSERT INTO discretionary_signals"
-            " (symbol, direction, confidence, reasoning, created_at, expires_at)"
-            " VALUES (?, ?, ?, ?, datetime('now'), datetime('now', '+24 hours'))",
-            (symbol, direction, confidence, notes),
-        )
-        conn.commit()
-        conn.close()
+            conn.execute(
+                "INSERT INTO discretionary_signals"
+                " (symbol, direction, confidence, reasoning, created_at, expires_at)"
+                " VALUES (?, ?, ?, ?, datetime('now'), datetime('now', '+24 hours'))",
+                (symbol, direction, confidence, notes),
+            )
     except Exception as e:
         return HTMLResponse(f'<span class="text-warn">⚠ DB error: {e}</span>')
 
