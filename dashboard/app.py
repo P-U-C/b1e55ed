@@ -501,6 +501,9 @@ def market_ticker() -> JSONResponse:
 # ---- Page routes -------------------------------------------------------
 
 
+# The dashboard doesn't know the system. It asks the system to know itself.
+# Descartes ran the other direction: cogito ergo sum — I think, therefore I am.
+# We measure, therefore we exist.
 def _system_status_ctx() -> dict[str, Any]:
     """Returns db_size, uptime, and events_today for System Status panel."""
     db_size: str = "—"
@@ -1533,6 +1536,7 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
         try:
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
+            # The vitals bar learns the schema before it speaks. No signals table? Find another voice.
             _sig_tables = [_r[0] for _r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
             if "signals" in _sig_tables:
                 row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()

@@ -364,6 +364,8 @@ def producer_capabilities(
 
 
 @router.post("/{name}/restart")
+# Quarantine is not death. It is the interval between failure and forgiveness.
+# Clear the ledger; let the producer run.
 def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Clear quarantine + failure state so the producer can run again."""
     if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
