@@ -51,7 +51,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # contributors total
     try:
-        r = db.execute("SELECT COUNT(1) FROM contributors").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM contributors")
         contributors_total = int(r[0]) if r else 0
     except Exception:
         contributors_total = 0
@@ -59,7 +59,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # brain cycles total (from events)
     try:
-        r = db.execute("SELECT COUNT(1) FROM events WHERE type = 'brain.cycle.v1'").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM events WHERE type = 'brain.cycle.v1'")
         brain_cycles_total = int(r[0]) if r else 0
     except Exception:
         brain_cycles_total = 0
@@ -67,7 +67,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # karma intents total
     try:
-        r = db.execute("SELECT COUNT(1) FROM karma_intents").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM karma_intents")
         karma_intents_total = int(r[0]) if r else 0
     except Exception:
         karma_intents_total = 0
@@ -75,7 +75,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # karma settled total
     try:
-        r = db.execute("SELECT COUNT(1) FROM karma_intents WHERE settled = 1").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM karma_intents WHERE settled = 1")
         karma_settled_total = int(r[0]) if r else 0
     except Exception:
         karma_settled_total = 0
@@ -83,7 +83,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # signals total (signal.* events)
     try:
-        r = db.execute("SELECT COUNT(1) FROM events WHERE type LIKE 'signal.%'").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM events WHERE type LIKE 'signal.%'")
         signals_total = int(r[0]) if r else 0
     except Exception:
         signals_total = 0
@@ -91,7 +91,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # positions total
     try:
-        r = db.execute("SELECT COUNT(1) FROM positions").fetchone()
+        r = db.fetchone("SELECT COUNT(1) FROM positions")
         positions_total = int(r[0]) if r else 0
     except Exception:
         positions_total = 0
@@ -99,7 +99,7 @@ def prometheus_metrics(db: Database = Depends(get_db)) -> PlainTextResponse:
 
     # requests from rate limiter window (best-effort)
     try:
-        r = db.execute("SELECT COALESCE(SUM(request_count), 0) FROM rate_limit_windows").fetchone()
+        r = db.fetchone("SELECT COALESCE(SUM(request_count), 0) FROM rate_limit_windows")
         requests_total = int(r[0]) if r else 0
     except Exception:
         requests_total = 0

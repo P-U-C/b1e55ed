@@ -212,7 +212,7 @@ def list_contributor_signals(
     query += " ORDER BY cs.created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
-    rows = db.execute(query, params).fetchall()
+    rows = db.fetchall(query, params)
     return {
         "contributor_id": contributor_id,
         "signals": [dict(r) for r in rows],

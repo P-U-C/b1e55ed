@@ -71,7 +71,7 @@ def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list
         domain = p.get("asset", "unknown")
 
         # Lookup karma
-        karma_row = db.execute("SELECT karma_score FROM producer_karma WHERE producer_id = ?", (pid,)).fetchone()
+        karma_row = db.fetchone("SELECT karma_score FROM producer_karma WHERE producer_id = ?", (pid,))
         karma_score = float(karma_row[0]) if karma_row else 1.0
 
         agrees = top_call is not None and direction == top_call.get("direction")
@@ -124,7 +124,7 @@ def _get_system_status(db: Database) -> dict[str, Any]:
     ks_name = _KS_LEVEL_NAMES.get(ks_level, "SAFE")
 
     # Consecutive losses
-    loss_rows = db.execute("SELECT realized_pnl FROM positions WHERE status = 'closed' ORDER BY closed_at DESC LIMIT 10").fetchall()
+    loss_rows = db.fetchall("SELECT realized_pnl FROM positions WHERE status = 'closed' ORDER BY closed_at DESC LIMIT 10")
     consecutive_losses = 0
     for lr in loss_rows:
         if lr[0] is not None and float(lr[0]) < 0:
@@ -133,7 +133,7 @@ def _get_system_status(db: Database) -> dict[str, Any]:
             break
 
     # Open positions
-    open_rows = db.execute("SELECT asset, direction, entry_price, size_notional FROM positions WHERE status = 'open'").fetchall()
+    open_rows = db.fetchall("SELECT asset, direction, entry_price, size_notional FROM positions WHERE status = 'open'")
     open_positions = [{"symbol": r[0], "direction": r[1], "entry": r[2], "unrealized_pnl": 0.0} for r in open_rows]
 
     open_risk_pct = 0.0
