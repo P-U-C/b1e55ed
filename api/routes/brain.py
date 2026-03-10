@@ -119,3 +119,36 @@ def run_cycle(
         regime=regime,
         kill_switch_level=kill_level,
     )
+
+
+@router.get("/convictions")
+def get_convictions(db: Database = Depends(get_db), limit: int = 20) -> list[dict]:
+    """Latest conviction scores, one per asset (most recent)."""
+    rows = db.execute(
+        """
+        SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
+        FROM conviction_scores
+        WHERE (symbol, ts) IN (
+            SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
+        )
+        ORDER BY confidence DESC, magnitude DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    result = []
+    for r in rows:
+        result.append(
+            {
+                "symbol": r[0],
+                "direction": r[1],
+                "confidence": float(r[2]) if r[2] is not None else 0.0,
+                "magnitude": float(r[3]) if r[3] is not None else 0.0,
+                "timeframe": r[4],
+                "regime": r[5],
+                "pcs_score": float(r[6]) if r[6] is not None else None,
+                "cts_score": float(r[7]) if r[7] is not None else None,
+                "ts": r[8],
+            }
+        )
+    return result

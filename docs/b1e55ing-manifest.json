@@ -750,6 +750,36 @@
       "placement": "inline_comment",
       "pr_number": 354,
       "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_db15c912",
+      "file": "dashboard/app.py",
+      "anchor": "def _system_status_ctx() -> dict[str, Any]:",
+      "tradition": "symbolic-cosmology",
+      "content": "# The dashboard doesn't know the system. It asks the system to know itself.\n# Descartes ran the other direction: cogito ergo sum — I think, therefore I am.\n# We measure, therefore we exist.",
+      "placement": "before_function",
+      "pr_number": 357,
+      "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_6917f98a",
+      "file": "api/routes/producers.py",
+      "anchor": "def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:",
+      "tradition": "stoic-accounting",
+      "content": "# Quarantine is not death. It is the interval between failure and forgiveness.\n# Clear the ledger; let the producer run.",
+      "placement": "before_function",
+      "pr_number": 357,
+      "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_5d159ef5",
+      "file": "dashboard/app.py",
+      "anchor": "_sig_tables = [_r[0] for _r in conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()]",
+      "tradition": "cartography",
+      "content": "# The vitals bar learns the schema before it speaks. No signals table? Find another voice.",
+      "placement": "inline_comment",
+      "pr_number": 357,
+      "applied_at": "2026-03-10T00:54:03Z"
     }
   ]
 }

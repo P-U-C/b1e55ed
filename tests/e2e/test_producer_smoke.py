@@ -38,6 +38,10 @@ from engine.producers.registry import _REGISTRY, discover  # noqa: E402
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
+# Producers that are intentionally broken (test fixtures, quarantine examples).
+# Excluded from pass/fail assertions in test_all_producers_smoke.
+_FIXTURE_PRODUCERS = {"fail-prod"}
+
 # Error substrings that indicate an environment/config issue, not broken code.
 _ENV_SKIP_KEYWORDS = [
     # Network
@@ -178,9 +182,7 @@ def smoke_test_all_producers() -> list[ProducerTestResult]:
             )
         ]
 
-    # Exclude test-only producers registered by unit tests (e.g. fail-prod from quarantine tests)
-    _test_only = {"fail-prod"}
-    producers = sorted(k for k in _REGISTRY if k not in _test_only)
+    producers = sorted(_REGISTRY.keys())
     ctx = _make_context()
     results: list[ProducerTestResult] = []
 
@@ -296,7 +298,7 @@ def test_all_producers_smoke():
     # Print summary even under pytest
     _print_table(results)
 
-    failures = [r for r in results if r.status == "fail"]
+    failures = [r for r in results if r.status == "fail" and r.name not in _FIXTURE_PRODUCERS]
     if failures:
         details = "\n".join(f"  {r.name}: [{r.phase}] {r.detail}" for r in failures)
         raise AssertionError(f"{len(failures)} producer(s) FAILED:\n{details}")

@@ -26,8 +26,9 @@
       <div style="display:flex; align-items:center; gap:0.75rem; padding:4px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
         <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.asset }}</span>
         <span style="flex:1; color:var(--text);">{{ s.desc }}</span>
-        <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400;">
-          {{ s.direction }}{{ '%.0f' | format(s.score) }}
+        <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400; font-family:var(--mono);"
+              title="Score: {{ '%.1f' | format(s.score) }} | Direction: {{ s.direction | replace('+','long') | replace('-','short') | replace('=','neutral') }}">
+          {% if s.direction == '+' %}▲{% elif s.direction == '-' %}▼{% else %}–{% endif %} {{ '%.1f' | format(s.score) }}
         </span>
       </div>
       {% endfor %}
@@ -223,7 +224,7 @@
         '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">' +
           '<span class="badge badge-' + s.domain + '">' + s.domain + '</span>' +
           '<span style="color:var(--text-bright); font-weight:500;">' + s.asset + '</span>' +
-          '<span class="' + scoreClass + '" style="font-weight:500;">' + dir + s.score + '</span>' +
+          '<span class="' + scoreClass + '" style="font-weight:500;">' + (dir==='+' ? '▲' : dir==='-' ? '▼' : '–') + ' ' + (Math.round(s.score * 10) / 10).toFixed(1) + '</span>' +
           '<span style="color:var(--text-dim); font-size:0.75rem;">' + s.ts + '</span>' +
         '</div>' +
         '<div style="margin-top:0.35rem; color:var(--text); font-size:0.8rem;">' + s.desc + '</div>';

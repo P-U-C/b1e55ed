@@ -4,14 +4,12 @@ on:
   pull_request:
     branches: [main, develop]
 
-permissions:
-  pull-requests: write
-  issues: write
-  contents: read
-
 jobs:
   doctor:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 

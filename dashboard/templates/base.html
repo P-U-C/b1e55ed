@@ -41,8 +41,8 @@
       <a href="/forecasts" class="nav-link {% if active_page == 'forecasts' %}active{% endif %}">Forecasts</a>
       <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">Settings</a>
       <div class="nav-overflow">
-        <button class="nav-overflow__trigger" id="nav-more-btn" onclick="(function(){var m=document.getElementById('nav-more-menu');m.hidden=!m.hidden;})()" aria-label="More pages">···</button>
-        <div class="nav-overflow__menu" id="nav-more-menu" hidden>
+        <button class="nav-overflow__trigger" id="nav-more-btn" onclick="(function(){var m=document.getElementById('nav-more-menu');m.style.display=m.style.display==='block'?'none':'block';})()" aria-label="More pages">···</button>
+        <div class="nav-overflow__menu" id="nav-more-menu" style="display:none">
           <a href="/social">Social</a>
           <a href="/artifacts">Artifacts</a>
           <a href="/contributors">Contributors</a>

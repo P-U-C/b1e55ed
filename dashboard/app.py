@@ -362,6 +362,66 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _build_conviction_ctx(client: Any) -> dict[str, Any]:
+    """Fetch conviction scores — tries API first, falls back to direct DB read."""
+    raw: list[dict] = []
+    res = client.get_convictions(limit=20)
+    if res.ok and isinstance(res.data, list) and res.data:
+        raw = res.data
+    else:
+        # Fallback: read directly from DB (handles older API versions without the endpoint)
+        try:
+            from engine.core.config import data_dir
+
+            db_path = data_dir() / "brain.db"
+            if db_path.exists():
+                import sqlite3
+
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """
+                    SELECT cs.* FROM conviction_scores cs
+                    INNER JOIN (
+                        SELECT symbol, MAX(ts) as max_ts FROM conviction_scores GROUP BY symbol
+                    ) latest ON cs.symbol = latest.symbol AND cs.ts = latest.max_ts
+                    ORDER BY cs.confidence DESC LIMIT 20
+                    """
+                ).fetchall()
+                raw = [dict(r) for r in rows]
+                conn.close()
+        except Exception:
+            pass
+    if not raw:
+        return {"convictions": [], "conviction_age": "—"}
+    convictions = []
+    for c in raw:
+        ts_str = c.get("ts")
+        age = "—"
+        if ts_str:
+            try:
+                dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+                age, _ = _age_str(dt)
+            except Exception:
+                pass
+        convictions.append(
+            {
+                "symbol": c.get("symbol", "?"),
+                "direction": c.get("direction", "neutral"),
+                "confidence": round(float(c.get("confidence") or 0), 1),
+                "magnitude": round(float(c.get("magnitude") or 0), 1),
+                "timeframe": c.get("timeframe", "—"),
+                "regime": c.get("regime", "—"),
+                "pcs_score": c.get("pcs_score"),
+                "cts_score": c.get("cts_score"),
+                "age": age,
+            }
+        )
+    # Overall age = age of most-recent score
+    first_age = convictions[0]["age"] if convictions else "—"
+    return {"convictions": convictions, "conviction_age": first_age}
+
+
 def _regime_banner_context(regime_payload: Any, *, stale: bool) -> dict[str, Any]:
     regime = None
     changed_at = None
@@ -439,6 +499,63 @@ def market_ticker() -> JSONResponse:
 
 
 # ---- Page routes -------------------------------------------------------
+
+
+# The dashboard doesn't know the system. It asks the system to know itself.
+# Descartes ran the other direction: cogito ergo sum — I think, therefore I am.
+# We measure, therefore we exist.
+def _system_status_ctx() -> dict[str, Any]:
+    """Returns db_size, uptime, and events_today for System Status panel."""
+    db_size: str = "—"
+    events_today: int = 0
+    uptime: str = "—"
+    try:
+        from engine.core.config import data_dir
+
+        db_path = data_dir() / "brain.db"
+        if db_path.exists():
+            size_bytes = db_path.stat().st_size
+            if size_bytes >= 1_048_576:
+                db_size = f"{size_bytes / 1_048_576:.1f} MB"
+            else:
+                db_size = f"{size_bytes / 1024:.0f} KB"
+            conn = sqlite3.connect(str(db_path))
+            row = conn.execute("SELECT COUNT(*) FROM events WHERE ts >= date('now')").fetchone()
+            events_today = int(row[0]) if row else 0
+            conn.close()
+    except Exception:
+        pass
+    try:
+        import time
+
+        pid_file = Path("/tmp/b1e55ed_start_time")
+        if pid_file.exists():
+            start = float(pid_file.read_text().strip())
+            secs = int(time.time() - start)
+            if secs >= 3600:
+                uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
+            else:
+                uptime = f"{secs // 60}m"
+        else:
+            # Estimate from process start time via /proc
+            import resource
+
+            _ = resource.getrusage(resource.RUSAGE_SELF)
+            proc_stat = Path(f"/proc/{os.getpid()}/stat")
+            if proc_stat.exists():
+                fields = proc_stat.read_text().split()
+                hz = os.sysconf("SC_CLK_TCK")
+                start_ticks = int(fields[21])
+                btime = int(next(line.split()[1] for line in Path("/proc/stat").read_text().splitlines() if line.startswith("btime")))
+                start_epoch = btime + start_ticks / hz
+                secs = int(time.time() - start_epoch)
+                if secs >= 3600:
+                    uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
+                else:
+                    uptime = f"{secs // 60}m"
+    except Exception:
+        pass
+    return {"db_size": db_size, "events_today": events_today, "uptime": uptime}
 
 
 def _is_new_operator() -> bool:
@@ -525,9 +642,7 @@ def brain_overview(request: Request) -> HTMLResponse:
             **regime_ctx,
             "positions": positions,
             "positions_age": positions_age,
-            # Conviction: not wired yet in API; keep empty.
-            "convictions": [],
-            "conviction_age": "stale",
+            **_build_conviction_ctx(client),
             "domain_weights": [],
             "signals": signals[:12],
             "total_signals": total_signals or 0,
@@ -535,9 +650,7 @@ def brain_overview(request: Request) -> HTMLResponse:
             "cycle_age_min": cycle_age_min,
             "producers_healthy": producers_healthy,
             "producers_total": producers_total,
-            "events_today": 0,
-            "db_size": "—",
-            "uptime": "—",
+            **_system_status_ctx(),
             "karma_pending": karma_pending,
             "disc_signals": _query_discretionary_signals(),
             "regime_history": _query_regime_history_for_brain(),
@@ -712,33 +825,137 @@ def _query_discretionary_signals() -> list[dict[str, Any]]:
 
 
 @app.get("/forecasts", response_class=HTMLResponse)
-def forecasts_page(request: Request, asset: str | None = None, horizon: str | None = None, status: str = "pending") -> HTMLResponse:
-    data = _query_forecasts(asset=asset, horizon=horizon, status=status)
+def forecasts_page(request: Request) -> HTMLResponse:
+    """Forecasts page — grouped asset cards from conviction_scores."""
+    from collections import defaultdict
+    from datetime import UTC as _UTC2
+    from datetime import datetime as _dt2
 
-    # Discover unique assets/horizons for filter buttons
-    db_path = _get_brain_db()
-    assets: list[str] = []
-    horizons: list[str] = []
-    if db_path:
-        conn = sqlite3.connect(str(db_path))
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        if "forecast_calibration" in tables:
-            assets = [r[0] for r in conn.execute("SELECT DISTINCT asset FROM forecast_calibration ORDER BY asset").fetchall()]
-            horizons = [r[0] for r in conn.execute("SELECT DISTINCT horizon FROM forecast_calibration ORDER BY horizon").fetchall()]
-        conn.close()
+    asset_groups: list[dict] = []
+    summary = {
+        "total": 0,
+        "pending": 0,
+        "resolved": 0,
+        "assets": 0,
+        "bullish": 0,
+        "bearish": 0,
+        "neutral": 0,
+    }
+
+    try:
+        db_path = _get_brain_db()
+        if db_path and db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+
+            # Latest conviction per asset
+            latest = conn.execute(
+                """
+                SELECT cs.*
+                FROM conviction_scores cs
+                INNER JOIN (
+                    SELECT symbol, MAX(ts) as max_ts
+                    FROM conviction_scores GROUP BY symbol
+                ) l ON cs.symbol = l.symbol AND cs.ts = l.max_ts
+                ORDER BY cs.confidence DESC
+                """
+            ).fetchall()
+
+            # All forecasts from last 24h
+            all_rows = conn.execute(
+                """
+                SELECT symbol, direction, confidence, magnitude, timeframe, ts
+                FROM conviction_scores
+                WHERE ts >= datetime('now', '-24 hours')
+                ORDER BY ts DESC
+                """
+            ).fetchall()
+            conn.close()
+
+            by_asset: dict[str, list[dict]] = defaultdict(list)
+            for row in all_rows:
+                by_asset[row["symbol"]].append(dict(row))
+
+            for row in latest:
+                asset = row["symbol"]
+                direction = row["direction"] or "neutral"
+                # Normalize direction
+                if direction in ("long", "buy"):
+                    direction = "bullish"
+                elif direction in ("short", "sell"):
+                    direction = "bearish"
+                confidence = float(row["confidence"] or 0)
+
+                # Horizons: latest per timeframe
+                horizons_map: dict[str, dict] = {}
+                for f in by_asset.get(asset, []):
+                    tf = f.get("timeframe") or "—"
+                    if tf not in horizons_map or (f.get("ts") or "") > (horizons_map[tf].get("ts") or ""):
+                        horizons_map[tf] = f
+                horizons = sorted(
+                    horizons_map.values(),
+                    key=lambda x: {"4h": 0, "24h": 1, "3d": 2}.get(x.get("timeframe") or "", 3),
+                )
+
+                # Age
+                age = "—"
+                try:
+                    dt = _dt2.fromisoformat(str(row["ts"]).replace("Z", "+00:00"))
+                    secs = (_dt2.now(_UTC2) - dt).total_seconds()
+                    age = f"{int(secs / 3600)}h ago" if secs >= 3600 else f"{int(secs / 60)}m ago"
+                except Exception:
+                    pass
+
+                # Detail forecasts
+                forecasts = []
+                for f in by_asset.get(asset, [])[:10]:
+                    emitted = (f.get("ts") or "—")[:16]
+                    f_dir = f.get("direction") or "neutral"
+                    if f_dir in ("long", "buy"):
+                        f_dir = "bullish"
+                    elif f_dir in ("short", "sell"):
+                        f_dir = "bearish"
+                    forecasts.append(
+                        {
+                            "producer_id": "brain",
+                            "direction": f_dir,
+                            "confidence": float(f.get("confidence") or 0),
+                            "horizon": f.get("timeframe") or "—",
+                            "emitted": emitted,
+                        }
+                    )
+
+                asset_groups.append(
+                    {
+                        "asset": asset,
+                        "direction": direction,
+                        "max_confidence": confidence,
+                        "horizons": [{"horizon": h.get("timeframe") or "—", "confidence": float(h.get("confidence") or 0)} for h in horizons],
+                        "producers": [{"name": "brain", "domain": "events"}],
+                        "age": age,
+                        "forecasts": forecasts,
+                    }
+                )
+
+                summary["total"] += len(by_asset.get(asset, []))
+                summary["pending"] += len(by_asset.get(asset, []))
+                if direction == "bullish":
+                    summary["bullish"] += 1
+                elif direction == "bearish":
+                    summary["bearish"] += 1
+                else:
+                    summary["neutral"] += 1
+
+            summary["assets"] = len(asset_groups)
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "forecasts.html",
         {
             **_shell(request, "forecasts"),
-            "forecasts": data["forecasts"],
-            "stats": data["stats"],
-            "producer_stats": data["producer_stats"],
-            "assets": assets,
-            "horizons": horizons,
-            "active_asset": asset,
-            "active_horizon": horizon,
-            "active_status": status or "pending",
+            "asset_groups": asset_groups,
+            "summary": summary,
         },
     )
 
@@ -975,12 +1192,10 @@ def system_page(request: Request) -> HTMLResponse:
             "kill_switch_label": label,
             "kill_switch_last_change": kill_last_change,
             "events_total": 0,
-            "events_today": 0,
-            "db_size": "—",
+            **_system_status_ctx(),
             "hash_chain_ok": True,
             "event_breakdown": [],
             "resources": [],
-            "uptime": "—",
         },
     )
 
@@ -1085,6 +1300,7 @@ def artifact_preview(request: Request, artifact_id: str) -> HTMLResponse:
 
 
 @app.post("/api/producers/{name}/restart", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/restart", response_class=HTMLResponse)
 async def restart_producer(name: str, request: Request) -> HTMLResponse:
     client = _api(request)
     result = client._post_json(f"/producers/{name}/restart", {})
@@ -1094,11 +1310,22 @@ async def restart_producer(name: str, request: Request) -> HTMLResponse:
 
 
 @app.post("/api/producers/{name}/reset-failures", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/reset-failures", response_class=HTMLResponse)
 async def reset_producer_failures(name: str, request: Request) -> HTMLResponse:
     client = _api(request)
     result = client._post_json(f"/producers/{name}/reset-failures", {})
     if result.ok:
         return HTMLResponse('<span class="text-bull">✓ Failures cleared</span>')
+    return HTMLResponse('<span class="text-bear">✗ Failed</span>')
+
+
+@app.post("/api/producers/{name}/run-now", response_class=HTMLResponse)
+@app.post("/api/v1/producers/{name}/run-now", response_class=HTMLResponse)
+async def run_producer_now(name: str, request: Request) -> HTMLResponse:
+    client = _api(request)
+    result = client._post_json(f"/producers/{name}/run-now", {})
+    if result.ok:
+        return HTMLResponse('<span class="text-bull">✓ Triggered</span>')
     return HTMLResponse('<span class="text-bear">✗ Failed</span>')
 
 
@@ -1206,6 +1433,13 @@ def treasury_page(request: Request) -> HTMLResponse:
 # ---- Partials ----------------------------------------------------------
 
 
+@app.get("/partials/conviction", response_class=HTMLResponse)
+def conviction_partial(request: Request) -> HTMLResponse:
+    client = _api(request)
+    ctx = _build_conviction_ctx(client)
+    return templates.TemplateResponse("conviction.html", {"request": request, **ctx})
+
+
 @app.get("/partials/kill-dot", response_class=HTMLResponse)
 def kill_dot(request: Request) -> HTMLResponse:
     client = _api(request)
@@ -1302,7 +1536,12 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
         try:
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
-            row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()
+            # The vitals bar learns the schema before it speaks. No signals table? Find another voice.
+            _sig_tables = [_r[0] for _r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            if "signals" in _sig_tables:
+                row = conn.execute("SELECT ts FROM signals ORDER BY ts DESC LIMIT 1").fetchone()
+            else:
+                row = conn.execute("SELECT ts FROM events WHERE type LIKE 'signal.%' ORDER BY ts DESC LIMIT 1").fetchone()
             if row:
                 try:
                     dt = _dt.datetime.fromisoformat(str(row["ts"]).replace("Z", ""))
@@ -1317,7 +1556,12 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
                 except Exception:
                     pass
             try:
-                r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
+                tables_here = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                if "signals" in tables_here:
+                    r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
+                else:
+                    # Fallback: count active sources from events table
+                    r = conn.execute("SELECT COUNT(DISTINCT source) FROM events WHERE type LIKE 'signal.%' AND ts > datetime('now','-1 hour')").fetchone()
                 producer_count = r[0] if r else 0
             except Exception:
                 pass
@@ -1429,9 +1673,7 @@ def system_status_partial(request: Request) -> HTMLResponse:
             "cycle_age_min": cycle_age_min,
             "producers_healthy": producers_healthy,
             "producers_total": producers_total,
-            "events_today": 0,
-            "db_size": "—",
-            "uptime": "—",
+            **_system_status_ctx(),
             "karma_pending": karma_pending,
         },
     )

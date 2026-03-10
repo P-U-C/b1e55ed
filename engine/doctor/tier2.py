@@ -23,11 +23,7 @@ Status = Literal["pass", "warn", "fail"]
 
 
 def _setup_temp_pipeline() -> tuple:
-    """Create a temp DB + config + identity for pipeline tests.
-
-    Returns (tmpdir_path, db, config, identity). Caller is responsible for
-    calling ``shutil.rmtree(tmpdir)`` after ``db.close()`` to avoid leaks.
-    """
+    """Create a temp DB + config + identity for pipeline tests."""
     from engine.core.config import Config
     from engine.core.database import Database
     from engine.security.identity import NodeIdentity
