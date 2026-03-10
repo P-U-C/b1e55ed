@@ -6,17 +6,17 @@
 
 :root {
   /* Surface */
-  --bg:            #0a0a0a;
-  --bg-raised:     #111111;
-  --bg-elevated:   #1a1a1a;
-  --border:        rgba(255,255,255,0.06);
-  --border-active: rgba(255,255,255,0.12);
+  --bg:            #0c0c0c;
+  --bg-raised:     #151515;
+  --bg-elevated:   #1e1e1e;
+  --border:        rgba(255,255,255,0.10);
+  --border-active: rgba(255,255,255,0.18);
 
   /* Text */
-  --text:          #b0aca4;
-  --text-bright:   #d4d0c8;
-  --text-dim:      #5a5650;
-  --text-faint:    #2e2b28;
+  --text:          #d0ccc4;
+  --text-bright:   #f0ece4;
+  --text-dim:      #888480;
+  --text-faint:    #504c48;
 
   /* Semantic */
   --green:         #22C55E;
@@ -122,7 +122,7 @@ a:hover { color: var(--green); }
   display: flex;
   gap: 2px;
   flex: 1;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .nav-link {
