@@ -822,33 +822,137 @@ def _query_discretionary_signals() -> list[dict[str, Any]]:
 
 
 @app.get("/forecasts", response_class=HTMLResponse)
-def forecasts_page(request: Request, asset: str | None = None, horizon: str | None = None, status: str = "pending") -> HTMLResponse:
-    data = _query_forecasts(asset=asset, horizon=horizon, status=status)
+def forecasts_page(request: Request) -> HTMLResponse:
+    """Forecasts page — grouped asset cards from conviction_scores."""
+    from collections import defaultdict
+    from datetime import UTC as _UTC2
+    from datetime import datetime as _dt2
 
-    # Discover unique assets/horizons for filter buttons
-    db_path = _get_brain_db()
-    assets: list[str] = []
-    horizons: list[str] = []
-    if db_path:
-        conn = sqlite3.connect(str(db_path))
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        if "forecast_calibration" in tables:
-            assets = [r[0] for r in conn.execute("SELECT DISTINCT asset FROM forecast_calibration ORDER BY asset").fetchall()]
-            horizons = [r[0] for r in conn.execute("SELECT DISTINCT horizon FROM forecast_calibration ORDER BY horizon").fetchall()]
-        conn.close()
+    asset_groups: list[dict] = []
+    summary = {
+        "total": 0,
+        "pending": 0,
+        "resolved": 0,
+        "assets": 0,
+        "bullish": 0,
+        "bearish": 0,
+        "neutral": 0,
+    }
+
+    try:
+        db_path = _get_brain_db()
+        if db_path and db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+
+            # Latest conviction per asset
+            latest = conn.execute(
+                """
+                SELECT cs.*
+                FROM conviction_scores cs
+                INNER JOIN (
+                    SELECT symbol, MAX(ts) as max_ts
+                    FROM conviction_scores GROUP BY symbol
+                ) l ON cs.symbol = l.symbol AND cs.ts = l.max_ts
+                ORDER BY cs.confidence DESC
+                """
+            ).fetchall()
+
+            # All forecasts from last 24h
+            all_rows = conn.execute(
+                """
+                SELECT symbol, direction, confidence, magnitude, timeframe, ts
+                FROM conviction_scores
+                WHERE ts >= datetime('now', '-24 hours')
+                ORDER BY ts DESC
+                """
+            ).fetchall()
+            conn.close()
+
+            by_asset: dict[str, list[dict]] = defaultdict(list)
+            for row in all_rows:
+                by_asset[row["symbol"]].append(dict(row))
+
+            for row in latest:
+                asset = row["symbol"]
+                direction = row["direction"] or "neutral"
+                # Normalize direction
+                if direction in ("long", "buy"):
+                    direction = "bullish"
+                elif direction in ("short", "sell"):
+                    direction = "bearish"
+                confidence = float(row["confidence"] or 0)
+
+                # Horizons: latest per timeframe
+                horizons_map: dict[str, dict] = {}
+                for f in by_asset.get(asset, []):
+                    tf = f.get("timeframe") or "—"
+                    if tf not in horizons_map or (f.get("ts") or "") > (horizons_map[tf].get("ts") or ""):
+                        horizons_map[tf] = f
+                horizons = sorted(
+                    horizons_map.values(),
+                    key=lambda x: {"4h": 0, "24h": 1, "3d": 2}.get(x.get("timeframe") or "", 3),
+                )
+
+                # Age
+                age = "—"
+                try:
+                    dt = _dt2.fromisoformat(str(row["ts"]).replace("Z", "+00:00"))
+                    secs = (_dt2.now(_UTC2) - dt).total_seconds()
+                    age = f"{int(secs / 3600)}h ago" if secs >= 3600 else f"{int(secs / 60)}m ago"
+                except Exception:
+                    pass
+
+                # Detail forecasts
+                forecasts = []
+                for f in by_asset.get(asset, [])[:10]:
+                    emitted = (f.get("ts") or "—")[:16]
+                    f_dir = f.get("direction") or "neutral"
+                    if f_dir in ("long", "buy"):
+                        f_dir = "bullish"
+                    elif f_dir in ("short", "sell"):
+                        f_dir = "bearish"
+                    forecasts.append(
+                        {
+                            "producer_id": "brain",
+                            "direction": f_dir,
+                            "confidence": float(f.get("confidence") or 0),
+                            "horizon": f.get("timeframe") or "—",
+                            "emitted": emitted,
+                        }
+                    )
+
+                asset_groups.append(
+                    {
+                        "asset": asset,
+                        "direction": direction,
+                        "max_confidence": confidence,
+                        "horizons": [{"horizon": h.get("timeframe") or "—", "confidence": float(h.get("confidence") or 0)} for h in horizons],
+                        "producers": [{"name": "brain", "domain": "events"}],
+                        "age": age,
+                        "forecasts": forecasts,
+                    }
+                )
+
+                summary["total"] += len(by_asset.get(asset, []))
+                summary["pending"] += len(by_asset.get(asset, []))
+                if direction == "bullish":
+                    summary["bullish"] += 1
+                elif direction == "bearish":
+                    summary["bearish"] += 1
+                else:
+                    summary["neutral"] += 1
+
+            summary["assets"] = len(asset_groups)
+    except Exception:
+        pass
 
     return templates.TemplateResponse(
         "forecasts.html",
         {
             **_shell(request, "forecasts"),
-            "forecasts": data["forecasts"],
-            "stats": data["stats"],
-            "producer_stats": data["producer_stats"],
-            "assets": assets,
-            "horizons": horizons,
-            "active_asset": asset,
-            "active_horizon": horizon,
-            "active_status": status or "pending",
+            "asset_groups": asset_groups,
+            "summary": summary,
         },
     )
 
