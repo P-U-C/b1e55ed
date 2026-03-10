@@ -3,10 +3,13 @@
 ETF Flows Producer.
 
 Fetches ETF flow metrics (typically for BTC/ETH spot ETFs) from a configured
-HTTP endpoint and emits :class:`~engine.core.events.EventType.SIGNAL_ETF_V1`.
+HTTP endpoint or the Coinglass v4 API, and emits
+:class:`~engine.core.events.EventType.SIGNAL_ETF_V1`.
 
-No reliable free API exists for ETF flows — requires B1E55ED_ETF_FLOWS_URL.
-When unconfigured, the producer reports OK with zero events (not DEGRADED).
+Data sources (tried in order):
+1. Custom endpoint (B1E55ED_ETF_FLOWS_URL) — any URL that returns flow data
+2. Coinglass v4 API (COINGLASS_API_KEY) — free tier at coinglass.com
+3. No source → reports OK with zero events (not DEGRADED)
 
 Easter egg:
 - Even in an index, someone chose the weights.
@@ -26,6 +29,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
+import logging
 from typing import Any
 
 import httpx
@@ -54,10 +58,17 @@ class ETFFlowsProducer(BaseProducer):
     configurable_fields = [
         {
             "key": "B1E55ED_ETF_FLOWS_URL",
-            "label": "ETF flows data endpoint",
+            "label": "Custom ETF flows endpoint",
             "type": "url",
-            "required": True,
-            "description": "Required — no free source available. Provide a URL that returns ETF flow data.",
+            "required": False,
+            "description": "Custom HTTP endpoint for ETF flow data",
+        },
+        {
+            "key": "COINGLASS_API_KEY",
+            "label": "Coinglass API Key",
+            "type": "secret",
+            "required": False,
+            "description": "Free tier available at coinglass.com — enables BTC/ETH ETF flow tracking",
         },
     ]
 
@@ -65,19 +76,73 @@ class ETFFlowsProducer(BaseProducer):
         """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_ETF_FLOWS_URL") or os.getenv("ETF_FLOWS_URL")
 
-    def collect(self) -> list[dict[str, Any]]:
-        url = self._custom_endpoint()
-        if not url:
-            self.ctx.logger.info("etf-flows requires B1E55ED_ETF_FLOWS_URL — no free source available")
+    def _collect_coinglass(self) -> list[dict[str, Any]]:
+        """Fetch ETF flows from Coinglass v4 API (requires API key)."""
+        api_key = os.getenv("COINGLASS_API_KEY")
+        if not api_key:
             return []
 
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
-        data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
-        if not isinstance(data, list):
-            return []
-        return [row for row in data if isinstance(row, dict)]
+        _log = logging.getLogger(__name__)
+        results: list[dict[str, Any]] = []
+
+        for asset in ["bitcoin", "ethereum"]:
+            try:
+                resp = httpx.get(
+                    f"https://open-api-v4.coinglass.com/api/etf/{asset}/flow-history",
+                    headers={"CG-API-KEY": api_key, "User-Agent": "b1e55ed/1.0"},
+                    params={"limit": 7},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("code") == "0" and data.get("data"):
+                    for day in data["data"]:
+                        results.append(
+                            {
+                                "symbol": "BTC" if asset == "bitcoin" else "ETH",
+                                "date": day.get("date", ""),
+                                "total_net_flow_usd": float(day.get("totalNetFlow", 0)),
+                                "price": float(day.get("price", 0)),
+                                "etf_flows": day.get("flows", []),
+                                "data_source": "coinglass",
+                            }
+                        )
+            except Exception as e:  # noqa: BLE001
+                _log.warning("coinglass_etf_failed: %s %s", asset, e)
+
+        return results
+
+    def collect(self) -> list[dict[str, Any]]:
+        # 1. Try custom endpoint first
+        url = self._custom_endpoint()
+        if url:
+            try:
+                symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+                data: Any = asyncio.run(
+                    self.ctx.client.request_json(
+                        "POST",
+                        url,
+                        expected=(list, dict),
+                        json={"symbols": symbols},
+                    )
+                )
+                if isinstance(data, dict) and "data" in data:
+                    data = data["data"]
+                if isinstance(data, list):
+                    rows = [row for row in data if isinstance(row, dict)]
+                    if rows:
+                        return rows
+            except Exception:  # noqa: BLE001
+                self.ctx.logger.warning("custom_etf_endpoint_failed")
+
+        # 2. Try Coinglass
+        coinglass_data = self._collect_coinglass()
+        if coinglass_data:
+            return coinglass_data
+
+        # 3. No source available
+        self.ctx.logger.info("etf_no_source_configured")
+        return []
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)
@@ -90,7 +155,7 @@ class ETFFlowsProducer(BaseProducer):
 
             payload_obj = ETFFlowPayload(
                 symbol=sym,
-                daily_flow_usd=row.get("daily_flow_usd"),
+                daily_flow_usd=row.get("daily_flow_usd") or row.get("total_net_flow_usd"),
                 streak_days=int(row.get("streak_days") or 0),
                 cumulative_7d=row.get("cumulative_7d"),
             )
@@ -119,7 +184,7 @@ class ETFFlowsProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                if not self._custom_endpoint():
+                if not self._custom_endpoint() and not os.getenv("COINGLASS_API_KEY"):
                     # No source configured — this is expected, not degraded
                     health = ProducerHealth.OK
                     errors.append("no_source_configured")

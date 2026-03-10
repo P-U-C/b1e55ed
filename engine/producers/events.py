@@ -6,8 +6,9 @@ Treats the configured endpoint as a simple HTTP poller that returns a list of
 "events" / catalysts per symbol, then emits
 :class:`~engine.core.events.EventType.SIGNAL_EVENTS_V1`.
 
-No reliable free API exists for market events — requires B1E55ED_EVENTS_URL.
+No reliable free API exists yet — requires B1E55ED_EVENTS_URL.
 When unconfigured, the producer reports OK with zero events (not DEGRADED).
+Potential sources: CoinGecko Pro, custom RSS-to-JSON proxy, self-hosted aggregator.
 
 Easter egg:
 - News is noise; catalysts are structure.
@@ -55,8 +56,14 @@ class MarketEventsProducer(BaseProducer):
             "key": "B1E55ED_EVENTS_URL",
             "label": "Market events data endpoint",
             "type": "url",
-            "required": True,
-            "description": "Required — no free source available. Provide a URL that returns market event/catalyst data.",
+            "required": False,
+            "description": (
+                "Custom HTTP endpoint for market event/catalyst data. "
+                "No reliable free API exists yet — options include: "
+                "CoinGecko Pro events feed, custom RSS-to-JSON proxy, "
+                "or a self-hosted aggregator. "
+                "Expected response: [{symbol, catalysts, headline_sentiment, impact_score}]"
+            ),
         },
     ]
 
