@@ -359,7 +359,7 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
         else:
             # Derive from domain-specific fields
             try:
-                if domain == "technical":
+                if domain in ("technical", "ta"):
                     # TA signals: use RSI to derive score
                     rsi = payload.get("rsi_14") or payload.get("rsi")
                     if rsi is not None:
@@ -1208,77 +1208,11 @@ def performance_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/system", response_class=HTMLResponse)
-def system_page(request: Request) -> HTMLResponse:
-    client = _api(request)
+def system_page_redirect(request: Request) -> HTMLResponse:
+    """System merged into Settings — redirect for backward compat."""
+    from fastapi.responses import RedirectResponse
 
-    prod_res = client.get_producers_status()
-    producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
-
-    producers: list[dict[str, Any]] = []
-    producers_healthy = 0
-    if isinstance(producers_map, dict):
-        for name, v in producers_map.items():
-            if not isinstance(v, dict):
-                continue
-            healthy = v.get("healthy")
-            health = "ok" if healthy is True else ("error" if healthy is False else "degraded")
-            if healthy is True:
-                producers_healthy += 1
-
-            last_run = "—"
-            if isinstance(v.get("last_run_at"), str):
-                try:
-                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
-                    last_run, _ = _age_str(dt)
-                except Exception:
-                    last_run = "—"
-
-            producers.append(
-                {
-                    "name": str(name),
-                    "domain": v.get("domain") or "—",
-                    "health": health,
-                    "last_run": last_run,
-                }
-            )
-
-    ks_res = client.get_kill_switch()
-    ks_level = 0
-    ks_changed = None
-    if ks_res.ok and isinstance(ks_res.data, dict):
-        try:
-            ks_level = int(ks_res.data.get("kill_switch_level") or 0)
-        except Exception:
-            ks_level = 0
-        ks_changed = ks_res.data.get("kill_switch_changed_at")
-
-    kill_last_change = "never"
-    if isinstance(ks_changed, str):
-        try:
-            dt = datetime.fromisoformat(ks_changed.replace("Z", "+00:00"))
-            kill_last_change, _ = _age_str(dt)
-        except Exception:
-            pass
-
-    label = "NORMAL" if ks_level == 0 else f"LEVEL {ks_level}"
-
-    return templates.TemplateResponse(
-        "system.html",
-        {
-            **_shell(request, "system", kill_switch_level=ks_level),
-            "producers": producers,
-            "producers_healthy": producers_healthy,
-            "producers_total": len(producers),
-            "kill_switch_level": ks_level,
-            "kill_switch_label": label,
-            "kill_switch_last_change": kill_last_change,
-            "events_total": 0,
-            **_system_status_ctx(),
-            "hash_chain_ok": True,
-            "event_breakdown": [],
-            "resources": [],
-        },
-    )
+    return RedirectResponse(url="/settings", status_code=302)
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -1286,6 +1220,12 @@ def settings_page(request: Request) -> HTMLResponse:
     client = _api(request)
     cfg_res = client._get_json("/config")
     cfg = cfg_res.data if (cfg_res.ok and isinstance(cfg_res.data, dict)) else {}
+
+    # Ensure nested dicts exist for template access
+    cfg.setdefault("risk", {})
+    cfg.setdefault("brain", {})
+    cfg.setdefault("execution", {})
+    cfg.setdefault("karma", {})
 
     risk = cfg.get("risk", {})
     trading_mode = cfg.get("execution", {}).get("mode", "paper")
@@ -1340,14 +1280,78 @@ def settings_page(request: Request) -> HTMLResponse:
     except Exception:
         pass
 
+    # System data (merged from /system page)
+    prod_res = client.get_producers_status()
+    producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+
+    producers: list[dict[str, Any]] = []
+    producers_healthy = 0
+    if isinstance(producers_map, dict):
+        for name, v in producers_map.items():
+            if not isinstance(v, dict):
+                continue
+            healthy = v.get("healthy")
+            health = "ok" if healthy is True else ("error" if healthy is False else "degraded")
+            if healthy is True:
+                producers_healthy += 1
+
+            last_run = "—"
+            if isinstance(v.get("last_run_at"), str):
+                try:
+                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
+                    last_run, _ = _age_str(dt)
+                except Exception:
+                    last_run = "—"
+
+            producers.append(
+                {
+                    "name": str(name),
+                    "domain": v.get("domain") or "—",
+                    "health": health,
+                    "last_run": last_run,
+                }
+            )
+
+    ks_res = client.get_kill_switch()
+    ks_level = 0
+    ks_changed = None
+    if ks_res.ok and isinstance(ks_res.data, dict):
+        try:
+            ks_level = int(ks_res.data.get("kill_switch_level") or 0)
+        except Exception:
+            ks_level = 0
+        ks_changed = ks_res.data.get("kill_switch_changed_at")
+
+    kill_last_change = "never"
+    if isinstance(ks_changed, str):
+        try:
+            dt = datetime.fromisoformat(ks_changed.replace("Z", "+00:00"))
+            kill_last_change, _ = _age_str(dt)
+        except Exception:
+            pass
+
+    label = "NORMAL" if ks_level == 0 else f"LEVEL {ks_level}"
+
     return templates.TemplateResponse(
         "settings.html",
         {
-            **_shell(request, "settings"),
+            **_shell(request, "settings", kill_switch_level=ks_level),
             "trading_mode": trading_mode,
             "risk_fields": risk_fields,
             "api_keys": api_keys,
             "producer_configs": producer_configs,
+            # Config page data
+            "preset": "custom",
+            "presets": ["conservative", "balanced", "degen"],
+            "cfg": cfg,
+            # System page data
+            "producers": producers,
+            "producers_healthy": producers_healthy,
+            "producers_total": len(producers),
+            "kill_switch_level": ks_level,
+            "kill_switch_label": label,
+            "kill_switch_last_change": kill_last_change,
+            **_system_status_ctx(),
         },
     )
 
@@ -1470,29 +1474,11 @@ async def adjust_target(position_id: str, request: Request) -> HTMLResponse:
 
 
 @app.get("/config", response_class=HTMLResponse)
-def config_page(request: Request) -> HTMLResponse:
-    client = _api(request)
-    cfg_res = client._get_json("/config")
+def config_page_redirect(request: Request) -> HTMLResponse:
+    """Config merged into Settings — redirect for backward compat."""
+    from fastapi.responses import RedirectResponse
 
-    cfg = (
-        cfg_res.data
-        if (cfg_res.ok and isinstance(cfg_res.data, dict))
-        else {
-            "risk": {},
-            "brain": {},
-            "execution": {},
-            "karma": {},
-        }
-    )
-    return templates.TemplateResponse(
-        "config.html",
-        {
-            **_shell(request, "config"),
-            "preset": "custom",
-            "presets": ["conservative", "balanced", "degen"],
-            "cfg": cfg,
-        },
-    )
+    return RedirectResponse(url="/settings", status_code=302)
 
 
 @app.get("/treasury", response_class=HTMLResponse)

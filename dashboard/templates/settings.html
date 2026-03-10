@@ -59,7 +59,133 @@
   {% endfor %}
 </div>
 
-<!-- C. API Keys Status -->
+<!-- C. Configuration (merged from Config page) -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <span class="panel-title">Configuration</span>
+    <span class="panel-age">preset: {{ preset | default('balanced') }}</span>
+  </div>
+
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
+    <span class="text-dim" style="font-size:0.75rem;">Preset</span>
+    <select class="btn" style="padding:6px 10px;" name="preset" hx-post="/api/config/preset" hx-target="#config-form" hx-swap="outerHTML">
+      {% for p in presets %}
+      <option value="{{ p }}" {% if preset == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn" hx-get="/api/config" hx-target="#config-form" hx-swap="outerHTML">Reload</button>
+    <button class="btn" hx-post="/api/config" hx-confirm="Save configuration?" hx-target="#config-save-result">Save</button>
+    <span id="config-save-result" class="text-dim" style="font-size:0.75rem;"></span>
+  </div>
+
+  <form id="config-form">
+    <!-- RISK -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Risk</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max daily loss (USD)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_daily_loss_usd" value="{{ cfg.risk.max_daily_loss_usd | default('1000') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max position size (%)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_position_size_pct" value="{{ cfg.risk.max_position_size_pct | default('15') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max leverage (default)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_leverage_default" value="{{ cfg.risk.max_leverage_default | default('5') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Max leverage (crisis)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="risk.max_leverage_crisis" value="{{ cfg.risk.max_leverage_crisis | default('1') }}">
+        </label>
+      </div>
+    </div>
+
+    <!-- BRAIN -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Brain</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Cycle interval (seconds)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.cycle_interval_s" value="{{ cfg.brain.cycle_interval_s | default('300') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Min conviction to trade (0-100)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.min_conviction" value="{{ cfg.brain.min_conviction | default('65') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">CTS auto-trigger (PCS)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="brain.cts_auto_trigger" value="{{ cfg.brain.cts_auto_trigger | default('75') }}">
+        </label>
+        <div>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Synthesis version</div>
+          <div class="text-dim" style="padding:8px 0;">{{ cfg.brain.synthesis_version | default('v2 (locked)') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXECUTION -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Execution</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Mode</div>
+          <select class="btn" style="width:100%; text-align:left; padding:6px 10px;" name="execution.mode">
+            {% for m in ['paper','live'] %}
+            <option value="{{ m }}" {% if cfg.execution.mode == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Confirmation threshold (USD)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.confirm_threshold_usd" value="{{ cfg.execution.confirm_threshold_usd | default('500') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Circuit breaker min interval (s)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.circuit_min_s" value="{{ cfg.execution.circuit_min_s | default('10') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Circuit breaker max interval (s)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="execution.circuit_max_s" value="{{ cfg.execution.circuit_max_s | default('60') }}">
+        </label>
+      </div>
+    </div>
+
+    <!-- KARMA -->
+    <div style="margin-bottom:1rem;">
+      <div class="panel-title" style="margin-bottom:0.5rem;">Karma</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1.5rem; font-size:0.8125rem;">
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Enabled</div>
+          <input type="checkbox" name="karma.enabled" {% if cfg.karma.enabled %}checked{% endif %}>
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Percentage (%)</div>
+          <input class="btn" style="width:100%; text-align:left;" name="karma.pct" value="{{ cfg.karma.pct | default('0.5') }}">
+        </label>
+        <label>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Settlement mode</div>
+          <select class="btn" style="width:100%; text-align:left; padding:6px 10px;" name="karma.mode">
+            {% for m in ['manual','auto'] %}
+            <option value="{{ m }}" {% if cfg.karma.mode == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div>
+          <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Treasury</div>
+          <div class="text-dim" style="padding:8px 0;">{{ cfg.karma.treasury | default('0xPUC…') }}</div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div style="margin-top:0.75rem; font-size:0.75rem; color:var(--text-dim);">
+    Config surfaces: <span class="text-bright">config/default.yaml</span>, <span class="text-bright">config/presets/*.yaml</span>, env vars (secrets only).
+  </div>
+</div>
+
+<!-- D. API Keys Status -->
 <div class="panel" style="margin-bottom:1.5rem;">
   <div class="panel-header">
     <span class="panel-title">API Keys</span>
@@ -90,7 +216,7 @@
   </div>
 </div>
 
-<!-- D. Producer Data Sources -->
+<!-- E. Producer Data Sources -->
 <div class="panel" style="margin-bottom:1.5rem;" id="producer-config">
   <div class="panel-header">
     <span class="panel-title">Producer Data Sources</span>
@@ -149,7 +275,72 @@
   {% endif %}
 </div>
 
-<!-- E. Danger Zone -->
+<!-- F. System (merged from System page) -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <span class="panel-title">System</span>
+    <span class="panel-age">{{ producers_healthy | default(0) }}/{{ producers_total | default(0) }} producers healthy</span>
+  </div>
+
+  <div class="grid" style="margin-bottom:1rem;">
+    <!-- Producers -->
+    <div hx-get="/partials/producers" hx-trigger="every 60s" hx-swap="innerHTML">
+      <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">Producers</div>
+      {% for p in producers %}
+      <div style="display:flex; align-items:center; gap:0.75rem; padding:5px 0; border-bottom:1px solid var(--border); font-size:0.8125rem;">
+        <span class="dot {{ 'dot-ok' if p.health == 'ok' else ('dot-degraded' if p.health == 'degraded' else 'dot-error') }}"></span>
+        <span style="flex:1; font-weight:400; color:var(--text-bright);">{{ p.name }}</span>
+        <span class="badge badge-{{ p.domain }}">{{ p.domain }}</span>
+        <span class="text-dim" style="font-size:0.7rem; width:5rem; text-align:right;">{{ p.last_run | default('—') }}</span>
+      </div>
+      {% endfor %}
+      {% if not producers %}
+      <div style="color:var(--text-dim); font-size:0.75rem; padding:0.5rem 0;">No producers registered yet.</div>
+      {% endif %}
+    </div>
+
+    <!-- Kill Switch -->
+    <div hx-get="/partials/kill-switch" hx-trigger="every 30s" hx-swap="innerHTML">
+      <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">Kill Switch</div>
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:1rem; font-weight:400; color:var(--text-bright); margin-bottom:0.75rem;">
+          {{ kill_switch_label | default('NORMAL') }}
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          {% for i in range(5) %}
+          <div style="flex:1; height:6px; background:{{ 'var(--green)' if i == 0 and kill_switch_level == 0 else ('var(--amber)' if i <= kill_switch_level and kill_switch_level <= 2 else ('var(--red)' if i <= kill_switch_level else 'var(--border)')) }};"></div>
+          {% endfor %}
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-dim); margin-top:0.25rem;">
+          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1rem; font-size:0.8125rem; margin-bottom:1rem;">
+        <div><span class="text-dim">Last change</span></div>
+        <div>{{ kill_switch_last_change | default('never') }}</div>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        {% for i in range(5) %}
+        <button class="btn {{ 'btn-danger' if i >= 3 else '' }}" style="padding:6px 12px; font-size:0.65rem;{% if i == kill_switch_level %} border-color:var(--text-bright); color:var(--text-bright);{% endif %}"
+                hx-post="/api/kill-switch?level={{ i }}"
+                hx-confirm="Set kill switch to level {{ i }}?">
+          L{{ i }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Store & Version -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(10rem,1fr)); gap:0.5rem 1.5rem; font-size:0.8125rem; padding-top:0.75rem; border-top:1px solid var(--border);">
+    <div><span class="text-dim">Events today</span><br><span class="data-live">{{ events_today | default(0) }}</span></div>
+    <div><span class="text-dim">DB size</span><br>{{ db_size | default('—') }}</div>
+    <div><span class="text-dim">Uptime</span><br>{{ uptime | default('—') }}</div>
+    <div><span class="text-dim">Dashboard</span><br>v{{ dashboard_version }}</div>
+  </div>
+</div>
+
+<!-- G. Danger Zone -->
 <div class="panel" style="border-color:rgba(220,38,38,0.3);">
   <div class="panel-header">
     <span class="panel-title" style="color:var(--red);">Danger Zone</span>

@@ -102,8 +102,7 @@ def test_dashboard_routes_200() -> None:
             "/signals",
             "/social",
             "/performance",
-            "/system",
-            "/config",
+            "/settings",
             "/treasury",
             # partials used by templates
             "/partials/kill-dot",
@@ -128,3 +127,9 @@ def test_dashboard_routes_200() -> None:
         for r in routes:
             resp = client.get(r)
             assert resp.status_code == 200, r
+
+        # /system and /config redirect to /settings (302)
+        for r in ["/system", "/config"]:
+            resp = client.get(r, follow_redirects=False)
+            assert resp.status_code == 302, f"{r} should redirect"
+            assert resp.headers["location"] == "/settings"
