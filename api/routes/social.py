@@ -37,8 +37,8 @@ router = APIRouter(prefix="/social", dependencies=[AuthDep])
 
 
 def _ensure_social_watchlist(db: Database) -> None:
-    with db.conn:
-        db.conn.execute(
+    with db._lock, db.conn:
+        db.execute(
             """
             CREATE TABLE IF NOT EXISTS social_watchlist (
                 symbol TEXT PRIMARY KEY,
@@ -49,8 +49,8 @@ def _ensure_social_watchlist(db: Database) -> None:
 
 
 def _ensure_social_sources(db: Database) -> None:
-    with db.conn:
-        db.conn.execute(
+    with db._lock, db.conn:
+        db.execute(
             """
             CREATE TABLE IF NOT EXISTS social_sources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -210,14 +210,14 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
     _ensure_social_sources(db)
 
     # Query social producers
-    rows = db.conn.execute(
+    rows = db.fetchall(
         """
         SELECT name, consecutive_failures, last_run_at, last_success_at,
                last_error, events_produced
         FROM producer_health
         WHERE domain = 'social'
         """
-    ).fetchall()
+    )
 
     producers: list[ProducerInfo] = []
     for r in rows:
@@ -235,13 +235,13 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
         )
 
     # Watchlist
-    wl_rows = db.conn.execute("SELECT symbol FROM social_watchlist ORDER BY symbol").fetchall()
+    wl_rows = db.fetchall("SELECT symbol FROM social_watchlist ORDER BY symbol")
     watchlist = [str(r[0]) for r in wl_rows]
     watchlist_count = len(watchlist)
     seeded = watchlist_count > 0
 
     # Sources
-    src_count = db.conn.execute("SELECT COUNT(*) FROM social_sources WHERE enabled = 1").fetchone()[0]
+    src_count = db.fetchone("SELECT COUNT(*) FROM social_sources WHERE enabled = 1")[0]
     sources_configured = int(src_count) if src_count else 0
 
     # Pipeline status
@@ -291,14 +291,14 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
 # Aggregate sentiment is the digital descendant — not wisdom, but a statistical ghost of it.
 def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:
     """Sentiment data from social signal events."""
-    rows = db.conn.execute(
+    rows = db.fetchall(
         """
         SELECT payload, ts FROM events
         WHERE type = 'signal.social.v1'
         ORDER BY ts DESC
         LIMIT 50
         """
-    ).fetchall()
+    )
 
     if not rows:
         return SentimentResponse(
@@ -333,14 +333,14 @@ def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:
 # The first pub/sub. Eight beacons, one bit of information, zero latency budget.
 def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:
     """Echo chamber and velocity alerts from social events."""
-    rows = db.conn.execute(
+    rows = db.fetchall(
         """
         SELECT payload, ts FROM events
         WHERE type = 'signal.social.v1'
         ORDER BY ts DESC
         LIMIT 100
         """
-    ).fetchall()
+    )
 
     items: list[AlertItem] = []
     for r in rows:
@@ -366,14 +366,14 @@ def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:
 @router.get("/narratives", response_model=NarrativesResponse)
 def social_narratives(db: Database = Depends(get_db)) -> NarrativesResponse:
     """Narrative tracking — returns existing narrative events or helpful empty state."""
-    rows = db.conn.execute(
+    rows = db.fetchall(
         """
         SELECT payload, ts FROM events
         WHERE type = 'signal.narrative.v1'
         ORDER BY ts DESC
         LIMIT 20
         """
-    ).fetchall()
+    )
 
     items: list[NarrativeItem] = []
     for r in rows:
@@ -399,7 +399,7 @@ def social_sources(db: Database = Depends(get_db)) -> SourcesResponse:
     """Configured social sources (twitter accounts, keywords, etc.)."""
     _ensure_social_sources(db)
 
-    rows = db.conn.execute("SELECT id, name, type, value, enabled, added_at FROM social_sources ORDER BY id").fetchall()
+    rows = db.fetchall("SELECT id, name, type, value, enabled, added_at FROM social_sources ORDER BY id")
 
     items = [
         SourceItem(
@@ -419,14 +419,14 @@ def social_sources(db: Database = Depends(get_db)) -> SourcesResponse:
 @router.get("/curator-feed", response_model=CuratorResponse)
 def curator_feed(db: Database = Depends(get_db)) -> CuratorResponse:
     """Curator signals from the events table."""
-    rows = db.conn.execute(
+    rows = db.fetchall(
         """
         SELECT payload, ts, source FROM events
         WHERE type = 'signal.curator.v1'
         ORDER BY ts DESC
         LIMIT 50
         """
-    ).fetchall()
+    )
 
     items: list[CuratorItem] = []
     for r in rows:
@@ -459,7 +459,7 @@ def curator_feed(db: Database = Depends(get_db)) -> CuratorResponse:
 def get_watchlist(db: Database = Depends(get_db)) -> dict[str, Any]:
     """Current watchlist tokens."""
     _ensure_social_watchlist(db)
-    rows = db.conn.execute("SELECT symbol, added_at FROM social_watchlist ORDER BY symbol").fetchall()
+    rows = db.fetchall("SELECT symbol, added_at FROM social_watchlist ORDER BY symbol")
     return {
         "items": [{"symbol": str(r[0]), "added_at": str(r[1])} for r in rows],
         "count": len(rows),
@@ -478,14 +478,14 @@ def seed_watchlist(body: SeedRequest, db: Database = Depends(get_db)) -> SeedRes
     now = datetime.now(tz=UTC).isoformat()
 
     count = 0
-    with db.conn:
+    with db._lock, db.conn:
         for symbol in body.watchlist:
             s = symbol.strip().upper()
             if not s:
                 continue
-            existing = db.conn.execute("SELECT symbol FROM social_watchlist WHERE symbol = ?", (s,)).fetchone()
+            existing = db.fetchone("SELECT symbol FROM social_watchlist WHERE symbol = ?", (s,))
             if existing is None:
-                db.conn.execute(
+                db.execute(
                     "INSERT INTO social_watchlist (symbol, added_at) VALUES (?, ?)",
                     (s, now),
                 )
@@ -497,8 +497,8 @@ def seed_watchlist(body: SeedRequest, db: Database = Depends(get_db)) -> SeedRes
 @router.post("/reset-failures", response_model=ResetResponse)
 def reset_failures(db: Database = Depends(get_db)) -> ResetResponse:
     """Reset consecutive failure counts for social producers."""
-    with db.conn:
-        cur = db.conn.execute(
+    with db._lock, db.conn:
+        cur = db.execute(
             """
             UPDATE producer_health
             SET consecutive_failures = 0, last_error = NULL
@@ -564,9 +564,9 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
     # Force-quarantine unresponsive producers
     if unresponsive:
         quarantine_until = datetime.fromtimestamp(time.time() + 300, tz=UTC).isoformat()
-        with db.conn:
+        with db._lock, db.conn:
             for name in unresponsive:
-                db.conn.execute(
+                db.execute(
                     """
                     UPDATE producer_health
                     SET quarantined_until = ?, quarantined_reason = 'unresponsive_force_quarantine'
@@ -591,8 +591,8 @@ def run_now(db: Database = Depends(get_db)) -> RunNowResponse:
         )
 
     # --- 4. Clear quarantine for healthy/recoverable producers ---
-    with db.conn:
-        db.conn.execute(
+    with db._lock, db.conn:
+        db.execute(
             """
             UPDATE producer_health
             SET quarantined_until = NULL, quarantined_reason = NULL
@@ -655,12 +655,12 @@ def add_to_watchlist(body: AddWatchlistRequest, db: Database = Depends(get_db)) 
     symbol = body.symbol.strip().upper()
     now = datetime.now(tz=UTC).isoformat()
 
-    existing = db.conn.execute("SELECT symbol FROM social_watchlist WHERE symbol = ?", (symbol,)).fetchone()
+    existing = db.fetchone("SELECT symbol FROM social_watchlist WHERE symbol = ?", (symbol,))
     if existing is not None:
         return AddWatchlistResponse(added=False, symbol=symbol)
 
-    with db.conn:
-        db.conn.execute(
+    with db._lock, db.conn:
+        db.execute(
             "INSERT INTO social_watchlist (symbol, added_at) VALUES (?, ?)",
             (symbol, now),
         )
@@ -674,8 +674,8 @@ def add_source(body: AddSourceRequest, db: Database = Depends(get_db)) -> AddSou
     _ensure_social_sources(db)
     now = datetime.now(tz=UTC).isoformat()
 
-    with db.conn:
-        cur = db.conn.execute(
+    with db._lock, db.conn:
+        cur = db.execute(
             "INSERT INTO social_sources (name, type, value, enabled, added_at) VALUES (?, ?, ?, 1, ?)",
             (body.name, body.type, body.value, now),
         )

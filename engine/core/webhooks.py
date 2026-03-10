@@ -41,7 +41,7 @@ def subscription_matches(sub: WebhookSubscription, *, event_type: str) -> bool:
 
 
 def list_webhook_subscriptions(db: Any) -> list[WebhookSubscription]:
-    rows = db.conn.execute("SELECT id, url, event_globs, enabled, created_at FROM webhook_subscriptions ORDER BY id ASC").fetchall()
+    rows = db.fetchall("SELECT id, url, event_globs, enabled, created_at FROM webhook_subscriptions ORDER BY id ASC")
     out: list[WebhookSubscription] = []
     for r in rows:
         out.append(
@@ -57,8 +57,8 @@ def list_webhook_subscriptions(db: Any) -> list[WebhookSubscription]:
 
 
 def add_webhook_subscription(db: Any, *, url: str, event_globs: str, enabled: bool = True) -> int:
-    with db.conn:
-        cur = db.conn.execute(
+    with db._lock, db.conn:
+        cur = db.execute(
             "INSERT INTO webhook_subscriptions (url, event_globs, enabled) VALUES (?, ?, ?)",
             (url, event_globs, 1 if enabled else 0),
         )
@@ -66,8 +66,8 @@ def add_webhook_subscription(db: Any, *, url: str, event_globs: str, enabled: bo
 
 
 def remove_webhook_subscription(db: Any, *, sub_id: int) -> bool:
-    with db.conn:
-        cur = db.conn.execute("DELETE FROM webhook_subscriptions WHERE id = ?", (int(sub_id),))
+    with db._lock, db.conn:
+        cur = db.execute("DELETE FROM webhook_subscriptions WHERE id = ?", (int(sub_id),))
     return int(cur.rowcount) > 0
 
 
@@ -94,7 +94,7 @@ def dispatch_event_webhooks(db: Any, event: Event) -> None:
 
     event_type = str(event.type)
 
-    rows = db.conn.execute("SELECT id, url, event_globs, enabled, created_at FROM webhook_subscriptions WHERE enabled = 1").fetchall()
+    rows = db.fetchall("SELECT id, url, event_globs, enabled, created_at FROM webhook_subscriptions WHERE enabled = 1")
 
     if not rows:
         return

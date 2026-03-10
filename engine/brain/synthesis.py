@@ -360,7 +360,7 @@ class VectorSynthesis:
             # producer_karma has producer_id (which maps to source/producer_id in SIGNAL_ACCEPTED_V1)
             # We need to map producer_id -> domain. Query the latest SIGNAL_ACCEPTED_V1 events
             # to build producer -> domain mapping, then average karma per domain.
-            rows = self.db.conn.execute("SELECT producer_id, karma_score FROM producer_karma").fetchall()
+            rows = self.db.fetchall("SELECT producer_id, karma_score FROM producer_karma")
             if not rows:
                 return {}
 
@@ -389,10 +389,10 @@ class VectorSynthesis:
         import json as _json
 
         try:
-            rows = self.db.conn.execute(
+            rows = self.db.fetchall(
                 "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
                 (str(EventType.SIGNAL_ACCEPTED_V1),),
-            ).fetchall()
+            )
             mapping: dict[str, str] = {}
             for row in rows:
                 payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]

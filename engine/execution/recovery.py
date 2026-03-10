@@ -35,7 +35,7 @@ def recover_missing_karma_intents(
     from engine.execution.karma import KarmaEngine
 
     try:
-        rows = db.conn.execute(
+        rows = db.fetchall(
             """
             SELECT p.id, p.realized_pnl
             FROM positions p
@@ -44,7 +44,7 @@ def recover_missing_karma_intents(
               AND p.realized_pnl IS NOT NULL
               AND ki.id IS NULL
             """
-        ).fetchall()
+        )
     except Exception:
         _log.warning("recover_missing_karma_intents: failed to query positions", exc_info=True)
         return 0

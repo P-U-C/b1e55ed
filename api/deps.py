@@ -50,10 +50,10 @@ def get_kill_switch(request: Request) -> KillSwitch:
     ks = KillSwitch(config=get_config(request), db=get_db(request))
     # Rehydrate level from last kill-switch event (best-effort).
     db = get_db(request)
-    row = db.conn.execute(
+    row = db.fetchone(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
-    ).fetchone()
+    )
     if row is not None:
         import json
 

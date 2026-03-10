@@ -81,7 +81,7 @@ def run_anchor(args: argparse.Namespace, *, repo_root: Path) -> int:
 
     # Query the latest hash-chain root.
     # There is no `seq` column; we use rowid as a monotonic sequence.
-    row = db.conn.execute("SELECT hash, rowid, created_at FROM events ORDER BY rowid DESC LIMIT 1").fetchone()
+    row = db.fetchone("SELECT hash, rowid, created_at FROM events ORDER BY rowid DESC LIMIT 1")
 
     if row is None:
         out: dict[str, Any] = {

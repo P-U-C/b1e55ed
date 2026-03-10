@@ -36,7 +36,7 @@ def _parse_dt(ts: str | None) -> datetime | None:
 
 def _ensure_endpoint_column(db: Database) -> None:
     cols = [str(r[1]) for r in db.fetchall("PRAGMA table_info(producer_health)")]
-    with db.conn:
+    with db._lock, db.conn:
         if "endpoint" not in cols:
             db.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
         if "quarantined_until" not in cols:
@@ -179,7 +179,7 @@ def register_producer(reg: ProducerRegistration, db: Database = Depends(get_db))
             name=reg.name,
         )
 
-    with db.conn:
+    with db._lock, db.conn:
         db.execute(
             """
             INSERT INTO producer_health (name, domain, schedule, endpoint, updated_at)
@@ -201,7 +201,7 @@ def register_producer(reg: ProducerRegistration, db: Database = Depends(get_db))
 def deregister_producer(name: str, db: Database = Depends(get_db)) -> dict[str, str]:
     _ensure_endpoint_column(db)
 
-    with db.conn:
+    with db._lock, db.conn:
         cur = db.execute(
             "DELETE FROM producer_health WHERE name = ?",
             (name,),
@@ -368,7 +368,7 @@ def producer_capabilities(
 # Clear the ledger; let the producer run.
 def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Clear quarantine + failure state so the producer can run again."""
-    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+    if not db.fetchone("SELECT 1 FROM producer_health WHERE name = ?", (name,)):
         raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(
@@ -384,7 +384,7 @@ def restart_producer(name: str, db: Database = Depends(get_db)) -> dict[str, Any
 @router.post("/{name}/reset-failures")
 def reset_producer_failures(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Reset consecutive failure count for a producer."""
-    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+    if not db.fetchone("SELECT 1 FROM producer_health WHERE name = ?", (name,)):
         raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(
@@ -400,7 +400,7 @@ def reset_producer_failures(name: str, db: Database = Depends(get_db)) -> dict[s
 @router.post("/{name}/run-now")
 def run_producer_now(name: str, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Trigger an immediate producer run (marks it for next scheduler tick)."""
-    if not db.conn.execute("SELECT 1 FROM producer_health WHERE name = ?", (name,)).fetchone():
+    if not db.fetchone("SELECT 1 FROM producer_health WHERE name = ?", (name,)):
         raise HTTPException(status_code=404, detail=f"Producer '{name}' not found")
     try:
         db.execute(

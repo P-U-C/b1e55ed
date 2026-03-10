@@ -731,10 +731,10 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                 return None
 
         def _is_quarantined(name: str) -> tuple[bool, str | None]:
-            row = db.conn.execute(
+            row = db.fetchone(
                 "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = ?",
                 (name,),
-            ).fetchone()
+            )
             if row is None:
                 return False, None
             until = str(row[0]) if row[0] is not None else None
@@ -775,8 +775,8 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             success = str(res.health) == str(ProducerHealth.OK)
 
             # Update row (create if missing)
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     """
                     INSERT INTO producer_health (
                         name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
@@ -816,18 +816,18 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                 )
 
                 # Auto-quarantine after repeated failures (PH1b)
-                row = db.conn.execute(
+                row = db.fetchone(
                     "SELECT consecutive_failures FROM producer_health WHERE name = ?",
                     (n,),
-                ).fetchone()
+                )
                 failures = int(row[0] or 0) if row else 0
                 if not success and failures >= 5:
                     until = datetime.now(tz=UTC) + timedelta(hours=1)
-                    db.conn.execute(
+                    db.execute(
                         "UPDATE producer_health SET quarantined_until = ?, quarantined_reason = ? WHERE name = ?",
                         (until.isoformat(), "consecutive_failures", n),
                     )
-                    db.conn.execute(
+                    db.execute(
                         "INSERT INTO audit_log (action, actor, details, ts) VALUES (?, ?, ?, datetime('now'))",
                         (
                             "producer.quarantined",
@@ -1047,8 +1047,8 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
             dedupe_key=compute_dedupe_key(EventType.SIGNAL_CURATOR_V1, payload),
         )
         if contributor_id is not None:
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     """
                     INSERT OR IGNORE INTO contributor_signals (contributor_id, event_id, accepted)
                     VALUES (?, ?, 0)
@@ -1155,9 +1155,9 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     tracker = PnLTracker(db)
 
     mark = _latest_mark_prices(db)
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT id, asset, direction, entry_price, size_notional, leverage, opened_at FROM positions WHERE status = 'open' ORDER BY opened_at DESC"
-    ).fetchall()
+    )
 
     out = []
     for r in rows:
@@ -1220,14 +1220,14 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
 
     def ensure_endpoint_column(db: Database) -> None:
-        cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
-        with db.conn:
+        cols = [str(r[1]) for r in db.fetchall("PRAGMA table_info(producer_health)")]
+        with db._lock, db.conn:
             if "endpoint" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
             if "quarantined_until" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
             if "quarantined_reason" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
     repo_root = ctx.repo_root
     db = Database(_resolve_db_path(repo_root))
@@ -1252,13 +1252,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         schedule = str(args.schedule)
 
         now = datetime.now(tz=UTC).isoformat()
-        existing = db.conn.execute("SELECT name FROM producer_health WHERE name = ?", (name,)).fetchone()
+        existing = db.fetchone("SELECT name FROM producer_health WHERE name = ?", (name,))
         if existing is not None:
             print(f"error: producer already registered: {name}", file=sys.stderr)
             return 1
 
-        with db.conn:
-            db.conn.execute(
+        with db._lock, db.conn:
+            db.execute(
                 "INSERT INTO producer_health (name, domain, schedule, endpoint, updated_at) VALUES (?, ?, ?, ?, ?)",
                 (name, domain, schedule, endpoint, now),
             )
@@ -1277,7 +1277,7 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         return 0
 
     if cmd == "list":
-        rows = db.conn.execute("SELECT name, domain, schedule, endpoint, updated_at FROM producer_health ORDER BY name ASC").fetchall()
+        rows = db.fetchall("SELECT name, domain, schedule, endpoint, updated_at FROM producer_health ORDER BY name ASC")
         out: list[dict[str, str]] = [
             {
                 "name": str(r[0]),
@@ -1303,8 +1303,8 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
 
     if cmd == "remove":
         name = str(args.name)
-        with db.conn:
-            cur = db.conn.execute("DELETE FROM producer_health WHERE name = ?", (name,))
+        with db._lock, db.conn:
+            cur = db.execute("DELETE FROM producer_health WHERE name = ?", (name,))
         if cur.rowcount == 0:
             print(f"error: producer not found: {name}", file=sys.stderr)
             return 1
@@ -1695,9 +1695,9 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
     # Producer health
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT name, domain, consecutive_failures, last_error, last_run_at FROM producer_health WHERE consecutive_failures > 0 OR last_error IS NOT NULL"
-    ).fetchall()
+    )
     for r in rows:
         name = str(r[0])
         domain = str(r[1] or "")
@@ -1717,11 +1717,11 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
 
     # Position stops/targets (with stop proximity)
     mark = _latest_mark_prices(db)
-    pos = db.conn.execute(
+    pos = db.fetchall(
         "SELECT asset, direction, stop_loss, take_profit, opened_at, id "
         "FROM positions "
         "WHERE status = 'open' AND (stop_loss IS NOT NULL OR take_profit IS NOT NULL)"
-    ).fetchall()
+    )
     for r in pos:
         sym = str(r[0]).upper()
         direction = str(r[1])

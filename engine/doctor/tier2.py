@@ -121,7 +121,7 @@ def check_brain_cycle() -> CheckResult:
         orch.run_cycle(symbols=symbols)
 
         # Check conviction_scores table
-        rows = db.conn.execute("SELECT COUNT(*) FROM conviction_scores").fetchone()
+        rows = db.fetchone("SELECT COUNT(*) FROM conviction_scores")
         count = int(rows[0]) if rows else 0
 
         if count > 0:
@@ -215,7 +215,7 @@ def check_learning_weights() -> CheckResult:
     try:
         # Insert a synthetic learning weight adjustment
         now = datetime.now(tz=UTC).isoformat()
-        db.conn.execute(
+        db.execute(
             """INSERT INTO learning_weights
                (cycle_type, domain, old_weight, new_weight, delta, reason, ts)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -223,7 +223,7 @@ def check_learning_weights() -> CheckResult:
         )
         db.conn.commit()
 
-        rows = db.conn.execute("SELECT COUNT(*) FROM learning_weights").fetchone()
+        rows = db.fetchone("SELECT COUNT(*) FROM learning_weights")
         count = int(rows[0]) if rows else 0
 
         if count > 0:
@@ -243,7 +243,7 @@ def check_karma_intents() -> CheckResult:
     try:
         intent_id = str(uuid.uuid4())
         trade_id = str(uuid.uuid4())
-        db.conn.execute(
+        db.execute(
             """INSERT INTO karma_intents
                (id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd, node_id)
                VALUES (?, ?, ?, ?, ?, ?)""",
@@ -251,7 +251,7 @@ def check_karma_intents() -> CheckResult:
         )
         db.conn.commit()
 
-        rows = db.conn.execute("SELECT COUNT(*) FROM karma_intents").fetchone()
+        rows = db.fetchone("SELECT COUNT(*) FROM karma_intents")
         count = int(rows[0]) if rows else 0
 
         if count > 0:

@@ -559,10 +559,10 @@ def _tool_get_regime_status(db: Database, params: dict) -> dict:
     regime_at = None
     trend = "stable"
 
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 2",
         ("brain.regime_change.v1",),
-    ).fetchall()
+    )
 
     if rows:
         p = json.loads(str(rows[0][0]))
@@ -582,20 +582,20 @@ def _tool_get_regime_status(db: Database, params: dict) -> dict:
 
     ks_level = 0
     ks_reason = None
-    ks_row = db.conn.execute(
+    ks_row = db.fetchone(
         "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
-    ).fetchone()
+    )
     if ks_row is not None:
         p = json.loads(str(ks_row[0]))
         ks_level = int(p.get("level", 0))
         ks_reason = p.get("reason")
 
     last_cycle_at = None
-    cy_row = db.conn.execute(
+    cy_row = db.fetchone(
         "SELECT ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.cycle.v1",),
-    ).fetchone()
+    )
     if cy_row is not None:
         last_cycle_at = str(cy_row[0])
 
@@ -630,7 +630,7 @@ def _tool_get_top_signals(db: Database, params: dict) -> dict:
         conditions.append("json_extract(payload, '$.signal_class') = ?")
         args.append(signal_class)
     if cursor:
-        cursor_row = db.conn.execute("SELECT ts FROM events WHERE id = ?", (cursor,)).fetchone()
+        cursor_row = db.fetchone("SELECT ts FROM events WHERE id = ?", (cursor,))
         if cursor_row:
             conditions.append("(ts < ? OR (ts = ? AND id < ?))")
             args.extend([str(cursor_row[0]), str(cursor_row[0]), cursor])
@@ -638,7 +638,7 @@ def _tool_get_top_signals(db: Database, params: dict) -> dict:
     where = " AND ".join(conditions)
     query = f"SELECT id, type, ts, source, payload FROM events WHERE {where} ORDER BY ts DESC, id DESC LIMIT ?"
     args.append(limit)
-    rows = db.conn.execute(query, tuple(args)).fetchall()
+    rows = db.fetchall(query, tuple(args))
 
     items = []
     for r in rows:
@@ -664,10 +664,10 @@ def _tool_get_top_signals(db: Database, params: dict) -> dict:
 def _tool_get_regime_history(db: Database, params: dict) -> dict:
     """Regime change history for last N days with stability indicator."""
     days = min(int(params.get("days", 7)), 30)
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT payload, ts FROM events WHERE type = ? AND ts > datetime('now', ?) ORDER BY ts DESC",
         ("brain.regime_change.v1", f"-{days} days"),
-    ).fetchall()
+    )
 
     items = []
     for i, row in enumerate(rows):
@@ -727,10 +727,10 @@ def _tool_submit_research_signal(db: Database, params: dict) -> dict:
     source = f"deerflow:{operator_node_id}"
     ensure_producer_karma_config(db, source, source_type="llm_research")
 
-    ceiling_row = db.conn.execute(
+    ceiling_row = db.fetchone(
         "SELECT karma_ceiling FROM producer_karma_config WHERE producer_name = ?",
         (source,),
-    ).fetchone()
+    )
     karma_ceiling_active = ceiling_row is not None and float(ceiling_row[0]) < 1.0
 
     event = db.append_event(
@@ -767,7 +767,7 @@ def _tool_get_signals_bulk_export(db: Database, params: dict) -> dict:
         conditions.append("ts <= ?")
         args.append(to_ts)
     if cursor:
-        cursor_row = db.conn.execute("SELECT ts FROM events WHERE id = ?", (cursor,)).fetchone()
+        cursor_row = db.fetchone("SELECT ts FROM events WHERE id = ?", (cursor,))
         if cursor_row:
             conditions.append("(ts < ? OR (ts = ? AND id < ?))")
             args.extend([str(cursor_row[0]), str(cursor_row[0]), cursor])
@@ -775,7 +775,7 @@ def _tool_get_signals_bulk_export(db: Database, params: dict) -> dict:
     where = " AND ".join(conditions)
     query = f"SELECT id, type, ts, source, payload FROM events WHERE {where} ORDER BY ts DESC, id DESC LIMIT ?"
     args.append(limit)
-    rows = db.conn.execute(query, tuple(args)).fetchall()
+    rows = db.fetchall(query, tuple(args))
 
     items = []
     for r in rows:

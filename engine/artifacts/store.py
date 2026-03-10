@@ -78,7 +78,7 @@ class ArtifactStore:
 
     def _ensure_schema(self) -> None:
         """Create artifacts table if not exists."""
-        with self._lock:
+        with self._lock, self._db._lock:
             self._db.conn.executescript(_ARTIFACTS_SCHEMA)
 
     # ------------------------------------------------------------------
@@ -124,7 +124,7 @@ class ArtifactStore:
         # Insert into DB
         with self._lock:
             try:
-                self._db.conn.execute(
+                self._db.execute(
                     "INSERT INTO artifacts (id, filename, content_type, size_bytes, "
                     "created_at, source, event_id, storage_path) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -159,10 +159,10 @@ class ArtifactStore:
 
     def get(self, artifact_id: str) -> ArtifactRecord | None:
         """Retrieve artifact record by ID."""
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             "SELECT id, filename, content_type, size_bytes, created_at, source, event_id, storage_path FROM artifacts WHERE id = ?",
             (artifact_id,),
-        ).fetchone()
+        )
 
         if row is None:
             return None
@@ -181,7 +181,7 @@ class ArtifactStore:
     def link_event(self, artifact_id: str, event_id: str) -> None:
         """Link an artifact to a b1e55ed event."""
         with self._lock:
-            self._db.conn.execute(
+            self._db.execute(
                 "UPDATE artifacts SET event_id = ? WHERE id = ?",
                 (event_id, artifact_id),
             )
@@ -197,10 +197,10 @@ class ArtifactStore:
 
     def list_recent(self, limit: int = 20) -> list[ArtifactRecord]:
         """List recent artifacts, newest first."""
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             "SELECT id, filename, content_type, size_bytes, created_at, source, event_id, storage_path FROM artifacts ORDER BY created_at DESC LIMIT ?",
             (limit,),
-        ).fetchall()
+        )
 
         return [
             ArtifactRecord(

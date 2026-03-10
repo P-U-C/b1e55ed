@@ -178,10 +178,10 @@ def check_kill_switch() -> CheckResult:
 
         db = Database(db_path)
         try:
-            row = db.conn.execute(
+            row = db.fetchone(
                 "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
                 (str(EventType.KILL_SWITCH_V1),),
-            ).fetchone()
+            )
             if not row:
                 return CheckResult("kill_switch", "pass", "Kill switch: SAFE (level 0)")
             payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]

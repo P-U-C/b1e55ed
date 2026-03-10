@@ -226,7 +226,7 @@ def run_export(args: argparse.Namespace, *, repo_root: Path) -> int:
         date_from=date_from,
         date_to=date_to,
     )
-    rows = db.conn.execute(q, params).fetchall()
+    rows = db.fetchall(q, params)
     records = [_row_to_record(r, include_chain=include_chain) for r in rows]
 
     db.close()

@@ -242,10 +242,10 @@ class OMS:
 
         for event_id in intent.source_event_ids:
             # Look up the original event to get producer/domain info
-            row = self.db.conn.execute(
+            row = self.db.fetchone(
                 "SELECT type, source FROM events WHERE id = ?",
                 (event_id,),
-            ).fetchone()
+            )
             if row is None:
                 continue
 

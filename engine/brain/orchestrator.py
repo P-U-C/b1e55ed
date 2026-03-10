@@ -96,7 +96,7 @@ class BrainOrchestrator:
 
         # 1) Try DB: most recent price event for this symbol
         try:
-            row = self.db.conn.execute(
+            row = self.db.fetchone(
                 """
                 SELECT payload FROM events
                 WHERE type = 'PRICE_V1'
@@ -104,7 +104,7 @@ class BrainOrchestrator:
                 ORDER BY ts DESC LIMIT 1
                 """,
                 (symbol.upper(),),
-            ).fetchone()
+            )
             if row is not None:
                 import json as _json
 
@@ -217,8 +217,8 @@ class BrainOrchestrator:
 
             # Persist feature snapshot row (reproducibility)
             snap = synth_results[sym_upper].snapshot
-            with self.db.conn:
-                self.db.conn.execute(
+            with self.db._lock, self.db.conn:
+                self.db.execute(
                     """
                     INSERT INTO feature_snapshots (cycle_id, symbol, ts, features, source_event_ids, regime, version)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -237,7 +237,7 @@ class BrainOrchestrator:
                 # Contributor attribution: mark signals that made it into synthesis as accepted.
                 if snap.source_event_ids:
                     placeholders = ",".join(["?"] * len(snap.source_event_ids))
-                    self.db.conn.execute(
+                    self.db.execute(
                         f"UPDATE contributor_signals SET accepted = 1 WHERE event_id IN ({placeholders})",
                         tuple(snap.source_event_ids),
                     )
@@ -316,10 +316,10 @@ class BrainOrchestrator:
                         # Look up conviction_id from the most recent conviction_scores row
                         _conv_id = None
                         try:
-                            _row = self.db.conn.execute(
+                            _row = self.db.fetchone(
                                 "SELECT id FROM conviction_scores WHERE cycle_id = ? AND symbol = ? ORDER BY id DESC LIMIT 1",
                                 (cycle_id, sym),
-                            ).fetchone()
+                            )
                             if _row is not None:
                                 _conv_id = int(_row[0])
                         except Exception:

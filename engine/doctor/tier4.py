@@ -70,7 +70,7 @@ def check_create_temp_db() -> tuple[CheckResult, Path | None]:
         db_path = Path(tmpdir) / "flywheel.db"
         db = Database(db_path)
 
-        tables = {r[0] for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        tables = {r[0] for r in db.fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "events" in tables, f"events table missing, got: {tables}"
         db.close()
 
@@ -166,8 +166,8 @@ def check_seed_signals(db_path: Path) -> CheckResult:
         # Register producers in producer_health
         now_iso = datetime.now(tz=UTC).isoformat()
         for name, domain in producers:
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     """INSERT OR IGNORE INTO producer_health
                        (name, domain, schedule, last_run_at, last_success_at,
                         consecutive_failures, events_produced, updated_at)
@@ -278,7 +278,7 @@ def check_paper_trades(db_path: Path) -> CheckResult:
         filled = sum(1 for r in results if r.status == "filled")
         rejected = sum(1 for r in results if r.status == "rejected")
 
-        pos_row = db.conn.execute("SELECT COUNT(*) FROM positions WHERE status='open'").fetchone()
+        pos_row = db.fetchone("SELECT COUNT(*) FROM positions WHERE status='open'")
         n_positions = int(pos_row[0]) if pos_row else 0
         db.close()
 
@@ -308,7 +308,7 @@ def check_resolve_outcomes(db_path: Path) -> CheckResult:
         db = Database(db_path)
 
         # Close open positions with simulated 5% profit
-        positions = db.conn.execute("SELECT id, direction, size_notional FROM positions WHERE status='open'").fetchall()
+        positions = db.fetchall("SELECT id, direction, size_notional FROM positions WHERE status='open'")
 
         closed = 0
         for pos in positions:
@@ -316,8 +316,8 @@ def check_resolve_outcomes(db_path: Path) -> CheckResult:
             direction = str(pos[1])
             notional = float(pos[2])
             pnl = notional * 0.05 if direction == "long" else -(notional * 0.05)
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     "UPDATE positions SET status='closed', closed_at=datetime('now'), realized_pnl=? WHERE id=?",
                     (pnl, pos_id),
                 )
@@ -376,12 +376,12 @@ def check_karma_intents(db_path: Path) -> CheckResult:
 
         karma_count = 0
         try:
-            row = db.conn.execute("SELECT COUNT(*) FROM karma_intents").fetchone()
+            row = db.fetchone("SELECT COUNT(*) FROM karma_intents")
             karma_count = int(row[0]) if row else 0
         except Exception:
             pass
 
-        karma_events = db.conn.execute("SELECT COUNT(*) FROM events WHERE type LIKE '%KARMA%'").fetchone()
+        karma_events = db.fetchone("SELECT COUNT(*) FROM events WHERE type LIKE '%KARMA%'")
         karma_ev_count = int(karma_events[0]) if karma_events else 0
         db.close()
 
@@ -416,19 +416,19 @@ def check_learning_loop(db_path: Path) -> CheckResult:
 
         db = Database(db_path)
 
-        total_events = db.conn.execute("SELECT COUNT(*) FROM events").fetchone()
+        total_events = db.fetchone("SELECT COUNT(*) FROM events")
         total = int(total_events[0]) if total_events else 0
 
-        cycle_events = db.conn.execute(
+        cycle_events = db.fetchone(
             "SELECT COUNT(*) FROM events WHERE type = ?",
             (str(EventType.BRAIN_CYCLE_V1),),
-        ).fetchone()
+        )
         cycles = int(cycle_events[0]) if cycle_events else 0
 
-        order_count = db.conn.execute("SELECT COUNT(*) FROM orders").fetchone()
+        order_count = db.fetchone("SELECT COUNT(*) FROM orders")
         orders = int(order_count[0]) if order_count else 0
 
-        pos_count = db.conn.execute("SELECT COUNT(*) FROM positions").fetchone()
+        pos_count = db.fetchone("SELECT COUNT(*) FROM positions")
         positions = int(pos_count[0]) if pos_count else 0
 
         db.close()
