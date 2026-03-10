@@ -3,14 +3,29 @@
 
 {% block content %}
 
-<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.5rem; flex-wrap:wrap; gap:0.5rem;">
   <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Signals</h1>
   <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
     {% for d in domains %}
-    <a href="/signals?domain={{ d.id }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}">{{ d.label }}</a>
+    <a href="/signals?domain={{ d.id }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}"
+       title="{{ {'ta':'Technical analysis — RSI, MACD, trend detection','tradfi':'TradFi plumbing — basis trades, funding rates, OI','onchain':'On-chain data — whale flows, accumulation patterns','social':'Social sentiment — CT pulse, narrative tracking','sentiment':'Aggregated sentiment scores from multiple sources','events':'Market events — listings, unlocks, regulatory','aci':'Autonomous crypto intelligence signals','research':'Deep research artifacts and analysis'}.get(d.id, '') }}">{{ d.label }}</a>
     {% endfor %}
     <a href="/signals" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
   </div>
+</div>
+
+<!-- Signal explainer -->
+<div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1rem; line-height:1.5;">
+  Signals are events emitted by producers. Each signal has a type (e.g., SIGNAL_TA_V1), a source producer, and a payload with domain-specific data.
+</div>
+
+<!-- Score legend -->
+<div style="display:flex; gap:1rem; align-items:center; font-size:0.7rem; color:var(--text-dim); margin-bottom:1rem; flex-wrap:wrap;">
+  <span style="font-weight:500; color:var(--text);">Score (0–10):</span>
+  <span><span class="text-dim">0</span> = strong sell</span>
+  <span><span class="text-dim">5</span> = neutral</span>
+  <span><span class="text-dim">10</span> = strong buy</span>
+  <span style="color:var(--text-faint);">Derived from producer-specific metrics.</span>
 </div>
 
 <!-- Latest by domain -->
@@ -24,11 +39,13 @@
     {% if group.signals %}
       {% for s in group.signals %}
       <div style="display:flex; align-items:center; gap:0.75rem; padding:4px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
+        {% if s.asset != '—' and s.asset not in s.desc %}
         <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.asset }}</span>
+        {% endif %}
         <span style="flex:1; color:var(--text);">{{ s.desc }}</span>
         <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400; font-family:var(--mono);"
               title="Score: {{ '%.1f' | format(s.score) }} | Direction: {{ s.direction | replace('+','long') | replace('-','short') | replace('=','neutral') }}">
-          {% if s.direction == '+' %}▲{% elif s.direction == '-' %}▼{% else %}–{% endif %} {{ '%.1f' | format(s.score) }}
+          {{ s.direction }} {{ '%.1f' | format(s.score) }}
         </span>
       </div>
       {% endfor %}

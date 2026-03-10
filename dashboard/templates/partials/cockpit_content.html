@@ -106,8 +106,9 @@
       </div>
     </div>
     {% else %}
-    <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+    <div style="flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:0.5rem;">
       <span style="color:var(--text-dim);">Waiting for first brain cycle...</span>
+      <span style="color:var(--text-dim); font-size:0.75rem;">The brain's top conviction trade setup appears here after synthesis.</span>
     </div>
     {% endif %}
   </div>
@@ -145,7 +146,10 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">No producer signals in last 30m.</div>
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">
+      No producer signals in last 30m.
+      <div style="font-size:0.75rem; margin-top:0.25rem;">Producer health and signal counts appear here after the first brain cycle.</div>
+    </div>
     {% endif %}
   </div>
 
@@ -176,7 +180,10 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">No benchmark data yet.</div>
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">
+      No benchmark data yet.
+      <div style="font-size:0.75rem; margin-top:0.25rem;">Portfolio benchmarks (vs BTC, ETH, S&P) appear here when positions are open.</div>
+    </div>
     {% endif %}
   </div>
 

@@ -25,7 +25,11 @@
      hx-trigger="every 30s"
      hx-swap="outerHTML">
   <span class="regime-name">{{ regime_name | default('TRANSITION') }}</span>
+  {% if is_new_operator and regime_name | default('TRANSITION') == 'TRANSITION' %}
+  <span class="regime-desc">Brain cycle hasn't run yet — regime detection starts after the first synthesis cycle (~5 min after startup)</span>
+  {% else %}
   <span class="regime-desc">{{ regime_desc | default('No clear trend') }}</span>
+  {% endif %}
   <span class="regime-confidence">{{ regime_confidence | default('—') }}</span>
 </div>
 
@@ -181,6 +185,9 @@
       <span class="panel-title">Discretionary Signals</span>
       <span class="panel-age">active</span>
     </div>
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.5rem;">
+      Manual signals submitted by operators via the /signal command or API. These bypass automated producers and carry curator-level weight.
+    </div>
     {% if disc_signals %}
     {% for s in disc_signals %}
     <div style="display:flex; align-items:center; gap:0.75rem; padding:6px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
@@ -194,8 +201,8 @@
     </div>
     {% endfor %}
     {% else %}
-    {% set message = "No active discretionary signals" %}
-    {% set status = "" %}
+    {% set message = "No discretionary signals yet" %}
+    {% set status = "Submit one via POST /api/v1/signals/discretionary or the /signal chat command." %}
     {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
