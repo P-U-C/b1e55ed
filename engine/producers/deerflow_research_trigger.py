@@ -85,7 +85,7 @@ async def resolve_universe(db: Database, size: int | None = None) -> list[str]:
     """Return top tokens from brain DB by recent signal activity."""
     limit = size or int(os.environ.get("DEERFLOW_UNIVERSE_SIZE", DEFAULT_UNIVERSE_SIZE))
     try:
-        rows = db.execute(UNIVERSE_QUERY, (limit,)).fetchall()
+        rows = db.fetchall(UNIVERSE_QUERY, (limit,))
         return [row[0] for row in rows if row[0]]
     except Exception:
         logger.exception("Failed to resolve universe from brain DB")

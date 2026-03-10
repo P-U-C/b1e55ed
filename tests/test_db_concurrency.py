@@ -221,7 +221,7 @@ class TestDataIntegrity:
         assert len(interface_errors) == 0, f"InterfaceErrors during integrity test: {interface_errors}"
 
         # Verify row count in DB matches what we tried to write
-        row = db_with_table.execute("SELECT COUNT(*) FROM stress_test WHERE value LIKE 'integrity-%'").fetchone()
+        row = db_with_table.fetchone("SELECT COUNT(*) FROM stress_test WHERE value LIKE 'integrity-%'")
         db_count = row[0]
         assert db_count == len(written_ids), f"Data loss: wrote {len(written_ids)} rows, DB has {db_count}"
         assert db_count == INTEGRITY_ROWS, f"Expected {INTEGRITY_ROWS} rows, got {db_count}"

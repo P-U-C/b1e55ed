@@ -132,7 +132,7 @@ async def _event_generator(
         type_frag, type_params = _type_clause()
         q = f"SELECT id, type, ts, payload, rowid FROM events WHERE rowid > ?{type_frag} ORDER BY rowid ASC"
         params2: list[object] = [last_rowid, *type_params]
-        rows = db.execute(q, params2).fetchall()
+        rows = db.fetchall(q, params2)
 
         for row in rows:
             if await request.is_disconnected():
