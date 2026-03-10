@@ -140,3 +140,9 @@ def build_system_manifest(api_base: str = "") -> dict:
             "oracle": oracle_base,
         },
     }
+
+
+@router.get("/.well-known/agent-registration.json", include_in_schema=False)
+async def well_known_agent_registration() -> dict:
+    """Serve /.well-known/agent-registration.json (also mounted at app root)."""
+    return build_system_manifest()

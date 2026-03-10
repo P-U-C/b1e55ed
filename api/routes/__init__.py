@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes import (
+    agents,
     artifacts,
     benchmarks,
     brain,
@@ -53,5 +54,6 @@ def get_api_router() -> APIRouter:
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
     router.include_router(mcp.router, tags=["mcp"])
     router.include_router(artifacts.router, tags=["artifacts"])
+    router.include_router(agents.router, tags=["agents"])
 
     return router
