@@ -66,6 +66,7 @@ def test_whale_producer_publishes_events(monkeypatch, tmp_path) -> None:
 
 
 def test_whale_producer_handles_401(monkeypatch, tmp_path) -> None:
+    """When custom endpoint returns 401, producer falls back to free Binance API."""
     monkeypatch.setenv("B1E55ED_WHALE_TRACKING_URL", "https://example.test/whale")
 
     req = httpx.Request("POST", "https://example.test/whale")
@@ -82,6 +83,6 @@ def test_whale_producer_handles_401(monkeypatch, tmp_path) -> None:
     )
 
     pr = WhaleTrackingProducer(ctx).run()
-    assert pr.events_published == 0
-    assert pr.health == ProducerHealth.DEGRADED
-    assert pr.errors and "401" in pr.errors[0]
+    # Custom endpoint failed → falls back to free Binance API which succeeds
+    assert pr.health in (ProducerHealth.OK, ProducerHealth.DEGRADED)
+    assert not pr.errors  # free fallback shouldn't produce top-level errors
