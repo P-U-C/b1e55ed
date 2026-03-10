@@ -11,13 +11,13 @@
 <div class="grid">
   {% for c in convictions %}
   <div class="panel">
-    <div class="panel-header">{{ c.asset }}</div>
+    <div class="panel-header">{{ c.symbol }}</div>
     <div class="panel-body">
       <div class="conviction-bar">
         <div class="conviction-bar-fill {{ 'long' if c.direction == 'long' else 'short' if c.direction == 'short' else 'neutral' }}"
-             style="width:{{ (c.score * 100) | int }}%"></div>
+             style="width:{{ (c.confidence * 100) | int }}%"></div>
       </div>
-      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.25rem;">{{ c.regime }} · {{ c.conviction_age }}</div>
+      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.25rem;">{{ c.regime }} · {{ c.age }}</div>
     </div>
   </div>
   {% endfor %}
