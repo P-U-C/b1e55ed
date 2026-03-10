@@ -826,14 +826,7 @@ async def mcp_endpoint(
 ) -> JSONResponse:
     """JSON-RPC 2.0 MCP server endpoint."""
 
-    # Auth check
-    if not _check_auth(request, x_api_key):
-        return JSONResponse(
-            status_code=401,
-            content=_err(None, -32001, "Unauthorized: provide X-API-Key or Authorization: Bearer header"),
-        )
-
-    # Parse body
+    # Parse body first (before auth) so we can check the method
     try:
         body = await request.json()
     except Exception:
@@ -851,6 +844,15 @@ async def mcp_endpoint(
     rpc_id = body.get("id")
     method = body.get("method")
     params = body.get("params") or {}
+
+    # Public methods — no auth required
+    public_methods = {"initialize", "tools/list"}
+
+    if method not in public_methods and not _check_auth(request, x_api_key):
+        return JSONResponse(
+            status_code=401,
+            content=_err(rpc_id, -32001, "Unauthorized: provide X-API-Key or Authorization: Bearer header"),
+        )
 
     if body.get("jsonrpc") != JSONRPC_VERSION:
         return JSONResponse(
