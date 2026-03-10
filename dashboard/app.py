@@ -338,15 +338,96 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
         asset = payload.get("asset") or payload.get("symbol") or payload.get("token") or "—"
         desc = payload.get("desc") or payload.get("description") or payload.get("message") or t
-        score = payload.get("score")
-        try:
-            score_f = float(score) if score is not None else 0.0
-        except Exception:
-            score_f = 0.0
 
-        direction = payload.get("direction")
-        if direction not in {"▲", "▼", "→"}:
-            direction = "→"
+        # Derive score and direction from domain-specific payloads.
+        # Producers emit raw domain data; payload.score/direction are often unset.
+        # This is display-only — the Brain uses its own feature extraction.
+        score_f = 0.0
+        direction = "→"
+
+        # Check if producer already set score/direction (e.g. social)
+        _raw_score = payload.get("score")
+        _raw_dir = payload.get("direction")
+
+        if _raw_score is not None and _raw_dir in {"▲", "▼", "→"}:
+            # Producer set both — trust them
+            try:
+                score_f = float(_raw_score)
+            except (ValueError, TypeError):
+                score_f = 0.0
+            direction = _raw_dir
+        else:
+            # Derive from domain-specific fields
+            try:
+                if domain == "technical":
+                    # TA signals: use RSI to derive score
+                    rsi = payload.get("rsi_14") or payload.get("rsi")
+                    if rsi is not None:
+                        rsi = float(rsi)
+                        if rsi < 30:
+                            # Oversold = bullish signal
+                            score_f = min(10.0, (30 - rsi) / 3.0)  # 0-10 scale
+                            direction = "▲"
+                        elif rsi > 70:
+                            # Overbought = bearish signal
+                            score_f = min(10.0, (rsi - 70) / 3.0)
+                            direction = "▼"
+                        else:
+                            score_f = 5.0 * abs(rsi - 50) / 20.0
+                            direction = "→"
+                elif domain == "orderbook":
+                    # Orderbook signals: use imbalance
+                    imbalance = payload.get("imbalance")
+                    if imbalance is not None:
+                        imbalance = float(imbalance)
+                        score_f = min(10.0, abs(imbalance) * 10.0)
+                        if imbalance > 0.1:
+                            direction = "▲"
+                        elif imbalance < -0.1:
+                            direction = "▼"
+                        else:
+                            direction = "→"
+                elif domain == "whale" or domain == "onchain":
+                    # Whale/onchain signals: use smart_money_netflow
+                    netflow = payload.get("smart_money_netflow") or payload.get("netflow")
+                    if netflow is not None:
+                        netflow = float(netflow)
+                        score_f = min(10.0, abs(netflow) * 5.0)
+                        direction = "▲" if netflow > 0 else ("▼" if netflow < 0 else "→")
+                elif domain == "tradfi":
+                    # TradFi signals: use meltup_score if present, else basis
+                    meltup = payload.get("meltup_score")
+                    if meltup is not None:
+                        score_f = min(10.0, max(0.0, float(meltup)))
+                        direction = "▲" if score_f > 5 else ("▼" if score_f < 3 else "→")
+                    else:
+                        basis = payload.get("basis") or payload.get("basis_pct")
+                        if basis is not None:
+                            basis = float(basis)
+                            score_f = min(10.0, abs(basis) * 2.0)
+                            direction = "▲" if basis > 0 else "▼"
+                elif domain == "social":
+                    # Social signals: payload.score usually set by producer
+                    if _raw_score is not None:
+                        score_f = max(0.0, min(10.0, float(_raw_score)))
+                        direction = _raw_dir if _raw_dir in {"▲", "▼", "→"} else "→"
+                elif domain == "stablecoin":
+                    # Stablecoin signals: use supply_change_24h
+                    supply_chg = payload.get("supply_change_24h") or payload.get("supply_change")
+                    if supply_chg is not None:
+                        supply_chg = float(supply_chg)
+                        score_f = min(10.0, abs(supply_chg) / 1e8)  # normalize
+                        direction = "▲" if supply_chg > 0 else ("▼" if supply_chg < 0 else "→")
+            except (ValueError, TypeError):
+                score_f = 0.0
+                direction = "→"
+
+            # Fallback: if we still have no score, try raw payload.score
+            if score_f == 0.0 and _raw_score is not None:
+                with contextlib.suppress(Exception):
+                    score_f = float(_raw_score)
+            if direction == "→" and _raw_dir in {"▲", "▼"}:
+                direction = _raw_dir
 
         out.append(
             {
