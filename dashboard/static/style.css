@@ -13,10 +13,10 @@
   --border-active: rgba(255,255,255,0.18);
 
   /* Text */
-  --text:          #d0ccc4;
-  --text-bright:   #f0ece4;
-  --text-dim:      #888480;
-  --text-faint:    #504c48;
+  --text:          #e0dcd4;
+  --text-bright:   #f8f4ec;
+  --text-dim:      #a09c94;
+  --text-faint:    #686460;
 
   /* Semantic */
   --green:         #22C55E;
@@ -145,6 +145,61 @@ a:hover { color: var(--green); }
 .nav-link.active {
   color: var(--text-bright);
   font-weight: 400;
+}
+
+/* ··· overflow dropdown */
+.nav-overflow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-overflow__trigger {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.nav-overflow__trigger:hover {
+  color: var(--text-bright);
+  border-color: var(--border-active);
+}
+
+.nav-overflow__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-active);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 140px;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+
+.nav-overflow__menu a {
+  display: block;
+  padding: 8px 16px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-overflow__menu a:hover {
+  background: var(--bg-raised);
+  color: var(--green);
 }
 
 .nav-right {
