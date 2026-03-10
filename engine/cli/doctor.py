@@ -207,3 +207,29 @@ def run_doctor(args: argparse.Namespace) -> int:
         print()
 
     return 1 if fails > 0 else 0
+
+
+def _repair_user_config() -> str | None:
+    """Repair /tmp path pollution in user.yaml. Returns description if repaired, else None."""
+    import yaml
+
+    from engine.core.paths import config_dir
+
+    user_yaml = config_dir() / "user.yaml"
+    if not user_yaml.exists():
+        return None
+    try:
+        with open(user_yaml) as f:
+            data = yaml.safe_load(f) or {}
+        dirty = False
+        for key, val in list(data.items()):
+            if isinstance(val, str) and val.startswith("/tmp"):
+                data[key] = None
+                dirty = True
+        if dirty:
+            with open(user_yaml, "w") as f:
+                yaml.safe_dump(data, f)
+            return "Removed /tmp path pollution from user.yaml"
+        return None
+    except Exception:
+        return None

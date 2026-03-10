@@ -29,7 +29,7 @@ from typing import Any
 import httpx
 
 try:  # pragma: no cover - optional dependency
-    from mcp import ClientSession as _MCPClientSession  # type: ignore[import-not-found]
+    from mcp import ClientSession as _MCPClientSession
 except ImportError:  # pragma: no cover - optional dependency
     _MCPClientSession = None
 
