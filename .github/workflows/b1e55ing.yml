@@ -115,31 +115,51 @@ jobs:
           git config user.email "b1e55ing@permanentupperclass.com"
           git commit --allow-empty -m "chore: a b1e55ing [skip ci]"
 
-      - name: Push blessing
+      - name: Push blessing and capture SHA
+        id: push
         if: steps.skip.outputs.skip == 'false' && steps.fork.outputs.is_fork == 'false' && steps.blessed.outputs.already_blessed == 'false'
         run: |
-          git push origin HEAD:${{ github.event.pull_request.head.ref }} || true
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          # Capture the NEW head SHA (the blessing commit we just pushed)
+          NEW_SHA=$(git rev-parse HEAD)
+          echo "new_sha=$NEW_SHA" >> "$GITHUB_OUTPUT"
+          echo "Blessing commit SHA: $NEW_SHA"
 
       # Hal Finney received block 170. The handshake completed before anyone moved on.
-      - name: Post success status
+      # CRITICAL: GITHUB_TOKEN pushes do NOT re-trigger workflows, so the new HEAD
+      # will never get a status check from a re-run. We must set it here, on both
+      # the original SHA (for the current check-run) and the new SHA (for merge gating).
+      - name: Post success status on both SHAs
         if: steps.skip.outputs.skip == 'false' && steps.fork.outputs.is_fork == 'false' && steps.blessed.outputs.already_blessed == 'false'
         uses: actions/github-script@v7
         with:
           script: |
-            // Fetch updated PR to get the new HEAD sha after our push
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
-            });
+            const newSha = '${{ steps.push.outputs.new_sha }}';
+            const origSha = context.payload.pull_request.head.sha;
+
+            // Set on new SHA (the blessing commit — this is what merge gating checks)
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              sha: pr.data.head.sha,
+              sha: newSha,
               state: 'success',
               context: 'a b1e55ing',
               description: 'Blessed ✓'
             });
+            console.log(`✓ Status set on new SHA: ${newSha}`);
+
+            // Also set on original SHA (belt and suspenders)
+            if (origSha !== newSha) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: origSha,
+                state: 'success',
+                context: 'a b1e55ing',
+                description: 'Blessed ✓'
+              });
+              console.log(`✓ Status set on orig SHA: ${origSha}`);
+            }
 
       # ── signal Telegram (best-effort, after merge is unblocked) ─
       - name: Signal agent for egg enhancement
