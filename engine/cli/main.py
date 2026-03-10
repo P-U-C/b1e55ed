@@ -2574,6 +2574,7 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
 
     health = "blessed" if cfg.exists() else "degraded"
     print(f"- system health: {health}")
+
     return 0
 
 

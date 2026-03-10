@@ -90,7 +90,66 @@
   </div>
 </div>
 
-<!-- D. Danger Zone -->
+<!-- D. Producer Data Sources -->
+<div class="panel" style="margin-bottom:1.5rem;" id="producer-config">
+  <div class="panel-header">
+    <span class="panel-title">Producer Data Sources</span>
+    <span class="panel-age" style="font-size:0.7rem;">auto-discovered from registered producers</span>
+  </div>
+
+  {% if producer_configs %}
+  {% for pc in producer_configs %}
+  <div style="padding:0.75rem 0; {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+      <span style="font-weight:500; color:var(--text-bright); font-size:0.85rem;">{{ pc.name }}</span>
+      <span class="badge badge-{{ pc.domain }}" style="font-size:0.6rem; padding:1px 5px;">{{ pc.domain }}</span>
+    </div>
+
+    {% for f in pc.fields %}
+    <div style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.35rem 0 0.35rem 1rem; font-size:0.8rem;">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <code style="color:var(--text-bright); font-size:0.75rem; font-family:var(--mono);">{{ f.key }}</code>
+          {% if f.required %}
+            <span style="color:var(--red); font-size:0.6rem; font-weight:600; text-transform:uppercase;">required</span>
+          {% endif %}
+        </div>
+        {% if f.description %}
+        <div style="color:var(--text-dim); font-size:0.7rem; margin-top:2px;">{{ f.description }}</div>
+        {% endif %}
+      </div>
+      <div style="min-width:140px; text-align:right;">
+        {% if f.configured %}
+          <span style="color:var(--green); font-size:0.75rem; font-family:var(--mono);">
+            {% if f.is_sensitive %}
+              🔒 {{ f.display_value }}
+            {% else %}
+              ✓ {{ f.display_value }}
+            {% endif %}
+          </span>
+        {% elif f.required %}
+          <span style="color:var(--red); font-size:0.75rem;">⚠ not set — producer may fail</span>
+        {% else %}
+          <span style="color:var(--green); font-size:0.75rem;">✓ using free fallback</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div style="padding:0.5rem 0 0; font-size:0.7rem; color:var(--text-dim);">
+    💡 Set env vars in <code>~/.b1e55ed/.env</code> or <code>user.yaml</code> then restart the engine.
+  </div>
+
+  {% else %}
+  <div class="empty-state" style="padding:1rem; font-size:0.8rem;">
+    No producers with configurable fields found.
+  </div>
+  {% endif %}
+</div>
+
+<!-- E. Danger Zone -->
 <div class="panel" style="border-color:rgba(220,38,38,0.3);">
   <div class="panel-header">
     <span class="panel-title" style="color:var(--red);">Danger Zone</span>

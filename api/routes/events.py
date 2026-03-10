@@ -102,7 +102,7 @@ async def _event_generator(
         while True:
             q_page = f"SELECT id, type, ts, payload, rowid FROM events WHERE rowid > ? AND ts >= ?{type_frag} ORDER BY rowid ASC LIMIT ?"
             page_params: list[object] = [_start_rowid, since_iso, *type_params, _page_size]
-            rows = db.execute(q_page, page_params).fetchall()
+            rows = db.fetchall(q_page, page_params)
             if not rows:
                 break
             for row in rows:
@@ -118,11 +118,11 @@ async def _event_generator(
     # --- 2. Poll for new events every 2s ---
     # Track the latest rowid we have delivered
     if last_id is not None:
-        row_cur = db.execute("SELECT rowid FROM events WHERE id = ?", (last_id,)).fetchone()
+        row_cur = db.fetchone("SELECT rowid FROM events WHERE id = ?", (last_id,))
         last_rowid: int = int(row_cur[0]) if row_cur else 0
     else:
         # Start from the current tail
-        row_tail = db.execute("SELECT MAX(rowid) FROM events").fetchone()
+        row_tail = db.fetchone("SELECT MAX(rowid) FROM events")
         last_rowid = int(row_tail[0]) if row_tail and row_tail[0] is not None else 0
 
     while True:
@@ -132,7 +132,7 @@ async def _event_generator(
         type_frag, type_params = _type_clause()
         q = f"SELECT id, type, ts, payload, rowid FROM events WHERE rowid > ?{type_frag} ORDER BY rowid ASC"
         params2: list[object] = [last_rowid, *type_params]
-        rows = db.execute(q, params2).fetchall()
+        rows = db.fetchall(q, params2)
 
         for row in rows:
             if await request.is_disconnected():

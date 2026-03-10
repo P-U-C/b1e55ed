@@ -85,6 +85,8 @@ module = [
     "eth_utils.*",
     "Crypto.*",
     "sha3",
+    "web3",
+    "web3.*",
 ]
 ignore_missing_imports = true
 

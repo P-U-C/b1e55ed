@@ -290,6 +290,13 @@ def create_app() -> FastAPI:
 
     app.include_router(mcp_router)
 
+    # Well-known agent registration (mounted at root, not under /api/v1)
+    from api.routes.agents import build_system_manifest
+
+    @app.get("/.well-known/agent-registration.json", include_in_schema=False)
+    async def well_known_root() -> dict:
+        return build_system_manifest()
+
     @app.get("/", include_in_schema=False)
     def root() -> dict:
         """API info page — lists key endpoints."""

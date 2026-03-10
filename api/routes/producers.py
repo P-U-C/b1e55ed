@@ -35,7 +35,7 @@ def _parse_dt(ts: str | None) -> datetime | None:
 
 
 def _ensure_endpoint_column(db: Database) -> None:
-    cols = [str(r[1]) for r in db.execute("PRAGMA table_info(producer_health)").fetchall()]
+    cols = [str(r[1]) for r in db.fetchall("PRAGMA table_info(producer_health)")]
     with db.conn:
         if "endpoint" not in cols:
             db.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")

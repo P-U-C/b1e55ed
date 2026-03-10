@@ -1223,6 +1223,42 @@ def settings_page(request: Request) -> HTMLResponse:
     ]
     api_keys = [{"name": k, "configured": bool(os.environ.get(k, "").strip())} for k in api_key_names]
 
+    # Producer config discovery: collect configurable_fields from all producers
+    producer_configs: list[dict[str, Any]] = []
+    try:
+        from engine.producers.registry import discover as _discover
+        from engine.producers.registry import get_producer as _get_reg
+        from engine.producers.registry import list_producers as _list_reg
+
+        _discover()
+        for pname in _list_reg():
+            cls = _get_reg(pname)
+            fields = getattr(cls, "configurable_fields", None)
+            if not fields:
+                continue
+            enriched_fields = []
+            for f in fields:
+                key = f.get("key", "")
+                raw_val = os.environ.get(key, "").strip()
+                is_sensitive = any(s in key.lower() for s in ("key", "secret", "token", "password", "private"))
+                enriched_fields.append(
+                    {
+                        **f,
+                        "configured": bool(raw_val),
+                        "display_value": ("••••" + raw_val[-4:]) if (raw_val and is_sensitive) else (raw_val or ""),
+                        "is_sensitive": is_sensitive,
+                    }
+                )
+            producer_configs.append(
+                {
+                    "name": pname,
+                    "domain": getattr(cls, "domain", "—"),
+                    "fields": enriched_fields,
+                }
+            )
+    except Exception:
+        pass
+
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -1230,6 +1266,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "trading_mode": trading_mode,
             "risk_fields": risk_fields,
             "api_keys": api_keys,
+            "producer_configs": producer_configs,
         },
     )
 
@@ -1685,6 +1722,19 @@ def producers_partial(request: Request) -> HTMLResponse:
     prod_res = client.get_producers_status()
     producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
 
+    # Collect configurable producer names for "Configure →" links
+    _config_producer_names: set[str] = set()
+    try:
+        from engine.producers.registry import get_producer as _get_reg
+        from engine.producers.registry import list_producers as _list_reg
+
+        for pname in _list_reg():
+            cls = _get_reg(pname)
+            if getattr(cls, "configurable_fields", None):
+                _config_producer_names.add(pname)
+    except Exception:
+        pass
+
     producers: list[dict[str, Any]] = []
     producers_healthy = 0
     if isinstance(producers_map, dict):
@@ -1692,9 +1742,51 @@ def producers_partial(request: Request) -> HTMLResponse:
             if not isinstance(v, dict):
                 continue
             healthy = v.get("healthy")
-            health = "ok" if healthy is True else ("error" if healthy is False else "degraded")
+            consecutive_failures = int(v.get("consecutive_failures") or 0)
+            last_error = v.get("last_error") or None
+            quarantined_until_raw = v.get("quarantined_until")
+
+            # Determine status: quarantined > failing > degraded > healthy
+            quarantined_until_fmt: str | None = None
+            is_quarantined = False
+            if quarantined_until_raw:
+                try:
+                    q_str = str(quarantined_until_raw).replace("Z", "+00:00")
+                    q_dt = datetime.fromisoformat(q_str)
+                    if q_dt.tzinfo is None:
+                        q_dt = q_dt.replace(tzinfo=UTC)
+                    if q_dt > datetime.now(tz=UTC):
+                        is_quarantined = True
+                        quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
+                except Exception:
+                    pass
+
+            if is_quarantined:
+                status = "quarantined"
+                health = "error"
+            elif consecutive_failures > 4:
+                status = "failing"
+                health = "error"
+            elif consecutive_failures > 0:
+                status = "degraded"
+                health = "degraded"
+            elif healthy is True:
+                status = "healthy"
+                health = "ok"
+            elif healthy is False:
+                status = "error"
+                health = "error"
+            else:
+                status = "unknown"
+                health = "degraded"
+
             if healthy is True:
                 producers_healthy += 1
+
+            # Detect "no source configured" vs actual runtime errors
+            no_source = False
+            if last_error and ("no_source_configured" in last_error or "not configured" in last_error.lower()):
+                no_source = True
 
             last_run = "—"
             if isinstance(v.get("last_run_at"), str):
@@ -1710,6 +1802,12 @@ def producers_partial(request: Request) -> HTMLResponse:
                     "domain": v.get("domain") or "—",
                     "health": health,
                     "last_run": last_run,
+                    "status": status,
+                    "last_error": last_error,
+                    "consecutive_failures": consecutive_failures,
+                    "quarantined_until": quarantined_until_fmt,
+                    "no_source": no_source,
+                    "has_config": name in _config_producer_names,
                 }
             )
 

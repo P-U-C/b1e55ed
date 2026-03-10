@@ -653,6 +653,16 @@ class Database:
         with self._lock:
             return self.conn.execute(sql, params)
 
+    def fetchone(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
+        """Fetch a single row, holding the lock throughout."""
+        with self._lock:
+            return self.conn.execute(sql, params).fetchone()
+
+    def fetchall(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        """Fetch all rows, holding the lock throughout."""
+        with self._lock:
+            return self.conn.execute(sql, params).fetchall()
+
     def _init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(SCHEMA)

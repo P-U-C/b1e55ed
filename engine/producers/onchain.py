@@ -5,8 +5,8 @@ Onchain Flows Producer.
 Fetches flow-style metrics from a configured HTTP endpoint and emits
 :class:`~engine.core.events.EventType.SIGNAL_ONCHAIN_V1`.
 
-The endpoint is configured via env (and can be provided by config tooling).
-Unit tests mock the injected ``context.client``.
+Depends on Allium API (subscription required). No free fallback available.
+When unconfigured, the producer reports OK with zero events (not DEGRADED).
 
 Easter egg:
 - Flows are the river; truth is the delta.
@@ -49,13 +49,32 @@ class OnchainFlowsProducer(BaseProducer):
     schedule = "*/30 * * * *"
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_ONCHAIN_FLOWS_URL",
+            "label": "Onchain flows data endpoint",
+            "type": "url",
+            "required": True,
+            "description": "Required — depends on Allium API (subscription). Provide your Allium-backed endpoint URL.",
+        },
+        {
+            "key": "ALLIUM_API_KEY",
+            "label": "Allium API key",
+            "type": "secret",
+            "required": True,
+            "description": "API key for the Allium on-chain data platform (allium.so).",
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_ONCHAIN_FLOWS_URL") or os.getenv("ONCHAIN_FLOWS_URL")
 
     def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
+        url = self._custom_endpoint()
         if not url:
-            self.ctx.logger.warning("onchain_flows_endpoint_missing")
+            self.ctx.logger.info("onchain-flows requires B1E55ED_ONCHAIN_FLOWS_URL (Allium API) — no free source available")
             return []
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
@@ -124,7 +143,12 @@ class OnchainFlowsProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                health = ProducerHealth.DEGRADED
+                if not self._custom_endpoint():
+                    # No source configured — this is expected, not degraded
+                    health = ProducerHealth.OK
+                    errors.append("no_source_configured")
+                else:
+                    health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
 

@@ -45,13 +45,9 @@
         <div class="nav-overflow__menu" id="nav-more-menu" style="display:none">
           <a href="/social">Social</a>
           <a href="/artifacts">Artifacts</a>
-          <a href="/contributors">Contributors</a>
-          <a href="/webhooks">Webhooks</a>
           <a href="/system">System</a>
-          <a href="/identity">Identity</a>
           <a href="/config">Config</a>
           <a href="/treasury">Treasury</a>
-          <a href="/conviction">Conviction</a>
         </div>
       </div>
     </div>
@@ -139,8 +135,8 @@
   document.addEventListener('click', function(e) {
     var menu = document.getElementById('nav-more-menu');
     var btn = document.getElementById('nav-more-btn');
-    if (menu && !menu.hidden && btn && !menu.contains(e.target) && e.target !== btn) {
-      menu.hidden = true;
+    if (menu && menu.style.display === 'block' && btn && !menu.contains(e.target) && e.target !== btn) {
+      menu.style.display = 'none';
     }
   });
   </script>

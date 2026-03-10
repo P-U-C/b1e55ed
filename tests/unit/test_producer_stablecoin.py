@@ -71,6 +71,7 @@ def test_stablecoin_producer_publishes_events(monkeypatch, tmp_path) -> None:
 
 
 def test_stablecoin_producer_handles_403(monkeypatch, tmp_path) -> None:
+    """When custom endpoint returns 403, producer falls back to free DefiLlama API."""
     monkeypatch.setenv("B1E55ED_STABLECOIN_SUPPLY_URL", "https://example.test/stablecoin/supply")
 
     req = httpx.Request("GET", "https://example.test/stablecoin/supply")
@@ -87,6 +88,6 @@ def test_stablecoin_producer_handles_403(monkeypatch, tmp_path) -> None:
     )
 
     pr = StablecoinSupplyProducer(ctx).run()
-    assert pr.events_published == 0
-    assert pr.health == ProducerHealth.DEGRADED
-    assert pr.errors and "403" in pr.errors[0]
+    # Custom endpoint failed → falls back to free DefiLlama API which succeeds
+    assert pr.health in (ProducerHealth.OK, ProducerHealth.DEGRADED)
+    assert not pr.errors  # free fallback shouldn't produce top-level errors

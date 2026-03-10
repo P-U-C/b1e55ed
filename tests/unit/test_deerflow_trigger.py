@@ -32,19 +32,19 @@ def mock_store():
 
 @pytest.mark.anyio
 async def test_resolve_universe_returns_top_tokens(mock_db):
-    mock_db.execute.return_value.fetchall.return_value = [
+    mock_db.fetchall.return_value = [
         ("BTC",),
         ("ETH",),
         ("SOL",),
     ]
     result = await resolve_universe(mock_db, size=3)
     assert result == ["BTC", "ETH", "SOL"]
-    mock_db.execute.assert_called_once()
+    mock_db.fetchall.assert_called_once()
 
 
 @pytest.mark.anyio
 async def test_resolve_universe_empty_on_error(mock_db):
-    mock_db.execute.side_effect = Exception("db error")
+    mock_db.fetchall.side_effect = Exception("db error")
     result = await resolve_universe(mock_db, size=5)
     assert result == []
 
@@ -146,7 +146,7 @@ async def test_poll_all_stale_returns_none():
 
 @pytest.mark.anyio
 async def test_full_cycle_success(mock_db, mock_store, tmp_path):
-    mock_db.execute.return_value.fetchall.return_value = [("BTC",), ("ETH",)]
+    mock_db.fetchall.return_value = [("BTC",), ("ETH",)]
     artifact = {"artifact_id": "a1", "permalink": "/a/a1", "event_id": "e1"}
 
     with (
@@ -183,7 +183,7 @@ async def test_full_cycle_success(mock_db, mock_store, tmp_path):
 @pytest.mark.anyio
 async def test_full_cycle_triggered_at_passed_to_poll(mock_db, mock_store, tmp_path):
     """run_cycle must pass triggered_at to poll_for_artifact to prevent stale-artifact race."""
-    mock_db.execute.return_value.fetchall.return_value = [("SOL",)]
+    mock_db.fetchall.return_value = [("SOL",)]
     artifact = {"artifact_id": "b1", "permalink": "/a/b1", "event_id": "e2"}
 
     with (
@@ -213,7 +213,7 @@ def test_deerflow_trigger_producer_is_registered():
 
 @pytest.mark.anyio
 async def test_cycle_trigger_failed(mock_db, mock_store, tmp_path):
-    mock_db.execute.return_value.fetchall.return_value = [("SOL",)]
+    mock_db.fetchall.return_value = [("SOL",)]
 
     with patch("engine.producers.deerflow_research_trigger.trigger_deerflow", new_callable=AsyncMock) as mock_trigger:
         mock_trigger.return_value = False
@@ -232,7 +232,7 @@ async def test_cycle_trigger_failed(mock_db, mock_store, tmp_path):
 
 @pytest.mark.anyio
 async def test_cycle_artifact_timeout(mock_db, mock_store, tmp_path):
-    mock_db.execute.return_value.fetchall.return_value = [("BTC",)]
+    mock_db.fetchall.return_value = [("BTC",)]
 
     with (
         patch.object(_trigger_module, "trigger_deerflow", new_callable=AsyncMock) as mock_trigger,
@@ -257,7 +257,7 @@ async def test_cycle_artifact_timeout(mock_db, mock_store, tmp_path):
 
 @pytest.mark.anyio
 async def test_cycle_empty_universe(mock_db, mock_store, tmp_path):
-    mock_db.execute.return_value.fetchall.return_value = []
+    mock_db.fetchall.return_value = []
 
     result = await run_cycle(
         mock_db,

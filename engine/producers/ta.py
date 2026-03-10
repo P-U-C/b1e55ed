@@ -5,8 +5,8 @@ Technical Analysis (TA) Producer.
 Fetches pre-computed TA indicators from a configured HTTP endpoint and emits
 :class:`~engine.core.events.EventType.SIGNAL_TA_V1`.
 
-The endpoint is configured via env and unit tests mock the injected
-``context.client``.
+Free fallback uses the Binance Klines public API (no auth required) to compute
+indicators locally when no custom endpoint is configured.
 
 Easter egg:
 - Charts change; patience doesn't.
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import statistics
 import time
 from datetime import datetime
 
@@ -45,6 +46,59 @@ from engine.core.regime import RegimeConfig, RegimeMatrix
 from engine.core.types import ProducerHealth, ProducerResult
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
+
+# ---------------------------------------------------------------------------
+# TA helper functions (used by _collect_free)
+# ---------------------------------------------------------------------------
+
+
+def _ema(data: list[float], period: int) -> float | None:
+    """Compute Exponential Moving Average."""
+    if len(data) < period:
+        return None
+    multiplier = 2 / (period + 1)
+    ema = statistics.mean(data[:period])
+    for val in data[period:]:
+        ema = (val - ema) * multiplier + ema
+    return ema
+
+
+def _compute_rsi(closes: list[float], period: int = 14) -> float | None:
+    """Compute Relative Strength Index."""
+    if len(closes) < period + 1:
+        return None
+    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains = [d if d > 0 else 0 for d in deltas]
+    losses = [-d if d < 0 else 0 for d in deltas]
+    avg_gain = statistics.mean(gains[:period])
+    avg_loss = statistics.mean(losses[:period])
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def _compute_atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float | None:
+    """Compute Average True Range."""
+    if len(closes) < period + 1:
+        return None
+    trs: list[float] = []
+    for i in range(1, len(closes)):
+        tr = max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        )
+        trs.append(tr)
+    if len(trs) < period:
+        return None
+    atr = statistics.mean(trs[:period])
+    for tr in trs[period:]:
+        atr = (atr * (period - 1) + tr) / period
+    return atr
 
 
 def _dedupe_key(*, producer: str, symbol: str, ts: datetime) -> str:
@@ -170,15 +224,23 @@ class TechnicalAnalysisProducer(BaseProducer):
     mcp_source_url: str | None = None  # override with MCP server URL when available
     interpreter: Interpreter | NullInterpreter | None = TechnicalInterpreter()
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_TA_URL",
+            "label": "Custom TA endpoint",
+            "type": "url",
+            "required": False,
+            "description": "Override the free Binance fallback with a custom TA data service",
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_TA_URL") or os.getenv("TA_URL")
 
-    def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
-        if not url:
-            self.ctx.logger.warning("ta_endpoint_missing")
-            return []
-
+    def _collect_from_custom(self, url: str) -> list[dict[str, Any]]:
+        """Fetch from a custom POST endpoint (original behaviour)."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
         if isinstance(data, dict) and "data" in data:
@@ -186,6 +248,107 @@ class TechnicalAnalysisProducer(BaseProducer):
         if not isinstance(data, list):
             return []
         return [row for row in data if isinstance(row, dict)]
+
+    def _collect_free(self) -> list[dict[str, Any]]:
+        """Free public API fallback (Binance Klines). Always available."""
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        results: list[dict[str, Any]] = []
+
+        for sym in symbols[:10]:  # limit to avoid rate limits
+            try:
+                resp = httpx.get(
+                    "https://api.binance.com/api/v3/klines",
+                    params={"symbol": f"{sym}USDT", "interval": "1h", "limit": 200},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                candles = resp.json()
+                if len(candles) < 50:
+                    continue
+
+                closes = [float(c[4]) for c in candles]
+                highs = [float(c[2]) for c in candles]
+                lows = [float(c[3]) for c in candles]
+                volumes = [float(c[5]) for c in candles]
+
+                # RSI-14
+                rsi = _compute_rsi(closes, 14)
+
+                # EMAs
+                ema_20 = _ema(closes, 20)
+                ema_50 = _ema(closes, 50)
+                ema_200 = _ema(closes, 200) if len(closes) >= 200 else None
+
+                # Bollinger Bands (20-period, 2 std)
+                bb_window = closes[-20:]
+                bb_mid = statistics.mean(bb_window)
+                bb_std = statistics.stdev(bb_window)
+                bb_upper = bb_mid + 2 * bb_std
+                bb_lower = bb_mid - 2 * bb_std
+                current = closes[-1]
+                bb_range = bb_upper - bb_lower
+                bb_position = (current - bb_lower) / bb_range if bb_range > 0 else 0.5
+
+                # ATR-14
+                atr = _compute_atr(highs, lows, closes, 14)
+
+                # Volume ratio (current vs 20-period avg)
+                vol_avg = statistics.mean(volumes[-20:]) if len(volumes) >= 20 else volumes[-1]
+                volume_ratio = volumes[-1] / vol_avg if vol_avg > 0 else 1.0
+
+                # Trend detection
+                trend = "bullish" if ema_20 and ema_50 and ema_20 > ema_50 else "bearish"
+                trend_strength = abs(ema_20 - ema_50) / current if ema_20 and ema_50 and current > 0 else 0.0
+                trend_strength = min(trend_strength * 10, 1.0)  # normalize to 0-1
+
+                # Volatility compression
+                bb_width = (bb_upper - bb_lower) / bb_mid if bb_mid > 0 else 0
+                volatility_compression = bb_width < 0.04
+
+                # Support / resistance (simple: recent low/high)
+                recent_low = min(lows[-20:])
+                recent_high = max(highs[-20:])
+                support_distance = (current - recent_low) / current if current > 0 else 0
+                resistance_distance = (recent_high - current) / current if current > 0 else 0
+
+                results.append(
+                    {
+                        "symbol": sym,
+                        "rsi_14": round(rsi, 2) if rsi else None,
+                        "ema_20": round(ema_20, 4) if ema_20 else None,
+                        "ema_50": round(ema_50, 4) if ema_50 else None,
+                        "ema_200": round(ema_200, 4) if ema_200 else None,
+                        "bb_upper": round(bb_upper, 4),
+                        "bb_lower": round(bb_lower, 4),
+                        "bb_mid": round(bb_mid, 4),
+                        "bb_position": round(bb_position, 4),
+                        "bb_width": round(bb_width, 4),
+                        "atr_14": round(atr, 4) if atr else None,
+                        "volume_ratio": round(volume_ratio, 2),
+                        "trend": trend,
+                        "trend_strength": round(trend_strength, 3),
+                        "support_distance": round(support_distance, 4),
+                        "resistance_distance": round(resistance_distance, 4),
+                        "volatility_compression": volatility_compression,
+                        "breakout_failure": False,
+                        "data_source": "binance_free",
+                    }
+                )
+            except Exception as e:  # noqa: BLE001
+                self.ctx.logger.warning("ta_free_symbol_failed symbol=%s error=%s", sym, e)
+                continue
+
+        return results
+
+    def collect(self) -> list[dict[str, Any]]:
+        url = self._custom_endpoint()
+        if url:
+            try:
+                return self._collect_from_custom(url)
+            except Exception:  # noqa: BLE001
+                self.ctx.logger.warning("custom_endpoint_failed_falling_back url=%s", url)
+        # Fall back to free API
+        return self._collect_free()
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)
