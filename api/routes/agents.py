@@ -107,7 +107,7 @@ def build_system_manifest(api_base: str = "") -> dict:
     """Build the system-level /.well-known/agent-registration.json manifest."""
     oracle_base = "https://oracle.b1e55ed.permanentupperclass.com"
     return {
-        "type": "https://github.com/P-U-C/b1e55ed/blob/main/docs/specs/erc-8004-agent-registration.md#registration-v1",
+        "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
         "name": "b1e55ed",
         "description": (
             "Falsifiable profit engine. Signal producers register, earn karma "
