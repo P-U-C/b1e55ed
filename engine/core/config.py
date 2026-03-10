@@ -198,6 +198,7 @@ class KarmaConfig(BaseModel):
     settlement_mode: Literal["manual", "daily", "weekly", "threshold"] = "manual"
     threshold_usd: float = 50.0
     treasury_address: str = ""
+    registration_threshold: float = 10.0  # karma units before prompting on-chain registration
 
 
 class DaemonConfig(BaseModel):
