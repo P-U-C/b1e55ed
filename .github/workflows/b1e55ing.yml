@@ -113,7 +113,7 @@ jobs:
         run: |
           git config user.name "a b1e55ing"
           git config user.email "b1e55ing@permanentupperclass.com"
-          git commit --allow-empty -m "chore: a b1e55ing [skip ci]"
+          git commit --allow-empty -m "chore: a b1e55ing"
 
       - name: Push blessing and capture SHA
         id: push
