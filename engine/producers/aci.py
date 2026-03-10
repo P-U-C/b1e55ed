@@ -173,12 +173,25 @@ class ACIProducer(BaseProducer):
         """Run with producer isolation: never raise.
 
         401/403 are treated as a degraded state (misconfigured/expired creds).
+        When no endpoint is configured, return OK with a note — not an error.
         """
 
         start = time.perf_counter()
         errors: list[str] = []
         published = 0
         health: ProducerHealth = ProducerHealth.OK
+
+        # Graceful skip when no endpoint is configured
+        if not self._endpoint():
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return ProducerResult(
+                events_published=0,
+                errors=["no_source_configured: set ACI_URL or B1E55ED_ACI_URL"],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(tz=UTC),
+                staleness_ms=None,
+                health=ProducerHealth.OK,
+            )
 
         try:
             raw = self.collect()

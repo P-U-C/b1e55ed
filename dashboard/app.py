@@ -716,6 +716,15 @@ def brain_overview(request: Request) -> HTMLResponse:
             pending_n = 0
         karma_pending = f"{pending_n} intents"
 
+    # Fetch cockpit state for merged brain+cockpit page
+    cockpit_state: dict[str, Any] = {}
+    try:
+        cockpit_res = client.get_cockpit_state()
+        if cockpit_res.ok and isinstance(cockpit_res.data, dict):
+            cockpit_state = cockpit_res.data
+    except Exception:
+        pass
+
     return templates.TemplateResponse(
         "brain.html",
         {
@@ -736,6 +745,8 @@ def brain_overview(request: Request) -> HTMLResponse:
             "disc_signals": _query_discretionary_signals(),
             "regime_history": _query_regime_history_for_brain(),
             "is_new_operator": _is_new_operator(),
+            "cockpit_state": cockpit_state,
+            "conviction_value": cockpit_state.get("conviction"),
         },
     )
 
@@ -903,6 +914,75 @@ def _query_discretionary_signals() -> list[dict[str, Any]]:
     signals = [dict(r) for r in rows]
     conn.close()
     return signals
+
+
+@app.post("/api/v1/signals/discretionary", response_class=HTMLResponse)
+async def submit_discretionary_signal(request: Request) -> HTMLResponse:
+    """Submit a discretionary signal via form or JSON."""
+    content_type = request.headers.get("content-type", "")
+
+    if "application/json" in content_type:
+        data = await request.json()
+    else:
+        form = await request.form()
+        data = dict(form)
+
+    symbol = str(data.get("symbol", "")).upper().strip()
+    direction = str(data.get("direction", "")).lower().strip()
+    notes = str(data.get("notes") or data.get("reasoning") or "")
+    try:
+        confidence = float(data.get("confidence", 5))
+        # Normalize: form sends 1-10, DB stores 0.0-1.0
+        if confidence > 1:
+            confidence = confidence / 10.0
+        confidence = max(0.0, min(1.0, confidence))
+    except (TypeError, ValueError):
+        confidence = 0.5
+
+    if not symbol:
+        return HTMLResponse('<span class="text-warn">⚠ Asset symbol required</span>')
+    if direction not in ("long", "short", "flat", "bullish", "bearish", "neutral"):
+        return HTMLResponse('<span class="text-warn">⚠ Direction must be long/short/flat</span>')
+
+    # Map aliases
+    if direction == "bullish":
+        direction = "long"
+    elif direction == "bearish":
+        direction = "short"
+    elif direction == "neutral":
+        direction = "flat"
+
+    db_path = _get_brain_db()
+    if not db_path:
+        return HTMLResponse('<span class="text-warn">⚠ Brain DB not found</span>')
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "discretionary_signals" not in tables:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS discretionary_signals ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "symbol TEXT NOT NULL, "
+                "direction TEXT NOT NULL, "
+                "confidence REAL, "
+                "reasoning TEXT, "
+                "created_at TEXT DEFAULT (datetime('now')), "
+                "expires_at TEXT DEFAULT (datetime('now', '+24 hours')))"
+            )
+
+        conn.execute(
+            "INSERT INTO discretionary_signals"
+            " (symbol, direction, confidence, reasoning, created_at, expires_at)"
+            " VALUES (?, ?, ?, ?, datetime('now'), datetime('now', '+24 hours'))",
+            (symbol, direction, confidence, notes),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return HTMLResponse(f'<span class="text-warn">⚠ DB error: {e}</span>')
+
+    return HTMLResponse(f'<span class="text-bull">✓ {symbol} {direction} @ {confidence:.0%} submitted</span>')
 
 
 @app.get("/forecasts", response_class=HTMLResponse)

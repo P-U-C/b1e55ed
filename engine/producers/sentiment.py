@@ -140,12 +140,27 @@ class MarketSentimentProducer(BaseProducer):
         return out
 
     def run(self) -> ProducerResult:
-        """Run with producer isolation: never raise."""
+        """Run with producer isolation: never raise.
+
+        When no endpoint is configured, return OK with a note — not an error.
+        """
 
         start = time.perf_counter()
         errors: list[str] = []
         published = 0
         health: ProducerHealth = ProducerHealth.OK
+
+        # Graceful skip when no endpoint is configured
+        if not self._endpoint():
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return ProducerResult(
+                events_published=0,
+                errors=["no_source_configured: set SENTIMENT_URL or B1E55ED_SENTIMENT_URL"],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(tz=UTC),
+                staleness_ms=None,
+                health=ProducerHealth.OK,
+            )
 
         try:
             raw = self.collect()

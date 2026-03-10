@@ -304,6 +304,19 @@ class DeerflowTriggerProducer(BaseProducer):
         import time
 
         start = time.monotonic()
+
+        # Graceful skip when gateway is not reachable
+        gw_key = os.environ.get("DEERFLOW_GATEWAY_API_KEY")
+        if not gw_key:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            return ProducerResult(
+                events_published=0,
+                errors=["no_source_configured: set DEERFLOW_GATEWAY_API_KEY"],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(UTC),
+                health=ProducerHealth.OK,
+            )
+
         store = ArtifactStore(db=self.ctx.db)
         try:
             result = asyncio.run(run_cycle(self.ctx.db, store))
