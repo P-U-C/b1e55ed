@@ -8,6 +8,44 @@
   <span class="panel-age">{{ producers | length if producers else 0 }} registered</span>
 </div>
 
+<!-- Registration (top, collapsed by default — auto-opens when no producers) -->
+<details class="panel grid-full" style="padding:0; margin-bottom:1rem;" {% if not producers %}open{% endif %}>
+  <summary style="cursor:pointer; padding:0.75rem 1rem; display:flex; justify-content:space-between; align-items:center; user-select:none; list-style:none;">
+    <span class="panel-title" style="pointer-events:none;">+ Register Producer</span>
+    <span style="font-size:0.7rem; color:var(--text-dim); font-family:var(--mono); pointer-events:none;">expand to add</span>
+  </summary>
+  <div style="padding:0 1rem 1rem;">
+  <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="name">Name</label>
+      <input class="input" id="name" name="name" placeholder="producer-name" required>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="domain">Domain</label>
+      <select class="input" id="domain" name="domain" required>
+        {% for d in domains %}
+          <option value="{{ d }}">{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="endpoint">Endpoint URL</label>
+      <input class="input" id="endpoint" name="endpoint" placeholder="/api/v1/producers/your-producer/signals" required>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
+      <label class="text-dim" for="schedule">Schedule</label>
+      <input class="input" id="schedule" name="schedule" value="*/15 * * * *" required>
+    </div>
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+      <button class="btn" type="submit">Register</button>
+      {% if form_result %}
+        <span class="{% if form_result.ok %}text-bull{% else %}text-warn{% endif %}" style="font-size:0.75rem;">{{ form_result.message }}</span>
+      {% endif %}
+    </div>
+  </form>
+  </div>
+</details>
+
 {% if producers %}
 {% set healthy_count = producers | selectattr('status', 'equalto', 'healthy') | list | length %}
 {% set degraded_count = producers | selectattr('status', 'equalto', 'degraded') | list | length %}
@@ -157,48 +195,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- Registration (collapsed by default — one-time setup) -->
-<details class="panel grid-full" style="padding:0;" {% if not producers %}open{% endif %}>
-  <summary style="cursor:pointer; padding:0.75rem 1rem; display:flex; justify-content:space-between; align-items:center; user-select:none; list-style:none;">
-    <span class="panel-title" style="pointer-events:none;">+ Register Producer</span>
-    <span style="font-size:0.7rem; color:var(--text-dim); font-family:var(--mono); pointer-events:none;">expand to add</span>
-  </summary>
-  <div style="padding:0 1rem 1rem;">
-  <form hx-post="/producers/register" hx-target="main" hx-swap="outerHTML" style="display:grid; grid-template-columns:1fr; gap:0.75rem; max-width:720px;">
-    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-      <label class="text-dim" for="name">Name</label>
-      <input class="input" id="name" name="name" placeholder="producer-name" required>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-      <label class="text-dim" for="domain">Domain</label>
-      <select class="input" id="domain" name="domain" required>
-        {% for d in domains %}
-          <option value="{{ d }}">{{ d }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-      <label class="text-dim" for="endpoint">Endpoint URL</label>
-      <input class="input" id="endpoint" name="endpoint" placeholder="/api/v1/producers/your-producer/signals" required>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 2fr; gap:0.75rem;">
-      <label class="text-dim" for="schedule">Schedule</label>
-      <input class="input" id="schedule" name="schedule" value="*/15 * * * *" required>
-    </div>
-
-    <div style="display:flex; align-items:center; gap:0.75rem;">
-      <button class="btn" type="submit">Register</button>
-      {% if form_result %}
-        <span class="{% if form_result.ok %}text-bull{% else %}text-warn{% endif %}" style="font-size:0.75rem;">{{ form_result.message }}</span>
-      {% endif %}
-    </div>
-  </form>
-  </div>
-</details>
 
 {% endblock %}
 
