@@ -50,7 +50,7 @@ class MCPServer:
                 return
 
         try:
-            from mcp.server.fastmcp import FastMCP
+            from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
         except ImportError:
             logger.warning("mcp_sdk_missing_registry_mode_only")
             return
