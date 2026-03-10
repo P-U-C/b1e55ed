@@ -121,6 +121,59 @@ def run_cycle(
     )
 
 
+@router.post("/cycle", response_model=CycleResult)
+def trigger_cycle(
+    config: Config = Depends(get_config),
+    db: Database = Depends(get_db),
+    ks: KillSwitch = Depends(get_kill_switch),
+) -> CycleResult:
+    """Trigger a brain cycle on-demand (debugging / manual override).
+
+    Identical to POST /brain/run but at a more intuitive path.
+    """
+    if int(ks.level) > 0:
+        raise B1e55edError(
+            code="kill_switch.active",
+            message="Kill switch is active",
+            status=423,
+            level=int(ks.level),
+        )
+
+    identity_handle = ensure_identity()
+    orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)
+
+    # Inject OMS for auto-paper-trade
+    try:
+        if getattr(config.execution, "mode", "paper") == "paper":
+            from engine.execution.oms import OMS
+
+            orch._oms = OMS(config=config, db=db)
+    except Exception:
+        pass
+
+    res = orch.run_cycle(symbols=list(config.universe.symbols))
+
+    kill_level = None
+    try:
+        kill_level = int(orch.kill_switch.level)
+    except Exception:
+        kill_level = None
+
+    regime = None
+    try:
+        regime = str(res.regime.state.regime)
+    except Exception:
+        regime = None
+
+    return CycleResult(
+        cycle_id=res.cycle_id,
+        ts=res.ts,
+        intents=res.intents,
+        regime=regime,
+        kill_switch_level=kill_level,
+    )
+
+
 @router.get("/convictions")
 def get_convictions(db: Database = Depends(get_db), limit: int = 20) -> list[dict]:
     """Latest conviction scores, one per asset (most recent)."""

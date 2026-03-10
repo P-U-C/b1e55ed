@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -118,6 +120,91 @@ def create_app() -> FastAPI:
     auth_token = str(getattr(config.api, "auth_token", "") or "")
     insecure_ok = os.environ.get("B1E55ED_INSECURE_OK", "").lower() in ("1", "true", "yes")
 
+    # Brain cycle interval from daemon config (default 300s = 5 min)
+    _brain_cycle_interval: int = getattr(config.daemon, "brain_interval_seconds", 300)
+
+    async def _brain_cycle_scheduler(app_ref: FastAPI) -> None:
+        """Background task: run BrainOrchestrator.run_cycle() on a schedule.
+
+        Waits 60s after startup to let producers populate, then loops every
+        ``brain_interval_seconds`` (default 300s).  Never crashes — all
+        exceptions are caught and logged.
+        """
+        _log = logging.getLogger("b1e55ed.brain_scheduler")
+        _log.info(
+            "Brain scheduler starting (initial_delay=60s, interval=%ds)",
+            _brain_cycle_interval,
+        )
+
+        # Let producers populate first.
+        await asyncio.sleep(60)
+
+        while True:
+            try:
+                _log.info("Brain scheduler: starting cycle…")
+                _cfg = app_ref.state.config
+                _db = app_ref.state.db
+
+                from engine.brain.orchestrator import BrainOrchestrator
+                from engine.security import ensure_identity
+
+                _identity = ensure_identity().identity
+                orchestrator = BrainOrchestrator(
+                    config=_cfg,
+                    db=_db,
+                    identity=_identity,
+                )
+
+                # Inject OMS for auto-paper-trade if execution mode is paper
+                try:
+                    if getattr(_cfg.execution, "mode", "paper") == "paper":
+                        from engine.execution.oms import OMS
+
+                        orchestrator._oms = OMS(config=_cfg, db=_db)
+                except Exception:
+                    _log.debug("OMS injection skipped", exc_info=True)
+
+                symbols = list(_cfg.universe.symbols)
+                result = orchestrator.run_cycle(symbols=symbols)
+
+                # Log summary
+                _cid = result.cycle_id[:8] if result.cycle_id else "?"
+                _regime = "?"
+                with contextlib.suppress(Exception):
+                    _regime = result.regime.state.regime
+
+                _top = "none"
+                if result.convictions:
+                    top_sym = max(
+                        result.convictions,
+                        key=lambda s: abs(result.convictions[s].final_conviction),
+                    )
+                    tc = result.convictions[top_sym]
+                    _dir = tc.score.direction if tc.score else "neutral"
+                    _conf = f"{(tc.score.confidence or 0):.2f}"
+                    _top = f"{top_sym} {_dir} (conf={_conf})"
+
+                _log.info(
+                    "Brain cycle complete: id=%s regime=%s top=%s assets=%d",
+                    _cid,
+                    _regime,
+                    _top,
+                    len(result.synthesis),
+                )
+
+            except asyncio.CancelledError:
+                _log.info("Brain scheduler cancelled — shutting down")
+                return
+            except Exception:
+                _log.exception("Brain scheduler cycle failed — will retry next interval")
+
+            # Sleep until next cycle
+            try:
+                await asyncio.sleep(_brain_cycle_interval)
+            except asyncio.CancelledError:
+                _log.info("Brain scheduler cancelled during sleep")
+                return
+
     if not auth_token and not insecure_ok:
         msg = (
             "❌ SECURITY ERROR: API auth_token is empty\n"
@@ -209,7 +296,31 @@ def create_app() -> FastAPI:
         except Exception:
             pass  # Never block startup on recovery failure.
 
+        # Start background Brain cycle scheduler
+        brain_task: asyncio.Task | None = None
+        try:
+            brain_task = asyncio.create_task(
+                _brain_cycle_scheduler(app),
+                name="brain-cycle-scheduler",
+            )
+            logging.getLogger("b1e55ed.startup").info(
+                "Brain cycle scheduler started (interval=%ds)",
+                _brain_cycle_interval,
+            )
+        except Exception:
+            logging.getLogger("b1e55ed.startup").warning(
+                "Failed to start brain cycle scheduler",
+                exc_info=True,
+            )
+
         yield
+
+        # Cancel brain cycle scheduler
+        if brain_task is not None and not brain_task.done():
+            brain_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await brain_task
+            logging.getLogger("b1e55ed.startup").info("Brain cycle scheduler stopped")
 
         # Best-effort close DB if we created it in this lifespan.
         db = getattr(app.state, "db", None)
