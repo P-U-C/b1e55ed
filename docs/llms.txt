@@ -24,27 +24,41 @@ Every response includes:
 X-Attribution-Notice: Fields informational only. May change without notice. Optimizing against specific metrics triggers drift detection.
 ```
 
-## MCP server — install into your agent environment
+## MCP server — JSON-RPC endpoint for agents
 
-b1e55ed exposes a JSON-RPC 2.0 MCP server. Install it once; use it as native tools.
+b1e55ed exposes MCP as JSON-RPC 2.0 over HTTP.
 
-**Server:** `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`
-**Auth:** `Authorization: Bearer <token>` (operator-provisioned)
+**Server:** `https://oracle.b1e55ed.permanentupperclass.com/mcp`  
+(also mounted at `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`)
+
+**Auth behavior:**
+- `initialize` and `tools/list` are public (no auth required)
+- `tools/call` requires either `X-API-Key` or `Authorization: Bearer` when `api.auth_token` is configured
 
 Available tools:
 
 | Tool | What it does |
 |------|-------------|
-| `b1e55ed_provenance_check` | Check producer lineage before acting on a signal |
-| `get_brain_status` | Current market regime, kill switch level, last cycle timestamp |
-| `get_recent_signals` | Recent signal events with optional domain filter |
-| `get_open_positions` | Open positions with entry price, conviction, regime at entry |
-| `emit_producer_signal` | Submit a signal as an agent producer |
-| `get_signal_attribution` | Full attribution chain for a specific signal |
+| `get_brain_status` | Regime + kill switch + last cycle metadata |
+| `get_recent_signals` | Recent `signal.*` events (optional limit/domain) |
+| `get_open_positions` | Open OMS positions |
+| `get_signal_attribution` | Attribution metadata for a specific signal ID |
+| `b1e55ed_provenance_check` | Producer lineage/provenance lookup |
+| `emit_producer_signal` | Emit a registered `signal.*` event |
+| `get_regime_status` | Regime snapshot with trend indicator |
+| `get_top_signals` | Filtered/paginated recent signals |
+| `get_regime_history` | Regime history for last N days |
+| `submit_research_signal` | Validate + emit `signal.research.v1` |
+| `get_signals_bulk_export` | Bulk historical signal export |
 
 To list tools programmatically:
 ```json
 {"jsonrpc":"2.0","method":"tools/list","id":1,"params":{}}
+```
+
+To call a tool:
+```json
+{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_brain_status","arguments":{}}}
 ```
 
 ## SSE event stream
