@@ -64,6 +64,14 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
 | `operator_coverage` | int | Distinct nodes that have observed this producer |
 | `attribution_windows` | object | Per-window hit rates and drawdowns |
 
+## Identity semantics (`source` vs `node_id`)
+
+- **Canonical producer identity is `node_id`** when a signal is linked to a registered contributor.
+- Oracle lookups accept either the canonical `node_id` **or** a historical `events.source` alias.
+- When an alias resolves unambiguously to a contributor, the response `producer_id` returns the canonical `node_id`.
+
+This keeps provenance queries coherent across legacy source labels and contributor-linked submissions.
+
 ## MCP tool
 
 The `b1e55ed_provenance_check` MCP tool wraps this endpoint for agent use.

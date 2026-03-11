@@ -62,6 +62,11 @@ def _extract_asset(payload: dict) -> str | None:
     return None
 
 
+def _canonical_signal_source(source: str | None, contributor_node_id: str) -> str:
+    normalized = str(source).strip() if source is not None else ""
+    return normalized or contributor_node_id
+
+
 @router.post("/submit", response_model=SignalSubmitResponse)
 def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> SignalSubmitResponse:
     if not str(req.event_type).startswith("signal."):
@@ -97,7 +102,7 @@ def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> S
     ev = db.append_event(
         event_type=req.event_type,
         payload=req.payload,
-        source=req.source,
+        source=_canonical_signal_source(req.source, contributor.node_id),
         contributor_id=contributor.id,
         ts=ts,
     )
@@ -166,17 +171,22 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     payload: dict = _json.loads(str(row["payload"])) if row["payload"] else {}
 
     # Resolve producer / contributor info
-    producer_id: str | None = row["source"]
+    producer_id: str | None = str(row["source"]) if row["source"] is not None else None
     domain: str | None = None
     contributor_id: str | None = row["contributor_id"]
 
     if contributor_id is not None:
         contrib_row = db.execute(
-            "SELECT name, metadata FROM contributors WHERE id = ?",
+            "SELECT node_id, name FROM contributors WHERE id = ?",
             (contributor_id,),
         ).fetchone()
-        if contrib_row is not None and not producer_id:
-            producer_id = str(contrib_row["name"])
+        if contrib_row is not None:
+            contributor_node_id = str(contrib_row["node_id"]) if contrib_row["node_id"] is not None else None
+            contributor_name = str(contrib_row["name"]) if contrib_row["name"] is not None else None
+            if contributor_node_id:
+                producer_id = contributor_node_id
+            elif not producer_id and contributor_name:
+                producer_id = contributor_name
 
     # Derive domain from event type  (signal.<domain>.*)
     event_type_str: str = str(row["type"])

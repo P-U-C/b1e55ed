@@ -50,6 +50,135 @@ class ProvenanceResult:
     note: str = ""
 
 
+@dataclass(frozen=True)
+class _IdentityResolution:
+    """Resolved identity used for provenance lookup."""
+
+    canonical_producer_id: str
+    source_aliases: tuple[str, ...]
+    contributor_ids: tuple[str, ...]
+
+
+def _normalize_identity(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _resolve_identity(producer_id: str, db: Database) -> _IdentityResolution:
+    """Resolve a producer query id into canonical + aliases.
+
+    Canonical identity is contributor ``node_id`` when there is an unambiguous
+    contributor match. Source aliases include historical ``events.source`` values
+    observed for the same contributor so both ``source`` and ``node_id`` lookups
+    converge to the same provenance record.
+    """
+
+    requested = _normalize_identity(producer_id) or str(producer_id)
+
+    source_aliases: set[str] = {requested}
+    contributor_ids: set[str] = set()
+    node_candidates: set[str] = set()
+
+    # 1) Direct contributor lookup (node_id or name)
+    direct_rows = db.fetchall(
+        "SELECT id, node_id, name FROM contributors WHERE node_id = ? OR name = ?",
+        (requested, requested),
+    )
+    for row in direct_rows:
+        cid = _normalize_identity(row["id"])
+        node_id = _normalize_identity(row["node_id"])
+        name = _normalize_identity(row["name"])
+
+        if cid:
+            contributor_ids.add(cid)
+        if node_id:
+            node_candidates.add(node_id)
+            source_aliases.add(node_id)
+        if name:
+            source_aliases.add(name)
+
+    # 2) Source lookup: source string may be an alias for a contributor node.
+    by_source_rows = db.fetchall(
+        "SELECT DISTINCT contributor_id FROM events WHERE source = ? AND contributor_id IS NOT NULL",
+        (requested,),
+    )
+    for row in by_source_rows:
+        cid = _normalize_identity(row[0])
+        if cid:
+            contributor_ids.add(cid)
+
+    # 3) Expand aliases from contributor linkage (historical source values).
+    if contributor_ids:
+        contributor_ids_list = sorted(contributor_ids)
+        placeholders = ",".join(["?"] * len(contributor_ids_list))
+
+        contributor_rows = db.fetchall(
+            f"SELECT id, node_id, name FROM contributors WHERE id IN ({placeholders})",
+            tuple(contributor_ids_list),
+        )
+        for row in contributor_rows:
+            node_id = _normalize_identity(row["node_id"])
+            name = _normalize_identity(row["name"])
+            if node_id:
+                node_candidates.add(node_id)
+                source_aliases.add(node_id)
+            if name:
+                source_aliases.add(name)
+
+        source_rows = db.fetchall(
+            f"SELECT DISTINCT source FROM events WHERE contributor_id IN ({placeholders}) AND source IS NOT NULL",
+            tuple(contributor_ids_list),
+        )
+        for row in source_rows:
+            src = _normalize_identity(row[0])
+            if src:
+                source_aliases.add(src)
+
+    # Canonicalize when mapping is unambiguous to a single contributor node_id.
+    canonical = requested
+    if len(node_candidates) == 1:
+        canonical = next(iter(node_candidates))
+    elif requested in node_candidates:
+        canonical = requested
+
+    return _IdentityResolution(
+        canonical_producer_id=canonical,
+        source_aliases=tuple(sorted(source_aliases)),
+        contributor_ids=tuple(sorted(contributor_ids)),
+    )
+
+
+def _build_signal_identity_filter(identity: _IdentityResolution) -> tuple[str, tuple[str, ...]]:
+    """Build SQL predicate params for matching producer signal events."""
+
+    clauses: list[str] = []
+    params: list[str] = []
+
+    if identity.source_aliases:
+        placeholders = ",".join(["?"] * len(identity.source_aliases))
+        clauses.append(f"source IN ({placeholders})")
+        params.extend(identity.source_aliases)
+
+    if identity.contributor_ids:
+        placeholders = ",".join(["?"] * len(identity.contributor_ids))
+        clauses.append(f"contributor_id IN ({placeholders})")
+        params.extend(identity.contributor_ids)
+
+    if not clauses:
+        return "1 = 0", tuple()
+
+    return f"({' OR '.join(clauses)})", tuple(params)
+
+
+def _build_in_clause(column: str, values: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+    if not values:
+        return "1 = 0", tuple()
+    placeholders = ",".join(["?"] * len(values))
+    return f"{column} IN ({placeholders})", values
+
+
 def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     """
     Compute full provenance for *producer_id*.
@@ -58,19 +187,27 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     exists (check ``has_provenance``).
     """
 
+    identity = _resolve_identity(producer_id, db)
+    signal_filter_sql, signal_filter_params = _build_signal_identity_filter(identity)
+
     # -----------------------------------------------------------------------
-    # 1. Basic event existence check
+    # 1. Signal existence + first/last seen (canonicalized over source aliases
+    #    and contributor linkage).
     # -----------------------------------------------------------------------
     row = db.fetchone(
-        "SELECT MIN(created_at), MAX(created_at), COUNT(*) FROM events WHERE source = ?",
-        (producer_id,),
+        f"""
+        SELECT MIN(created_at), MAX(created_at), COUNT(*)
+        FROM events
+        WHERE type LIKE 'signal.%' AND {signal_filter_sql}
+        """,
+        signal_filter_params,
     )
 
-    total_events = int(row[2]) if row else 0
+    total_signals = int(row[2]) if row else 0
 
-    if total_events == 0:
+    if total_signals == 0:
         return ProvenanceResult(
-            producer_id=producer_id,
+            producer_id=identity.canonical_producer_id,
             has_provenance=False,
             chain_verified=False,
             chain_integrity_spot_checked=False,
@@ -82,18 +219,20 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
             note=("No provenance data available. Proceeding without attribution context."),
         )
 
-    assert row is not None  # COUNT(*) always returns a row; guarded by total_events check above
+    assert row is not None  # COUNT(*) always returns a row; guarded by total_signals check above
     first_seen: str | None = str(row[0]) if row[0] else None
     last_seen: str | None = str(row[1]) if row[1] else None
 
     # -----------------------------------------------------------------------
-    # 2. Operator coverage (distinct contributors, used as proxy for node coverage)
-    #    events.contributor_id references contributors.id, each of which has a
-    #    unique node_id — so COUNT(DISTINCT contributor_id) ≈ distinct nodes.
+    # 2. Operator coverage (distinct contributors for matched signals)
     # -----------------------------------------------------------------------
     cov_row = db.fetchone(
-        "SELECT COUNT(DISTINCT contributor_id) FROM events WHERE source = ?",
-        (producer_id,),
+        f"""
+        SELECT COUNT(DISTINCT contributor_id)
+        FROM events
+        WHERE type LIKE 'signal.%' AND contributor_id IS NOT NULL AND {signal_filter_sql}
+        """,
+        signal_filter_params,
     )
     operator_coverage = int(cov_row[0]) if cov_row else 0
 
@@ -114,29 +253,21 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
     chain_verified = chain_integrity_spot_checked  # backwards-compat alias
 
     # -----------------------------------------------------------------------
-    # 4. P&L attribution: check if any conviction_scores for this producer
-    #    have resolved outcomes (proxy for attribution to actual P&L).
-    #    karma_settlements.intent_ids is a JSON list and does not directly
-    #    reference producer_id, so we use the conviction_scores outcome as
-    #    the canonical signal that outcomes were tracked.
+    # 4. Outcome attribution from conviction_scores.
+    #    We resolve by canonical id + aliases so source/node_id queries share
+    #    one identity surface.
     # -----------------------------------------------------------------------
+    score_node_ids = tuple(sorted({x for x in (identity.canonical_producer_id, *identity.source_aliases) if x}))
+    score_filter_sql, score_filter_params = _build_in_clause("node_id", score_node_ids)
+
     pnl_row = db.fetchone(
-        "SELECT COUNT(*) FROM conviction_scores WHERE node_id = ? AND outcome IS NOT NULL",
-        (producer_id,),
+        f"SELECT COUNT(*) FROM conviction_scores WHERE {score_filter_sql} AND outcome IS NOT NULL",
+        score_filter_params,
     )
     p_and_l_attributed = bool(pnl_row and int(pnl_row[0]) > 0)
 
     # -----------------------------------------------------------------------
-    # 5. Total signals (conviction_scores emitted by this producer as node)
-    # -----------------------------------------------------------------------
-    sig_row = db.fetchone(
-        "SELECT COUNT(*) FROM conviction_scores WHERE node_id = ?",
-        (producer_id,),
-    )
-    total_signals = int(sig_row[0]) if sig_row else 0
-
-    # -----------------------------------------------------------------------
-    # 6. Attribution windows (7d, 30d, 90d)
+    # 5. Attribution windows (7d, 30d, 90d)
     # -----------------------------------------------------------------------
     windows: dict[str, AttributionWindow] = {}
     for label, days in (("7d", 7), ("30d", 30), ("90d", 90)):
@@ -144,16 +275,16 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
         cutoff_iso = cutoff.isoformat()
 
         w_row = db.fetchone(
-            """
+            f"""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN outcome IS NOT NULL AND outcome > 0 THEN 1 ELSE 0 END) AS wins,
                 SUM(CASE WHEN outcome IS NOT NULL THEN 1 ELSE 0 END) AS known,
                 MIN(CASE WHEN outcome IS NOT NULL THEN outcome ELSE NULL END) AS min_outcome
             FROM conviction_scores
-            WHERE node_id = ? AND ts >= ?
+            WHERE {score_filter_sql} AND ts >= ?
             """,
-            (producer_id, cutoff_iso),
+            (*score_filter_params, cutoff_iso),
         )
 
         if w_row is None:
@@ -177,7 +308,7 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
         )
 
     return ProvenanceResult(
-        producer_id=producer_id,
+        producer_id=identity.canonical_producer_id,
         has_provenance=True,
         chain_verified=chain_verified,
         chain_integrity_spot_checked=chain_integrity_spot_checked,
@@ -188,7 +319,8 @@ def compute_provenance(producer_id: str, db: Database) -> ProvenanceResult:
         last_seen=last_seen,
         attribution_windows=windows,
         note=(
-            "Provenance data available. Fields are informational only — interpret in context. "
+            "Provenance data available. Queries resolve contributor node_id and observed source aliases to a "
+            "canonical producer identity. Fields are informational only — interpret in context. "
             "chain_integrity_spot_checked: last 100 events verified against their stored hashes."
         ),
     )
