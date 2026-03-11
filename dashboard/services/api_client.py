@@ -85,6 +85,12 @@ class ApiClient:
         # Kill switch is exposed via brain/status.
         return self._get_json("/brain/status")
 
+    def run_brain_cycle(self) -> ApiResult:
+        return self._post_json("/brain/run", {})
+
+    def set_kill_switch(self, level: int, reason: str = "dashboard") -> ApiResult:
+        return self._post_json("/kill-switch/set", {"level": int(level), "reason": reason})
+
     def get_convictions(self, limit: int = 20) -> ApiResult:
         return self._get_json(f"/brain/convictions?limit={limit}")
 

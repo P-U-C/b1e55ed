@@ -76,7 +76,9 @@
       <button class="btn {{ 'btn-danger' if kill_switch_level | default(0) > 0 else '' }}"
               style="font-size:0.7rem; padding:3px 10px;"
               hx-post="/api/kill-switch"
-              hx-confirm="Toggle kill switch?">
+              hx-confirm="Toggle kill switch?"
+              hx-target="#cycle-result"
+              hx-swap="innerHTML">
         ⚠ KS: {{ 'L%d' | format(kill_switch_level) if kill_switch_level | default(0) > 0 else 'OFF' }}
       </button>
       <span id="cycle-result" style="font-size:0.75rem;"></span>
