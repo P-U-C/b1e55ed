@@ -76,7 +76,7 @@ GET /api/v1/capabilities
 Authorization: Bearer <token>
 ```
 
-Returns what this instance supports — tools, event domains, producer list. Use for agent onboarding.
+Returns what this instance supports — MCP tools, event domains, and producer capability entries (signal types + health). Use for agent onboarding.
 
 ## Trace sessions
 

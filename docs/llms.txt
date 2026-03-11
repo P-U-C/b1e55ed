@@ -84,7 +84,7 @@ GET /api/v1/capabilities
 Authorization: Bearer <token>
 ```
 
-Returns what this node supports: tools, event domains, producer list. Use on first contact.
+Returns MCP tools, supported event domains, and producer capability entries (including per-producer signal types and health). Use on first contact.
 
 ## Health check
 
@@ -100,7 +100,7 @@ No auth. Returns version, uptime, db_size_bytes.
 GET /api/v1/openapi.json
 ```
 
-Full machine-readable API specification.
+Compatibility alias for the canonical `GET /openapi.json` path. Full machine-readable API specification.
 
 ## Full documentation
 
