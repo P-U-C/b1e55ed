@@ -625,6 +625,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = subprocess.run(
+        # Rectification of names: a blessing commit should be explicit, not a CI blindfold.
         ["git", "commit", "-m", "chore: a b1e55ing"],
         cwd=repo_root,
         capture_output=True,
