@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover
 
 
 def _seed_social_producers(db: Database) -> None:
-    """Insert mock social producers into producer_health."""
+    """Insert failing mock social producers into producer_health."""
     db.conn.execute(
         """
         INSERT OR IGNORE INTO producer_health (name, domain, schedule, consecutive_failures, events_produced)
@@ -32,6 +32,20 @@ def _seed_social_producers(db: Database) -> None:
         INSERT OR IGNORE INTO producer_health (name, domain, schedule, consecutive_failures, events_produced)
         VALUES ('market-sentiment', 'social', '*/15 * * * *', 3, 0)
         """
+    )
+    db.conn.commit()
+
+
+def _seed_healthy_social_producer(db: Database) -> None:
+    """Insert one healthy social producer for active/no-data status tests."""
+    now = datetime.now(tz=UTC).isoformat()
+    db.conn.execute(
+        """
+        INSERT OR REPLACE INTO producer_health
+        (name, domain, schedule, consecutive_failures, last_run_at, last_success_at, last_error, events_produced)
+        VALUES ('social-intel', 'social', '*/15 * * * *', 0, ?, ?, NULL, 3)
+        """,
+        (now, now),
     )
     db.conn.commit()
 
@@ -131,12 +145,55 @@ async def test_social_status_with_producers(_app_and_headers):
         r = await ac.get("/api/v1/social/status", headers=headers)
         assert r.status_code == 200
         js = r.json()
-        assert js["pipeline_status"] in ("unconfigured", "down", "degraded", "active")
+        assert js["pipeline_status"] == "unconfigured"
         assert len(js["producers"]) == 2
         # Not seeded yet so should be unconfigured
         assert js["seeded"] is False
         assert "seed_default_watchlist" in js["actions_available"]
         assert "reset_failures" in js["actions_available"]
+
+
+@pytest.mark.anyio
+async def test_social_status_running_no_data_when_configured(_app_and_headers):
+    app, headers, db = _app_and_headers
+    _seed_healthy_social_producer(db)
+
+    async with make_client(app) as ac:
+        await ac.post("/api/v1/social/seed", headers=headers, json={"watchlist": ["BTC"]})
+        await ac.post(
+            "/api/v1/social/sources/add",
+            headers=headers,
+            json={"name": "BTC keyword", "type": "keyword", "value": "bitcoin"},
+        )
+
+        r = await ac.get("/api/v1/social/status", headers=headers)
+        assert r.status_code == 200
+        js = r.json()
+        assert js["pipeline_status"] == "running_no_data"
+        assert js["signal_events_count"] == 0
+        assert js["watchlist_count"] == 1
+        assert js["sources_configured"] == 1
+
+
+@pytest.mark.anyio
+async def test_social_status_active_when_signal_events_exist(_app_and_headers):
+    app, headers, db = _app_and_headers
+    _seed_healthy_social_producer(db)
+    _seed_social_events(db)
+
+    async with make_client(app) as ac:
+        await ac.post("/api/v1/social/seed", headers=headers, json={"watchlist": ["BTC"]})
+        await ac.post(
+            "/api/v1/social/sources/add",
+            headers=headers,
+            json={"name": "BTC keyword", "type": "keyword", "value": "bitcoin"},
+        )
+
+        r = await ac.get("/api/v1/social/status", headers=headers)
+        assert r.status_code == 200
+        js = r.json()
+        assert js["pipeline_status"] == "active"
+        assert js["signal_events_count"] >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -341,11 +398,30 @@ async def test_add_to_watchlist(_app_and_headers):
         js = r.json()
         assert js["added"] is True
         assert js["symbol"] == "AVAX"
+        assert "Added" in js["message"]
 
         # Verify via watchlist endpoint
         r2 = await ac.get("/api/v1/social/watchlist", headers=headers)
         assert r2.status_code == 200
         assert r2.json()["count"] == 1
+
+
+@pytest.mark.anyio
+async def test_remove_from_watchlist_reports_missing_and_removed(_app_and_headers):
+    app, headers, db = _app_and_headers
+    async with make_client(app) as ac:
+        r_missing = await ac.delete("/api/v1/social/watchlist/AVAX", headers=headers)
+        assert r_missing.status_code == 200
+        js_missing = r_missing.json()
+        assert js_missing["removed"] is False
+        assert "not in watchlist" in js_missing["message"]
+
+        await ac.post("/api/v1/social/watchlist/add", headers=headers, json={"symbol": "avax"})
+        r_removed = await ac.delete("/api/v1/social/watchlist/AVAX", headers=headers)
+        assert r_removed.status_code == 200
+        js_removed = r_removed.json()
+        assert js_removed["removed"] is True
+        assert "Removed AVAX" in js_removed["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +442,16 @@ async def test_add_source(_app_and_headers):
         js = r.json()
         assert js["added"] is True
         assert js["id"] > 0
+        assert "Added source" in js["message"]
+
+        r_dup = await ac.post(
+            "/api/v1/social/sources/add",
+            headers=headers,
+            json={"name": "Cobie", "type": "twitter_account", "value": "@coabornn"},
+        )
+        js_dup = r_dup.json()
+        assert js_dup["added"] is False
+        assert js_dup["id"] == js["id"]
 
         # Verify via sources endpoint
         r2 = await ac.get("/api/v1/social/sources", headers=headers)

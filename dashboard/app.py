@@ -1190,6 +1190,7 @@ def social_page(request: Request) -> HTMLResponse:
     nar_res = client.get_social_narratives()
     src_res = client.get_social_sources()
     cur_res = client.get_curator_feed()
+    coll_res = client.get_collector_health()
 
     sentiments = sent_res.data.get("items") if (sent_res.ok and isinstance(sent_res.data, dict)) else []
     alerts = alerts_res.data.get("items") if (alerts_res.ok and isinstance(alerts_res.data, dict)) else []
@@ -1197,11 +1198,9 @@ def social_page(request: Request) -> HTMLResponse:
     sources = src_res.data.get("items") if (src_res.ok and isinstance(src_res.data, dict)) else []
     curator_signals = cur_res.data.get("items") if (cur_res.ok and isinstance(cur_res.data, dict)) else []
 
-    # Recent artifacts for the Research Artifacts panel
     art_res = client.get_artifacts(limit=5)
     recent_artifacts = art_res.data.get("items") if (art_res.ok and isinstance(art_res.data, dict)) else []
 
-    # Extract diagnostic info from status endpoint
     pipeline_status = str(status_data.get("pipeline_status", "unknown"))
     pipeline_active = bool(status_data.get("pipeline_active", False))
     diagnosis = str(status_data.get("diagnosis", "Unable to reach social status API"))
@@ -1209,21 +1208,41 @@ def social_page(request: Request) -> HTMLResponse:
     producer_health = status_data.get("producers", [])
     watchlist = status_data.get("watchlist", [])
     seeded = bool(status_data.get("seeded", False))
-    watchlist_count = int(status_data.get("watchlist_count", 0))
-    sources_configured = int(status_data.get("sources_configured", 0))
+    watchlist_count = int(status_data.get("watchlist_count", 0) or 0)
+    sources_configured = int(status_data.get("sources_configured", 0) or 0)
+    signal_events_count = int(status_data.get("signal_events_count", 0) or 0)
+    failing_producers = int(status_data.get("failing_producers", 0) or 0)
 
-    # Compute last run from producer data
     pipeline_last_run = "never"
+    newest_run: datetime | None = None
     for p in producer_health if isinstance(producer_health, list) else []:
-        if isinstance(p, dict) and p.get("last_run_at"):
-            try:
-                dt = datetime.fromisoformat(str(p["last_run_at"]).replace("Z", "+00:00"))
-                pipeline_last_run, _ = _age_str(dt)
-            except Exception:
-                pass
+        if not isinstance(p, dict) or not p.get("last_run_at"):
+            continue
+        try:
+            dt = datetime.fromisoformat(str(p["last_run_at"]).replace("Z", "+00:00"))
+            if newest_run is None or dt > newest_run:
+                newest_run = dt
+        except Exception:
+            continue
+    if newest_run is not None:
+        pipeline_last_run, _ = _age_str(newest_run)
 
-    # Sentiment horizon data: recent social signal scores grouped by producer
+    social_empty_reason = diagnosis
+    if pipeline_status == "unconfigured":
+        if watchlist_count == 0:
+            social_empty_reason = "No watchlist configured yet. Seed defaults or add symbols manually."
+        elif sources_configured == 0:
+            social_empty_reason = "No social sources configured yet. Add at least one source to start collection."
+    elif pipeline_status == "running_no_data":
+        social_empty_reason = "Pipeline is running, but no social signal events have been produced yet."
+    elif pipeline_status in {"degraded", "down"}:
+        social_empty_reason = "Social pipeline is degraded. Inspect producer failures and collector health below."
+    elif not sent_res.ok:
+        social_empty_reason = "Sentiment API unavailable right now."
+
     sentiment_horizons = _get_sentiment_horizons()
+
+    collector_data = coll_res.data if (coll_res.ok and isinstance(coll_res.data, dict)) else {}
 
     return templates.TemplateResponse(
         "social.html",
@@ -1239,6 +1258,9 @@ def social_page(request: Request) -> HTMLResponse:
             "seeded": seeded,
             "watchlist_count": watchlist_count,
             "sources_configured": sources_configured,
+            "signal_events_count": signal_events_count,
+            "failing_producers": failing_producers,
+            "social_empty_reason": social_empty_reason,
             "llm_cost": 0.0,
             "llm_budget": 100,
             "llm_cost_pct": 0.0,
@@ -1254,6 +1276,9 @@ def social_page(request: Request) -> HTMLResponse:
             "source_warnings": [],
             "recent_artifacts": recent_artifacts if isinstance(recent_artifacts, list) else [],
             "sentiment_horizons": sentiment_horizons,
+            "collectors": collector_data.get("collectors", []),
+            "collector_summary": collector_data.get("summary", {}),
+            "collector_health_ok": coll_res.ok,
         },
     )
 
@@ -2071,38 +2096,91 @@ def signal_history_partial(request: Request, domain: str | None = None) -> HTMLR
 # ---- Social action partials (HTMX POST handlers) ----------------------
 
 
+def _feedback(message: str, level: str = "info") -> dict[str, str]:
+    return {"message": message, "level": level}
+
+
 @app.post("/social/action/seed", response_class=HTMLResponse)
 def social_action_seed(request: Request) -> HTMLResponse:
     client = _api(request)
-    client.post_social_seed()
-    return _social_status_partial(request)
+    res = client.post_social_seed()
+
+    if res.ok and isinstance(res.data, dict):
+        count = int(res.data.get("count", 0) or 0)
+        msg = str(res.data.get("message") or "Seed request completed")
+        level = "success" if count > 0 else "warning"
+        return _social_status_partial(request, feedback=_feedback(msg, level))
+
+    return _social_status_partial(request, feedback=_feedback("Seed request failed — API unreachable", "error"))
 
 
 @app.post("/social/action/reset-failures", response_class=HTMLResponse)
 def social_action_reset(request: Request) -> HTMLResponse:
     client = _api(request)
-    client.post_social_reset_failures()
-    return _social_status_partial(request)
+    res = client.post_social_reset_failures()
+
+    if res.ok and isinstance(res.data, dict):
+        reset_count = int(res.data.get("producers_reset", 0) or 0)
+        if reset_count > 0:
+            msg = f"Reset failures for {reset_count} producer{'s' if reset_count != 1 else ''}."
+            level = "success"
+        else:
+            msg = "No producer failures to reset."
+            level = "warning"
+        return _social_status_partial(request, feedback=_feedback(msg, level))
+
+    return _social_status_partial(request, feedback=_feedback("Reset request failed — API unreachable", "error"))
 
 
 @app.post("/social/action/run-now", response_class=HTMLResponse)
 def social_action_run(request: Request) -> HTMLResponse:
     client = _api(request)
     res = client.post_social_run_now()
-    msg = "Triggered"
+
     if res.ok and isinstance(res.data, dict):
-        msg = str(res.data.get("message", "Pipeline run triggered"))
-    return HTMLResponse(f'<div class="text-dim" style="font-size:0.75rem; padding:0.5rem;">✓ {msg}</div>')
+        msg = str(res.data.get("message") or "Run now request submitted")
+        if bool(res.data.get("already_running", False)):
+            level = "warning"
+        else:
+            level = "success" if bool(res.data.get("triggered", True)) else "warning"
+        return _social_status_partial(request, feedback=_feedback(msg, level))
+
+    return _social_status_partial(request, feedback=_feedback("Run now failed — API unreachable", "error"))
 
 
 @app.post("/social/action/add-to-watchlist", response_class=HTMLResponse)
 async def social_action_add_watchlist(request: Request) -> HTMLResponse:
     form = await request.form()
     symbol = str(form.get("symbol", "")).strip().upper()
-    if symbol:
-        client = _api(request)
-        client.post_social_add_watchlist(symbol)
-    return _social_watchlist_partial(request)
+    if not symbol:
+        return _social_watchlist_partial(request, feedback=_feedback("Symbol is required", "error"))
+
+    client = _api(request)
+    res = client.post_social_add_watchlist(symbol)
+    if res.ok and isinstance(res.data, dict):
+        added = bool(res.data.get("added", False))
+        msg = str(res.data.get("message") or (f"Added {symbol} to watchlist" if added else f"{symbol} is already on watchlist"))
+        level = "success" if added else "warning"
+        return _social_watchlist_partial(request, feedback=_feedback(msg, level))
+
+    return _social_watchlist_partial(request, feedback=_feedback("Failed to add watchlist symbol — API unreachable", "error"))
+
+
+@app.delete("/social/action/remove-from-watchlist/{symbol}", response_class=HTMLResponse)
+def social_action_remove_watchlist(request: Request, symbol: str) -> HTMLResponse:
+    client = _api(request)
+    sym = symbol.strip().upper()
+    if not sym:
+        return _social_watchlist_partial(request, feedback=_feedback("Symbol is required", "error"))
+
+    res = client.delete_social_watchlist(sym)
+    if res.ok and isinstance(res.data, dict):
+        removed = bool(res.data.get("removed", False))
+        msg = str(res.data.get("message") or (f"Removed {sym} from watchlist" if removed else f"{sym} was not in watchlist"))
+        level = "success" if removed else "warning"
+        return _social_watchlist_partial(request, feedback=_feedback(msg, level))
+
+    return _social_watchlist_partial(request, feedback=_feedback("Failed to remove watchlist symbol — API unreachable", "error"))
 
 
 @app.post("/social/action/add-source", response_class=HTMLResponse)
@@ -2111,13 +2189,22 @@ async def social_action_add_source(request: Request) -> HTMLResponse:
     name = str(form.get("name", "")).strip()
     src_type = str(form.get("type", "")).strip()
     value = str(form.get("value", "")).strip()
-    if name and src_type and value:
-        client = _api(request)
-        client.post_social_add_source(name, src_type, value)
-    return _social_sources_partial(request)
+
+    if not name or not src_type or not value:
+        return _social_sources_partial(request, feedback=_feedback("Name, type, and value are required", "error"))
+
+    client = _api(request)
+    res = client.post_social_add_source(name, src_type, value)
+    if res.ok and isinstance(res.data, dict):
+        added = bool(res.data.get("added", False))
+        msg = str(res.data.get("message") or (f"Added source: {name}" if added else f"Source already exists: {name}"))
+        level = "success" if added else "warning"
+        return _social_sources_partial(request, feedback=_feedback(msg, level))
+
+    return _social_sources_partial(request, feedback=_feedback("Failed to add source — API unreachable", "error"))
 
 
-def _social_status_partial(request: Request) -> HTMLResponse:
+def _social_status_partial(request: Request, feedback: dict[str, str] | None = None) -> HTMLResponse:
     client = _api(request)
     status_res = client.get_social_status()
     status_data = status_res.data if (status_res.ok and isinstance(status_res.data, dict)) else {}
@@ -2128,15 +2215,37 @@ def _social_status_partial(request: Request) -> HTMLResponse:
     actions_available = status_data.get("actions_available", [])
     producer_health = status_data.get("producers", [])
     seeded = bool(status_data.get("seeded", False))
+    watchlist_count = int(status_data.get("watchlist_count", 0) or 0)
+    sources_configured = int(status_data.get("sources_configured", 0) or 0)
+    signal_events_count = int(status_data.get("signal_events_count", 0) or 0)
+    failing_producers = int(status_data.get("failing_producers", 0) or 0)
 
     pipeline_last_run = "never"
+    newest_run: datetime | None = None
     for p in producer_health if isinstance(producer_health, list) else []:
-        if isinstance(p, dict) and p.get("last_run_at"):
-            try:
-                dt = datetime.fromisoformat(str(p["last_run_at"]).replace("Z", "+00:00"))
-                pipeline_last_run, _ = _age_str(dt)
-            except Exception:
-                pass
+        if not isinstance(p, dict) or not p.get("last_run_at"):
+            continue
+        try:
+            dt = datetime.fromisoformat(str(p["last_run_at"]).replace("Z", "+00:00"))
+            if newest_run is None or dt > newest_run:
+                newest_run = dt
+        except Exception:
+            continue
+    if newest_run is not None:
+        pipeline_last_run, _ = _age_str(newest_run)
+
+    signal_last_seen = "never"
+    raw_last_signal = status_data.get("last_signal_at")
+    if isinstance(raw_last_signal, str) and raw_last_signal:
+        try:
+            dt = datetime.fromisoformat(raw_last_signal.replace("Z", "+00:00"))
+            signal_last_seen, _ = _age_str(dt)
+        except Exception:
+            signal_last_seen = raw_last_signal
+
+    status_feedback = feedback
+    if status_feedback is None and not status_res.ok:
+        status_feedback = _feedback("Unable to refresh status from API", "error")
 
     return templates.TemplateResponse(
         "partials/social_status_panel.html",
@@ -2149,11 +2258,17 @@ def _social_status_partial(request: Request) -> HTMLResponse:
             "actions_available": actions_available if isinstance(actions_available, list) else [],
             "producer_health": producer_health if isinstance(producer_health, list) else [],
             "seeded": seeded,
+            "watchlist_count": watchlist_count,
+            "sources_configured": sources_configured,
+            "signal_events_count": signal_events_count,
+            "failing_producers": failing_producers,
+            "signal_last_seen": signal_last_seen,
+            "status_feedback": status_feedback,
         },
     )
 
 
-def _social_watchlist_partial(request: Request) -> HTMLResponse:
+def _social_watchlist_partial(request: Request, feedback: dict[str, str] | None = None) -> HTMLResponse:
     client = _api(request)
     wl_res = client.get_social_watchlist()
     watchlist: list[dict[str, Any]] = []
@@ -2161,28 +2276,65 @@ def _social_watchlist_partial(request: Request) -> HTMLResponse:
         watchlist = wl_res.data.get("items", [])
     symbols = [str(w.get("symbol", "")) for w in watchlist if isinstance(w, dict)]
 
+    status_feedback = feedback
+    if status_feedback is None and not wl_res.ok:
+        status_feedback = _feedback("Unable to refresh watchlist from API", "error")
+
     return templates.TemplateResponse(
         "partials/social_watchlist_panel.html",
         {
             "request": request,
             "watchlist": symbols,
             "watchlist_count": len(symbols),
+            "status_feedback": status_feedback,
+            "api_ok": wl_res.ok,
         },
     )
 
 
-def _social_sources_partial(request: Request) -> HTMLResponse:
+def _social_sources_partial(request: Request, feedback: dict[str, str] | None = None) -> HTMLResponse:
     client = _api(request)
     src_res = client.get_social_sources()
     sources: list[dict[str, Any]] = []
     if src_res.ok and isinstance(src_res.data, dict):
         sources = src_res.data.get("items", [])
 
+    status_feedback = feedback
+    if status_feedback is None and not src_res.ok:
+        status_feedback = _feedback("Unable to refresh sources from API", "error")
+
     return templates.TemplateResponse(
         "partials/social_sources_panel.html",
         {
             "request": request,
             "sources": sources if isinstance(sources, list) else [],
+            "status_feedback": status_feedback,
+            "api_ok": src_res.ok,
+        },
+    )
+
+
+@app.get("/partials/collector-health", response_class=HTMLResponse)
+def collector_health_partial(request: Request) -> HTMLResponse:
+    client = _api(request)
+    res = client.get_collector_health()
+
+    collectors: list[dict[str, Any]] = []
+    summary: dict[str, int] = {}
+    health_error: str | None = None
+    if res.ok and isinstance(res.data, dict):
+        collectors = res.data.get("collectors", [])
+        summary = res.data.get("summary", {}) if isinstance(res.data.get("summary"), dict) else {}
+    else:
+        health_error = "Unable to reach collector health endpoint"
+
+    return templates.TemplateResponse(
+        "partials/social_collector_health.html",
+        {
+            "request": request,
+            "collectors": collectors,
+            "collector_summary": summary,
+            "health_error": health_error,
         },
     )
 

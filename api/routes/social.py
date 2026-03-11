@@ -87,6 +87,9 @@ class StatusResponse(BaseModel):
     watchlist_count: int
     sources_configured: int
     seeded: bool
+    signal_events_count: int = 0
+    last_signal_at: str | None = None
+    failing_producers: int = 0
     diagnosis: str
     actions_available: list[str]
 
@@ -165,6 +168,7 @@ class SeedRequest(BaseModel):
 class SeedResponse(BaseModel):
     seeded: bool
     count: int
+    message: str = ""
 
 
 class ResetResponse(BaseModel):
@@ -185,6 +189,13 @@ class AddWatchlistRequest(BaseModel):
 class AddWatchlistResponse(BaseModel):
     added: bool
     symbol: str
+    message: str = ""
+
+
+class RemoveWatchlistResponse(BaseModel):
+    removed: bool
+    symbol: str
+    message: str = ""
 
 
 class AddSourceRequest(BaseModel):
@@ -196,6 +207,7 @@ class AddSourceRequest(BaseModel):
 class AddSourceResponse(BaseModel):
     added: bool
     id: int
+    message: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -205,11 +217,10 @@ class AddSourceResponse(BaseModel):
 
 @router.get("/status", response_model=StatusResponse)
 def social_status(db: Database = Depends(get_db)) -> StatusResponse:
-    """Pipeline diagnostic — shows why social is up/down and what actions help."""
+    """Pipeline diagnostic — report truthful operational state and next actions."""
     _ensure_social_watchlist(db)
     _ensure_social_sources(db)
 
-    # Query social producers
     rows = db.fetchall(
         """
         SELECT name, consecutive_failures, last_run_at, last_success_at,
@@ -234,43 +245,54 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
             )
         )
 
-    # Watchlist
     wl_rows = db.fetchall("SELECT symbol FROM social_watchlist ORDER BY symbol")
     watchlist = [str(r[0]) for r in wl_rows]
     watchlist_count = len(watchlist)
     seeded = watchlist_count > 0
 
-    # Sources
-    src_count = db.fetchone("SELECT COUNT(*) FROM social_sources WHERE enabled = 1")[0]
-    sources_configured = int(src_count) if src_count else 0
+    src_row = db.fetchone("SELECT COUNT(*) FROM social_sources WHERE enabled = 1")
+    sources_configured = int(src_row[0]) if (src_row and src_row[0] is not None) else 0
 
-    # Pipeline status
+    signal_row = db.fetchone("SELECT COUNT(*), MAX(ts) FROM events WHERE type = 'signal.social.v1'")
+    signal_events_count = int(signal_row[0]) if (signal_row and signal_row[0] is not None) else 0
+    last_signal_at = str(signal_row[1]) if (signal_row and signal_row[1]) else None
+
+    failing_producers = sum(1 for p in producers if p.consecutive_failures > 0 or p.last_error)
     pipeline_active = any(p.consecutive_failures < 3 for p in producers) if producers else False
     all_quarantined = all(p.consecutive_failures >= 5 for p in producers) if producers else False
 
-    # Diagnosis
     if not seeded:
-        diagnosis = "Watchlist not seeded — no tokens to monitor"
+        diagnosis = "Watchlist is empty — seed defaults or add tokens manually"
+        pipeline_status = "unconfigured"
+    elif sources_configured == 0:
+        diagnosis = "No social sources configured — add at least one source"
         pipeline_status = "unconfigured"
     elif not producers:
-        diagnosis = "No social producers registered"
-        pipeline_status = "unconfigured"
+        diagnosis = "No social producers registered in backend"
+        pipeline_status = "degraded"
     elif all_quarantined:
         max_failures = max(p.consecutive_failures for p in producers)
         diagnosis = f"All producers quarantined ({max_failures} consecutive failures)"
         pipeline_status = "down"
+    elif failing_producers > 0:
+        diagnosis = f"{failing_producers}/{len(producers)} producer(s) failing — reset failures or inspect logs"
+        pipeline_status = "degraded"
+    elif pipeline_active and signal_events_count == 0:
+        diagnosis = "Producers are running, but no social signal events exist yet"
+        pipeline_status = "running_no_data"
     elif pipeline_active:
-        diagnosis = "Running"
+        diagnosis = f"Producing social signals ({signal_events_count} event{'s' if signal_events_count != 1 else ''} recorded)"
         pipeline_status = "active"
     else:
-        diagnosis = "Some producers failing — pipeline degraded"
-        pipeline_status = "degraded"
+        diagnosis = "Configured and idle — trigger run now to produce fresh signals"
+        pipeline_status = "running_no_data"
 
-    # Actions
     actions: list[str] = ["run_now"]
     if not seeded:
         actions.insert(0, "seed_default_watchlist")
-    if any(p.consecutive_failures > 0 for p in producers):
+    if sources_configured == 0:
+        actions.append("add_source")
+    if failing_producers > 0:
         actions.append("reset_failures")
 
     return StatusResponse(
@@ -281,6 +303,9 @@ def social_status(db: Database = Depends(get_db)) -> StatusResponse:
         watchlist_count=watchlist_count,
         sources_configured=sources_configured,
         seeded=seeded,
+        signal_events_count=signal_events_count,
+        last_signal_at=last_signal_at,
+        failing_producers=failing_producers,
         diagnosis=diagnosis,
         actions_available=actions,
     )
@@ -315,7 +340,8 @@ def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:
             continue
         score = float(payload.get("score") or 0.0)
         direction = str(payload.get("direction") or "neutral")
-        label = direction.capitalize() if direction else "Neutral"
+        # Derive label from score, not direction — direction can lag or miss
+        label = _score_to_label(score)
         seen[symbol] = SentimentItem(
             symbol=symbol,
             score=score,
@@ -396,7 +422,7 @@ def social_narratives(db: Database = Depends(get_db)) -> NarrativesResponse:
 
 @router.get("/sources", response_model=SourcesResponse)
 def social_sources(db: Database = Depends(get_db)) -> SourcesResponse:
-    """Configured social sources (twitter accounts, keywords, etc.)."""
+    """Configured social source descriptors for the operator console."""
     _ensure_social_sources(db)
 
     rows = db.fetchall("SELECT id, name, type, value, enabled, added_at FROM social_sources ORDER BY id")
@@ -455,6 +481,71 @@ def curator_feed(db: Database = Depends(get_db)) -> CuratorResponse:
     return CuratorResponse(items=items)
 
 
+@router.get("/collector-health")
+def collector_health() -> dict[str, Any]:
+    """Health check for built-in social collectors.
+
+    Returns online/offline/error/disabled states for each collector plus a summary.
+    """
+    import time as _time
+
+    collectors_info: list[dict[str, Any]] = []
+    _collector_specs: list[tuple[str, str, str]] = [
+        ("engine.social.collectors.fear_greed", "FearGreedCollector", "Fear & Greed Index"),
+        ("engine.social.collectors.polymarket", "PolymarketCollector", "Polymarket"),
+        ("engine.social.collectors.reddit", "RedditCollector", "Reddit r/cryptocurrency"),
+        ("engine.social.collectors.trends", "TrendsCollector", "Google Trends"),
+    ]
+
+    for mod_path, cls_name, display_name in _collector_specs:
+        entry: dict[str, Any] = {
+            "name": display_name,
+            "collector": cls_name,
+            "status": "error",
+            "response_ms": None,
+            "error": None,
+        }
+        try:
+            import importlib
+
+            mod = importlib.import_module(mod_path)
+            collector_cls = getattr(mod, cls_name)
+            collector = collector_cls()
+
+            start = _time.monotonic()
+            results = collector.collect(["BTC"])
+            elapsed_ms = round((_time.monotonic() - start) * 1000)
+
+            entry["response_ms"] = elapsed_ms
+            if results:
+                entry["status"] = "online"
+            elif cls_name == "TrendsCollector":
+                entry["status"] = "disabled"
+                entry["error"] = "collector currently returns no data"
+            else:
+                entry["status"] = "offline"
+                entry["error"] = "probe returned empty results"
+        except Exception as exc:
+            err = str(exc)[:200]
+            lowered = err.lower()
+            if any(token in lowered for token in ("not configured", "missing", "api key", "token", "env", "credential")):
+                entry["status"] = "disabled"
+            else:
+                entry["status"] = "error"
+            entry["error"] = err or "collector probe failed"
+
+        collectors_info.append(entry)
+
+    summary = {
+        "online": sum(1 for c in collectors_info if c["status"] == "online"),
+        "offline": sum(1 for c in collectors_info if c["status"] == "offline"),
+        "error": sum(1 for c in collectors_info if c["status"] == "error"),
+        "disabled": sum(1 for c in collectors_info if c["status"] == "disabled"),
+    }
+
+    return {"collectors": collectors_info, "summary": summary}
+
+
 @router.get("/watchlist")
 def get_watchlist(db: Database = Depends(get_db)) -> dict[str, Any]:
     """Current watchlist tokens."""
@@ -478,11 +569,13 @@ def seed_watchlist(body: SeedRequest, db: Database = Depends(get_db)) -> SeedRes
     now = datetime.now(tz=UTC).isoformat()
 
     count = 0
+    total = 0
     with db._lock, db.conn:
         for symbol in body.watchlist:
             s = symbol.strip().upper()
             if not s:
                 continue
+            total += 1
             existing = db.fetchone("SELECT symbol FROM social_watchlist WHERE symbol = ?", (s,))
             if existing is None:
                 db.execute(
@@ -491,7 +584,14 @@ def seed_watchlist(body: SeedRequest, db: Database = Depends(get_db)) -> SeedRes
                 )
                 count += 1
 
-    return SeedResponse(seeded=True, count=count)
+    if count == 0 and total > 0:
+        message = f"Watchlist already seeded ({total} tokens)"
+    elif count > 0:
+        message = f"Seeded {count} new token{'s' if count != 1 else ''}"
+    else:
+        message = "No tokens to seed"
+
+    return SeedResponse(seeded=True, count=count, message=message)
 
 
 @router.post("/reset-failures", response_model=ResetResponse)
@@ -653,11 +753,13 @@ def add_to_watchlist(body: AddWatchlistRequest, db: Database = Depends(get_db)) 
     """Add a token to the social watchlist."""
     _ensure_social_watchlist(db)
     symbol = body.symbol.strip().upper()
-    now = datetime.now(tz=UTC).isoformat()
+    if not symbol:
+        return AddWatchlistResponse(added=False, symbol="", message="Symbol is required")
 
+    now = datetime.now(tz=UTC).isoformat()
     existing = db.fetchone("SELECT symbol FROM social_watchlist WHERE symbol = ?", (symbol,))
     if existing is not None:
-        return AddWatchlistResponse(added=False, symbol=symbol)
+        return AddWatchlistResponse(added=False, symbol=symbol, message=f"{symbol} is already on the watchlist")
 
     with db._lock, db.conn:
         db.execute(
@@ -665,27 +767,82 @@ def add_to_watchlist(body: AddWatchlistRequest, db: Database = Depends(get_db)) 
             (symbol, now),
         )
 
-    return AddWatchlistResponse(added=True, symbol=symbol)
+    return AddWatchlistResponse(added=True, symbol=symbol, message=f"Added {symbol} to watchlist")
+
+
+@router.delete("/watchlist/{symbol}", response_model=RemoveWatchlistResponse)
+def remove_from_watchlist(symbol: str, db: Database = Depends(get_db)) -> RemoveWatchlistResponse:
+    """Remove a token from the social watchlist."""
+    _ensure_social_watchlist(db)
+    s = symbol.strip().upper()
+    with db._lock, db.conn:
+        cur = db.execute("DELETE FROM social_watchlist WHERE symbol = ?", (s,))
+
+    removed = bool(cur.rowcount and cur.rowcount > 0)
+    if removed:
+        message = f"Removed {s} from watchlist"
+    else:
+        message = f"{s} was not in watchlist"
+
+    return RemoveWatchlistResponse(removed=removed, symbol=s, message=message)
 
 
 @router.post("/sources/add", response_model=AddSourceResponse)
 def add_source(body: AddSourceRequest, db: Database = Depends(get_db)) -> AddSourceResponse:
-    """Add a social data source."""
+    """Add a social source descriptor used by operators."""
     _ensure_social_sources(db)
-    now = datetime.now(tz=UTC).isoformat()
 
+    name = body.name.strip()
+    source_type = body.type.strip().lower().replace(" ", "_")
+    value = body.value.strip()
+    if not name or not source_type or not value:
+        return AddSourceResponse(added=False, id=0, message="name, type, and value are required")
+
+    existing = db.fetchone(
+        "SELECT id FROM social_sources WHERE lower(name) = lower(?) AND type = ? AND value = ?",
+        (name, source_type, value),
+    )
+    if existing is not None:
+        return AddSourceResponse(
+            added=False,
+            id=int(existing[0]),
+            message=f"Source already exists: {name}",
+        )
+
+    now = datetime.now(tz=UTC).isoformat()
     with db._lock, db.conn:
         cur = db.execute(
             "INSERT INTO social_sources (name, type, value, enabled, added_at) VALUES (?, ?, ?, 1, ?)",
-            (body.name, body.type, body.value, now),
+            (name, source_type, value, now),
         )
 
-    return AddSourceResponse(added=True, id=cur.lastrowid or 0)
+    return AddSourceResponse(added=True, id=int(cur.lastrowid or 0), message=f"Added source: {name}")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _score_to_label(score: float) -> str:
+    """Map sentiment score to human-readable label.
+
+    Thresholds:
+      >= 0.6  → Bullish
+      >= 0.4  → Slightly Bullish
+      >= -0.4 → Neutral          (covers the [-0.4, +0.4) range)
+      >= -0.6 → Slightly Bearish
+      < -0.6  → Bearish
+    """
+    if score >= 0.6:
+        return "Bullish"
+    if score >= 0.4:
+        return "Slightly Bullish"
+    if score >= -0.4:
+        return "Neutral"
+    if score >= -0.6:
+        return "Slightly Bearish"
+    return "Bearish"
 
 
 def _safe_json(raw: Any) -> dict[str, Any]:

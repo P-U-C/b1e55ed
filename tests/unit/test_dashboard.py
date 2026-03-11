@@ -76,6 +76,9 @@ class DummyApiClient:
     def get_curator_feed(self) -> _Res:
         return _Res({"items": []}, False)
 
+    def get_collector_health(self) -> _Res:
+        return _Res({"collectors": [], "summary": {}}, False)
+
     def get_convictions(self, limit: int = 20) -> _Res:
         return _Res({"items": []}, False)
 
