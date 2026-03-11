@@ -33,6 +33,12 @@ class DummyApiClient:
     def get_kill_switch(self) -> _Res:
         return _Res({"kill_switch_level": 0, "last_cycle_at": None, "kill_switch_changed_at": None}, False)
 
+    def run_brain_cycle(self) -> _Res:
+        return _Res({"cycle_id": "cycle-test"}, True)
+
+    def set_kill_switch(self, level: int, reason: str = "dashboard") -> _Res:
+        return _Res({"level": level, "reason": reason}, True)
+
     def get_karma_summary(self) -> _Res:
         return _Res({"pending_intents": 0, "percentage": 0.005, "treasury_address": "0x0", "receipts": 0}, False)
 
@@ -136,3 +142,52 @@ def test_dashboard_routes_200() -> None:
             resp = client.get(r, follow_redirects=False)
             assert resp.status_code == 302, f"{r} should redirect"
             assert resp.headers["location"] == "/settings"
+
+
+def test_dashboard_brain_controls_no_dead_routes() -> None:
+    with TestClient(app) as client:
+        dummy = DummyApiClient()
+        client.app.state.api_client = dummy
+        client.app.state.kill_switch_api_client = dummy
+
+        run_resp = client.post("/api/v1/brain/run")
+        assert run_resp.status_code == 200
+        assert "Cycle triggered" in run_resp.text
+
+        kill_resp = client.post("/api/kill-switch?level=2")
+        assert kill_resp.status_code == 200
+        assert "Kill switch set to L2" in kill_resp.text
+
+
+def test_settings_actions_are_truthful_and_config_paths_exist() -> None:
+    with TestClient(app) as client:
+        dummy = DummyApiClient()
+        client.app.state.api_client = dummy
+        client.app.state.kill_switch_api_client = dummy
+
+        actions: list[tuple[str, str, dict[str, str] | None]] = [
+            ("post", "/api/settings/trading-mode", {"mode": "live"}),
+            ("post", "/api/settings/risk/max_daily_loss", {"value": "500"}),
+            ("post", "/api/settings/reset-defaults", None),
+            ("post", "/api/settings/clear-signals", None),
+            ("post", "/api/settings/config/preset", {"preset": "balanced"}),
+            ("get", "/api/settings/config/reload", None),
+            ("post", "/api/settings/config/save", {"execution.mode": "paper"}),
+        ]
+
+        for method, path, payload in actions:
+            if method == "get":
+                resp = client.get(path)
+            else:
+                resp = client.post(path, data=payload or {})
+            assert resp.status_code == 200
+            body = resp.text.lower()
+            assert "not implemented" in body
+            assert "saved" not in body
+            assert "restored" not in body
+            assert "cleared" not in body
+
+        page = client.get("/settings")
+        assert page.status_code == 200
+        assert "/api/config" not in page.text
+        assert "/api/settings/config/save" in page.text

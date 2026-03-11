@@ -154,18 +154,30 @@ def _startup() -> None:
     # Prefer explicit env var; fall back to user config so the dashboard
     # works out of the box without extra env wiring.
     token = os.getenv("B1E55ED_API_TOKEN")
-    if not token:
+    kill_switch_token = os.getenv("B1E55ED_KILL_SWITCH_TOKEN")
+    if not token or not kill_switch_token:
         try:
             user_path = config_dir() / "user.yaml"
             cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(None)
-            token = str(getattr(cfg.api, "auth_token", "") or "")
+            if not token:
+                token = str(getattr(cfg.api, "auth_token", "") or "")
+            if not kill_switch_token:
+                kill_switch_token = str(getattr(cfg.api, "kill_switch_token", "") or "")
         except Exception:
             pass
+
     app.state.api_client = ApiClient(base_url=base_url, token=token or None)
+    # Kill-switch endpoints use a separate auth boundary.
+    app.state.kill_switch_api_client = ApiClient(base_url=base_url, token=kill_switch_token or token or None)
 
 
 def _api(request: Request) -> ApiClient:
     return request.app.state.api_client
+
+
+def _kill_switch_api(request: Request) -> ApiClient:
+    client = getattr(request.app.state, "kill_switch_api_client", None)
+    return client if isinstance(client, ApiClient) else _api(request)
 
 
 def _now_utc() -> datetime:
@@ -1459,33 +1471,84 @@ def settings_page(request: Request) -> HTMLResponse:
     )
 
 
+def _settings_not_implemented(action: str) -> HTMLResponse:
+    return HTMLResponse(f'<span class="text-warn" style="font-size:0.75rem;">⚠ {action} is not implemented from dashboard yet.</span>')
+
+
+@app.post("/api/v1/brain/run", response_class=HTMLResponse)
+async def dashboard_run_brain_cycle(request: Request) -> HTMLResponse:
+    client = _api(request)
+    result = client.run_brain_cycle()
+    if result.ok and isinstance(result.data, dict):
+        cycle_id = str(result.data.get("cycle_id") or "submitted")
+        return HTMLResponse(f'<span class="text-bull" style="font-size:0.75rem;">✓ Cycle triggered ({cycle_id})</span>')
+
+    return HTMLResponse('<span class="text-warn" style="font-size:0.75rem;">⚠ Run cycle failed — check API auth/connectivity.</span>')
+
+
+@app.post("/api/kill-switch", response_class=HTMLResponse)
+async def dashboard_set_kill_switch(request: Request, level: int | None = None) -> HTMLResponse:
+    target_level = level
+
+    if target_level is None:
+        status = _api(request).get_kill_switch()
+        current_level = 0
+        if status.ok and isinstance(status.data, dict):
+            with contextlib.suppress(TypeError, ValueError):
+                current_level = int(status.data.get("kill_switch_level") or 0)
+        target_level = 0 if current_level > 0 else 1
+
+    if target_level < 0 or target_level > 4:
+        return HTMLResponse('<span class="text-warn" style="font-size:0.75rem;">⚠ Kill-switch level must be 0–4.</span>')
+
+    result = _kill_switch_api(request).set_kill_switch(level=target_level, reason="dashboard")
+    if result.ok:
+        return HTMLResponse(f'<span class="text-bull" style="font-size:0.75rem;">✓ Kill switch set to L{target_level}</span>')
+
+    return HTMLResponse('<span class="text-warn" style="font-size:0.75rem;">⚠ Kill-switch update failed — verify kill-switch token/API availability.</span>')
+
+
 @app.post("/api/settings/trading-mode", response_class=HTMLResponse)
 async def settings_trading_mode(request: Request) -> HTMLResponse:
     form = await request.form()
-    mode = form.get("mode", "paper")
-    if mode == "live":
-        return HTMLResponse(
-            '<div style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.3); '
-            "border-radius:4px; padding:0.5rem 0.75rem; color:var(--red); font-size:0.8rem; "
-            'font-family:var(--mono);">⚠ LIVE MODE — real funds at risk</div>'
-        )
-    return HTMLResponse('<span class="text-dim" style="font-size:0.8rem;">Currently: PAPER — trades are simulated</span>')
+    mode = str(form.get("mode", "paper")).strip().lower() or "paper"
+    return _settings_not_implemented(f"Trading mode update ({mode.upper()})")
 
 
 @app.post("/api/settings/risk/{field}", response_class=HTMLResponse)
 async def settings_risk_field(field: str, request: Request) -> HTMLResponse:
     _ = await request.form()  # consume form data
-    return HTMLResponse(f'<span class="text-bull" style="font-size:0.7rem;">✓ {field} saved</span>')
+    return _settings_not_implemented(f"Risk limit update ({field})")
 
 
 @app.post("/api/settings/reset-defaults", response_class=HTMLResponse)
 async def settings_reset_defaults(request: Request) -> HTMLResponse:
-    return HTMLResponse('<span class="text-bull">Defaults restored</span>')
+    _ = await request.body()
+    return _settings_not_implemented("Reset defaults")
 
 
 @app.post("/api/settings/clear-signals", response_class=HTMLResponse)
 async def settings_clear_signals(request: Request) -> HTMLResponse:
-    return HTMLResponse('<span class="text-bull">Signal history cleared</span>')
+    _ = await request.body()
+    return _settings_not_implemented("Clear signal history")
+
+
+@app.post("/api/settings/config/preset", response_class=HTMLResponse)
+async def settings_config_preset(request: Request) -> HTMLResponse:
+    form = await request.form()
+    preset = str(form.get("preset") or "custom")
+    return _settings_not_implemented(f"Preset switch ({preset})")
+
+
+@app.get("/api/settings/config/reload", response_class=HTMLResponse)
+def settings_config_reload() -> HTMLResponse:
+    return _settings_not_implemented("Config reload")
+
+
+@app.post("/api/settings/config/save", response_class=HTMLResponse)
+async def settings_config_save(request: Request) -> HTMLResponse:
+    _ = await request.form()
+    return _settings_not_implemented("Config save")
 
 
 @app.get("/partials/artifact-preview/{artifact_id}", response_class=HTMLResponse)

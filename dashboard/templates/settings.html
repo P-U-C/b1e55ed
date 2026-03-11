@@ -20,7 +20,8 @@
                hx-post="/api/settings/trading-mode"
                hx-vals='js:{"mode": document.getElementById("trading-mode-toggle").checked ? "live" : "paper"}'
                hx-target="#trading-mode-status"
-               hx-swap="innerHTML">
+               hx-swap="innerHTML"
+               disabled>
         <span style="position:absolute; inset:0; background:var(--border); border-radius:12px; transition:0.3s;"></span>
         <span style="position:absolute; top:2px; left:2px; width:20px; height:20px; background:var(--text-bright); border-radius:50%; transition:0.3s;"></span>
       </label>
@@ -34,6 +35,7 @@
       {% else %}
       <span class="text-dim" style="font-size:0.8rem;">Currently: PAPER — trades are simulated</span>
       {% endif %}
+      <div class="text-warn" style="font-size:0.75rem; margin-top:0.5rem;">Write controls are disabled in dashboard (not implemented yet).</div>
     </div>
   </div>
 </div>
@@ -51,12 +53,13 @@
           hx-target="#risk-{{ field.key }}-status"
           hx-swap="innerHTML">
       <input type="number" name="value" value="{{ field.value }}" step="{{ field.step }}"
-             style="width:100px;" class="btn" style="font-family:var(--mono); padding:4px 8px;">
-      <button type="submit" class="btn" style="font-size:0.7rem; padding:4px 8px;">Save</button>
+             style="width:100px;" class="btn" style="font-family:var(--mono); padding:4px 8px;" disabled>
+      <button type="submit" class="btn" style="font-size:0.7rem; padding:4px 8px;" disabled>Save</button>
     </form>
     <span id="risk-{{ field.key }}-status" style="font-size:0.7rem; min-width:60px;"></span>
   </div>
   {% endfor %}
+  <div class="text-warn" style="font-size:0.75rem; margin-top:0.5rem;">Risk limit writes are disabled in dashboard (not implemented yet).</div>
 </div>
 
 <!-- C. Configuration (merged from Config page) -->
@@ -68,14 +71,18 @@
 
   <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
     <span class="text-dim" style="font-size:0.75rem;">Preset</span>
-    <select class="btn" style="padding:6px 10px;" name="preset" hx-post="/api/config/preset" hx-target="#config-form" hx-swap="outerHTML">
+    <select class="btn" style="padding:6px 10px;" name="preset"
+            hx-post="/api/settings/config/preset"
+            hx-target="#config-save-result"
+            hx-swap="innerHTML"
+            disabled>
       {% for p in presets %}
       <option value="{{ p }}" {% if preset == p %}selected{% endif %}>{{ p }}</option>
       {% endfor %}
     </select>
-    <button class="btn" hx-get="/api/config" hx-target="#config-form" hx-swap="outerHTML">Reload</button>
-    <button class="btn" hx-post="/api/config" hx-confirm="Save configuration?" hx-target="#config-save-result">Save</button>
-    <span id="config-save-result" class="text-dim" style="font-size:0.75rem;"></span>
+    <button class="btn" hx-get="/api/settings/config/reload" hx-target="#config-save-result" hx-swap="innerHTML" disabled>Reload</button>
+    <button class="btn" hx-post="/api/settings/config/save" hx-confirm="Save configuration?" hx-target="#config-save-result" hx-swap="innerHTML" disabled>Save</button>
+    <span id="config-save-result" class="text-warn" style="font-size:0.75rem;">Config write actions are disabled in dashboard (not implemented yet).</span>
   </div>
 
   <form id="config-form">
@@ -323,11 +330,14 @@
         {% for i in range(5) %}
         <button class="btn {{ 'btn-danger' if i >= 3 else '' }}" style="padding:6px 12px; font-size:0.65rem;{% if i == kill_switch_level %} border-color:var(--text-bright); color:var(--text-bright);{% endif %}"
                 hx-post="/api/kill-switch?level={{ i }}"
-                hx-confirm="Set kill switch to level {{ i }}?">
+                hx-confirm="Set kill switch to level {{ i }}?"
+                hx-target="#kill-switch-action-result"
+                hx-swap="innerHTML">
           L{{ i }}
         </button>
         {% endfor %}
       </div>
+      <div id="kill-switch-action-result" style="font-size:0.75rem; margin-top:0.5rem;"></div>
     </div>
   </div>
 
@@ -349,16 +359,18 @@
     <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
             hx-post="/api/settings/reset-defaults"
             hx-confirm="Reset ALL settings to defaults? This cannot be undone."
-            hx-target="#danger-status" hx-swap="innerHTML">
+            hx-target="#danger-status" hx-swap="innerHTML"
+            disabled>
       Reset All to Defaults
     </button>
     <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
             hx-post="/api/settings/clear-signals"
             hx-confirm="Clear ALL signal history from brain.db? This cannot be undone."
-            hx-target="#danger-status" hx-swap="innerHTML">
+            hx-target="#danger-status" hx-swap="innerHTML"
+            disabled>
       Clear Signal History
     </button>
-    <span id="danger-status" style="font-size:0.75rem; align-self:center;"></span>
+    <span id="danger-status" class="text-warn" style="font-size:0.75rem; align-self:center;">Danger-zone actions are disabled in dashboard (not implemented yet).</span>
   </div>
 </div>
 
