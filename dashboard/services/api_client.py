@@ -51,6 +51,16 @@ class ApiClient:
         except Exception:
             return ApiResult(None, False)
 
+    def _delete_json(self, path: str) -> ApiResult:
+        url = f"{self.base_url}{path}"
+        try:
+            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
+                resp = client.delete(url)
+                resp.raise_for_status()
+                return ApiResult(resp.json(), True)
+        except Exception:
+            return ApiResult(None, False)
+
     # ---- Brain / system -------------------------------------------------
 
     def get_cockpit_state(self) -> ApiResult:
@@ -135,3 +145,9 @@ class ApiClient:
 
     def post_social_add_source(self, name: str, type: str, value: str) -> ApiResult:
         return self._post_json("/social/sources/add", {"name": name, "type": type, "value": value})
+
+    def get_collector_health(self) -> ApiResult:
+        return self._get_json("/social/collector-health")
+
+    def delete_social_watchlist(self, symbol: str) -> ApiResult:
+        return self._delete_json(f"/social/watchlist/{symbol}")

@@ -1,25 +1,65 @@
-<div id="social-watchlist-panel">
-  <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
-    {% if watchlist %}
-      {% for symbol in watchlist %}
-      <span style="display:inline-block; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.06); border-radius:12px; font-size:0.75rem; font-weight:400; color:var(--text-bright);">
-        {{ symbol }}
-      </span>
-      {% endfor %}
-    {% else %}
-      <span class="text-dim" style="font-size:0.75rem;">No tokens in watchlist.</span>
-    {% endif %}
+<div id="social-watchlist-panel" class="panel" style="margin-top:1rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+    <h2 class="panel-title">Watchlist</h2>
+    <span class="text-dim" style="font-size:0.75rem;">{{ watchlist_count | default(0) }} symbols</span>
   </div>
-  <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:0.5rem;">{{ watchlist_count }} tokens tracked</div>
+
+  {% if status_feedback and status_feedback.message %}
+  <div style="margin-bottom:0.7rem; padding:0.5rem 0.65rem; border-radius:6px;
+    {% if status_feedback.level == 'success' %}
+      background:rgba(20,184,166,0.12); border:1px solid rgba(20,184,166,0.35); color:var(--green);
+    {% elif status_feedback.level == 'warning' %}
+      background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:var(--amber);
+    {% elif status_feedback.level == 'error' %}
+      background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:var(--red);
+    {% else %}
+      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:var(--text-bright);
+    {% endif %}
+    font-size:0.76rem;">
+    {{ status_feedback.message }}
+  </div>
+  {% endif %}
+
+  {% if api_ok is defined and not api_ok %}
+  <div style="margin-bottom:0.75rem; font-size:0.76rem; color:var(--amber);">
+    Watchlist API unavailable — shown state may be stale.
+  </div>
+  {% endif %}
+
+  {% if watchlist %}
+  <div style="display:flex; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.9rem;">
+    {% for symbol in watchlist %}
+    <div style="display:flex; align-items:center; gap:0.4rem; padding:0.28rem 0.5rem; border:1px solid rgba(255,255,255,0.12); border-radius:999px; font-size:0.72rem;">
+      <span style="color:var(--text-bright);">{{ symbol }}</span>
+      <button
+        hx-delete="/social/action/remove-from-watchlist/{{ symbol }}"
+        hx-target="#social-watchlist-panel"
+        hx-swap="outerHTML"
+        style="background:none; border:none; color:var(--red); cursor:pointer; padding:0; font-size:0.78rem;"
+        title="Remove {{ symbol }}">
+        ×
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-dim" style="font-size:0.78rem; margin-bottom:0.9rem;">
+    No symbols configured. Add a token or use <strong>Seed</strong> in pipeline status to load defaults.
+  </div>
+  {% endif %}
 
   <form hx-post="/social/action/add-to-watchlist"
         hx-target="#social-watchlist-panel"
         hx-swap="outerHTML"
-        style="display:flex; gap:0.5rem; align-items:center;">
-    <input type="text" name="symbol" placeholder="Add token (e.g. AVAX)"
-           style="font-size:0.75rem; padding:0.25rem 0.5rem; background:var(--bg); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; width:8rem;">
+        style="display:flex; gap:0.45rem; align-items:center;">
+    <input type="text"
+           name="symbol"
+           placeholder="e.g. BTC"
+           style="flex:1; background:var(--bg); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:0.45rem 0.55rem; color:var(--text-bright); font-family:var(--mono); font-size:0.8rem; text-transform:uppercase;"
+           required>
     <button type="submit"
-            style="font-size:0.7rem; padding:0.25rem 0.5rem; background:rgba(255,255,255,0.08); color:var(--text-bright); border:1px solid rgba(255,255,255,0.1); border-radius:4px; cursor:pointer;">
+            class="btn btn-sm"
+            style="font-size:0.75rem; padding:0.35rem 0.7rem; background:var(--blue); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
       Add
     </button>
   </form>
