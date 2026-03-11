@@ -65,8 +65,10 @@ def get_agent_manifest(
     db: Database = Depends(get_db),
 ) -> dict:
     """Return ERC-8004-compliant agent manifest for a producer."""
+    # Query contributor row without assuming optional columns exist.
+    # Some deployments do not have an `agent_id` column in contributors.
     row = db.execute(
-        "SELECT id, node_id, name, role, metadata, agent_id FROM contributors WHERE node_id = ?",
+        "SELECT * FROM contributors WHERE node_id = ?",
         (node_id,),
     ).fetchone()
 
