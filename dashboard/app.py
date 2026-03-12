@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -349,6 +350,8 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
             ts_hm = "—"
 
         asset = payload.get("asset") or payload.get("symbol") or payload.get("token") or "—"
+        symbol = str(asset).upper().strip() if asset else "—"
+        venue = payload.get("venue") or payload.get("exchange") or payload.get("market") or ""
         desc = payload.get("desc") or payload.get("description") or payload.get("message") or t
 
         # Derive score and direction from domain-specific payloads.
@@ -443,11 +446,14 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
         out.append(
             {
-                # Keep raw timestamp for timeline plotting; use ts_hm for display-only chips.
+                # Keep raw timestamp for timeline plotting; keep display timestamp for UI labels.
                 "ts": str(ts) if ts is not None else "",
+                "ts_iso": str(ts) if ts is not None else "",
                 "ts_hm": ts_hm,
                 "domain": domain,
                 "asset": str(asset),
+                "symbol": symbol,
+                "venue": str(venue),
                 "desc": str(desc),
                 "direction": str(direction),
                 "score": score_f,
@@ -455,6 +461,88 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
         )
 
     return out
+
+
+def _normalize_symbols(values: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        sym = str(raw or "").strip().upper()
+        if not sym or sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return out
+
+
+def _universe_bundle_context(client: Any) -> dict[str, Any]:
+    bundles_res = client.get_universe_bundles()
+    bundles_data = bundles_res.data if (bundles_res.ok and isinstance(bundles_res.data, dict)) else {}
+    bundles_raw = bundles_data.get("items") if isinstance(bundles_data, dict) else []
+    bundles = [b for b in bundles_raw if isinstance(b, dict)] if isinstance(bundles_raw, list) else []
+
+    active_res = client.get_universe_active()
+    active_data = active_res.data if (active_res.ok and isinstance(active_res.data, dict)) else {}
+    active_symbols = _normalize_symbols(active_data.get("symbols") if isinstance(active_data, dict) else [])
+
+    enabled_bundle_ids = set(active_data.get("enabled_bundle_ids") or []) if isinstance(active_data, dict) else set()
+    if not enabled_bundle_ids:
+        enabled_bundle_ids = {str(b.get("id")) for b in bundles if bool(b.get("enabled", True)) and b.get("id")}
+
+    bundle_symbol_map: dict[str, list[str]] = {}
+    for b in bundles:
+        bid = str(b.get("id") or "").strip()
+        if not bid:
+            continue
+        syms = _normalize_symbols(b.get("symbols") if isinstance(b.get("symbols"), list) else [])
+        bundle_symbol_map[bid] = syms
+
+    asset_class_symbol_map: dict[str, list[str]] = {}
+    raw_asset_map = active_data.get("asset_class_symbols") if isinstance(active_data, dict) else {}
+    if isinstance(raw_asset_map, dict) and raw_asset_map:
+        for k, v in raw_asset_map.items():
+            asset_class_symbol_map[str(k)] = _normalize_symbols(v if isinstance(v, list) else [])
+    else:
+        agg: dict[str, list[str]] = {}
+        for b in bundles:
+            if str(b.get("id") or "") not in enabled_bundle_ids:
+                continue
+            acls = str(b.get("asset_class") or "").strip()
+            if not acls:
+                continue
+            agg.setdefault(acls, []).extend(bundle_symbol_map.get(str(b.get("id")), []))
+        asset_class_symbol_map = {k: _normalize_symbols(v) for k, v in agg.items()}
+
+    venue_symbol_map: dict[str, list[str]] = {}
+    raw_venue_map = active_data.get("venue_symbols") if isinstance(active_data, dict) else {}
+    if isinstance(raw_venue_map, dict) and raw_venue_map:
+        for k, v in raw_venue_map.items():
+            venue_symbol_map[str(k)] = _normalize_symbols(v if isinstance(v, list) else [])
+    else:
+        agg_v: dict[str, list[str]] = {}
+        for b in bundles:
+            if str(b.get("id") or "") not in enabled_bundle_ids:
+                continue
+            venue = str(b.get("venue") or "").strip()
+            if not venue:
+                continue
+            agg_v.setdefault(venue, []).extend(bundle_symbol_map.get(str(b.get("id")), []))
+        venue_symbol_map = {k: _normalize_symbols(v) for k, v in agg_v.items()}
+
+    asset_classes = sorted(asset_class_symbol_map.keys())
+    venues = sorted(venue_symbol_map.keys())
+
+    return {
+        "bundles": bundles,
+        "active_symbols": active_symbols,
+        "enabled_bundle_ids": sorted(enabled_bundle_ids),
+        "bundle_symbol_map": bundle_symbol_map,
+        "asset_class_symbol_map": asset_class_symbol_map,
+        "venue_symbol_map": venue_symbol_map,
+        "asset_classes": asset_classes,
+        "venues": venues,
+        "fallback_to_symbols": bool(active_data.get("fallback_to_symbols", True)) if isinstance(active_data, dict) else True,
+    }
 
 
 def _build_conviction_ctx(client: Any) -> dict[str, Any]:
@@ -1152,12 +1240,39 @@ def discretionary_signals_partial(request: Request) -> HTMLResponse:
 
 
 @app.get("/signals", response_class=HTMLResponse)
-def signals_page(request: Request, domain: str | None = None) -> HTMLResponse:
+def signals_page(
+    request: Request,
+    domain: str | None = None,
+    bundle: str | None = None,
+    asset_class: str | None = None,
+    venue: str | None = None,
+) -> HTMLResponse:
     client = _api(request)
     res = client.get_signals(domain=domain)
     signals = _map_signals(res.data)
 
-    # Build latest-by-domain groups from whatever we got.
+    universe_ctx = _universe_bundle_context(client)
+
+    bundle_symbol_map = {k: set(v) for k, v in universe_ctx.get("bundle_symbol_map", {}).items()}
+    asset_class_symbol_map = {k: set(v) for k, v in universe_ctx.get("asset_class_symbol_map", {}).items()}
+    venue_symbol_map = {k: set(v) for k, v in universe_ctx.get("venue_symbol_map", {}).items()}
+
+    if bundle:
+        allowed = bundle_symbol_map.get(bundle)
+        signals = [s for s in signals if s.get("symbol") in allowed] if allowed else []
+
+    if asset_class:
+        allowed = asset_class_symbol_map.get(asset_class)
+        signals = [s for s in signals if s.get("symbol") in allowed] if allowed else []
+
+    if venue:
+        allowed = venue_symbol_map.get(venue)
+        if allowed:
+            signals = [s for s in signals if s.get("symbol") in allowed or str(s.get("venue") or "") == venue]
+        else:
+            signals = [s for s in signals if str(s.get("venue") or "") == venue]
+
+    # Build latest-by-domain groups from filtered signals.
     by_domain: dict[str, list[dict[str, Any]]] = {}
     for s in signals:
         by_domain.setdefault(str(s.get("domain") or "unknown"), []).append(s)
@@ -1177,7 +1292,19 @@ def signals_page(request: Request, domain: str | None = None) -> HTMLResponse:
         {"id": "research", "label": "Research"},
     ]
 
-    total = res.data.get("total") if (res.ok and isinstance(res.data, dict)) else 0
+    filter_params: dict[str, str] = {}
+    if bundle:
+        filter_params["bundle"] = bundle
+    if asset_class:
+        filter_params["asset_class"] = asset_class
+    if venue:
+        filter_params["venue"] = venue
+    filter_qs = urlencode(filter_params)
+
+    enabled_ids = set(universe_ctx.get("enabled_bundle_ids") or [])
+    raw_bundles = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
+    bundle_options = [b for b in raw_bundles if isinstance(b, dict) and str(b.get("id") or "") and (not enabled_ids or str(b.get("id")) in enabled_ids)]
+    bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
     return templates.TemplateResponse(
         "signals.html",
@@ -1186,8 +1313,16 @@ def signals_page(request: Request, domain: str | None = None) -> HTMLResponse:
             "domains": domains,
             "active_domain": domain,
             "signals": signals,
-            "total_signals": total,
+            "total_signals": len(signals),
             "domain_groups": domain_groups,
+            "bundle_options": bundle_options,
+            "asset_class_options": universe_ctx.get("asset_classes", []),
+            "venue_options": universe_ctx.get("venues", []),
+            "active_bundle": bundle,
+            "active_asset_class": asset_class,
+            "active_venue": venue,
+            "domain_filter_suffix": f"&{filter_qs}" if filter_qs else "",
+            "all_filter_query": f"?{filter_qs}" if filter_qs else "",
         },
     )
 
@@ -1335,6 +1470,7 @@ def system_page_redirect(request: Request) -> HTMLResponse:
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request) -> HTMLResponse:
     client = _api(request)
+    universe_ctx = _universe_bundle_context(client)
     cfg_res = client._get_json("/config")
     cfg = cfg_res.data if (cfg_res.ok and isinstance(cfg_res.data, dict)) else {}
 
@@ -1461,6 +1597,9 @@ def settings_page(request: Request) -> HTMLResponse:
             "preset": "custom",
             "presets": ["conservative", "balanced", "degen"],
             "cfg": cfg,
+            "universe_bundles": universe_ctx.get("bundles", []),
+            "universe_active_symbols": universe_ctx.get("active_symbols", []),
+            "universe_fallback_to_symbols": universe_ctx.get("fallback_to_symbols", True),
             # System page data
             "producers": producers,
             "producers_healthy": producers_healthy,
@@ -1471,6 +1610,92 @@ def settings_page(request: Request) -> HTMLResponse:
             **_system_status_ctx(),
         },
     )
+
+
+def _render_universe_bundles_panel(
+    request: Request,
+    *,
+    status_message: str | None = None,
+    status_ok: bool = False,
+) -> HTMLResponse:
+    ctx = _universe_bundle_context(_api(request))
+    return templates.TemplateResponse(
+        "partials/universe_bundles_panel.html",
+        {
+            "request": request,
+            "universe_bundles": ctx.get("bundles", []),
+            "universe_active_symbols": ctx.get("active_symbols", []),
+            "universe_fallback_to_symbols": ctx.get("fallback_to_symbols", True),
+            "bundle_status_message": status_message,
+            "bundle_status_ok": status_ok,
+        },
+    )
+
+
+@app.get("/partials/universe-bundles", response_class=HTMLResponse)
+def universe_bundles_partial(request: Request) -> HTMLResponse:
+    return _render_universe_bundles_panel(request)
+
+
+@app.post("/api/settings/universe/bundles", response_class=HTMLResponse)
+async def settings_add_universe_bundle(request: Request) -> HTMLResponse:
+    form = await request.form()
+
+    name = str(form.get("name") or "").strip()
+    symbols_raw = str(form.get("symbols") or "")
+    tags_raw = str(form.get("tags") or "")
+    asset_class = str(form.get("asset_class") or "crypto").strip() or "crypto"
+    venue = str(form.get("venue") or "global").strip() or "global"
+    enabled = str(form.get("enabled") or "true").strip().lower() in {"1", "true", "yes", "on"}
+
+    symbols = [s.strip().upper() for s in symbols_raw.replace("\n", ",").split(",") if s.strip()]
+    tags = [t.strip().lower() for t in tags_raw.replace("\n", ",").split(",") if t.strip()]
+
+    if not name:
+        return _render_universe_bundles_panel(request, status_message="Bundle name is required.", status_ok=False)
+    if not symbols:
+        return _render_universe_bundles_panel(request, status_message="At least one symbol is required.", status_ok=False)
+
+    result = _api(request).create_universe_bundle(
+        {
+            "name": name,
+            "symbols": symbols,
+            "tags": tags,
+            "asset_class": asset_class,
+            "venue": venue,
+            "enabled": enabled,
+            "source": "user",
+        }
+    )
+
+    if not result.ok:
+        return _render_universe_bundles_panel(request, status_message="Failed to add bundle (API unavailable).", status_ok=False)
+
+    created = result.data if isinstance(result.data, dict) else {}
+    label = str(created.get("name") or name)
+    return _render_universe_bundles_panel(request, status_message=f"Added bundle: {label}", status_ok=True)
+
+
+@app.post("/api/settings/universe/bundles/{bundle_id}/toggle", response_class=HTMLResponse)
+async def settings_toggle_universe_bundle(bundle_id: str, request: Request) -> HTMLResponse:
+    form = await request.form()
+    enabled = str(form.get("enabled") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    result = _api(request).update_universe_bundle(bundle_id, {"enabled": enabled})
+    if not result.ok:
+        return _render_universe_bundles_panel(request, status_message=f"Failed to update bundle: {bundle_id}", status_ok=False)
+
+    state = "enabled" if enabled else "disabled"
+    return _render_universe_bundles_panel(request, status_message=f"{bundle_id} {state}", status_ok=True)
+
+
+@app.post("/api/settings/universe/bundles/{bundle_id}/delete", response_class=HTMLResponse)
+async def settings_delete_universe_bundle(bundle_id: str, request: Request) -> HTMLResponse:
+    result = _api(request).delete_universe_bundle(bundle_id)
+    if not result.ok:
+        return _render_universe_bundles_panel(request, status_message=f"Failed to delete bundle: {bundle_id}", status_ok=False)
+
+    return _render_universe_bundles_panel(request, status_message=f"Deleted bundle: {bundle_id}", status_ok=True)
 
 
 def _settings_not_implemented(action: str) -> HTMLResponse:

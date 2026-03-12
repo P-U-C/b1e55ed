@@ -24,6 +24,35 @@ class DummyApiClient:
     def get_signals(self, domain: str | None = None) -> _Res:
         return _Res({"items": [], "total": 0, "limit": 100, "offset": 0}, False)
 
+    def get_universe_bundles(self) -> _Res:
+        return _Res({"items": [], "total": 0}, True)
+
+    def get_universe_active(self) -> _Res:
+        return _Res(
+            {
+                "symbols": ["BTC", "ETH", "SOL"],
+                "count": 3,
+                "fallback_to_symbols": True,
+                "bundles": [],
+                "enabled_bundle_ids": [],
+                "asset_classes": [],
+                "venues": [],
+                "asset_class_symbols": {},
+                "venue_symbols": {},
+            },
+            True,
+        )
+
+    def create_universe_bundle(self, body: dict) -> _Res:
+        return _Res(body, True)
+
+    def update_universe_bundle(self, bundle_id: str, body: dict) -> _Res:
+        payload = {"id": bundle_id, **body}
+        return _Res(payload, True)
+
+    def delete_universe_bundle(self, bundle_id: str) -> _Res:
+        return _Res({"ok": True, "deleted": bundle_id}, True)
+
     def get_producers_status(self) -> _Res:
         return _Res({"producers": {}}, False)
 
@@ -124,6 +153,7 @@ def test_dashboard_routes_200() -> None:
             "/partials/system-status",
             "/partials/producers",
             "/partials/kill-switch",
+            "/partials/universe-bundles",
             "/partials/sentiment-map",
             "/partials/social-alerts",
             "/partials/curator-feed",
@@ -214,6 +244,180 @@ class SignalTimelineApiClient(DummyApiClient):
             True,
         )
 
+
+class UniverseDashboardApiClient(DummyApiClient):
+    def __init__(self) -> None:
+        self.bundles = [
+            {
+                "id": "crypto-core",
+                "name": "Crypto Core",
+                "symbols": ["BTC", "ETH"],
+                "tags": ["starter", "crypto"],
+                "asset_class": "crypto",
+                "venue": "global",
+                "enabled": True,
+                "source": "wizard",
+            },
+            {
+                "id": "tradfi-infra",
+                "name": "TradFi Infra",
+                "symbols": ["SPY"],
+                "tags": ["starter", "tradfi"],
+                "asset_class": "tradfi",
+                "venue": "nyse",
+                "enabled": True,
+                "source": "wizard",
+            },
+        ]
+
+    def _active_symbols(self) -> list[str]:
+        out: list[str] = []
+        for bundle in self.bundles:
+            if not bundle.get("enabled", True):
+                continue
+            for sym in bundle.get("symbols", []):
+                s = str(sym).upper()
+                if s not in out:
+                    out.append(s)
+        return out
+
+    def _asset_class_map(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for bundle in self.bundles:
+            if not bundle.get("enabled", True):
+                continue
+            key = str(bundle.get("asset_class") or "").strip()
+            if not key:
+                continue
+            out.setdefault(key, [])
+            for sym in bundle.get("symbols", []):
+                s = str(sym).upper()
+                if s not in out[key]:
+                    out[key].append(s)
+        return out
+
+    def _venue_map(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for bundle in self.bundles:
+            if not bundle.get("enabled", True):
+                continue
+            key = str(bundle.get("venue") or "").strip()
+            if not key:
+                continue
+            out.setdefault(key, [])
+            for sym in bundle.get("symbols", []):
+                s = str(sym).upper()
+                if s not in out[key]:
+                    out[key].append(s)
+        return out
+
+    def get_universe_bundles(self) -> _Res:
+        return _Res({"items": self.bundles, "total": len(self.bundles)}, True)
+
+    def get_universe_active(self) -> _Res:
+        return _Res(
+            {
+                "symbols": self._active_symbols(),
+                "count": len(self._active_symbols()),
+                "fallback_to_symbols": False,
+                "bundles": self.bundles,
+                "enabled_bundle_ids": [str(b["id"]) for b in self.bundles if b.get("enabled", True)],
+                "asset_classes": sorted(self._asset_class_map().keys()),
+                "venues": sorted(self._venue_map().keys()),
+                "asset_class_symbols": self._asset_class_map(),
+                "venue_symbols": self._venue_map(),
+            },
+            True,
+        )
+
+    def get_signals(self, domain: str | None = None) -> _Res:
+        items = [
+            {
+                "type": "signal.ta.rsi.v1",
+                "payload": {"symbol": "BTC", "message": "BTC momentum"},
+                "ts": "2026-03-12T20:00:00+00:00",
+            },
+            {
+                "type": "signal.tradfi.v1",
+                "payload": {"symbol": "SPY", "message": "SPY basis", "venue": "nyse"},
+                "ts": "2026-03-12T20:05:00+00:00",
+            },
+        ]
+        if domain:
+            items = [it for it in items if str(it.get("type", "")).startswith(f"signal.{domain}")]
+        return _Res({"items": items, "total": len(items), "limit": 100, "offset": 0}, True)
+
+    def create_universe_bundle(self, body: dict) -> _Res:
+        name = str(body.get("name") or "Bundle").strip()
+        slug = name.lower().replace(" ", "-")
+        bundle = {
+            "id": slug,
+            "name": name,
+            "symbols": [str(s).upper() for s in body.get("symbols", [])],
+            "tags": [str(t) for t in body.get("tags", [])],
+            "asset_class": body.get("asset_class") or "crypto",
+            "venue": body.get("venue") or "global",
+            "enabled": bool(body.get("enabled", True)),
+            "source": body.get("source") or "user",
+        }
+        self.bundles.append(bundle)
+        return _Res(bundle, True)
+
+    def update_universe_bundle(self, bundle_id: str, body: dict) -> _Res:
+        for bundle in self.bundles:
+            if bundle["id"] == bundle_id:
+                bundle.update(body)
+                return _Res(bundle, True)
+        return _Res({}, False)
+
+    def delete_universe_bundle(self, bundle_id: str) -> _Res:
+        self.bundles = [b for b in self.bundles if b["id"] != bundle_id]
+        return _Res({"ok": True, "deleted": bundle_id}, True)
+
+
+def test_signals_page_filters_by_bundle_and_asset_class() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = UniverseDashboardApiClient()
+
+        by_bundle = client.get("/signals?bundle=crypto-core")
+        assert by_bundle.status_code == 200
+        assert "BTC momentum" in by_bundle.text
+        assert "SPY basis" not in by_bundle.text
+
+        by_asset_class = client.get("/signals?asset_class=tradfi")
+        assert by_asset_class.status_code == 200
+        assert "SPY basis" in by_asset_class.text
+        assert "BTC momentum" not in by_asset_class.text
+
+
+def test_settings_universe_bundle_controls_use_live_routes() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = UniverseDashboardApiClient()
+
+        add_resp = client.post(
+            "/api/settings/universe/bundles",
+            data={
+                "name": "Meme Basket",
+                "symbols": "DOGE,PEPE",
+                "tags": "meme",
+                "asset_class": "crypto",
+                "venue": "global",
+                "enabled": "true",
+            },
+        )
+        assert add_resp.status_code == 200
+        assert "Added bundle: Meme Basket" in add_resp.text
+
+        toggle_resp = client.post(
+            "/api/settings/universe/bundles/meme-basket/toggle",
+            data={"enabled": "false"},
+        )
+        assert toggle_resp.status_code == 200
+        assert "meme-basket disabled" in toggle_resp.text
+
+        delete_resp = client.post("/api/settings/universe/bundles/meme-basket/delete")
+        assert delete_resp.status_code == 200
+        assert "Deleted bundle: meme-basket" in delete_resp.text
 
 class SocialPanelApiClient(DummyApiClient):
     def get_social_status(self) -> _Res:

@@ -7,12 +7,51 @@
   <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Signals</h1>
   <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
     {% for d in domains %}
-    <a href="/signals?domain={{ d.id }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}"
+    <a href="/signals?domain={{ d.id }}{{ domain_filter_suffix }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}"
        title="{{ {'ta':'Technical analysis — RSI, MACD, trend detection','tradfi':'TradFi plumbing — basis trades, funding rates, OI','onchain':'On-chain data — whale flows, accumulation patterns','social':'Social sentiment — CT pulse, narrative tracking','sentiment':'Aggregated sentiment scores from multiple sources','events':'Market events — listings, unlocks, regulatory','aci':'Autonomous crypto intelligence signals','research':'Deep research artifacts and analysis'}.get(d.id, '') }}">{{ d.label }}</a>
     {% endfor %}
-    <a href="/signals" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
+    <a href="/signals{{ all_filter_query }}" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
   </div>
 </div>
+
+<form method="get" class="panel" style="margin-bottom:1rem; padding:0.75rem; display:grid; grid-template-columns:1fr 1fr 1fr auto auto; gap:0.5rem; align-items:end;">
+  {% if active_domain %}
+  <input type="hidden" name="domain" value="{{ active_domain }}">
+  {% endif %}
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Bundle</div>
+    <select class="btn" name="bundle" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All bundles</option>
+      {% for b in bundle_options %}
+      <option value="{{ b.id }}" {% if active_bundle == b.id %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Asset class</div>
+    <select class="btn" name="asset_class" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All classes</option>
+      {% for c in asset_class_options %}
+      <option value="{{ c }}" {% if active_asset_class == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Venue</div>
+    <select class="btn" name="venue" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All venues</option>
+      {% for v in venue_options %}
+      <option value="{{ v }}" {% if active_venue == v %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <button class="btn" type="submit" style="font-size:0.72rem; padding:6px 10px;">Apply</button>
+  <a class="btn" href="/signals{% if active_domain %}?domain={{ active_domain }}{% endif %}" style="font-size:0.72rem; padding:6px 10px; text-decoration:none; color:var(--text-dim);">Reset</a>
+</form>
 
 <!-- Signal explainer -->
 <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1rem; line-height:1.5;">
@@ -105,7 +144,7 @@
 
   // Parse signal data from the rendered page (safe server-side JSON serialization)
   {% set signal_data = [] %}
-  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts, 'ts_hm': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts_iso or s.ts, 'ts_hm': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
   var signals = {{ signal_data | tojson }};
 
   if (!signals.length) return;
@@ -242,7 +281,7 @@
           '<span class="badge badge-' + s.domain + '">' + s.domain + '</span>' +
           '<span style="color:var(--text-bright); font-weight:500;">' + s.asset + '</span>' +
           '<span class="' + scoreClass + '" style="font-weight:500;">' + (dir==='+' ? '▲' : dir==='-' ? '▼' : '–') + ' ' + (Math.round(s.score * 10) / 10).toFixed(1) + '</span>' +
-          '<span style="color:var(--text-dim); font-size:0.75rem;">' + s.ts + '</span>' +
+          '<span style="color:var(--text-dim); font-size:0.75rem;">' + (s.ts_label || s.ts) + '</span>' +
         '</div>' +
         '<div style="margin-top:0.35rem; color:var(--text); font-size:0.8rem;">' + s.desc + '</div>';
       detailDiv.style.display = 'block';

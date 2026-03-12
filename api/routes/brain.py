@@ -122,7 +122,7 @@ def run_cycle(
     except Exception:
         pass
 
-    res = orch.run_cycle(symbols=list(config.universe.symbols))
+    res = orch.run_cycle(symbols=list(config.universe.active_symbols()))
 
     kill_level = None
     try:
@@ -189,7 +189,7 @@ def trigger_cycle(
     except Exception:
         pass
 
-    res = orch.run_cycle(symbols=list(config.universe.symbols))
+    res = orch.run_cycle(symbols=list(config.universe.active_symbols()))
 
     kill_level = None
     try:
