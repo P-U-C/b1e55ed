@@ -191,3 +191,67 @@ def test_settings_actions_are_truthful_and_config_paths_exist() -> None:
         assert page.status_code == 200
         assert "/api/config" not in page.text
         assert "/api/settings/config/save" in page.text
+
+
+class SocialPanelApiClient(DummyApiClient):
+    def get_social_status(self) -> _Res:
+        return _Res(
+            {
+                "pipeline_status": "active",
+                "diagnosis": "Running",
+                "producers": [],
+                "watchlist": [],
+                "watchlist_count": 2,
+                "sources_configured": 4,
+                "signal_events_count": 12,
+                "seeded": True,
+                "actions_available": ["run_now"],
+                "pipeline_active": True,
+            },
+            True,
+        )
+
+    def get_social_sentiment(self) -> _Res:
+        return _Res({"items": [{"symbol": "SOL", "score": 0.4, "label": "bull"}]}, True)
+
+    def get_social_alerts(self) -> _Res:
+        return _Res(
+            {
+                "items": [
+                    {
+                        "type": "velocity",
+                        "symbol": "SOL",
+                        "desc": "Velocity accelerating",
+                    }
+                ]
+            },
+            True,
+        )
+
+
+def test_sentiment_map_partial_shows_live_source_counts() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = SocialPanelApiClient()
+        resp = client.get("/partials/sentiment-map")
+        assert resp.status_code == 200
+        assert "Sources configured: 4" in resp.text
+        assert "Signal events: 12" in resp.text
+
+
+def test_social_alerts_partial_falls_back_to_symbol() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = SocialPanelApiClient()
+        resp = client.get("/partials/social-alerts")
+        assert resp.status_code == 200
+        assert ">SOL<" in resp.text
+
+
+def test_social_page_preserves_contextual_headers_on_htmx_refresh() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = SocialPanelApiClient()
+        resp = client.get("/social")
+        assert resp.status_code == 200
+        assert "Pipeline Status" in resp.text
+        assert "Collector Health" in resp.text
+        assert 'id="social-status-refresh"' in resp.text
+        assert 'id="collector-health-refresh"' in resp.text

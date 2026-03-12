@@ -51,15 +51,17 @@
 </div>
 
 <!-- Pipeline Status -->
-<div class="panel" style="margin-bottom:1rem;" hx-get="/partials/social-status" hx-trigger="every 30s" hx-swap="innerHTML">
+<div class="panel" style="margin-bottom:1rem;">
   <div class="panel-header">
     <span class="panel-title">Pipeline Status</span>
   </div>
-  {% include "partials/social_status_panel.html" %}
+  <div id="social-status-refresh" hx-get="/partials/social-status" hx-trigger="every 30s" hx-swap="innerHTML">
+    {% include "partials/social_status_panel.html" %}
+  </div>
 </div>
 
 <!-- Collector Health -->
-<div class="panel" style="margin-bottom:1rem;" hx-get="/partials/collector-health" hx-trigger="every 120s" hx-swap="innerHTML">
+<div class="panel" style="margin-bottom:1rem;">
   <div class="panel-header">
     <span class="panel-title">Collector Health</span>
     <span class="panel-age text-dim" style="font-size:0.65rem;">built-in probes</span>
@@ -67,7 +69,9 @@
   {% if not collector_health_ok %}
     {% set health_error = 'Unable to reach collector health endpoint' %}
   {% endif %}
-  {% include "partials/social_collector_health.html" %}
+  <div id="collector-health-refresh" hx-get="/partials/collector-health" hx-trigger="every 120s" hx-swap="innerHTML">
+    {% include "partials/social_collector_health.html" %}
+  </div>
 </div>
 
 <div class="grid" style="margin-bottom:1rem;">

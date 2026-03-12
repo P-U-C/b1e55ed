@@ -2093,15 +2093,29 @@ def kill_switch_partial(request: Request) -> HTMLResponse:
 @app.get("/partials/sentiment-map", response_class=HTMLResponse)
 def sentiment_map_partial(request: Request) -> HTMLResponse:
     client = _api(request)
-    res = client.get_social_sentiment()
-    sentiments = res.data.get("items") if (res.ok and isinstance(res.data, dict)) else []
+    sent_res = client.get_social_sentiment()
+    status_res = client.get_social_status()
+
+    sentiments = sent_res.data.get("items") if (sent_res.ok and isinstance(sent_res.data, dict)) else []
+    status_data = status_res.data if (status_res.ok and isinstance(status_res.data, dict)) else {}
+
+    sources_active = int(status_data.get("sources_configured", 0) or 0)
+    signal_events_count = int(status_data.get("signal_events_count", 0) or 0)
+
+    if sources_active == 0:
+        src_res = client.get_social_sources()
+        if src_res.ok and isinstance(src_res.data, dict):
+            source_items = src_res.data.get("items", [])
+            if isinstance(source_items, list):
+                sources_active = len(source_items)
 
     return templates.TemplateResponse(
         "partials/sentiment_map_panel.html",
         {
             "request": request,
-            "sentiment_age": "—" if res.ok else "stale",
-            "sources_active": 0,
+            "sentiment_age": "—" if sent_res.ok else "stale",
+            "sources_active": sources_active,
+            "signal_events_count": signal_events_count,
             "sentiments": sentiments if isinstance(sentiments, list) else [],
         },
     )
