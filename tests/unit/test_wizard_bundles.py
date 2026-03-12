@@ -12,19 +12,24 @@ def test_starter_bundle_pack_selection() -> None:
     assert [b["id"] for b in tradfi_only] == ["tradfi-infra"]
     assert tradfi_only[0]["asset_class"] == "tradfi"
 
-    mixed = wizard._starter_bundles_for_choice("3", ["BTC", "ETH", "SOL"])
-    assert [b["id"] for b in mixed] == ["crypto-core", "tradfi-infra"]
+    hl_pack = wizard._starter_bundles_for_choice("3", ["BTC", "ETH", "SOL"])
+    assert [b["id"] for b in hl_pack] == ["hl-tradfi-perps"]
+    assert hl_pack[0]["venue"] == "hyperliquid"
+
+    mixed_pack = wizard._starter_bundles_for_choice("4", ["BTC", "ETH", "SOL"])
+    assert [b["id"] for b in mixed_pack] == ["mixed-market"]
+    assert "SUI" in mixed_pack[0]["symbols"]
 
 
 def test_active_symbols_resolve_from_enabled_bundles_with_fallback() -> None:
     base = ["BTC", "ETH"]
-    mixed = wizard._starter_bundles_for_choice("3", base)
-    active = wizard._active_symbols_from_bundles(base, mixed)
-    assert active == ["BTC", "ETH", "SOL"]
+    hl = wizard._starter_bundles_for_choice("3", base)
+    active = wizard._active_symbols_from_bundles(base, hl)
+    assert active == ["HYPE", "SOL", "BTC", "ETH"]
 
-    for bundle in mixed:
+    for bundle in hl:
         bundle["enabled"] = False
-    fallback = wizard._active_symbols_from_bundles(base, mixed)
+    fallback = wizard._active_symbols_from_bundles(base, hl)
     assert fallback == ["BTC", "ETH"]
 
 
@@ -32,8 +37,7 @@ def test_bundles_yaml_block_renders_expected_shape() -> None:
     bundles = wizard._starter_bundles_for_choice("3", ["BTC", "ETH", "SOL"])
     yaml_block = wizard._bundles_yaml_block(bundles)
 
-    assert 'id: "crypto-core"' in yaml_block
-    assert 'id: "tradfi-infra"' in yaml_block
+    assert 'id: "hl-tradfi-perps"' in yaml_block
     assert 'asset_class: "crypto"' in yaml_block
-    assert 'asset_class: "tradfi"' in yaml_block
+    assert 'venue: "hyperliquid"' in yaml_block
     assert 'source: "wizard"' in yaml_block

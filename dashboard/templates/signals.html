@@ -14,7 +14,7 @@
   </div>
 </div>
 
-<form method="get" class="panel" style="margin-bottom:1rem; padding:0.75rem; display:grid; grid-template-columns:1fr 1fr 1fr auto auto; gap:0.5rem; align-items:end;">
+<form method="get" class="panel" style="margin-bottom:1rem; padding:0.75rem; display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto auto; gap:0.5rem; align-items:end;">
   {% if active_domain %}
   <input type="hidden" name="domain" value="{{ active_domain }}">
   {% endif %}
@@ -45,6 +45,16 @@
       <option value="">All venues</option>
       {% for v in venue_options %}
       <option value="{{ v }}" {% if active_venue == v %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Tag</div>
+    <select class="btn" name="tag" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All tags</option>
+      {% for t in tag_options %}
+      <option value="{{ t }}" {% if active_tag == t %}selected{% endif %}>{{ t }}</option>
       {% endfor %}
     </select>
   </label>
@@ -144,7 +154,7 @@
 
   // Parse signal data from the rendered page (safe server-side JSON serialization)
   {% set signal_data = [] %}
-  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts_iso or s.ts, 'ts_hm': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts_iso or s.ts, 'ts_hm': s.ts_hm, 'ts_label': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
   var signals = {{ signal_data | tojson }};
 
   if (!signals.length) return;

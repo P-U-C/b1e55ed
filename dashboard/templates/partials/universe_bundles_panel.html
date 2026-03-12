@@ -5,6 +5,8 @@
 
 <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.75rem; line-height:1.4;">
   Manage runtime symbol bundles. Enabled bundles define the active universe; when no enabled bundles exist, the system falls back to <code>universe.symbols</code>.
+  <br>
+  <strong>Direct</strong> mapping = symbol has first-order feed coverage. <strong>Proxy</strong> mapping = symbol inherits factor context (rates/dollar/vol/beta/liquidity) from a mapped anchor.
 </div>
 
 <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem;">
@@ -23,28 +25,43 @@
   hx-post="/api/settings/universe/bundles"
   hx-target="#universe-bundles-panel"
   hx-swap="outerHTML"
-  style="display:grid; grid-template-columns:1.2fr 1.5fr 1fr 0.9fr 0.9fr auto auto; gap:0.5rem; align-items:end; margin-bottom:1rem;"
+  style="display:grid; grid-template-columns:1.1fr 1.2fr 1.5fr 1fr 0.9fr 0.9fr auto auto; gap:0.5rem; align-items:end; margin-bottom:1rem;"
 >
   <label>
-    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Name</div>
-    <input class="btn" style="width:100%; text-align:left;" name="name" placeholder="Crypto Core" required>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Pack template</div>
+    <select class="btn" style="width:100%; text-align:left;" name="pack_id">
+      <option value="">Custom (manual)</option>
+      {% for p in universe_packs %}
+      <option value="{{ p.id }}">{{ p.name }} · {{ p.mapping_summary.direct }}D/{{ p.mapping_summary.proxy }}P</option>
+      {% endfor %}
+    </select>
   </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Name</div>
+    <input class="btn" style="width:100%; text-align:left;" name="name" placeholder="Optional if pack selected">
+  </label>
+
   <label>
     <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Symbols (comma)</div>
-    <input class="btn" style="width:100%; text-align:left;" name="symbols" placeholder="BTC,ETH,SOL" required>
+    <input class="btn" style="width:100%; text-align:left;" name="symbols" placeholder="Optional if pack selected">
   </label>
+
   <label>
     <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Tags</div>
-    <input class="btn" style="width:100%; text-align:left;" name="tags" placeholder="core,liquid">
+    <input class="btn" style="width:100%; text-align:left;" name="tags" placeholder="meme,high-beta">
   </label>
+
   <label>
     <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Asset class</div>
-    <input class="btn" style="width:100%; text-align:left;" name="asset_class" value="crypto">
+    <input class="btn" style="width:100%; text-align:left;" name="asset_class" placeholder="optional override">
   </label>
+
   <label>
     <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Venue</div>
-    <input class="btn" style="width:100%; text-align:left;" name="venue" value="global">
+    <input class="btn" style="width:100%; text-align:left;" name="venue" placeholder="optional override">
   </label>
+
   <label style="display:flex; align-items:center; gap:0.35rem; padding-bottom:0.35rem;">
     <input type="checkbox" name="enabled" value="true" checked>
     <span class="text-dim" style="font-size:0.75rem;">Enabled</span>
@@ -66,6 +83,7 @@
         <th>Name</th>
         <th>Class</th>
         <th>Venue</th>
+        <th>Tags</th>
         <th>Symbols</th>
         <th>Status</th>
         <th>Source</th>
@@ -78,9 +96,20 @@
         <td>
           <div style="color:var(--text-bright);">{{ b.name }}</div>
           <div class="text-dim" style="font-size:0.65rem;">{{ b.id }}</div>
+          {% if universe_pack_map.get(b.id) %}
+          {% set meta = universe_pack_map.get(b.id) %}
+          <div class="text-dim" style="font-size:0.62rem;">{{ meta.mapping_summary.direct }} direct / {{ meta.mapping_summary.proxy }} proxy</div>
+          {% endif %}
         </td>
         <td>{{ b.asset_class }}</td>
         <td>{{ b.venue }}</td>
+        <td style="max-width:240px;">
+          <div style="display:flex; flex-wrap:wrap; gap:0.25rem;">
+            {% for t in b.tags %}
+            <span class="badge" style="font-size:0.62rem;">{{ t }}</span>
+            {% endfor %}
+          </div>
+        </td>
         <td style="max-width:240px;">
           <div style="display:flex; flex-wrap:wrap; gap:0.25rem;">
             {% for s in b.symbols %}

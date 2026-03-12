@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from engine.core.bundle_packs import bundle_template_from_pack
 from engine.core.paths import b1e55ed_dir, logs_dir
 
 if TYPE_CHECKING:
@@ -288,12 +289,11 @@ _SYMBOL_PACKS: dict[str, dict] = {
     },
 }
 
-_TRADFI_INFRA_STARTER_SYMBOLS: list[str] = ["BTC", "ETH", "SOL"]
-
 _STARTER_BUNDLE_PACKS: dict[str, dict[str, str]] = {
     "1": {"id": "crypto-core", "name": "Crypto core (existing behavior)"},
-    "2": {"id": "tradfi-infra", "name": "TradFi infra starter"},
-    "3": {"id": "mixed", "name": "Mixed (crypto core + tradfi infra)"},
+    "2": {"id": "tradfi-infra", "name": "TradFi infra"},
+    "3": {"id": "hl-tradfi-perps", "name": "Hyperliquid TradFi-perps"},
+    "4": {"id": "mixed-market", "name": "Mixed market (direct + proxy)"},
 }
 
 
@@ -310,32 +310,29 @@ def _normalize_symbols(symbols: list[str]) -> list[str]:
 
 
 def _starter_bundles_for_choice(choice: str, crypto_symbols: list[str]) -> list[dict[str, object]]:
-    crypto_core = {
-        "id": "crypto-core",
-        "name": "Crypto Core",
-        "symbols": _normalize_symbols(crypto_symbols),
-        "tags": ["starter", "crypto"],
-        "asset_class": "crypto",
-        "venue": "global",
-        "enabled": True,
-        "source": "wizard",
-    }
-    tradfi_infra = {
-        "id": "tradfi-infra",
-        "name": "TradFi Infra Starter",
-        "symbols": _normalize_symbols(_TRADFI_INFRA_STARTER_SYMBOLS),
-        "tags": ["starter", "tradfi"],
-        "asset_class": "tradfi",
-        "venue": "binance",
-        "enabled": True,
-        "source": "wizard",
-    }
+    selected = _STARTER_BUNDLE_PACKS.get(choice, _STARTER_BUNDLE_PACKS["1"])
+    pack_id = str(selected.get("id") or "crypto-core")
 
-    if choice == "2":
-        return [tradfi_infra]
-    if choice == "3":
-        return [crypto_core, tradfi_infra]
-    return [crypto_core]
+    if pack_id == "crypto-core":
+        template = bundle_template_from_pack(
+            "crypto-core",
+            source="wizard",
+            enabled=True,
+            symbols=_normalize_symbols(crypto_symbols),
+        )
+        return [template] if isinstance(template, dict) else []
+
+    template = bundle_template_from_pack(pack_id, source="wizard", enabled=True)
+    if isinstance(template, dict):
+        return [template]
+
+    fallback = bundle_template_from_pack(
+        "crypto-core",
+        source="wizard",
+        enabled=True,
+        symbols=_normalize_symbols(crypto_symbols),
+    )
+    return [fallback] if isinstance(fallback, dict) else []
 
 
 def _active_symbols_from_bundles(default_symbols: list[str], bundles: list[dict[str, object]]) -> list[str]:

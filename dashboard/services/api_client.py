@@ -85,6 +85,9 @@ class ApiClient:
             params["domain"] = domain
         return self._get_json("/signals", params=params)
 
+    def get_universe_packs(self) -> ApiResult:
+        return self._get_json("/universe/packs")
+
     def get_universe_bundles(self) -> ApiResult:
         return self._get_json("/universe/bundles")
 
