@@ -106,9 +106,89 @@ class DaemonConfig(BaseModel):
     resolver_interval_seconds: int = 1800  # 30 min
 
 
+class UniverseBundle(BaseModel):
+    id: str
+    name: str
+    symbols: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    asset_class: str = "crypto"
+    venue: str = "global"
+    enabled: bool = True
+    source: Literal["wizard", "user", "system"] = "user"
+
+    @field_validator("id", "name", mode="before")
+    @classmethod
+    def _required_text(cls, v: Any) -> str:
+        text = str(v or "").strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalize_symbols(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            sym = str(raw or "").strip().upper()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            out.append(sym)
+        return out
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            tag = str(raw or "").strip().lower()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            out.append(tag)
+        return out
+
+
 class UniverseConfig(BaseModel):
-    symbols: list[str] = ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+    symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "SUI", "HYPE"])
     max_size: int = 100
+    bundles: list[UniverseBundle] = Field(default_factory=list)
+
+    @staticmethod
+    def normalize_symbols(values: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            sym = str(raw or "").strip().upper()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            out.append(sym)
+        return out
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalize_symbol_list(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        return cls.normalize_symbols(vals)
+
+    def enabled_bundles(self) -> list[UniverseBundle]:
+        return [b for b in self.bundles if b.enabled]
+
+    def active_symbols(self) -> list[str]:
+        max_size = int(self.max_size or 0)
+        if max_size <= 0:
+            max_size = 1
+
+        bundle_symbols = self.normalize_symbols([s for b in self.enabled_bundles() for s in b.symbols])
+        if bundle_symbols:
+            return bundle_symbols[:max_size]
+
+        return self.normalize_symbols(self.symbols)[:max_size]
 
 
 class LoggingConfig(BaseModel):

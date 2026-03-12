@@ -884,7 +884,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
         except Exception:
             logging.getLogger("b1e55ed.cli").debug("OMS injection skipped", exc_info=True)
 
-        result = orchestrator.run_cycle(symbols=config.universe.symbols)
+        result = orchestrator.run_cycle(symbols=config.universe.active_symbols())
 
         if bool(args.json):
             payload = {"cycle": asdict(result), "producers": producer_results}
