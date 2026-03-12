@@ -105,7 +105,7 @@
 
   // Parse signal data from the rendered page (safe server-side JSON serialization)
   {% set signal_data = [] %}
-  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts, 'ts_hm': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
   var signals = {{ signal_data | tojson }};
 
   if (!signals.length) return;
