@@ -301,8 +301,19 @@ class BrainOrchestrator:
         if getattr(self.config.brain, "auto_paper_trade", True):
             _log = logging.getLogger("b1e55ed.orchestrator")
             for sym, conv in convictions.items():
-                confidence = conv.score.confidence or 0.0
-                if confidence >= 0.65 and self.kill_switch.level == KillSwitchLevel.SAFE:
+                confidence = float(conv.score.confidence or 0.0)
+                magnitude = float(conv.score.magnitude or 0.0)
+                final_conviction = float(conv.final_conviction or 0.0)
+
+                min_conf = float(getattr(self.config.brain, "auto_paper_trade_min_confidence", 0.35) or 0.35)
+
+                # Primary trigger: calibrated confidence.
+                # Fallback trigger: very strong directional conviction even when confidence calibration is conservative.
+                strong_directional = conv.score.direction != "neutral" and magnitude >= 6.5 and (final_conviction >= 80.0 or final_conviction <= 20.0)
+
+                should_auto_trade = confidence >= min_conf or strong_directional
+
+                if should_auto_trade and self.kill_switch.level == KillSwitchLevel.SAFE:
                     try:
                         direction = conv.score.direction if conv.score.direction != "neutral" else "long"
 

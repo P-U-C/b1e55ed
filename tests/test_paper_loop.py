@@ -111,6 +111,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.75
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 8.0
         mock_conv_result.final_conviction = 80.0
         mock_conv_result.pcs = 80.0
         mock_conv_result.cts = 0.0
@@ -149,6 +150,7 @@ class TestAutoPaperTrade:
 
         identity = MagicMock(spec=NodeIdentity)
         identity.node_id = "test-node"
+        config.brain.auto_paper_trade_min_confidence = 0.65
         orch = BrainOrchestrator(config, db, identity)
 
         mock_conv_result = MagicMock()
@@ -157,6 +159,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.55
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 2.0
         mock_conv_result.final_conviction = 60.0
 
         with (
@@ -200,6 +203,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.30
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 2.0
         mock_conv_result.final_conviction = 40.0
 
         with (
@@ -228,6 +232,53 @@ class TestAutoPaperTrade:
 
             orch.run_cycle(["BTC"])
             mock_oms_low.submit.assert_not_called()
+
+    def test_auto_trade_on_strong_directional_fallback(self, db, config):
+        """Low confidence can still auto-trade on very strong directional conviction."""
+        from engine.brain.orchestrator import BrainOrchestrator
+
+        identity = MagicMock(spec=NodeIdentity)
+        identity.node_id = "test-node"
+        mock_oms = MagicMock()
+        mock_oms.submit.return_value = MagicMock(status="filled")
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
+
+        mock_conv_result = MagicMock()
+        mock_conv_result.score.confidence = 0.10
+        mock_conv_result.score.direction = "short"
+        mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 7.0
+        mock_conv_result.final_conviction = 0.0
+        mock_conv_result.pcs = 0.0
+        mock_conv_result.cts = 0.0
+
+        with (
+            patch.object(orch.data_quality, "evaluate") as mock_dq,
+            patch.object(orch.synthesis, "synthesize") as mock_synth,
+            patch.object(orch.regime, "detect") as mock_regime,
+            patch.object(orch.regime, "emit_if_changed"),
+            patch.object(orch.conviction, "compute", return_value=mock_conv_result),
+            patch.object(orch.conviction, "emit"),
+            patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
+        ):
+            mock_dq.return_value = MagicMock(per_domain_quality={})
+            mock_synth_res = MagicMock()
+            mock_synth_res.snapshot.cycle_id = "c1"
+            mock_synth_res.snapshot.symbol = "BTC"
+            mock_synth_res.snapshot.ts = datetime.now(tz=UTC)
+            mock_synth_res.snapshot.features = {}
+            mock_synth_res.snapshot.source_event_ids = []
+            mock_synth_res.snapshot.regime = "BULL"
+            mock_synth_res.snapshot.version = "v1"
+            mock_synth.return_value = mock_synth_res
+
+            mock_regime_res = MagicMock()
+            mock_regime_res.state.regime = "BULL"
+            mock_regime.return_value = mock_regime_res
+
+            orch.run_cycle(["BTC"])
+            mock_oms.submit.assert_called_once()
 
     def test_auto_trade_disabled_by_config(self, db, config):
         """auto_paper_trade=False -> no trade."""

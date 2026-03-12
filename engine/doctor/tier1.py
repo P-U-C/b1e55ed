@@ -121,22 +121,27 @@ def check_oms() -> CheckResult:
 
 
 def check_oms_wired() -> CheckResult:
-    """Check if OMS is wired into orchestrator (inspect cli/main.py for oms= kwarg)."""
+    """Check if OMS is wired into orchestrator on CLI brain path.
+
+    Accept either:
+    - constructor injection (`BrainOrchestrator(..., oms=...)`), or
+    - post-init injection (`orchestrator._oms = ...`)
+    """
     try:
         import inspect
 
         from engine.cli.main import _cmd_brain
 
         source = inspect.getsource(_cmd_brain)
-        if "oms=" in source:
+        wired = ("oms=" in source) or ("_oms" in source and "orchestrator" in source)
+        if wired:
             return CheckResult("oms_wired", "pass", "OMS wired into orchestrator")
-        else:
-            return CheckResult(
-                "oms_wired",
-                "warn",
-                "OMS not wired into orchestrator (cli/main.py missing oms= arg)",
-                remediation="Wire OMS into BrainOrchestrator in cli/main.py _cmd_brain()",
-            )
+        return CheckResult(
+            "oms_wired",
+            "warn",
+            "OMS not wired into orchestrator (no constructor or post-init OMS injection found)",
+            remediation="Inject OMS in cli/main.py _cmd_brain() before run_cycle",
+        )
     except Exception as e:
         return CheckResult("oms_wired", "warn", f"Could not inspect cli/main.py: {e}")
 
