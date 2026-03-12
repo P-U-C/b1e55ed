@@ -138,6 +138,38 @@ async def test_attribution_score_fields(app_factory, tmp_path):
 
 
 @pytest.mark.anyio
+async def test_attribution_prefers_contributor_node_id(app_factory, tmp_path):
+    """When contributor linkage exists, producer_id should be canonical node_id."""
+    db = Database(tmp_path / "brain4b.db")
+
+    with db.conn:
+        db.conn.execute(
+            """
+            INSERT INTO contributors (id, node_id, name, role)
+            VALUES (?, ?, ?, ?)
+            """,
+            ("contrib-canonical", "node-canonical-123", "display-name", "agent"),
+        )
+
+    ev = db.append_event(
+        event_type=EventType.SIGNAL_CURATOR_V1,
+        payload={"symbol": "SOL", "conviction": 5.5},
+        source="display-name",
+        contributor_id="contrib-canonical",
+    )
+
+    app = app_factory(db)
+    headers = {"Authorization": "Bearer tok"}
+
+    async with make_client(app) as ac:
+        r = await ac.get(f"/api/v1/signals/{ev.id}/attribution", headers=headers)
+
+    assert r.status_code == 200
+    assert r.json()["producer_id"] == "node-canonical-123"
+    db.close()
+
+
+@pytest.mark.anyio
 async def test_attribution_outcome_with_closed_position(app_factory, tmp_path):
     """If a closed position exists, outcome should be populated."""
     from datetime import datetime

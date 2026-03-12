@@ -144,6 +144,7 @@ Lists recent signal events.
 Submit a curator signal with contributor attribution.
 
 Resolves contributor by `node_id`. Records attribution in `contributor_signals`.
+If `source` is omitted/blank, event `source` defaults to contributor `node_id` (canonical producer identity).
 
 **Request**:
 ```json
@@ -526,6 +527,8 @@ Close a trace session.
 ### GET `/oracle/producers/{producer_id}/provenance`
 
 Producer provenance data. **No authentication required.**
+
+Lookup accepts canonical contributor `node_id` or historical `source` alias; when alias resolution is unambiguous, `producer_id` in the response is canonicalized to `node_id`.
 
 Every response includes:
 ```
