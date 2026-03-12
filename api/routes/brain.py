@@ -98,6 +98,30 @@ def run_cycle(
     # Create orchestrator with persisted identity (same as CLI for consistent audit trail)
     identity_handle = ensure_identity()
     orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)
+
+    # Inject OMS for auto-paper-trade
+    try:
+        if getattr(config.execution, "mode", "paper") == "paper":
+            from engine.brain.kill_switch import KillSwitch
+            from engine.execution.oms import OMS, default_sizer_from_config
+            from engine.execution.preflight import Preflight, default_policy_from_risk
+
+            policy = default_policy_from_risk(
+                max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                max_position_size_pct=float(config.risk.max_position_pct),
+                max_leverage_default=float(config.risk.max_leverage),
+            )
+            preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+            orch._oms = OMS(
+                config=config,
+                db=db,
+                preflight=preflight,
+                sizer=default_sizer_from_config(config),
+                policy=policy,
+            )
+    except Exception:
+        pass
+
     res = orch.run_cycle(symbols=list(config.universe.symbols))
 
     kill_level = None
@@ -145,9 +169,23 @@ def trigger_cycle(
     # Inject OMS for auto-paper-trade
     try:
         if getattr(config.execution, "mode", "paper") == "paper":
-            from engine.execution.oms import OMS
+            from engine.brain.kill_switch import KillSwitch
+            from engine.execution.oms import OMS, default_sizer_from_config
+            from engine.execution.preflight import Preflight, default_policy_from_risk
 
-            orch._oms = OMS(config=config, db=db)
+            policy = default_policy_from_risk(
+                max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                max_position_size_pct=float(config.risk.max_position_pct),
+                max_leverage_default=float(config.risk.max_leverage),
+            )
+            preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+            orch._oms = OMS(
+                config=config,
+                db=db,
+                preflight=preflight,
+                sizer=default_sizer_from_config(config),
+                policy=policy,
+            )
     except Exception:
         pass
 

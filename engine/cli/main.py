@@ -860,6 +860,30 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             return 1
 
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
+
+        # Inject OMS for auto-paper-trade when execution mode is paper.
+        try:
+            if getattr(config.execution, "mode", "paper") == "paper":
+                from engine.brain.kill_switch import KillSwitch
+                from engine.execution.oms import OMS, default_sizer_from_config
+                from engine.execution.preflight import Preflight, default_policy_from_risk
+
+                policy = default_policy_from_risk(
+                    max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                    max_position_size_pct=float(config.risk.max_position_pct),
+                    max_leverage_default=float(config.risk.max_leverage),
+                )
+                preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+                orchestrator._oms = OMS(
+                    config=config,
+                    db=db,
+                    preflight=preflight,
+                    sizer=default_sizer_from_config(config),
+                    policy=policy,
+                )
+        except Exception:
+            logging.getLogger("b1e55ed.cli").debug("OMS injection skipped", exc_info=True)
+
         result = orchestrator.run_cycle(symbols=config.universe.symbols)
 
         if bool(args.json):
