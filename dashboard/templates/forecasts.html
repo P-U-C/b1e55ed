@@ -17,7 +17,38 @@
   {% if summary.resolved > 0 %}<span style="color:var(--amber);">{{ summary.resolved }} resolved</span>{% endif %}
 </div>
 
-<!-- Filter controls -->
+<!-- Universe filters -->
+<form method="get" action="/forecasts" style="margin-bottom:0.75rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+  <select class="input" name="bundle" style="min-width:10rem;" onchange="this.form.submit()">
+    <option value="">All bundles</option>
+    {% for b in bundle_options %}
+    <option value="{{ b.id }}" {% if active_bundle == b.id %}selected{% endif %}>{{ b.name or b.id }}</option>
+    {% endfor %}
+  </select>
+  <select class="input" name="asset_class" onchange="this.form.submit()">
+    <option value="">All asset classes</option>
+    {% for a in asset_class_options %}
+    <option value="{{ a }}" {% if active_asset_class == a %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+  <select class="input" name="venue" onchange="this.form.submit()">
+    <option value="">All venues</option>
+    {% for v in venue_options %}
+    <option value="{{ v }}" {% if active_venue == v %}selected{% endif %}>{{ v }}</option>
+    {% endfor %}
+  </select>
+  <select class="input" name="tag" onchange="this.form.submit()">
+    <option value="">All tags</option>
+    {% for t in tag_options %}
+    <option value="{{ t }}" {% if active_tag == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  {% if active_bundle or active_asset_class or active_venue or active_tag %}
+  <a href="/forecasts" class="btn btn-sm">Clear</a>
+  {% endif %}
+</form>
+
+<!-- Direction filter controls -->
 <div style="margin-bottom:1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
   <div style="display:flex; gap:0.35rem;" id="dir-filters">
     <button class="btn btn-sm filter-pill active" data-filter="all" onclick="filterForecasts('all')">ALL</button>

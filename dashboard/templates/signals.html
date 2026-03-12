@@ -77,6 +77,34 @@
   <span style="color:var(--text-faint);">Derived from producer-specific metrics.</span>
 </div>
 
+<!-- Signal Beeswarm Timeline -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Signal Timeline</span>
+    <span class="panel-age cursor-blink">24h</span>
+  </div>
+  <div id="beeswarm-container">
+    {% if signals %}
+    <!-- Beeswarm data injected via JS below -->
+    <div id="beeswarm-timeline" style="width:100%; overflow-x:auto; position:relative;">
+      <svg id="beeswarm-svg" width="100%" height="180" style="min-width:600px;"></svg>
+    </div>
+    <!-- Detail expand row -->
+    <div id="beeswarm-detail" style="display:none; margin-top:0.5rem; padding:0.75rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-raised); font-size:0.8rem;">
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+      {{ signals | length }} signals{% if active_domain %} ({{ active_domain }}){% endif %} · click dot for details
+    </div>
+    {% else %}
+    {% set message = "No signals yet" %}
+    {% set status = "Waiting for first producer cycle" %}
+    {% set action_text = "Go to Producers" %}
+    {% set action_url = "/producers" %}
+    {% include "partials/empty_state.html" %}
+    {% endif %}
+  </div>
+</div>
+
 <!-- Latest by domain -->
 <div class="grid" style="margin-bottom:1rem;">
   {% for group in domain_groups %}
@@ -104,34 +132,6 @@
     {% endif %}
   </div>
   {% endfor %}
-</div>
-
-<!-- Signal Beeswarm Timeline -->
-<div class="panel">
-  <div class="panel-header">
-    <span class="panel-title">Signal Timeline</span>
-    <span class="panel-age cursor-blink">24h</span>
-  </div>
-  <div id="beeswarm-container">
-    {% if signals %}
-    <!-- Beeswarm data injected via JS below -->
-    <div id="beeswarm-timeline" style="width:100%; overflow-x:auto; position:relative;">
-      <svg id="beeswarm-svg" width="100%" height="180" style="min-width:600px;"></svg>
-    </div>
-    <!-- Detail expand row -->
-    <div id="beeswarm-detail" style="display:none; margin-top:0.5rem; padding:0.75rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-raised); font-size:0.8rem;">
-    </div>
-    <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
-      {{ signals | length }} signals{% if active_domain %} ({{ active_domain }}){% endif %} · click dot for details
-    </div>
-    {% else %}
-    {% set message = "No signals yet" %}
-    {% set status = "Waiting for first producer cycle" %}
-    {% set action_text = "Go to Producers" %}
-    {% set action_url = "/producers" %}
-    {% include "partials/empty_state.html" %}
-    {% endif %}
-  </div>
 </div>
 
 {% endblock %}
