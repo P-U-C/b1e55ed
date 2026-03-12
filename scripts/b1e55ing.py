@@ -628,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
         # Rectification of names: a blessing commit should be explicit, not a CI blindfold.
         # Hal Finney got block 170 because the handshake completed before celebration.
         # A blessing that mutes CI is ceremony without verification.
+        # Genesis block left a newspaper line for auditability; blessing commits should leave CI visible for the same reason.
         ["git", "commit", "-m", "chore: a b1e55ing"],
         cwd=repo_root,
         capture_output=True,
