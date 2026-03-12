@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
+from typing import Any
 
 try:
     from datetime import UTC  # py311+
@@ -59,6 +60,13 @@ class CycleResult:
     synthesis: dict[str, SynthesisResult]
     convictions: dict[str, ConvictionResult]
     intents: list[dict]
+
+
+@dataclass(frozen=True, slots=True)
+class AutoTradePolicyDecision:
+    allowed: bool
+    reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BrainOrchestrator:
@@ -140,6 +148,181 @@ class BrainOrchestrator:
             _log.debug("Binance price lookup failed for %s", symbol, exc_info=True)
 
         return None
+
+    @staticmethod
+    def _normalize_list(values: Any, *, upper: bool = False) -> list[str]:
+        vals = values if isinstance(values, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            item = str(raw or "").strip()
+            if not item:
+                continue
+            item = item.upper() if upper else item.lower()
+            if item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    def _bundle_auto_trade_policy(self, symbol: str) -> AutoTradePolicyDecision:
+        """Resolve whether auto execution is allowed for this symbol.
+
+        Backward compatibility rule:
+        - no bundles configured => allow legacy behavior
+        """
+
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return AutoTradePolicyDecision(allowed=False, reason="invalid_symbol", metadata={"symbol": symbol})
+
+        universe = getattr(self.config, "universe", None)
+        if universe is None:
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_no_universe"})
+
+        try:
+            enabled_bundles_fn = getattr(universe, "enabled_bundles", None)
+            if callable(enabled_bundles_fn):
+                enabled_bundles = list(enabled_bundles_fn())
+            else:
+                bundles = getattr(universe, "bundles", [])
+                enabled_bundles = [b for b in bundles if bool(getattr(b, "enabled", True))]
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").debug("bundle policy lookup failed; using legacy allow", exc_info=True)
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_bundle_lookup_error"})
+
+        if not enabled_bundles:
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_no_bundles"})
+
+        metadata_fn = getattr(universe, "execution_metadata_for_symbol", None)
+        metadata: dict[str, Any]
+        if callable(metadata_fn):
+            raw_meta = metadata_fn(sym)
+            metadata = dict(raw_meta) if isinstance(raw_meta, dict) else {}
+        else:
+            symbol_bundles = [b for b in enabled_bundles if sym in self._normalize_list(getattr(b, "symbols", []), upper=True)]
+            metadata = {
+                "bundle_ids": [str(getattr(b, "id", "")) for b in symbol_bundles],
+                "asset_classes": [str(getattr(b, "asset_class", "")).lower() for b in symbol_bundles],
+                "venues": [str(getattr(b, "venue", "")).lower() for b in symbol_bundles],
+                "tags": [tag for b in symbol_bundles for tag in self._normalize_list(getattr(b, "tags", []))],
+                "execution_mode_hints": [
+                    str(getattr(b, "execution_mode_hint", "")).lower() for b in symbol_bundles if str(getattr(b, "execution_mode_hint", "")).strip()
+                ],
+            }
+
+        bundle_ids = self._normalize_list(metadata.get("bundle_ids", []), upper=False)
+        asset_classes = self._normalize_list(metadata.get("asset_classes", []), upper=False)
+        venues = self._normalize_list(metadata.get("venues", []), upper=False)
+        tags = self._normalize_list(metadata.get("tags", []), upper=False)
+        mode_hints = self._normalize_list(metadata.get("execution_mode_hints", []), upper=False)
+
+        policy_meta = {
+            "symbol": sym,
+            "bundle_ids": bundle_ids,
+            "asset_classes": asset_classes,
+            "venues": venues,
+            "tags": tags,
+            "execution_mode_hints": mode_hints,
+        }
+
+        if not bundle_ids:
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="symbol_not_in_active_bundle",
+                metadata=policy_meta,
+            )
+
+        deny_tags = {
+            "no-trade",
+            "no_trade",
+            "observe-only",
+            "observe_only",
+            "signal-only",
+            "signal_only",
+            "conviction-only",
+            "conviction_only",
+            "watchlist-only",
+            "watchlist_only",
+        }
+        deny_hints = {
+            "disabled",
+            "off",
+            "none",
+            "signal_only",
+            "signal-only",
+            "conviction_only",
+            "conviction-only",
+            "observe_only",
+            "observe-only",
+            "no_trade",
+            "no-trade",
+        }
+
+        if any(tag in deny_tags for tag in tags):
+            return AutoTradePolicyDecision(allowed=False, reason="execution_tag_blocks_execution", metadata=policy_meta)
+
+        if any(hint in deny_hints for hint in mode_hints):
+            return AutoTradePolicyDecision(allowed=False, reason="execution_mode_hint_blocks_execution", metadata=policy_meta)
+
+        execution_cfg = getattr(self.config, "execution", None)
+        runtime_mode = str(getattr(execution_cfg, "mode", "paper") or "paper").strip().lower()
+
+        restricted_modes: set[str] = set()
+        for hint in mode_hints:
+            if hint in {"paper_only", "paper-only"}:
+                restricted_modes.add("paper")
+            elif hint in {"live_only", "live-only"}:
+                restricted_modes.add("live")
+
+        if restricted_modes and runtime_mode not in restricted_modes:
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="execution_mode_hint_mismatch",
+                metadata={**policy_meta, "runtime_mode": runtime_mode, "allowed_modes": sorted(restricted_modes)},
+            )
+
+        allowed_asset_classes = self._normalize_list(getattr(execution_cfg, "allowed_bundle_asset_classes", ["crypto"]), upper=False)
+        if asset_classes and allowed_asset_classes and not set(asset_classes).intersection(allowed_asset_classes):
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="asset_class_not_allowed",
+                metadata={**policy_meta, "allowed_asset_classes": allowed_asset_classes},
+            )
+
+        allowed_venues = self._normalize_list(
+            getattr(execution_cfg, "allowed_bundle_venues", ["global", "paper", "hyperliquid", "binance", "coinbase"]),
+            upper=False,
+        )
+        if venues and allowed_venues and not set(venues).intersection(allowed_venues):
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="venue_not_allowed",
+                metadata={**policy_meta, "allowed_venues": allowed_venues},
+            )
+
+        return AutoTradePolicyDecision(allowed=True, reason=None, metadata=policy_meta)
+
+    def _emit_execution_gate_event(self, *, symbol: str, cycle_id: str, decision: AutoTradePolicyDecision) -> None:
+        try:
+            self.db.append_event(
+                event_type=EventType.AUDIT_V1,
+                payload={
+                    "reason": "execution_gated_by_bundle_policy",
+                    "gate_reason": str(decision.reason or "unknown"),
+                    "symbol": str(symbol).upper(),
+                    "details": dict(decision.metadata),
+                    "cycle_id": cycle_id,
+                },
+                source="brain.orchestrator",
+                trace_id=cycle_id,
+            )
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").debug(
+                "failed to emit execution gate audit event for %s",
+                symbol,
+                exc_info=True,
+            )
 
     def run_cycle(self, symbols: list[str]) -> CycleResult:
         # Abort immediately if kill switch is active.
@@ -314,6 +497,17 @@ class BrainOrchestrator:
                 should_auto_trade = confidence >= min_conf or strong_directional
 
                 if should_auto_trade and self.kill_switch.level == KillSwitchLevel.SAFE:
+                    gate_decision = self._bundle_auto_trade_policy(sym)
+                    if not gate_decision.allowed:
+                        _log.info(
+                            "execution_gated_by_bundle_policy: symbol=%s gate_reason=%s metadata=%s",
+                            sym,
+                            gate_decision.reason,
+                            gate_decision.metadata,
+                        )
+                        self._emit_execution_gate_event(symbol=sym, cycle_id=cycle_id, decision=gate_decision)
+                        continue
+
                     try:
                         direction = conv.score.direction if conv.score.direction != "neutral" else "long"
 

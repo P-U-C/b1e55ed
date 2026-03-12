@@ -8,6 +8,7 @@ brain:
 
 universe:
   symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+  bundles: []
   max_size: 100
 
 execution:
@@ -15,6 +16,9 @@ execution:
   paper_start_balance: 10000.0
   confirmation_threshold_usd: 500.0
   paper_min_days: 14
+  # Bundle-aware execution gating defaults (safe posture)
+  allowed_bundle_asset_classes: ["crypto"]
+  allowed_bundle_venues: ["global", "paper", "hyperliquid", "binance", "coinbase"]
 
 karma:
   enabled: true

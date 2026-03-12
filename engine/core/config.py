@@ -76,12 +76,34 @@ class ExecutionConfig(BaseModel):
     confirmation_threshold_usd: float = 500.0
     paper_min_days: int = 14
 
+    # Bundle-aware execution policy defaults (safe by default).
+    allowed_bundle_asset_classes: list[str] = Field(default_factory=lambda: ["crypto"])
+    allowed_bundle_venues: list[str] = Field(default_factory=lambda: ["global", "paper", "hyperliquid", "binance", "coinbase"])
+
     @field_validator("paper_min_days")
     @classmethod
     def paper_min_days_cannot_be_zero(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("paper_min_days must be >= 1")
         return v
+
+    @staticmethod
+    def _normalize_lower_unique(values: Any) -> list[str]:
+        vals = values if isinstance(values, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            item = str(raw or "").strip().lower()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    @field_validator("allowed_bundle_asset_classes", "allowed_bundle_venues", mode="before")
+    @classmethod
+    def _normalize_policy_lists(cls, v: Any) -> list[str]:
+        return cls._normalize_lower_unique(v)
 
 
 class KillSwitchConfig(BaseModel):
@@ -106,9 +128,125 @@ class DaemonConfig(BaseModel):
     resolver_interval_seconds: int = 1800  # 30 min
 
 
+class UniverseBundle(BaseModel):
+    id: str
+    name: str
+    symbols: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    asset_class: str = "crypto"
+    venue: str = "global"
+    execution_mode_hint: str | None = None
+    enabled: bool = True
+    source: Literal["wizard", "user", "system"] = "user"
+
+    @field_validator("id", "name", mode="before")
+    @classmethod
+    def _required_text(cls, v: Any) -> str:
+        text = str(v or "").strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+    @field_validator("asset_class", "venue", mode="before")
+    @classmethod
+    def _normalize_lower_text(cls, v: Any) -> str:
+        text = str(v or "").strip().lower()
+        return text or "unknown"
+
+    @field_validator("execution_mode_hint", mode="before")
+    @classmethod
+    def _normalize_execution_hint(cls, v: Any) -> str | None:
+        text = str(v or "").strip().lower()
+        return text or None
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalize_symbols(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            sym = str(raw or "").strip().upper()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            out.append(sym)
+        return out
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            tag = str(raw or "").strip().lower()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            out.append(tag)
+        return out
+
+
 class UniverseConfig(BaseModel):
-    symbols: list[str] = ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+    symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "SUI", "HYPE"])
     max_size: int = 100
+    bundles: list[UniverseBundle] = Field(default_factory=list)
+
+    @staticmethod
+    def normalize_symbols(values: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            sym = str(raw or "").strip().upper()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            out.append(sym)
+        return out
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalize_symbol_list(cls, v: Any) -> list[str]:
+        vals = v if isinstance(v, list) else []
+        return cls.normalize_symbols(vals)
+
+    def enabled_bundles(self) -> list[UniverseBundle]:
+        return [b for b in self.bundles if b.enabled]
+
+    def active_symbols(self) -> list[str]:
+        max_size = int(self.max_size or 0)
+        if max_size <= 0:
+            max_size = 1
+
+        bundle_symbols = self.normalize_symbols([s for b in self.enabled_bundles() for s in b.symbols])
+        if bundle_symbols:
+            return bundle_symbols[:max_size]
+
+        return self.normalize_symbols(self.symbols)[:max_size]
+
+    def execution_metadata_for_symbol(self, symbol: str) -> dict[str, list[str]]:
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return {
+                "bundle_ids": [],
+                "asset_classes": [],
+                "venues": [],
+                "tags": [],
+                "execution_mode_hints": [],
+            }
+
+        bundles = [b for b in self.enabled_bundles() if sym in b.symbols]
+        tags = sorted({tag for bundle in bundles for tag in bundle.tags if tag})
+        mode_hints = sorted({bundle.execution_mode_hint for bundle in bundles if bundle.execution_mode_hint})
+
+        return {
+            "bundle_ids": [bundle.id for bundle in bundles],
+            "asset_classes": sorted({bundle.asset_class for bundle in bundles if bundle.asset_class}),
+            "venues": sorted({bundle.venue for bundle in bundles if bundle.venue}),
+            "tags": tags,
+            "execution_mode_hints": mode_hints,
+        }
 
 
 class LoggingConfig(BaseModel):
