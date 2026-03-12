@@ -193,6 +193,28 @@ def test_settings_actions_are_truthful_and_config_paths_exist() -> None:
         assert "/api/settings/config/save" in page.text
 
 
+class SignalTimelineApiClient(DummyApiClient):
+    def get_signals(self, domain: str | None = None) -> _Res:
+        return _Res(
+            {
+                "items": [
+                    {
+                        "type": "signal.ta.rsi.v1",
+                        "ts": "2026-03-12T18:00:00Z",
+                        "payload": {"symbol": "BTC", "desc": "RSI oversold", "score": 7.2, "direction": "▲"},
+                    },
+                    {
+                        "type": "signal.social.sentiment.v1",
+                        "ts": "2026-03-12T19:00:00Z",
+                        "payload": {"symbol": "SOL", "desc": "Social velocity", "score": 6.4, "direction": "▲"},
+                    },
+                ],
+                "total": 2,
+            },
+            True,
+        )
+
+
 class SocialPanelApiClient(DummyApiClient):
     def get_social_status(self) -> _Res:
         return _Res(
@@ -227,6 +249,16 @@ class SocialPanelApiClient(DummyApiClient):
             },
             True,
         )
+
+
+def test_signals_page_uses_raw_timestamps_for_timeline() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = SignalTimelineApiClient()
+        resp = client.get("/signals")
+        assert resp.status_code == 200
+        # Raw ISO timestamps must be present for timeline placement JS.
+        assert "2026-03-12T18:00:00Z" in resp.text
+        assert "2026-03-12T19:00:00Z" in resp.text
 
 
 def test_sentiment_map_partial_shows_live_source_counts() -> None:

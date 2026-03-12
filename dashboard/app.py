@@ -443,7 +443,9 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
         out.append(
             {
-                "ts": ts_hm,
+                # Keep raw timestamp for timeline plotting; use ts_hm for display-only chips.
+                "ts": str(ts) if ts is not None else "",
+                "ts_hm": ts_hm,
                 "domain": domain,
                 "asset": str(asset),
                 "desc": str(desc),
