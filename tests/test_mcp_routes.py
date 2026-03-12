@@ -155,10 +155,25 @@ class TestMCPPublicMethods:
         assert "tools" in data["result"]
         assert isinstance(data["result"]["tools"], list)
 
+        tool_names = {tool["name"] for tool in data["result"]["tools"]}
+        assert {
+            "get_brain_status",
+            "get_recent_signals",
+            "get_open_positions",
+            "get_signal_attribution",
+            "b1e55ed_provenance_check",
+            "emit_producer_signal",
+            "get_regime_status",
+            "get_top_signals",
+            "get_regime_history",
+            "submit_research_signal",
+            "get_signals_bulk_export",
+        }.issubset(tool_names)
+
     def test_tools_call_requires_auth(self, authed_client: TestClient) -> None:
         resp = authed_client.post(
             "/mcp",
-            json=_rpc("tools/call", {"name": "list_producers"}),
+            json=_rpc("tools/call", {"name": "get_brain_status", "arguments": {}}),
         )
         assert resp.status_code == 401
 
