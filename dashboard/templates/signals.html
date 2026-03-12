@@ -138,6 +138,19 @@
 
 {% block scripts %}
 <script>
+// Signals view should self-refresh so operators don't need manual reload.
+(function() {
+  var refreshMs = 30000;
+  setInterval(function() {
+    var active = document.activeElement;
+    var tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    window.location.reload();
+  }, refreshMs);
+})();
+</script>
+
+<script>
 (function() {
   // Domain color map
   var DOMAIN_COLORS = {

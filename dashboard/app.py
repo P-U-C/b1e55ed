@@ -278,9 +278,43 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
+def _latest_mark_prices() -> dict[str, float]:
+    """Best-effort latest mark prices from recent WS price signals."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return {}
+
+    prices: dict[str, float] = {}
+    try:
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute(
+            """
+            SELECT json_extract(payload, '$.symbol') AS symbol,
+                   json_extract(payload, '$.price') AS price
+            FROM events
+            WHERE type = 'signal.price_ws.v1'
+            ORDER BY ts DESC
+            LIMIT 500
+            """
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+
+    for symbol, price in rows:
+        sym = str(symbol or "").strip().upper()
+        if not sym or sym in prices or price is None:
+            continue
+        with contextlib.suppress(Exception):
+            prices[sym] = float(price)
+    return prices
+
+
 def _map_positions(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
+
+    mark_prices = _latest_mark_prices()
 
     out: list[dict[str, Any]] = []
     for p in raw:
@@ -290,23 +324,46 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         stop = float(p.get("stop_loss") or entry)
         target = float(p.get("take_profit") or entry)
         leverage = float(p.get("leverage") or 1.0)
+        direction = str(p.get("direction") or "neutral").lower()
+        symbol = str(p.get("asset") or p.get("symbol") or "—").upper()
+        status = str(p.get("status") or "")
+        size_notional = float(p.get("size_notional") or 0.0)
+
+        current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
+
+        if status.lower() == "closed":
+            pnl_usd = float(p.get("realized_pnl") or 0.0)
+            pnl_pct = float(p.get("pnl_pct") or 0.0)
+        else:
+            if direction in {"short", "sell"}:
+                ret = (entry - current) / entry if entry > 0 else 0.0
+            else:
+                ret = (current - entry) / entry if entry > 0 else 0.0
+            pnl_usd = ret * size_notional if size_notional > 0 else 0.0
+            pnl_pct = ret * 100.0
+
+        near_stop = False
+        if entry > 0 and stop > 0 and current > 0:
+            if direction in {"short", "sell"}:
+                near_stop = current >= stop * 0.995
+            else:
+                near_stop = current <= stop * 1.005
 
         out.append(
             {
                 "id": str(p.get("id") or "—"),
-                "symbol": str(p.get("asset") or p.get("symbol") or "—"),
-                "direction": str(p.get("direction") or "neutral"),
-                # API currently doesn't expose mark price / pnl; keep UI stable with safe defaults.
-                "current": entry,
+                "symbol": symbol,
+                "direction": direction,
+                "current": current,
                 "entry": entry,
                 "stop": stop,
                 "target": target,
-                "pnl_pct": float(p.get("pnl_pct") or 0.0),
-                "pnl_usd": float(p.get("realized_pnl") or 0.0),
+                "pnl_pct": pnl_pct,
+                "pnl_usd": pnl_usd,
                 "leverage": leverage,
                 "leverage_warning": False,
-                "near_stop": False,
-                "opened": None,
+                "near_stop": near_stop,
+                "opened": p.get("opened_at"),
                 "conviction_entry": p.get("conviction_id"),
                 "conviction_current": None,
                 "regime_entry": p.get("regime_at_entry"),

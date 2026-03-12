@@ -121,3 +121,17 @@
 {% endif %}
 
 {% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var refreshMs = 30000;
+  setInterval(function() {
+    var active = document.activeElement;
+    var tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    window.location.reload();
+  }, refreshMs);
+})();
+</script>
+{% endblock %}
