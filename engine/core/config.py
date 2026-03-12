@@ -66,6 +66,8 @@ class RiskConfig(BaseModel):
 class BrainConfig(BaseModel):
     cycle_interval_seconds: int = 1800
     auto_paper_trade: bool = True
+    # Lower default than 0.65 so paper mode can execute in moderate-conviction regimes.
+    auto_paper_trade_min_confidence: float = 0.35
 
 
 class ExecutionConfig(BaseModel):
