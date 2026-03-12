@@ -419,6 +419,7 @@ def test_settings_universe_bundle_controls_use_live_routes() -> None:
         assert delete_resp.status_code == 200
         assert "Deleted bundle: meme-basket" in delete_resp.text
 
+
 class SocialPanelApiClient(DummyApiClient):
     def get_social_status(self) -> _Res:
         return _Res(
