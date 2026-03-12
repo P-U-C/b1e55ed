@@ -24,6 +24,34 @@ class DummyApiClient:
     def get_signals(self, domain: str | None = None) -> _Res:
         return _Res({"items": [], "total": 0, "limit": 100, "offset": 0}, False)
 
+    def get_universe_bundles(self) -> _Res:
+        return _Res({"items": [], "total": 0}, True)
+
+    def get_universe_active(self) -> _Res:
+        return _Res(
+            {
+                "symbols": ["BTC", "ETH", "SOL"],
+                "count": 3,
+                "fallback_to_symbols": True,
+                "bundles": [],
+                "enabled_bundle_ids": [],
+                "asset_classes": [],
+                "venues": [],
+                "asset_class_symbols": {},
+                "venue_symbols": {},
+            },
+            True,
+        )
+
+    def create_universe_bundle(self, body: dict) -> _Res:
+        return _Res(body, True)
+
+    def update_universe_bundle(self, bundle_id: str, body: dict) -> _Res:
+        return _Res({"id": bundle_id, **body}, True)
+
+    def delete_universe_bundle(self, bundle_id: str) -> _Res:
+        return _Res({"ok": True, "deleted": bundle_id}, True)
+
     def get_producers_status(self) -> _Res:
         return _Res({"producers": {}}, False)
 

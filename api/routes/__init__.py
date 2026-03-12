@@ -26,6 +26,7 @@ from api.routes import (
     signals_validate,
     social,
     trace,
+    universe,
 )
 
 
@@ -48,6 +49,7 @@ def get_api_router() -> APIRouter:
     router.include_router(capabilities.router, tags=["capabilities"])
     router.include_router(contributors.router, tags=["contributors"])
     router.include_router(config.router, tags=["config"])
+    router.include_router(universe.router, tags=["universe"])
     router.include_router(karma.router, tags=["karma"])
     router.include_router(social.router, tags=["social"])
     router.include_router(trace.router, tags=["trace"])

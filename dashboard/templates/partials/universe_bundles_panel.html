@@ -1,0 +1,130 @@
+<div class="panel-header">
+  <span class="panel-title">Universe Bundles</span>
+  <span class="panel-age">{{ universe_active_symbols | length }} active symbols</span>
+</div>
+
+<div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.75rem; line-height:1.4;">
+  Manage runtime symbol bundles. Enabled bundles define the active universe; when no enabled bundles exist, the system falls back to <code>universe.symbols</code>.
+</div>
+
+<div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+  {% for sym in universe_active_symbols[:12] %}
+  <span class="badge" style="font-size:0.65rem;">{{ sym }}</span>
+  {% endfor %}
+  {% if universe_active_symbols | length > 12 %}
+  <span class="text-dim" style="font-size:0.7rem;">+{{ (universe_active_symbols | length) - 12 }} more</span>
+  {% endif %}
+  {% if universe_fallback_to_symbols %}
+  <span class="text-dim" style="font-size:0.7rem;">(fallback mode)</span>
+  {% endif %}
+</div>
+
+<form
+  hx-post="/api/settings/universe/bundles"
+  hx-target="#universe-bundles-panel"
+  hx-swap="outerHTML"
+  style="display:grid; grid-template-columns:1.2fr 1.5fr 1fr 0.9fr 0.9fr auto auto; gap:0.5rem; align-items:end; margin-bottom:1rem;"
+>
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Name</div>
+    <input class="btn" style="width:100%; text-align:left;" name="name" placeholder="Crypto Core" required>
+  </label>
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Symbols (comma)</div>
+    <input class="btn" style="width:100%; text-align:left;" name="symbols" placeholder="BTC,ETH,SOL" required>
+  </label>
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Tags</div>
+    <input class="btn" style="width:100%; text-align:left;" name="tags" placeholder="core,liquid">
+  </label>
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Asset class</div>
+    <input class="btn" style="width:100%; text-align:left;" name="asset_class" value="crypto">
+  </label>
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Venue</div>
+    <input class="btn" style="width:100%; text-align:left;" name="venue" value="global">
+  </label>
+  <label style="display:flex; align-items:center; gap:0.35rem; padding-bottom:0.35rem;">
+    <input type="checkbox" name="enabled" value="true" checked>
+    <span class="text-dim" style="font-size:0.75rem;">Enabled</span>
+  </label>
+  <button class="btn" type="submit" style="font-size:0.7rem; padding:6px 10px;">Add bundle</button>
+</form>
+
+{% if bundle_status_message %}
+<div class="{{ 'text-bull' if bundle_status_ok else 'text-warn' }}" style="font-size:0.75rem; margin-bottom:0.75rem;">
+  {{ '✓' if bundle_status_ok else '⚠' }} {{ bundle_status_message }}
+</div>
+{% endif %}
+
+{% if universe_bundles %}
+<div style="overflow-x:auto;">
+  <table class="data-table" style="width:100%; font-size:0.78rem;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Class</th>
+        <th>Venue</th>
+        <th>Symbols</th>
+        <th>Status</th>
+        <th>Source</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in universe_bundles %}
+      <tr>
+        <td>
+          <div style="color:var(--text-bright);">{{ b.name }}</div>
+          <div class="text-dim" style="font-size:0.65rem;">{{ b.id }}</div>
+        </td>
+        <td>{{ b.asset_class }}</td>
+        <td>{{ b.venue }}</td>
+        <td style="max-width:240px;">
+          <div style="display:flex; flex-wrap:wrap; gap:0.25rem;">
+            {% for s in b.symbols %}
+            <span class="badge" style="font-size:0.62rem;">{{ s }}</span>
+            {% endfor %}
+          </div>
+        </td>
+        <td>
+          {% if b.enabled %}
+          <span class="text-bull">enabled</span>
+          {% else %}
+          <span class="text-dim">disabled</span>
+          {% endif %}
+        </td>
+        <td>{{ b.source }}</td>
+        <td>
+          <div style="display:flex; justify-content:flex-end; gap:0.35rem;">
+            <form
+              hx-post="/api/settings/universe/bundles/{{ b.id }}/toggle"
+              hx-target="#universe-bundles-panel"
+              hx-swap="outerHTML"
+            >
+              <input type="hidden" name="enabled" value="{{ 'false' if b.enabled else 'true' }}">
+              <button class="btn" type="submit" style="font-size:0.65rem; padding:4px 8px;">
+                {{ 'Disable' if b.enabled else 'Enable' }}
+              </button>
+            </form>
+            <form
+              hx-post="/api/settings/universe/bundles/{{ b.id }}/delete"
+              hx-confirm="Delete bundle {{ b.name }}?"
+              hx-target="#universe-bundles-panel"
+              hx-swap="outerHTML"
+            >
+              <button class="btn" type="submit" style="font-size:0.65rem; padding:4px 8px; border-color:rgba(220,38,38,0.4); color:var(--red);">Remove</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state" style="padding:0.9rem;">
+  No bundles configured yet. Add one above.
+</div>
+{% endif %}

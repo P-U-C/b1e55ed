@@ -51,6 +51,16 @@ class ApiClient:
         except Exception:
             return ApiResult(None, False)
 
+    def _patch_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:
+        url = f"{self.base_url}{path}"
+        try:
+            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
+                resp = client.patch(url, json=body or {})
+                resp.raise_for_status()
+                return ApiResult(resp.json(), True)
+        except Exception:
+            return ApiResult(None, False)
+
     def _delete_json(self, path: str) -> ApiResult:
         url = f"{self.base_url}{path}"
         try:
@@ -74,6 +84,21 @@ class ApiClient:
         if domain:
             params["domain"] = domain
         return self._get_json("/signals", params=params)
+
+    def get_universe_bundles(self) -> ApiResult:
+        return self._get_json("/universe/bundles")
+
+    def get_universe_active(self) -> ApiResult:
+        return self._get_json("/universe/active")
+
+    def create_universe_bundle(self, body: dict[str, Any]) -> ApiResult:
+        return self._post_json("/universe/bundles", body)
+
+    def update_universe_bundle(self, bundle_id: str, body: dict[str, Any]) -> ApiResult:
+        return self._patch_json(f"/universe/bundles/{bundle_id}", body)
+
+    def delete_universe_bundle(self, bundle_id: str) -> ApiResult:
+        return self._delete_json(f"/universe/bundles/{bundle_id}")
 
     def get_producers_status(self) -> ApiResult:
         return self._get_json("/producers/status")

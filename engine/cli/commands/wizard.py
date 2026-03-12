@@ -288,6 +288,112 @@ _SYMBOL_PACKS: dict[str, dict] = {
     },
 }
 
+_TRADFI_INFRA_STARTER_SYMBOLS: list[str] = ["BTC", "ETH", "SOL"]
+
+_STARTER_BUNDLE_PACKS: dict[str, dict[str, str]] = {
+    "1": {"id": "crypto-core", "name": "Crypto core (existing behavior)"},
+    "2": {"id": "tradfi-infra", "name": "TradFi infra starter"},
+    "3": {"id": "mixed", "name": "Mixed (crypto core + tradfi infra)"},
+}
+
+
+def _normalize_symbols(symbols: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in symbols:
+        sym = str(raw or "").strip().upper()
+        if not sym or sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return out
+
+
+def _starter_bundles_for_choice(choice: str, crypto_symbols: list[str]) -> list[dict[str, object]]:
+    crypto_core = {
+        "id": "crypto-core",
+        "name": "Crypto Core",
+        "symbols": _normalize_symbols(crypto_symbols),
+        "tags": ["starter", "crypto"],
+        "asset_class": "crypto",
+        "venue": "global",
+        "enabled": True,
+        "source": "wizard",
+    }
+    tradfi_infra = {
+        "id": "tradfi-infra",
+        "name": "TradFi Infra Starter",
+        "symbols": _normalize_symbols(_TRADFI_INFRA_STARTER_SYMBOLS),
+        "tags": ["starter", "tradfi"],
+        "asset_class": "tradfi",
+        "venue": "binance",
+        "enabled": True,
+        "source": "wizard",
+    }
+
+    if choice == "2":
+        return [tradfi_infra]
+    if choice == "3":
+        return [crypto_core, tradfi_infra]
+    return [crypto_core]
+
+
+def _active_symbols_from_bundles(default_symbols: list[str], bundles: list[dict[str, object]]) -> list[str]:
+    enabled_bundle_symbols: list[str] = []
+    for bundle in bundles:
+        if not bool(bundle.get("enabled", True)):
+            continue
+        syms = bundle.get("symbols")
+        if isinstance(syms, list):
+            enabled_bundle_symbols.extend([str(s) for s in syms])
+
+    active = _normalize_symbols(enabled_bundle_symbols)
+    if active:
+        return active
+    return _normalize_symbols(default_symbols)
+
+
+def _bundles_yaml_block(bundles: list[dict[str, object]]) -> str:
+    if not bundles:
+        return "    []"
+
+    lines: list[str] = []
+    for bundle in bundles:
+        bundle_id = str(bundle.get("id") or "").strip() or "bundle"
+        name = str(bundle.get("name") or bundle_id).replace('"', "'")
+
+        raw_symbols = bundle.get("symbols")
+        symbol_values = raw_symbols if isinstance(raw_symbols, list) else []
+        symbols = _normalize_symbols([str(s) for s in symbol_values if str(s).strip()])
+
+        raw_tags = bundle.get("tags")
+        tag_values = raw_tags if isinstance(raw_tags, list) else []
+        tags = [str(t).strip().lower() for t in tag_values if str(t).strip()]
+
+        asset_class = str(bundle.get("asset_class") or "crypto").strip() or "crypto"
+        venue = str(bundle.get("venue") or "global").strip() or "global"
+        enabled = bool(bundle.get("enabled", True))
+        source = str(bundle.get("source") or "wizard").strip() or "wizard"
+
+        symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
+        tags_yaml = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+
+        lines.extend(
+            [
+                f'    - id: "{bundle_id}"',
+                f'      name: "{name}"',
+                f"      symbols: {symbols_yaml}",
+                f"      tags: {tags_yaml}",
+                f'      asset_class: "{asset_class}"',
+                f'      venue: "{venue}"',
+                f"      enabled: {'true' if enabled else 'false'}",
+                f'      source: "{source}"',
+            ]
+        )
+
+    return "\n".join(lines)
+
+
 # ── Step helpers ──────────────────────────────────────────────────────────────
 
 
@@ -712,6 +818,28 @@ def _step4_configuration(repo_root: Path) -> None:
         symbols = _SYMBOL_PACKS[pack_choice]["symbols"]
         print(f"  {_ok(f'Pack selected: {len(symbols)} symbols')}")
 
+    symbols = _normalize_symbols(symbols)
+
+    print()
+    print("  " + bold("Starter bundle pack") + " — choose your initial runtime universe:")
+    for key, starter_pack in _STARTER_BUNDLE_PACKS.items():
+        print(f"  {bold(key)}) {starter_pack['name']}")
+    print()
+
+    try:
+        starter_choice = _ask("  Starter pack", default="1")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        starter_choice = "1"
+    if starter_choice not in _STARTER_BUNDLE_PACKS:
+        starter_choice = "1"
+
+    starter_bundles = _starter_bundles_for_choice(starter_choice, symbols)
+    active_symbols = _active_symbols_from_bundles(symbols, starter_bundles)
+    starter_label = str(_STARTER_BUNDLE_PACKS[starter_choice]["name"])
+
+    print(f"  {_ok(f'Starter pack selected: {starter_label} ({len(active_symbols)} active symbols)')}")
+
     # Determine if GitHub App auth is pre-configured (baked-in app_id)
     try:
         from engine.config.github_app_defaults import (
@@ -766,7 +894,8 @@ def _step4_configuration(repo_root: Path) -> None:
                 print(f"  {_ok('Token configured')}")
 
     # Build config YAML
-    symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
+    symbols_yaml = "[" + ", ".join(f'"{s}"' for s in active_symbols) + "]"
+    bundles_yaml = _bundles_yaml_block(starter_bundles)
     github_token_value = github_token if github_token else ""
 
     if app_auth_baked_in:
@@ -829,6 +958,8 @@ brain:
 
 universe:
   symbols: {symbols_yaml}
+  bundles:
+{bundles_yaml}
   max_size: 100
 
 execution:
