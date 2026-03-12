@@ -33,7 +33,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Allow health/docs without rate limiting
-        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
             return await call_next(request)
 
         # Key by bearer token if present, else by client IP.
@@ -78,7 +78,7 @@ class IdentityGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Allow health/docs without identity (monitoring + introspection)
-        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json"):
+        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
             return await call_next(request)
 
         from engine.core.identity_gate import load_identity
@@ -337,6 +337,7 @@ def create_app() -> FastAPI:
         {"name": "positions", "description": "Read-only access to positions projected from events."},
         {"name": "regime", "description": "Market regime projections and state."},
         {"name": "producers", "description": "Producer registration and health."},
+        {"name": "capabilities", "description": "Agent capability discovery and producer capability summaries."},
         {"name": "contributors", "description": "Contributor registry, scoring, and leaderboard."},
         {"name": "config", "description": "Runtime configuration inspection."},
         {"name": "karma", "description": "Karma accounting and settlement state."},
@@ -417,11 +418,13 @@ def create_app() -> FastAPI:
             "name": "b1e55ed",
             "version": _engine.__version__,
             "docs": "/docs",
+            "openapi": "/api/v1/openapi.json",
             "health": "/api/v1/health",
             "endpoints": {
                 "contributors": "/api/v1/contributors",
                 "signals": "/api/v1/signals",
                 "producers": "/api/v1/producers",
+                "capabilities": "/api/v1/capabilities",
                 "karma": "/api/v1/karma",
                 "positions": "/api/v1/positions",
                 "brain": "/api/v1/brain",
@@ -431,6 +434,11 @@ def create_app() -> FastAPI:
                 "mcp": "/mcp",
             },
         }
+
+    @app.get("/api/v1/openapi.json", include_in_schema=False)
+    def openapi_v1_alias() -> dict:
+        """Compatibility alias for clients expecting versioned OpenAPI path."""
+        return app.openapi()
 
     return app
 

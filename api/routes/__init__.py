@@ -7,6 +7,7 @@ from api.routes import (
     artifacts,
     benchmarks,
     brain,
+    capabilities,
     cockpit,
     config,
     contributors,
@@ -44,6 +45,7 @@ def get_api_router() -> APIRouter:
     router.include_router(regime.router, tags=["regime"])
     router.include_router(producers.router, tags=["producers"])
     router.include_router(producers_feedback.router, tags=["producers"])
+    router.include_router(capabilities.router, tags=["capabilities"])
     router.include_router(contributors.router, tags=["contributors"])
     router.include_router(config.router, tags=["config"])
     router.include_router(karma.router, tags=["karma"])

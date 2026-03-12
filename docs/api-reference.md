@@ -497,9 +497,11 @@ Available tools: `get_brain_status`, `get_recent_signals`, `get_open_positions`,
 
 ### GET `/capabilities`
 
-Returns supported tools, event domains, and producer list. Use for agent onboarding.
+Returns supported tools, event domains, and producer capability entries (per-producer signal types + health). Use for agent onboarding.
 
 **Auth**: Required
+
+See also: `POST /mcp` with `tools/list` (tool metadata) and `GET /producers/capabilities` (producer-only capability view).
 
 ### POST `/trace/sessions`
 

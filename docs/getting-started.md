@@ -158,6 +158,8 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:5050/api/v1/capabilities
 ```
 
+This returns MCP tools, event domains, and producer capability summaries for onboarding.
+
 ## Cockpit
 
 After setup, visit the cockpit for a "what do I trade today" view:
