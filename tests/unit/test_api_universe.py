@@ -79,6 +79,8 @@ async def test_universe_bundle_crud_and_active_resolution(temp_dir: Path, test_c
         assert active_js["fallback_to_symbols"] is False
         assert active_js["asset_class_symbols"]["crypto"] == ["SOL", "BTC"]
         assert active_js["asset_class_symbols"]["tradfi"] == ["SPY"]
+        assert active_js["tags"] == ["core"]
+        assert active_js["tag_symbols"]["core"] == ["SOL", "BTC"]
 
         disable_crypto = await ac.patch(
             f"/api/v1/universe/bundles/{b1['id']}",
@@ -106,5 +108,55 @@ async def test_universe_bundle_crud_and_active_resolution(temp_dir: Path, test_c
     raw = yaml.safe_load(user_cfg.read_text(encoding="utf-8"))
     assert "universe" in raw
     assert "bundles" in raw["universe"]
+
+    db.close()
+
+
+@pytest.mark.anyio
+async def test_universe_pack_catalog_and_pack_based_bundle_creation(temp_dir: Path, test_config, monkeypatch: pytest.MonkeyPatch):
+    home = temp_dir / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    cfg = test_config.model_copy(
+        update={
+            "api": test_config.api.model_copy(update={"auth_token": "secret"}),
+            "universe": test_config.universe.model_copy(update={"symbols": ["BTC", "ETH"], "bundles": []}),
+        }
+    )
+
+    db = Database(temp_dir / "brain-universe-packs.db")
+    app = create_app()
+    app.state.config = cfg
+    app.state.db = db
+
+    headers = {"Authorization": "Bearer secret"}
+    async with make_client(app) as ac:
+        packs = await ac.get("/api/v1/universe/packs", headers=headers)
+        assert packs.status_code == 200
+        packs_js = packs.json()
+        pack_ids = {item["id"] for item in packs_js["items"]}
+        assert {"tradfi-infra", "hl-tradfi-perps", "mixed-market"}.issubset(pack_ids)
+
+        create_from_pack = await ac.post(
+            "/api/v1/universe/bundles",
+            headers=headers,
+            json={
+                "pack_id": "hl-tradfi-perps",
+                "source": "system",
+            },
+        )
+        assert create_from_pack.status_code == 200, create_from_pack.text
+        bundle = create_from_pack.json()
+        assert bundle["id"] == "hl-tradfi-perps"
+        assert bundle["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
+        assert "pack:hl-tradfi-perps" in bundle["tags"]
+        assert "vol" in bundle["tags"]
+
+        active = await ac.get("/api/v1/universe/active", headers=headers)
+        assert active.status_code == 200
+        active_js = active.json()
+        assert active_js["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
+        assert "vol" in active_js["tags"]
+        assert active_js["tag_symbols"]["vol"] == ["HYPE", "SOL", "BTC", "ETH"]
 
     db.close()

@@ -24,6 +24,9 @@ class DummyApiClient:
     def get_signals(self, domain: str | None = None) -> _Res:
         return _Res({"items": [], "total": 0, "limit": 100, "offset": 0}, False)
 
+    def get_universe_packs(self) -> _Res:
+        return _Res({"items": [], "total": 0}, True)
+
     def get_universe_bundles(self) -> _Res:
         return _Res({"items": [], "total": 0}, True)
 
@@ -37,8 +40,10 @@ class DummyApiClient:
                 "enabled_bundle_ids": [],
                 "asset_classes": [],
                 "venues": [],
+                "tags": [],
                 "asset_class_symbols": {},
                 "venue_symbols": {},
+                "tag_symbols": {},
             },
             True,
         )

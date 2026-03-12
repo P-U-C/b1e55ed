@@ -24,6 +24,9 @@ class DummyApiClient:
     def get_signals(self, domain: str | None = None) -> _Res:
         return _Res({"items": [], "total": 0, "limit": 100, "offset": 0}, False)
 
+    def get_universe_packs(self) -> _Res:
+        return _Res({"items": [], "total": 0}, True)
+
     def get_universe_bundles(self) -> _Res:
         return _Res({"items": [], "total": 0}, True)
 
@@ -37,8 +40,10 @@ class DummyApiClient:
                 "enabled_bundle_ids": [],
                 "asset_classes": [],
                 "venues": [],
+                "tags": [],
                 "asset_class_symbols": {},
                 "venue_symbols": {},
+                "tag_symbols": {},
             },
             True,
         )
@@ -252,7 +257,7 @@ class UniverseDashboardApiClient(DummyApiClient):
                 "id": "crypto-core",
                 "name": "Crypto Core",
                 "symbols": ["BTC", "ETH"],
-                "tags": ["starter", "crypto"],
+                "tags": ["starter", "crypto", "beta"],
                 "asset_class": "crypto",
                 "venue": "global",
                 "enabled": True,
@@ -262,11 +267,28 @@ class UniverseDashboardApiClient(DummyApiClient):
                 "id": "tradfi-infra",
                 "name": "TradFi Infra",
                 "symbols": ["SPY"],
-                "tags": ["starter", "tradfi"],
+                "tags": ["starter", "tradfi", "rates"],
                 "asset_class": "tradfi",
                 "venue": "nyse",
                 "enabled": True,
                 "source": "wizard",
+            },
+        ]
+        self.packs = [
+            {
+                "id": "tradfi-infra",
+                "name": "TradFi Infra",
+                "mapping_summary": {"direct": 3, "proxy": 0},
+            },
+            {
+                "id": "hl-tradfi-perps",
+                "name": "Hyperliquid TradFi-Perps",
+                "mapping_summary": {"direct": 3, "proxy": 1},
+            },
+            {
+                "id": "mixed-market",
+                "name": "Mixed Market",
+                "mapping_summary": {"direct": 3, "proxy": 2},
             },
         ]
 
@@ -311,6 +333,25 @@ class UniverseDashboardApiClient(DummyApiClient):
                     out[key].append(s)
         return out
 
+    def _tag_map(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for bundle in self.bundles:
+            if not bundle.get("enabled", True):
+                continue
+            symbols = [str(sym).upper() for sym in bundle.get("symbols", [])]
+            for tag in bundle.get("tags", []):
+                key = str(tag).strip().lower()
+                if not key:
+                    continue
+                out.setdefault(key, [])
+                for sym in symbols:
+                    if sym not in out[key]:
+                        out[key].append(sym)
+        return out
+
+    def get_universe_packs(self) -> _Res:
+        return _Res({"items": self.packs, "total": len(self.packs)}, True)
+
     def get_universe_bundles(self) -> _Res:
         return _Res({"items": self.bundles, "total": len(self.bundles)}, True)
 
@@ -324,8 +365,10 @@ class UniverseDashboardApiClient(DummyApiClient):
                 "enabled_bundle_ids": [str(b["id"]) for b in self.bundles if b.get("enabled", True)],
                 "asset_classes": sorted(self._asset_class_map().keys()),
                 "venues": sorted(self._venue_map().keys()),
+                "tags": sorted(self._tag_map().keys()),
                 "asset_class_symbols": self._asset_class_map(),
                 "venue_symbols": self._venue_map(),
+                "tag_symbols": self._tag_map(),
             },
             True,
         )
@@ -348,15 +391,39 @@ class UniverseDashboardApiClient(DummyApiClient):
         return _Res({"items": items, "total": len(items), "limit": 100, "offset": 0}, True)
 
     def create_universe_bundle(self, body: dict) -> _Res:
-        name = str(body.get("name") or "Bundle").strip()
-        slug = name.lower().replace(" ", "-")
+        pack_id = str(body.get("pack_id") or "").strip().lower()
+
+        if pack_id == "hl-tradfi-perps":
+            default_name = "Hyperliquid TradFi-Perps"
+            default_symbols = ["HYPE", "SOL", "BTC", "ETH"]
+            default_tags = ["starter", "hyperliquid", "tradfi", "vol", "pack:hl-tradfi-perps"]
+            default_asset_class = "crypto"
+            default_venue = "hyperliquid"
+        elif pack_id == "tradfi-infra":
+            default_name = "TradFi Infra"
+            default_symbols = ["BTC", "ETH", "SOL"]
+            default_tags = ["starter", "tradfi", "rates", "pack:tradfi-infra"]
+            default_asset_class = "tradfi"
+            default_venue = "binance"
+        else:
+            default_name = "Bundle"
+            default_symbols = []
+            default_tags = []
+            default_asset_class = "crypto"
+            default_venue = "global"
+
+        name = str(body.get("name") or default_name).strip() or default_name
+        symbols_raw = body.get("symbols") or default_symbols
+        tags_raw = body.get("tags") or default_tags
+
+        slug = pack_id or name.lower().replace(" ", "-")
         bundle = {
             "id": slug,
             "name": name,
-            "symbols": [str(s).upper() for s in body.get("symbols", [])],
-            "tags": [str(t) for t in body.get("tags", [])],
-            "asset_class": body.get("asset_class") or "crypto",
-            "venue": body.get("venue") or "global",
+            "symbols": [str(s).upper() for s in symbols_raw],
+            "tags": [str(t) for t in tags_raw],
+            "asset_class": body.get("asset_class") or default_asset_class,
+            "venue": body.get("venue") or default_venue,
             "enabled": bool(body.get("enabled", True)),
             "source": body.get("source") or "user",
         }
@@ -375,7 +442,7 @@ class UniverseDashboardApiClient(DummyApiClient):
         return _Res({"ok": True, "deleted": bundle_id}, True)
 
 
-def test_signals_page_filters_by_bundle_and_asset_class() -> None:
+def test_signals_page_filters_by_bundle_asset_class_and_tag() -> None:
     with TestClient(app) as client:
         client.app.state.api_client = UniverseDashboardApiClient()
 
@@ -389,10 +456,25 @@ def test_signals_page_filters_by_bundle_and_asset_class() -> None:
         assert "SPY basis" in by_asset_class.text
         assert "BTC momentum" not in by_asset_class.text
 
+        by_tag = client.get("/signals?tag=rates")
+        assert by_tag.status_code == 200
+        assert "SPY basis" in by_tag.text
+        assert "BTC momentum" not in by_tag.text
+
 
 def test_settings_universe_bundle_controls_use_live_routes() -> None:
     with TestClient(app) as client:
         client.app.state.api_client = UniverseDashboardApiClient()
+
+        add_pack_resp = client.post(
+            "/api/settings/universe/bundles",
+            data={
+                "pack_id": "hl-tradfi-perps",
+                "enabled": "true",
+            },
+        )
+        assert add_pack_resp.status_code == 200
+        assert "Added bundle: Hyperliquid TradFi-Perps" in add_pack_resp.text
 
         add_resp = client.post(
             "/api/settings/universe/bundles",
