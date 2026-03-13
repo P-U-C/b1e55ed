@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -632,3 +634,111 @@ def test_positions_page_short_loss_uses_red_and_shows_conflict_badge() -> None:
         assert "⚠ conviction conflict" in resp.text
         assert "$-100" in resp.text
         assert "$+100" not in resp.text
+
+
+def test_position_partial_keeps_conviction_conflict_badge() -> None:
+    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}), TestClient(app) as client:
+        client.app.state.api_client = PositionsConflictApiClient()
+        resp = client.get("/partials/position/HL-123")
+        assert resp.status_code == 200
+        assert "⚠ conviction conflict" in resp.text
+
+
+class PositionsMarkPriceApiClient(DummyApiClient):
+    def get_positions(self) -> _Res:
+        return _Res(
+            [
+                {
+                    "id": "HL-SOL-LONG",
+                    "asset": "SOL",
+                    "direction": "long",
+                    "entry_price": 89.0,
+                    "stop_loss": 84.0,
+                    "take_profit": 100.0,
+                    "size_notional": 1000,
+                    "leverage": 2,
+                    "status": "open",
+                }
+            ],
+            True,
+        )
+
+
+def test_positions_page_uses_ws_mark_price_for_live_unrealized_pnl(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "brain.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE events (type TEXT, payload TEXT, ts TEXT)")
+    conn.execute(
+        "INSERT INTO events(type, payload, ts) VALUES (?, ?, ?)",
+        ("signal.price_ws.v1", '{"symbol":"SOL","price":95.0}', datetime.now(UTC).isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = PositionsMarkPriceApiClient()
+        resp = client.get("/positions?view=open")
+        assert resp.status_code == 200
+        assert "$95.00" in resp.text
+        assert "+6.7%" in resp.text
+        assert "$+67" in resp.text
+
+
+class PositionsInvertedShortApiClient(DummyApiClient):
+    def get_positions(self) -> _Res:
+        return _Res(
+            [
+                {
+                    "id": "HL-SOL-SHORT",
+                    "asset": "SOL",
+                    "direction": "short",
+                    "entry_price": 89.24,
+                    "stop_loss": 84.82,
+                    "take_profit": 93.10,
+                    "size_notional": -1000,
+                    "leverage": 3,
+                    "status": "open",
+                }
+            ],
+            True,
+        )
+
+
+def test_positions_page_autocorrects_legacy_short_risk_levels_for_display() -> None:
+    with patch("dashboard.app._latest_mark_prices", return_value={"SOL": 88.5}), TestClient(app) as client:
+        client.app.state.api_client = PositionsInvertedShortApiClient()
+        resp = client.get("/positions?view=open")
+        assert resp.status_code == 200
+        assert "auto-corrected for display" in resp.text
+        assert "$93.10" in resp.text
+        assert "$84.82" in resp.text
+
+
+class ProducersNoSourceApiClient(DummyApiClient):
+    def get_producers_status(self) -> _Res:
+        return _Res(
+            {
+                "producers": {
+                    "onchain-flows": {
+                        "domain": "onchain",
+                        "healthy": True,
+                        "last_run_at": datetime.now(UTC).isoformat(),
+                        "last_error": "no_source_configured",
+                        "consecutive_failures": 0,
+                        "events_produced": 0,
+                    }
+                }
+            },
+            True,
+        )
+
+
+def test_producers_partial_marks_no_source_as_needs_configuration() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = ProducersNoSourceApiClient()
+        resp = client.get("/partials/producers")
+        assert resp.status_code == 200
+        assert "needs configuration" in resp.text
+        assert "0/1 healthy" in resp.text

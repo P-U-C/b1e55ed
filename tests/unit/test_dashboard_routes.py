@@ -254,6 +254,32 @@ def test_producers_page_degrades_zero_event_runs_and_marks_stale(tmp_path: Path,
         assert "⌛ stale" in resp.text
 
 
+def test_producers_page_marks_no_source_configured_as_needs_configuration(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    now = datetime.now(UTC).isoformat()
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO producer_health
+        (name, domain, schedule, endpoint, last_run_at, last_success_at, last_error, consecutive_failures, events_produced, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("onchain-flows", "onchain", "*/15 * * * *", "/api/onchain", now, now, "no_source_configured", 0, 0, now),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/producers")
+        assert resp.status_code == 200
+        assert "needs configuration" in resp.text
+        assert "✓ healthy" not in resp.text
+
+
 def test_forecasts_page(tmp_path: Path, monkeypatch) -> None:
     db_path = _make_db(tmp_path)
     # Add forecast_calibration table

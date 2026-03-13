@@ -70,6 +70,9 @@
   <div>Current conviction: {{ p.conviction_current | default('—') }}{% if p.conviction_conflict %} <span style="color:var(--amber);">⚠ opposes position</span>{% endif %}</div>
   <div>Regime at entry: {{ p.regime_entry | default('—') }}</div>
   <div>Held: {{ p.held | default('—') }}</div>
+  {% if p.risk_levels_autocorrected %}
+  <div style="grid-column:1 / -1; color:var(--amber);">⚠ stop/target auto-corrected for display (legacy short risk values were inverted)</div>
+  {% endif %}
 </div>
 
 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
