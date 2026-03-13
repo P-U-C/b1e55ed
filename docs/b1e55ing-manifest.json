@@ -780,6 +780,36 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_98b9a36d",
+      "file": "api/routes/universe.py",
+      "anchor": "def _alloc_bundle_id(*, candidate: str, existing: set[str]) -> str:",
+      "tradition": "confucian-rectification-of-names",
+      "content": "# Confucius: disorder begins when names do not match reality.\n# Slugs make names routable; numeric suffixes make collisions honest.",
+      "placement": "before_function",
+      "pr_number": 379,
+      "applied_at": "2026-03-13T04:25:29Z"
+    },
+    {
+      "id": "egg_4e707c1f",
+      "file": "engine/core/config.py",
+      "anchor": "def active_symbols(self) -> list[str]:",
+      "tradition": "cybernetics-ashby-variety",
+      "content": "    # Ashby's Law: the controller needs variety equal to the system it faces.\n    # Enabled bundles expand variety; base symbols remain the fail-safe baseline.",
+      "placement": "before_function",
+      "pr_number": 379,
+      "applied_at": "2026-03-13T04:25:29Z"
+    },
+    {
+      "id": "egg_c602f57b",
+      "file": "tests/unit/test_wizard_bundles.py",
+      "anchor": "def test_active_symbols_resolve_from_enabled_bundles_with_fallback() -> None:",
+      "tradition": "taoism-wu-wei",
+      "content": "# Watts: muddy water is cleared by leaving it alone.\n# If every bundle is disabled, the fallback list is restraint, not regression.",
+      "placement": "before_function",
+      "pr_number": 379,
+      "applied_at": "2026-03-13T04:25:29Z"
     }
   ]
 }

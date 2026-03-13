@@ -72,6 +72,8 @@ def _slugify_bundle_id(raw: str) -> str:
     return slug or "bundle"
 
 
+# Confucius: disorder begins when names do not match reality.
+# Slugs make names routable; numeric suffixes make collisions honest.
 def _alloc_bundle_id(*, candidate: str, existing: set[str]) -> str:
     base = _slugify_bundle_id(candidate)
     if base not in existing:

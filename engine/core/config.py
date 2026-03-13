@@ -179,6 +179,8 @@ class UniverseConfig(BaseModel):
     def enabled_bundles(self) -> list[UniverseBundle]:
         return [b for b in self.bundles if b.enabled]
 
+    # Ashby's Law: the controller needs variety equal to the system it faces.
+    # Enabled bundles expand variety; base symbols remain the fail-safe baseline.
     def active_symbols(self) -> list[str]:
         max_size = int(self.max_size or 0)
         if max_size <= 0:

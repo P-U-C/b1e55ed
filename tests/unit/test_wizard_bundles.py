@@ -16,6 +16,8 @@ def test_starter_bundle_pack_selection() -> None:
     assert [b["id"] for b in mixed] == ["crypto-core", "tradfi-infra"]
 
 
+# Watts: muddy water is cleared by leaving it alone.
+# If every bundle is disabled, the fallback list is restraint, not regression.
 def test_active_symbols_resolve_from_enabled_bundles_with_fallback() -> None:
     base = ["BTC", "ETH"]
     mixed = wizard._starter_bundles_for_choice("3", base)
