@@ -126,7 +126,7 @@
         <span style="flex:1; color:var(--text);">{{ s.desc }}</span>
         <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400; font-family:var(--mono);"
               title="Score: {{ '%.1f' | format(s.score) }} | Direction: {{ s.direction | replace('+','long') | replace('-','short') | replace('=','neutral') }}">
-          {{ s.direction }} {{ '%.1f' | format(s.score) }}
+          {{ '▲' if s.direction == '+' else ('▼' if s.direction == '-' else '–') }} {{ '%.1f' | format(s.score) }}
         </span>
       </div>
       {% endfor %}
