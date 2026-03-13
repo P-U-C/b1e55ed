@@ -79,9 +79,12 @@
 
 <!-- Signal Beeswarm Timeline -->
 <div class="panel" style="margin-bottom:1rem;">
-  <div class="panel-header">
-    <span class="panel-title">Signal Timeline</span>
-    <span class="panel-age cursor-blink">24h</span>
+  <div class="panel-header" style="align-items:flex-start; gap:0.75rem;">
+    <div>
+      <span class="panel-title">Signal Timeline</span>
+      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.15rem;">{{ timeline_window_label or 'Last 24h UTC' }}</div>
+    </div>
+    <span class="panel-age {{ 'text-warn' if signal_feed_stale else 'cursor-blink' }}">last signal {{ latest_signal_age }}</span>
   </div>
   <div id="beeswarm-container">
     {% if signals %}
@@ -94,6 +97,7 @@
     </div>
     <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
       {{ signals | length }} signals{% if active_domain %} ({{ active_domain }}){% endif %} · click dot for details
+      {% if signal_feed_stale %} · <span class="text-warn">feed stale</span>{% endif %}
     </div>
     {% else %}
     {% set message = "No signals yet" %}

@@ -131,9 +131,15 @@ class OMS:
         stop_loss = None
         take_profit = None
         if intent.stop_loss_pct is not None:
-            stop_loss = float(mid_price) * (1.0 - float(intent.stop_loss_pct))
+            if intent.direction == "short":
+                stop_loss = float(mid_price) * (1.0 + float(intent.stop_loss_pct))
+            else:
+                stop_loss = float(mid_price) * (1.0 - float(intent.stop_loss_pct))
         if intent.take_profit_pct is not None:
-            take_profit = float(mid_price) * (1.0 + float(intent.take_profit_pct))
+            if intent.direction == "short":
+                take_profit = float(mid_price) * (1.0 - float(intent.take_profit_pct))
+            else:
+                take_profit = float(mid_price) * (1.0 + float(intent.take_profit_pct))
 
         if mode == "paper":
             fill = self.paper.execute_market(
