@@ -278,9 +278,43 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
+def _latest_mark_prices() -> dict[str, float]:
+    """Best-effort latest mark prices from recent WS price signals."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return {}
+
+    prices: dict[str, float] = {}
+    try:
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute(
+            """
+            SELECT json_extract(payload, '$.symbol') AS symbol,
+                   json_extract(payload, '$.price') AS price
+            FROM events
+            WHERE type = 'signal.price_ws.v1'
+            ORDER BY ts DESC
+            LIMIT 500
+            """
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+
+    for symbol, price in rows:
+        sym = str(symbol or "").strip().upper()
+        if not sym or sym in prices or price is None:
+            continue
+        with contextlib.suppress(Exception):
+            prices[sym] = float(price)
+    return prices
+
+
 def _map_positions(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
+
+    mark_prices = _latest_mark_prices()
 
     out: list[dict[str, Any]] = []
     for p in raw:
@@ -290,23 +324,46 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         stop = float(p.get("stop_loss") or entry)
         target = float(p.get("take_profit") or entry)
         leverage = float(p.get("leverage") or 1.0)
+        direction = str(p.get("direction") or "neutral").lower()
+        symbol = str(p.get("asset") or p.get("symbol") or "—").upper()
+        status = str(p.get("status") or "")
+        size_notional = float(p.get("size_notional") or 0.0)
+
+        current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
+
+        if status.lower() == "closed":
+            pnl_usd = float(p.get("realized_pnl") or 0.0)
+            pnl_pct = float(p.get("pnl_pct") or 0.0)
+        else:
+            if direction in {"short", "sell"}:
+                ret = (entry - current) / entry if entry > 0 else 0.0
+            else:
+                ret = (current - entry) / entry if entry > 0 else 0.0
+            pnl_usd = ret * size_notional if size_notional > 0 else 0.0
+            pnl_pct = ret * 100.0
+
+        near_stop = False
+        if entry > 0 and stop > 0 and current > 0:
+            if direction in {"short", "sell"}:
+                near_stop = current >= stop * 0.995
+            else:
+                near_stop = current <= stop * 1.005
 
         out.append(
             {
                 "id": str(p.get("id") or "—"),
-                "symbol": str(p.get("asset") or p.get("symbol") or "—"),
-                "direction": str(p.get("direction") or "neutral"),
-                # API currently doesn't expose mark price / pnl; keep UI stable with safe defaults.
-                "current": entry,
+                "symbol": symbol,
+                "direction": direction,
+                "current": current,
                 "entry": entry,
                 "stop": stop,
                 "target": target,
-                "pnl_pct": float(p.get("pnl_pct") or 0.0),
-                "pnl_usd": float(p.get("realized_pnl") or 0.0),
+                "pnl_pct": pnl_pct,
+                "pnl_usd": pnl_usd,
                 "leverage": leverage,
                 "leverage_warning": False,
-                "near_stop": False,
-                "opened": None,
+                "near_stop": near_stop,
+                "opened": p.get("opened_at"),
                 "conviction_entry": p.get("conviction_id"),
                 "conviction_current": None,
                 "regime_entry": p.get("regime_at_entry"),
@@ -1129,22 +1186,27 @@ async def submit_discretionary_signal(request: Request) -> HTMLResponse:
 
 
 @app.get("/forecasts", response_class=HTMLResponse)
-def forecasts_page(request: Request) -> HTMLResponse:
+def forecasts_page(
+    request: Request,
+    bundle: str | None = None,
+    asset_class: str | None = None,
+    venue: str | None = None,
+    tag: str | None = None,
+) -> HTMLResponse:
     """Forecasts page — grouped asset cards from conviction_scores."""
     from collections import defaultdict
     from datetime import UTC as _UTC2
     from datetime import datetime as _dt2
 
+    client = _api(request)
+    universe_ctx = _universe_bundle_context(client)
+
+    bundle_symbol_map = {k: set(v) for k, v in universe_ctx.get("bundle_symbol_map", {}).items()}
+    asset_class_symbol_map = {k: set(v) for k, v in universe_ctx.get("asset_class_symbol_map", {}).items()}
+    venue_symbol_map = {k: set(v) for k, v in universe_ctx.get("venue_symbol_map", {}).items()}
+    tag_symbol_map = {k: set(v) for k, v in universe_ctx.get("tag_symbol_map", {}).items()}
+
     asset_groups: list[dict] = []
-    summary = {
-        "total": 0,
-        "pending": 0,
-        "resolved": 0,
-        "assets": 0,
-        "bullish": 0,
-        "bearish": 0,
-        "neutral": 0,
-    }
 
     try:
         db_path = _get_brain_db()
@@ -1152,7 +1214,6 @@ def forecasts_page(request: Request) -> HTMLResponse:
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
 
-            # Latest conviction per asset
             latest = conn.execute(
                 """
                 SELECT cs.*
@@ -1165,7 +1226,6 @@ def forecasts_page(request: Request) -> HTMLResponse:
                 """
             ).fetchall()
 
-            # All forecasts from last 24h
             all_rows = conn.execute(
                 """
                 SELECT symbol, direction, confidence, magnitude, timeframe, ts
@@ -1181,16 +1241,17 @@ def forecasts_page(request: Request) -> HTMLResponse:
                 by_asset[row["symbol"]].append(dict(row))
 
             for row in latest:
-                asset = row["symbol"]
+                asset = str(row["symbol"] or "").upper()
+                if not asset:
+                    continue
+
                 direction = row["direction"] or "neutral"
-                # Normalize direction
                 if direction in ("long", "buy"):
                     direction = "bullish"
                 elif direction in ("short", "sell"):
                     direction = "bearish"
                 confidence = float(row["confidence"] or 0)
 
-                # Horizons: latest per timeframe
                 horizons_map: dict[str, dict] = {}
                 for f in by_asset.get(asset, []):
                     tf = f.get("timeframe") or "—"
@@ -1201,7 +1262,6 @@ def forecasts_page(request: Request) -> HTMLResponse:
                     key=lambda x: {"4h": 0, "24h": 1, "3d": 2}.get(x.get("timeframe") or "", 3),
                 )
 
-                # Age
                 age = "—"
                 try:
                     dt = _dt2.fromisoformat(str(row["ts"]).replace("Z", "+00:00"))
@@ -1210,7 +1270,6 @@ def forecasts_page(request: Request) -> HTMLResponse:
                 except Exception:
                     pass
 
-                # Detail forecasts
                 forecasts = []
                 for f in by_asset.get(asset, [])[:10]:
                     emitted = (f.get("ts") or "—")[:16]
@@ -1240,19 +1299,40 @@ def forecasts_page(request: Request) -> HTMLResponse:
                         "forecasts": forecasts,
                     }
                 )
-
-                summary["total"] += len(by_asset.get(asset, []))
-                summary["pending"] += len(by_asset.get(asset, []))
-                if direction == "bullish":
-                    summary["bullish"] += 1
-                elif direction == "bearish":
-                    summary["bearish"] += 1
-                else:
-                    summary["neutral"] += 1
-
-            summary["assets"] = len(asset_groups)
     except Exception:
         pass
+
+    # Apply bundle-aware filters (same model as signals page)
+    if bundle:
+        allowed = bundle_symbol_map.get(bundle)
+        asset_groups = [g for g in asset_groups if g.get("asset") in allowed] if allowed else []
+
+    if asset_class:
+        allowed = asset_class_symbol_map.get(asset_class)
+        asset_groups = [g for g in asset_groups if g.get("asset") in allowed] if allowed else []
+
+    if venue:
+        allowed = venue_symbol_map.get(venue)
+        asset_groups = [g for g in asset_groups if g.get("asset") in allowed] if allowed else []
+
+    if tag:
+        allowed = tag_symbol_map.get(tag)
+        asset_groups = [g for g in asset_groups if g.get("asset") in allowed] if allowed else []
+
+    summary = {
+        "total": sum(len(g.get("forecasts", [])) for g in asset_groups),
+        "pending": sum(len(g.get("forecasts", [])) for g in asset_groups),
+        "resolved": 0,
+        "assets": len(asset_groups),
+        "bullish": sum(1 for g in asset_groups if g.get("direction") == "bullish"),
+        "bearish": sum(1 for g in asset_groups if g.get("direction") == "bearish"),
+        "neutral": sum(1 for g in asset_groups if g.get("direction") not in {"bullish", "bearish"}),
+    }
+
+    enabled_ids = set(universe_ctx.get("enabled_bundle_ids") or [])
+    raw_bundles = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
+    bundle_options = [b for b in raw_bundles if isinstance(b, dict) and str(b.get("id") or "") and (not enabled_ids or str(b.get("id")) in enabled_ids)]
+    bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
     return templates.TemplateResponse(
         "forecasts.html",
@@ -1260,6 +1340,14 @@ def forecasts_page(request: Request) -> HTMLResponse:
             **_shell(request, "forecasts"),
             "asset_groups": asset_groups,
             "summary": summary,
+            "bundle_options": bundle_options,
+            "asset_class_options": universe_ctx.get("asset_classes", []),
+            "venue_options": universe_ctx.get("venues", []),
+            "tag_options": universe_ctx.get("tags", []),
+            "active_bundle": bundle,
+            "active_asset_class": asset_class,
+            "active_venue": venue,
+            "active_tag": tag,
         },
     )
 
