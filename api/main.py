@@ -158,26 +158,11 @@ def create_app() -> FastAPI:
                 # Inject OMS for auto-paper-trade if execution mode is paper
                 try:
                     if getattr(_cfg.execution, "mode", "paper") == "paper":
-                        from engine.brain.kill_switch import KillSwitch
-                        from engine.execution.oms import OMS, default_sizer_from_config
-                        from engine.execution.preflight import Preflight, default_policy_from_risk
+                        from engine.execution.oms import OMS
 
-                        _policy = default_policy_from_risk(
-                            max_daily_loss_usd=float(_cfg.risk.daily_loss_limit_pct) * float(_cfg.risk.portfolio_value_usd),
-                            max_position_size_pct=float(_cfg.risk.max_position_pct),
-                            max_leverage_default=float(_cfg.risk.max_leverage),
-                        )
-                        _preflight = Preflight(policy=_policy, kill_switch=KillSwitch(config=_cfg, db=_db))
-                        orchestrator._oms = OMS(
-                            config=_cfg,
-                            db=_db,
-                            preflight=_preflight,
-                            sizer=default_sizer_from_config(_cfg),
-                            policy=_policy,
-                        )
-                        _log.info("OMS injected for auto-paper-trade")
+                        orchestrator._oms = OMS(config=_cfg, db=_db)
                 except Exception:
-                    _log.warning("OMS injection failed — paper trades will be skipped", exc_info=True)
+                    _log.debug("OMS injection skipped", exc_info=True)
 
                 symbols = list(_cfg.universe.active_symbols())
                 result = await asyncio.to_thread(orchestrator.run_cycle, symbols=symbols)
