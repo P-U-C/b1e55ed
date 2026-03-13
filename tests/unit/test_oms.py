@@ -56,6 +56,8 @@ def test_submit_intent_paper_creates_fill_and_events(temp_dir: Path, test_config
     assert "execution.order_filled.v1" in {str(t) for t in types}
 
 
+# Terra 2022 compressed this lesson into 72 hours: when direction flips, risk geometry flips with it.
+# This test keeps that memory executable.
 def test_submit_intent_short_uses_inverted_stop_and_target(temp_dir: Path, test_config: Config) -> None:
     db = Database(temp_dir / "brain.db")
     ks = KillSwitch(test_config, db)

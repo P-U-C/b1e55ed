@@ -800,6 +800,26 @@
       "placement": "inline_comment",
       "pr_number": 383,
       "applied_at": "2026-03-13T03:57:09Z"
+    },
+    {
+      "id": "egg_e844b57a",
+      "file": "engine/execution/oms.py",
+      "anchor": "if intent.stop_loss_pct is not None:",
+      "tradition": "mandelbrot-short-tail-geometry",
+      "content": "        # Mandelbrot in reverse: the dangerous tail for a short is up, not down.\n        # Stops above entry are not optional geometry; they are survival math.",
+      "placement": "inline_comment",
+      "pr_number": 383,
+      "applied_at": "2026-03-13T04:22:51Z"
+    },
+    {
+      "id": "egg_0982daeb",
+      "file": "tests/unit/test_oms.py",
+      "anchor": "def test_submit_intent_short_uses_inverted_stop_and_target(temp_dir: Path, test_config: Config) -> None:",
+      "tradition": "catastrophes-terra-geometry",
+      "content": "# Terra 2022 compressed this lesson into 72 hours: when direction flips, risk geometry flips with it.\n# This test keeps that memory executable.",
+      "placement": "before_function",
+      "pr_number": 383,
+      "applied_at": "2026-03-13T04:22:51Z"
     }
   ]
 }
