@@ -790,6 +790,16 @@
       "placement": "before_function",
       "pr_number": 376,
       "applied_at": "2026-03-13T02:25:11Z"
+    },
+    {
+      "id": "egg_6a32452e",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "# Blessings should annotate the head commit, never rewrite it mid-flight.",
+      "tradition": "git-receipts",
+      "content": "# Preserve head SHA: status checks should certify the reviewed commit, not a blessing-generated ghost commit.",
+      "placement": "inline_comment",
+      "pr_number": 376,
+      "applied_at": "2026-03-13T04:28:17Z"
     }
   ]
 }

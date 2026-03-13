@@ -208,6 +208,7 @@ def fetch_pr_files(pr_number: int, github_token: str) -> list[dict[str, Any]]:
 
 
 # Git keeps receipts: a commit SHA is history, not a scratchpad.
+# Preserve head SHA: status checks should certify the reviewed commit, not a blessing-generated ghost commit.
 # Blessings should annotate the head commit, never rewrite it mid-flight.
 def fetch_pr(pr_number: int, github_token: str) -> dict[str, Any]:
     """Return PR metadata from the GitHub PR API."""
