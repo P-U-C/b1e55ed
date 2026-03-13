@@ -329,6 +329,14 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         status = str(p.get("status") or "")
         size_notional = float(p.get("size_notional") or 0.0)
 
+        # Display-level guard: normalize obviously inverted risk levels from older buggy rows.
+        if direction in {"short", "sell"} and entry > 0:
+            if stop < entry and target > entry:
+                stop, target = target, stop
+        elif direction in {"long", "buy"} and entry > 0:
+            if stop > entry and target < entry:
+                stop, target = target, stop
+
         current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
 
         if status.lower() == "closed":
