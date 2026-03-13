@@ -82,14 +82,25 @@ class ProducerRow:
     last_error: str | None
     quarantined_until: str | None
     status: str
+    is_stale: bool
+    zero_events_warning: bool
 
 
-def _producer_healthy(*, consecutive_failures: int, last_error: str | None) -> bool | None:
-    if consecutive_failures == 0 and not last_error:
-        return True
+def _producer_healthy(
+    *,
+    consecutive_failures: int,
+    last_error: str | None,
+    last_run_at: str | None,
+    events_produced: int,
+    is_stale: bool,
+) -> bool | None:
+    if last_run_at is None:
+        return None
+    if is_stale:
+        return False
     if consecutive_failures > 0 or last_error:
         return False
-    return None
+    return events_produced > 0
 
 
 def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
@@ -143,18 +154,32 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 is_quarantined = True
                 quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
 
+        last_run_dt = _parse_dt(last_run_at)
+        is_stale = bool(last_run_dt and (now - last_run_dt).total_seconds() > 30 * 60)
+        zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
+
         # Triage predates software. Nightingale sorted the wounded the same way: healthy, degraded, failing.
-        # Determine status
+        # Dashboard semantics: stale (>30m) overrides healthy; zero events on a run is degraded.
         if is_quarantined:
             status = "quarantined"
-        elif consecutive_failures == 0:
-            status = "healthy"
-        elif consecutive_failures <= 4:
-            status = "degraded"
-        else:
+        elif is_stale:
+            status = "stale"
+        elif consecutive_failures > 4:
             status = "failing"
+        elif consecutive_failures > 0 or last_error or zero_events_warning:
+            status = "degraded"
+        elif last_run_dt is not None:
+            status = "healthy"
+        else:
+            status = "unknown"
 
-        healthy = _producer_healthy(consecutive_failures=consecutive_failures, last_error=last_error)
+        healthy = _producer_healthy(
+            consecutive_failures=consecutive_failures,
+            last_error=last_error,
+            last_run_at=last_run_at,
+            events_produced=events_produced,
+            is_stale=is_stale,
+        )
 
         out.append(
             ProducerRow(
@@ -170,6 +195,8 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 last_error=last_error,
                 quarantined_until=quarantined_until_fmt,
                 status=status,
+                is_stale=is_stale,
+                zero_events_warning=zero_events_warning,
             )
         )
 

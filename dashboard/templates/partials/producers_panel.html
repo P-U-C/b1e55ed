@@ -32,6 +32,10 @@
       {% if p.last_error %}
         <span style="color:var(--text-dim); display:block; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px;" title="{{ p.last_error }}">{{ p.last_error[:80] }}{% if p.last_error|length > 80 %}…{% endif %}</span>
       {% endif %}
+    {% elif p.status == 'stale' %}
+      <span style="color:var(--amber);">⌛ stale (last run {{ p.last_run }})</span>
+    {% elif p.zero_events_warning %}
+      <span style="color:var(--amber);">⚠ ran but emitted 0 events</span>
     {% elif p.last_error %}
       <span style="color:{% if p.health == 'degraded' %}var(--amber){% else %}var(--red){% endif %}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px; display:block;" title="{{ p.last_error }}">
         {% if p.consecutive_failures %}{{ p.consecutive_failures }}× fail{{ 's' if p.consecutive_failures != 1 else '' }} — {% endif %}{{ p.last_error[:60] }}{% if p.last_error|length > 60 %}…{% endif %}

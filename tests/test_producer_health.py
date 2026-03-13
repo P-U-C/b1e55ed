@@ -64,6 +64,8 @@ def _seed_producer(
     domain: str = "test",
     schedule: str = "*/5 * * * *",
     endpoint: str = "http://localhost:8000/test",
+    events_produced: int = 1,
+    last_run_at: str | None = None,
 ) -> None:
     """Insert a row into producer_health with the given state."""
     _create_table(conn)
@@ -71,8 +73,9 @@ def _seed_producer(
         """
         INSERT OR REPLACE INTO producer_health
             (name, domain, endpoint, schedule, last_error,
-             consecutive_failures, quarantined_until, quarantined_reason, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             consecutive_failures, quarantined_until, quarantined_reason, updated_at,
+             events_produced, last_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -84,6 +87,8 @@ def _seed_producer(
             quarantined_until.isoformat() if quarantined_until else None,
             quarantined_reason,
             datetime.now(UTC).isoformat(),
+            events_produced,
+            last_run_at or datetime.now(UTC).isoformat(),
         ),
     )
     conn.commit()
