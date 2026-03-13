@@ -171,7 +171,7 @@
 
   // Parse signal data from the rendered page (safe server-side JSON serialization)
   {% set signal_data = [] %}
-  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts_iso or s.ts, 'ts_hm': s.ts_hm, 'ts_label': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts or s.ts_iso, 'ts_ms': s.ts_ms, 'ts_hm': s.ts_hm, 'ts_label': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
   var signals = {{ signal_data | tojson }};
 
   if (!signals.length) return;
@@ -195,15 +195,43 @@
   var now = Date.now();
   var t24h = now - 24 * 60 * 60 * 1000;
 
+  function parseSignalTs(s) {
+    if (typeof s.ts_ms === 'number' && isFinite(s.ts_ms) && s.ts_ms > 0) {
+      return s.ts_ms;
+    }
+
+    var raw = s.ts;
+    if (raw === null || raw === undefined) return now;
+
+    if (typeof raw === 'number' && isFinite(raw)) {
+      return Math.abs(raw) < 1e11 ? raw * 1000 : raw;
+    }
+
+    var txt = String(raw).trim();
+    if (!txt) return now;
+
+    if (/^-?\d+(\.\d+)?$/.test(txt)) {
+      var numeric = Number(txt);
+      if (isFinite(numeric)) {
+        return Math.abs(numeric) < 1e11 ? numeric * 1000 : numeric;
+      }
+    }
+
+    var normalized = txt.replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(normalized)) {
+      normalized += 'Z';
+    }
+
+    var parsed = Date.parse(normalized);
+    if (!isNaN(parsed)) return parsed;
+
+    parsed = Date.parse(txt);
+    return isNaN(parsed) ? now : parsed;
+  }
+
   // Parse timestamps
   signals.forEach(function(s) {
-    var d;
-    if (/^\d{4}-\d{2}-\d{2}/.test(s.ts)) {
-      d = new Date(s.ts.replace(' ', 'T') + (s.ts.indexOf('+') < 0 && s.ts.indexOf('Z') < 0 ? 'Z' : ''));
-    } else {
-      d = new Date(s.ts);
-    }
-    s._time = isNaN(d.getTime()) ? now : d.getTime();
+    s._time = parseSignalTs(s);
   });
 
   // Filter to last 24h & sort

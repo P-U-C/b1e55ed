@@ -42,21 +42,40 @@ templates = Jinja2Templates(directory=_HERE / "templates")
 
 
 def _parse_dt(value: Any) -> datetime | None:
-    """Parse ISO-8601, Unix timestamp, or datetime to a tz-aware datetime."""
-    if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-    s = str(value).strip()
+    """Parse ISO-8601, Unix timestamp (sec/ms), or datetime to UTC-aware datetime."""
+    if value is None or value == "":
+        return None
+
     dt: datetime | None = None
-    with contextlib.suppress(ValueError, OSError):
-        epoch = float(s)
-        if epoch > 1e9:  # plausible Unix timestamp
-            dt = datetime.fromtimestamp(epoch, tz=UTC)
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        if not s:
+            return None
+
+        # Numeric values may be epoch seconds or epoch milliseconds.
+        with contextlib.suppress(ValueError, OSError):
+            epoch = float(s)
+            if abs(epoch) > 1e12:
+                epoch /= 1000.0
+            if abs(epoch) > 1e8:  # ignore tiny numerics that are clearly not timestamps
+                dt = datetime.fromtimestamp(epoch, tz=UTC)
+
+        if dt is None:
+            normalized = s.replace(" ", "T") if " " in s and "T" not in s else s
+            if normalized.endswith("Z"):
+                normalized = normalized[:-1] + "+00:00"
+            with contextlib.suppress(ValueError, TypeError):
+                dt = datetime.fromisoformat(normalized)
+
     if dt is None:
-        with contextlib.suppress(ValueError, TypeError):
-            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    if dt is not None and dt.tzinfo is None:
+        return None
+
+    if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
-    return dt
+    return dt.astimezone(UTC)
 
 
 def _timeago_filter(value: Any) -> str:
@@ -328,6 +347,13 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         symbol = str(p.get("asset") or p.get("symbol") or "—").upper()
         status = str(p.get("status") or "")
         size_notional = float(p.get("size_notional") or 0.0)
+        notional_for_pnl = abs(size_notional)
+        if notional_for_pnl <= 0:
+            # Fallback for APIs that expose quantity but not notional.
+            with contextlib.suppress(Exception):
+                qty = abs(float(p.get("size") or p.get("qty") or p.get("quantity") or 0.0))
+                if qty > 0 and entry > 0:
+                    notional_for_pnl = qty * entry
 
         # Display-level guard: normalize obviously inverted risk levels from older buggy rows.
         if direction in {"short", "sell"} and entry > 0:
@@ -347,7 +373,7 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 ret = (entry - current) / entry if entry > 0 else 0.0
             else:
                 ret = (current - entry) / entry if entry > 0 else 0.0
-            pnl_usd = ret * size_notional if size_notional > 0 else 0.0
+            pnl_usd = ret * notional_for_pnl if notional_for_pnl > 0 else 0.0
             pnl_pct = ret * 100.0
 
         near_stop = False
@@ -373,13 +399,131 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 "near_stop": near_stop,
                 "opened": p.get("opened_at"),
                 "conviction_entry": p.get("conviction_id"),
-                "conviction_current": None,
+                "conviction_current": "—",
+                "conviction_conflict": False,
                 "regime_entry": p.get("regime_at_entry"),
                 "held": None,
                 "status": p.get("status"),
             }
         )
     return out
+
+
+def _normalize_trade_direction(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"long", "buy", "bull", "bullish", "up", "▲", "+", "1"}:
+        return "long"
+    if raw in {"short", "sell", "bear", "bearish", "down", "▼", "-", "-1"}:
+        return "short"
+    return "neutral"
+
+
+def _direction_label(direction: str) -> str:
+    if direction == "long":
+        return "bullish"
+    if direction == "short":
+        return "bearish"
+    return "neutral"
+
+
+def _latest_convictions_by_symbol(client: Any, symbols: set[str] | None = None) -> dict[str, dict[str, Any]]:
+    requested = {str(s).strip().upper() for s in (symbols or set()) if str(s).strip()}
+
+    rows: list[dict[str, Any]] = []
+    get_convictions = getattr(client, "get_convictions", None)
+    if callable(get_convictions):
+        with contextlib.suppress(Exception):
+            limit = max(20, len(requested) * 4) if requested else 50
+            res = get_convictions(limit=limit)
+            payload = res.data if getattr(res, "ok", False) else None
+            if isinstance(payload, list):
+                rows = [r for r in payload if isinstance(r, dict)]
+            elif isinstance(payload, dict):
+                raw_items = payload.get("items")
+                if isinstance(raw_items, list):
+                    rows = [r for r in raw_items if isinstance(r, dict)]
+
+    if not rows:
+        db_path = _get_brain_db()
+        if db_path:
+            try:
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
+                raw = conn.execute(
+                    """
+                    SELECT cs.symbol, cs.direction, cs.confidence, cs.ts
+                    FROM conviction_scores cs
+                    INNER JOIN (
+                        SELECT symbol, MAX(ts) AS max_ts
+                        FROM conviction_scores
+                        GROUP BY symbol
+                    ) latest ON cs.symbol = latest.symbol AND cs.ts = latest.max_ts
+                    ORDER BY cs.ts DESC
+                    """
+                ).fetchall()
+                conn.close()
+                rows = [dict(r) for r in raw]
+            except Exception:
+                rows = []
+
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        sym = str(row.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        if requested and sym not in requested:
+            continue
+
+        raw_direction = str(row.get("direction") or "neutral").strip().lower()
+        normalized = _normalize_trade_direction(raw_direction)
+
+        ts = _parse_dt(row.get("ts"))
+        ts_key = ts.timestamp() if ts is not None else float("-inf")
+
+        prev = out.get(sym)
+        if prev is not None and ts_key <= float(prev.get("_ts_key", float("-inf"))):
+            continue
+
+        confidence = None
+        with contextlib.suppress(Exception):
+            confidence = float(row.get("confidence")) if row.get("confidence") is not None else None
+
+        out[sym] = {
+            "symbol": sym,
+            "normalized_direction": normalized,
+            "label": _direction_label(normalized),
+            "confidence": confidence,
+            "_ts_key": ts_key,
+        }
+
+    for data in out.values():
+        data.pop("_ts_key", None)
+
+    return out
+
+
+def _annotate_positions_with_convictions(positions: list[dict[str, Any]], client: Any) -> list[dict[str, Any]]:
+    if not positions:
+        return positions
+
+    symbols = {str(p.get("symbol") or "").strip().upper() for p in positions if str(p.get("symbol") or "").strip()}
+    conviction_map = _latest_convictions_by_symbol(client, symbols=symbols)
+
+    for p in positions:
+        symbol = str(p.get("symbol") or "").strip().upper()
+        pos_direction = _normalize_trade_direction(p.get("direction"))
+
+        conviction = conviction_map.get(symbol)
+        if conviction is None:
+            p["conviction_current"] = p.get("conviction_current") or "—"
+            p["conviction_conflict"] = False
+            continue
+
+        conviction_direction = str(conviction.get("normalized_direction") or "neutral")
+        p["conviction_current"] = str(conviction.get("label") or "—")
+        p["conviction_conflict"] = pos_direction in {"long", "short"} and conviction_direction in {"long", "short"} and pos_direction != conviction_direction
+
+    return positions
 
 
 def _domain_from_type(t: str) -> str:
@@ -406,13 +550,10 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
         domain = _domain_from_type(t)
 
         ts = s.get("ts")
-        ts_hm = "—"
-        try:
-            # API returns ISO string
-            dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-            ts_hm = dt.strftime("%H:%M")
-        except Exception:
-            ts_hm = "—"
+        ts_dt = _parse_dt(ts)
+        ts_hm = ts_dt.strftime("%H:%M") if ts_dt is not None else "—"
+        ts_iso = ts_dt.isoformat() if ts_dt is not None else (str(ts) if ts is not None else "")
+        ts_ms = int(ts_dt.timestamp() * 1000) if ts_dt is not None else None
 
         asset = payload.get("asset") or payload.get("symbol") or payload.get("token") or "—"
         symbol = str(asset).upper().strip() if asset else "—"
@@ -511,9 +652,10 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
         out.append(
             {
-                # Keep raw timestamp for timeline plotting; keep display timestamp for UI labels.
+                # Keep both normalized timestamp and epoch-ms for reliable timeline plotting.
                 "ts": str(ts) if ts is not None else "",
-                "ts_iso": str(ts) if ts is not None else "",
+                "ts_iso": ts_iso,
+                "ts_ms": ts_ms,
                 "ts_hm": ts_hm,
                 "domain": domain,
                 "asset": str(asset),
@@ -889,7 +1031,7 @@ def brain_overview(request: Request) -> HTMLResponse:
     regime_ctx = _regime_banner_context(regime_res.data, stale=not regime_res.ok)
 
     pos_res = client.get_positions()
-    positions = _map_positions(pos_res.data)
+    positions = _annotate_positions_with_convictions(_map_positions(pos_res.data), client)
     positions_age = "—" if pos_res.ok else "stale"
 
     sig_res = client.get_signals(domain=None)
@@ -965,7 +1107,7 @@ def brain_overview(request: Request) -> HTMLResponse:
 def positions_page(request: Request, view: str = "open") -> HTMLResponse:
     client = _api(request)
     res = client.get_positions()
-    all_positions = _map_positions(res.data)
+    all_positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
 
     if view == "closed":
         positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
@@ -2170,7 +2312,7 @@ def regime_banner(request: Request) -> HTMLResponse:
 def positions_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     res = client.get_positions()
-    all_positions = _map_positions(res.data)
+    all_positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
     # Brain panel is "open positions" context — hide closed rows.
     positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
@@ -2188,7 +2330,7 @@ def positions_partial(request: Request) -> HTMLResponse:
 def position_partial(request: Request, position_id: str) -> HTMLResponse:
     client = _api(request)
     res = client.get_positions()
-    positions = _map_positions(res.data)
+    positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
     p = next((x for x in positions if x.get("id") == position_id), None)
     if p is None:
         return HTMLResponse('<div class="empty-state">Position not found.</div>')
@@ -2388,8 +2530,24 @@ def producers_partial(request: Request) -> HTMLResponse:
             consecutive_failures = int(v.get("consecutive_failures") or 0)
             last_error = v.get("last_error") or None
             quarantined_until_raw = v.get("quarantined_until")
+            events_produced = int(v.get("events_produced") or v.get("event_count") or 0)
 
-            # Determine status: quarantined > failing > degraded > healthy
+            last_run = "—"
+            last_run_dt: datetime | None = None
+            if isinstance(v.get("last_run_at"), str):
+                try:
+                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=UTC)
+                    last_run_dt = dt.astimezone(UTC)
+                    last_run, _ = _age_str(last_run_dt)
+                except Exception:
+                    last_run = "—"
+
+            is_stale = bool(last_run_dt and (datetime.now(tz=UTC) - last_run_dt).total_seconds() > 30 * 60)
+            zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
+
+            # Determine status: quarantined > stale > failing > degraded > healthy
             quarantined_until_fmt: str | None = None
             is_quarantined = False
             if quarantined_until_raw:
@@ -2407,13 +2565,16 @@ def producers_partial(request: Request) -> HTMLResponse:
             if is_quarantined:
                 status = "quarantined"
                 health = "error"
+            elif is_stale:
+                status = "stale"
+                health = "degraded"
             elif consecutive_failures > 4:
                 status = "failing"
                 health = "error"
-            elif consecutive_failures > 0:
+            elif consecutive_failures > 0 or last_error or zero_events_warning:
                 status = "degraded"
                 health = "degraded"
-            elif healthy is True:
+            elif healthy is True or last_run_dt is not None:
                 status = "healthy"
                 health = "ok"
             elif healthy is False:
@@ -2423,21 +2584,13 @@ def producers_partial(request: Request) -> HTMLResponse:
                 status = "unknown"
                 health = "degraded"
 
-            if healthy is True:
+            if status == "healthy":
                 producers_healthy += 1
 
             # Detect "no source configured" vs actual runtime errors
             no_source = False
             if last_error and ("no_source_configured" in last_error or "not configured" in last_error.lower()):
                 no_source = True
-
-            last_run = "—"
-            if isinstance(v.get("last_run_at"), str):
-                try:
-                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
-                    last_run, _ = _age_str(dt)
-                except Exception:
-                    last_run = "—"
 
             producers.append(
                 {
@@ -2448,7 +2601,10 @@ def producers_partial(request: Request) -> HTMLResponse:
                     "status": status,
                     "last_error": last_error,
                     "consecutive_failures": consecutive_failures,
+                    "events_produced": events_produced,
                     "quarantined_until": quarantined_until_fmt,
+                    "is_stale": is_stale,
+                    "zero_events_warning": zero_events_warning,
                     "no_source": no_source,
                     "has_config": name in _config_producer_names,
                 }
