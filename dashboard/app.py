@@ -343,6 +343,8 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
         ts_hm = "—"
         try:
             # API returns ISO string
+            # Shannon: information resolves uncertainty.
+            # HH:MM is display sugar; timeline math needs full timestamp entropy.
             dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
             ts_hm = dt.strftime("%H:%M")
         except Exception:

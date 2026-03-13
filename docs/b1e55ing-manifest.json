@@ -800,6 +800,16 @@
       "placement": "before_function",
       "pr_number": 378,
       "applied_at": "2026-03-13T02:25:36Z"
+    },
+    {
+      "id": "egg_6f24f4e8",
+      "file": "dashboard/app.py",
+      "anchor": "dt = datetime.fromisoformat(str(ts).replace(\"Z\", \"+00:00\"))",
+      "tradition": "information-theory",
+      "content": "            # Shannon: information resolves uncertainty.\n            # HH:MM is display sugar; timeline math needs full timestamp entropy.",
+      "placement": "inline_comment",
+      "pr_number": 378,
+      "applied_at": "2026-03-13T04:28:01Z"
     }
   ]
 }
