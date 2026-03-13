@@ -528,8 +528,26 @@ class BrainOrchestrator:
                         self._emit_execution_gate_event(symbol=sym, cycle_id=cycle_id, decision=gate_decision)
                         continue
 
+                    # Fix 1: Hard gate — skip neutral or missing direction.
+                    # Never open a position on a neutral conviction; neutral means "no edge".
+                    _direction = str(conv.score.direction or "").strip().lower()
+                    if not _direction or _direction == "neutral":
+                        _log.info("auto-paper-trade skipped: %s direction is neutral/missing", sym)
+                        continue
+
+                    # Fix 2: Minimum magnitude threshold — low-magnitude signals lack conviction.
+                    min_magnitude = float(getattr(self.config.brain, "auto_paper_trade_min_magnitude", 5.0) or 5.0)
+                    if magnitude < min_magnitude:
+                        _log.info(
+                            "auto-paper-trade skipped: %s magnitude %.2f < %.2f threshold",
+                            sym,
+                            magnitude,
+                            min_magnitude,
+                        )
+                        continue
+
                     try:
-                        direction = conv.score.direction if conv.score.direction != "neutral" else "long"
+                        direction = _direction  # already validated above; cannot be neutral or empty
 
                         # Resolve mid_price from DB price events or Binance API
                         # Resolve mid_price from DB price events or Binance API
@@ -574,6 +592,55 @@ class BrainOrchestrator:
                     _log.info("watch: %s confidence=%.2f", sym, confidence)
                 elif confidence < 0.45:
                     _log.debug("low conviction: %s confidence=%.2f", sym, confidence)
+
+        # Fix 4: Auto-close open positions when stop-loss or take-profit is hit.
+        # Runs at the end of every brain cycle so paper positions resolve promptly.
+        if getattr(self.config.brain, "auto_paper_trade", True):
+            _close_log = logging.getLogger("b1e55ed.orchestrator")
+            try:
+                from engine.execution.pnl import PnLTracker  # local import: avoids circular deps
+
+                pnl_tracker = PnLTracker(self.db, self.config)
+                open_positions = self.db.fetchall("SELECT id, asset, direction, stop_loss, take_profit FROM positions WHERE status = 'open'")
+                for _pos in open_positions:
+                    _pid = str(_pos[0])
+                    _asset = str(_pos[1]).upper()
+                    _dirn = str(_pos[2]).lower()
+                    _stop = float(_pos[3]) if _pos[3] is not None else None
+                    _tp = float(_pos[4]) if _pos[4] is not None else None
+
+                    _mark = self._resolve_mid_price(_asset)
+                    if _mark is None:
+                        continue
+
+                    _close_reason: str | None = None
+                    if _dirn == "long":
+                        if _stop is not None and _mark <= _stop:
+                            _close_reason = "stop_loss"
+                        elif _tp is not None and _mark >= _tp:
+                            _close_reason = "take_profit"
+                    elif _dirn == "short":
+                        # For shorts: stop is ABOVE entry, take-profit is BELOW entry.
+                        if _stop is not None and _mark >= _stop:
+                            _close_reason = "stop_loss"
+                        elif _tp is not None and _mark <= _tp:
+                            _close_reason = "take_profit"
+
+                    if _close_reason:
+                        try:
+                            pnl_tracker.close_position(position_id=_pid, exit_price=_mark, reason=_close_reason)
+                            _close_log.info(
+                                "auto-close: position %s (%s %s) closed at %.4f reason=%s",
+                                _pid,
+                                _dirn,
+                                _asset,
+                                _mark,
+                                _close_reason,
+                            )
+                        except Exception:
+                            _close_log.warning("auto-close failed for position %s", _pid, exc_info=True)
+            except Exception:
+                _close_log.warning("auto-close cycle check failed", exc_info=True)
 
         # Fowler's event sourcing invariant: state is the function of events, not the inverse.
         # This cycle event now carries enough state to reconstruct the moment entirely.

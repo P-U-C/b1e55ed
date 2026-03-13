@@ -68,6 +68,9 @@ class BrainConfig(BaseModel):
     auto_paper_trade: bool = True
     # Lower default than 0.65 so paper mode can execute in moderate-conviction regimes.
     auto_paper_trade_min_confidence: float = 0.35
+    # Minimum magnitude required to open a paper trade (0–10 scale). Signals below this
+    # lack sufficient conviction and are skipped entirely.
+    auto_paper_trade_min_magnitude: float = 5.0
 
 
 class ExecutionConfig(BaseModel):
