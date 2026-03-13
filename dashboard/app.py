@@ -329,6 +329,8 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         status = str(p.get("status") or "")
         size_notional = float(p.get("size_notional") or 0.0)
 
+        # Mark-to-market is a feedback loop, not a vanity number.
+        # Wiener called this control by signal, not by hope.
         current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
 
         if status.lower() == "closed":

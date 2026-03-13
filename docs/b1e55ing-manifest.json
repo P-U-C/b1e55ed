@@ -780,6 +780,16 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_51bb000d",
+      "file": "dashboard/app.py",
+      "anchor": "current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))",
+      "tradition": "cybernetics",
+      "content": "# Mark-to-market is a feedback loop, not a vanity number.\n# Wiener called this control by signal, not by hope.",
+      "placement": "inline_comment",
+      "pr_number": 382,
+      "applied_at": "2026-03-13T03:55:07Z"
     }
   ]
 }
