@@ -810,6 +810,16 @@
       "placement": "inline_comment",
       "pr_number": 365,
       "applied_at": "2026-03-12T04:16:13Z"
+    },
+    {
+      "id": "egg_ca548858",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "# A blessing that arrives after the merge is not a blessing. It is a footnote.",
+      "tradition": "talmudic-witness",
+      "content": "# In Talmudic procedure, testimony requires witnesses.\n# CI is the witness for code: a blessing without checks is an unwitnessed claim.",
+      "placement": "inline_comment",
+      "pr_number": 365,
+      "applied_at": "2026-03-13T02:26:34Z"
     }
   ]
 }

@@ -59,6 +59,8 @@ MANIFEST_REL_PATH = Path("docs") / "b1e55ing-manifest.json"
 MANIFEST_VERSION = "1"
 MAX_EGGS_PER_FILE = 2
 # Wiener's first principle: the feedback loop must close before the system acts.
+# In Talmudic procedure, testimony requires witnesses.
+# CI is the witness for code: a blessing without checks is an unwitnessed claim.
 # A blessing that arrives after the merge is not a blessing. It is a footnote.
 
 # ---------------------------------------------------------------------------
