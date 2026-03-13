@@ -2168,7 +2168,9 @@ def regime_banner(request: Request) -> HTMLResponse:
 def positions_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     res = client.get_positions()
-    positions = _map_positions(res.data)
+    all_positions = _map_positions(res.data)
+    # Brain panel is "open positions" context — hide closed rows.
+    positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
     return templates.TemplateResponse(
         "partials/positions_panel.html",
