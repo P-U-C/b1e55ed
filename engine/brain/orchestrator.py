@@ -226,6 +226,7 @@ class BrainOrchestrator:
             "execution_mode_hints": mode_hints,
         }
 
+        # Wu wei at the execution edge: when context is undefined, conviction may speak but orders stay silent.
         if not bundle_ids:
             return AutoTradePolicyDecision(
                 allowed=False,

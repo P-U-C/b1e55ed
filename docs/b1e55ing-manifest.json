@@ -780,6 +780,26 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_3e0de308",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "if not bundle_ids:",
+      "tradition": "tao-wu-wei",
+      "content": "        # Wu wei at the execution edge: when context is undefined, conviction may speak but orders stay silent.",
+      "placement": "inline_comment",
+      "pr_number": 380,
+      "applied_at": "2026-03-13T04:20:27Z"
+    },
+    {
+      "id": "egg_ff83eea2",
+      "file": "engine/core/config.py",
+      "anchor": "def execution_metadata_for_symbol(self, symbol: str) -> dict[str, list[str]]:",
+      "tradition": "confucius-rectification-of-names",
+      "content": "    # Confucius: disorder begins when names drift from reality; this map keeps bundle identity and execution policy aligned.",
+      "placement": "before_function",
+      "pr_number": 380,
+      "applied_at": "2026-03-13T04:20:27Z"
     }
   ]
 }

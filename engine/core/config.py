@@ -225,6 +225,7 @@ class UniverseConfig(BaseModel):
 
         return self.normalize_symbols(self.symbols)[:max_size]
 
+    # Confucius: disorder begins when names drift from reality; this map keeps bundle identity and execution policy aligned.
     def execution_metadata_for_symbol(self, symbol: str) -> dict[str, list[str]]:
         sym = str(symbol or "").strip().upper()
         if not sym:
