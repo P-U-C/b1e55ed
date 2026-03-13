@@ -800,6 +800,26 @@
       "placement": "inline_comment",
       "pr_number": 377,
       "applied_at": "2026-03-13T02:28:33Z"
+    },
+    {
+      "id": "egg_3ec84942",
+      "file": "engine/core/config.py",
+      "anchor": "auto_paper_trade_min_confidence: float = 0.35",
+      "tradition": "kelly-fractional-sizing",
+      "content": "    # Fractional Kelly in config form: calibrated participation beats all-or-nothing silence.",
+      "placement": "inline_comment",
+      "pr_number": 377,
+      "applied_at": "2026-03-13T04:28:40Z"
+    },
+    {
+      "id": "egg_4e7cb300",
+      "file": "tests/test_paper_loop.py",
+      "anchor": "def test_auto_trade_on_strong_directional_fallback(self, db, config):",
+      "tradition": "popper-falsification",
+      "content": "    # Popper in one unit test: a single edge case can falsify a comforting threshold rule.",
+      "placement": "before_function",
+      "pr_number": 377,
+      "applied_at": "2026-03-13T04:28:40Z"
     }
   ]
 }

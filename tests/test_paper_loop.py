@@ -233,6 +233,7 @@ class TestAutoPaperTrade:
             orch.run_cycle(["BTC"])
             mock_oms_low.submit.assert_not_called()
 
+    # Popper in one unit test: a single edge case can falsify a comforting threshold rule.
     def test_auto_trade_on_strong_directional_fallback(self, db, config):
         """Low confidence can still auto-trade on very strong directional conviction."""
         from engine.brain.orchestrator import BrainOrchestrator
