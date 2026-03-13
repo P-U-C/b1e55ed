@@ -100,6 +100,37 @@ def test_synthesis_missing_domain_degrades_gracefully(test_config, temp_dir):
     assert res.weighted_score == res.domain_scores["technical"]
 
 
+def test_synthesis_sparse_domains_do_not_default_bearish(test_config, temp_dir):
+    db = Database(temp_dir / "brain.db")
+    now = datetime.now(tz=UTC)
+
+    # Only one domain emits this cycle.
+    db.append_event(
+        event_type=EventType.SIGNAL_SOCIAL_V1,
+        payload={"symbol": "HYPE", "score": 0.0, "source_count": 2},
+        ts=now,
+    )
+
+    synth = VectorSynthesis(test_config, db)
+    res = synth.synthesize(cycle_id="c_sparse", symbol="HYPE", as_of=now)
+
+    assert set(res.domain_scores) == {"social"}
+    assert res.weights_used["social"] == pytest.approx(1.0)
+    assert res.weighted_score == pytest.approx(res.domain_scores["social"])
+
+
+def test_synthesis_no_domain_evidence_stays_neutral(test_config, temp_dir):
+    db = Database(temp_dir / "brain.db")
+    now = datetime.now(tz=UTC)
+
+    synth = VectorSynthesis(test_config, db)
+    res = synth.synthesize(cycle_id="c_empty", symbol="BTC", as_of=now)
+
+    assert res.domain_scores == {}
+    assert res.weighted_score == pytest.approx(0.5)
+    assert sum(res.weights_used.values()) == pytest.approx(0.0)
+
+
 def test_freshness_factor_at_zero_age():
     now = datetime.now(tz=UTC)
     assert _freshness_factor(now, now) == 1.0

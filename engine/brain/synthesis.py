@@ -463,14 +463,31 @@ class VectorSynthesis:
             if s is not None:
                 domain_scores[dom] = float(s)
 
-        weighted_score = 0.0
-        for dom, s in domain_scores.items():
-            weighted_score += float(weights_used.get(dom, 0.0)) * float(s)
+        if not domain_scores:
+            # No usable domain evidence this cycle: stay neutral instead of
+            # defaulting bearish via an implicit zero score.
+            weights_effective = {dom: 0.0 for dom in weights_used}
+            weighted_score = 0.5
+        else:
+            active_weight_total = sum(float(weights_used.get(dom, 0.0)) for dom in domain_scores)
+
+            if active_weight_total > 0.0:
+                # Re-normalize to domains that actually produced a score.
+                # Missing domains should be "no evidence", not an implicit short.
+                weights_effective = {dom: (float(w) / active_weight_total if dom in domain_scores else 0.0) for dom, w in weights_used.items()}
+                weighted_score = 0.0
+                for dom, s in domain_scores.items():
+                    weighted_score += float(weights_effective.get(dom, 0.0)) * float(s)
+            else:
+                # All scored domains were quality-gated to zero weight.
+                # Respect the gate and remain neutral.
+                weights_effective = {dom: 0.0 for dom in weights_used}
+                weighted_score = 0.5
 
         return SynthesisResult(
             snapshot=snapshot,
             domain_scores=domain_scores,
-            weights_used=weights_used,
+            weights_used=weights_effective,
             weighted_score=_clamp01(weighted_score),
             hierarchy_factors=(dict(hier_result.multipliers) if hier_result is not None else {}),
         )
