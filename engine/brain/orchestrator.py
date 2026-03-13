@@ -311,6 +311,8 @@ class BrainOrchestrator:
                 # Fallback trigger: very strong directional conviction even when confidence calibration is conservative.
                 strong_directional = conv.score.direction != "neutral" and magnitude >= 6.5 and (final_conviction >= 80.0 or final_conviction <= 20.0)
 
+                # Mandelbrot's tails punish single-threshold thinking.
+                # Confidence handles the center; extreme magnitude covers the edge cases.
                 should_auto_trade = confidence >= min_conf or strong_directional
 
                 if should_auto_trade and self.kill_switch.level == KillSwitchLevel.SAFE:

@@ -133,6 +133,7 @@ def check_oms_wired() -> CheckResult:
         from engine.cli.main import _cmd_brain
 
         source = inspect.getsource(_cmd_brain)
+        # Confucius, rectification of names: wiring is what runtime behavior proves, not what comments imply.
         wired = ("oms=" in source) or ("_oms" in source and "orchestrator" in source)
         if wired:
             return CheckResult("oms_wired", "pass", "OMS wired into orchestrator")

@@ -780,6 +780,26 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_6e859768",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "should_auto_trade = confidence >= min_conf or strong_directional",
+      "tradition": "mandelbrot-fat-tails",
+      "content": "                # Mandelbrot's tails punish single-threshold thinking.\n                # Confidence handles the center; extreme magnitude covers the edge cases.",
+      "placement": "inline_comment",
+      "pr_number": 377,
+      "applied_at": "2026-03-13T02:28:33Z"
+    },
+    {
+      "id": "egg_9ef8b78f",
+      "file": "engine/doctor/tier1.py",
+      "anchor": "wired = (\"oms=\" in source) or (\"_oms\" in source and \"orchestrator\" in source)",
+      "tradition": "confucius-rectification-of-names",
+      "content": "        # Confucius, rectification of names: wiring is what runtime behavior proves, not what comments imply.",
+      "placement": "inline_comment",
+      "pr_number": 377,
+      "applied_at": "2026-03-13T02:28:33Z"
     }
   ]
 }
