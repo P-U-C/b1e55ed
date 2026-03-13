@@ -278,6 +278,8 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
+# Shannon's constraint is simple: stale bits are noise.
+# Prices are only useful while they're fresh.
 def _latest_mark_prices() -> dict[str, float]:
     """Best-effort latest mark prices from recent WS price signals."""
     db_path = _get_brain_db()

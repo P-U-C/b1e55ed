@@ -790,6 +790,16 @@
       "placement": "inline_comment",
       "pr_number": 382,
       "applied_at": "2026-03-13T03:55:07Z"
+    },
+    {
+      "id": "egg_0195cd82",
+      "file": "dashboard/app.py",
+      "anchor": "def _latest_mark_prices() -> dict[str, float]:",
+      "tradition": "information-theory",
+      "content": "# Shannon's constraint is simple: stale bits are noise.\n# Prices are only useful while they're fresh.",
+      "placement": "before_function",
+      "pr_number": 382,
+      "applied_at": "2026-03-13T04:21:32Z"
     }
   ]
 }
