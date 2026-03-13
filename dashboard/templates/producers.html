@@ -49,9 +49,10 @@
 {% if producers %}
 {% set healthy_count = producers | selectattr('status', 'equalto', 'healthy') | list | length %}
 {% set degraded_count = producers | selectattr('status', 'equalto', 'degraded') | list | length %}
+{% set stale_count = producers | selectattr('status', 'equalto', 'stale') | list | length %}
 {% set failing_count = producers | selectattr('status', 'equalto', 'failing') | list | length %}
 {% set quarantined_count = producers | selectattr('status', 'equalto', 'quarantined') | list | length %}
-{% set unknown_count = producers | length - healthy_count - degraded_count - failing_count - quarantined_count %}
+{% set unknown_count = producers | length - healthy_count - degraded_count - stale_count - failing_count - quarantined_count %}
 {% set non_healthy = producers | length - healthy_count %}
 
 {% if producers | length > 0 and non_healthy * 2 >= producers | length %}
@@ -64,6 +65,7 @@
 <div style="margin-bottom:1rem; font-size:0.8rem;" class="text-dim">
   <span class="text-bull">{{ healthy_count }} healthy</span> ·
   <span style="color:var(--amber);">{{ degraded_count }} degraded</span> ·
+  <span style="color:var(--amber);">{{ stale_count }} stale</span> ·
   <span class="text-bear">{{ failing_count }} failing</span> ·
   <span class="text-bear">{{ quarantined_count }} quarantined</span>
 </div>
@@ -95,6 +97,8 @@
         <span class="producer-status-badge" style="color:var(--green); border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.08);">✓ healthy</span>
       {% elif p.status == 'degraded' %}
         <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ degraded</span>
+      {% elif p.status == 'stale' %}
+        <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⌛ stale</span>
       {% elif p.status == 'failing' %}
         <span class="producer-status-badge" style="color:var(--red); border-color:rgba(220,38,38,0.3); background:rgba(220,38,38,0.08);">✗ failing</span>
       {% else %}
@@ -129,6 +133,8 @@
         <span class="producer-status-badge" style="color:var(--green); border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.08);">✓ healthy</span>
       {% elif p.status == 'degraded' %}
         <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ degraded</span>
+      {% elif p.status == 'stale' %}
+        <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⌛ stale</span>
       {% elif p.status == 'failing' %}
         <span class="producer-status-badge" style="color:var(--red); border-color:rgba(220,38,38,0.3); background:rgba(220,38,38,0.08);">✗ failing</span>
       {% elif p.status == 'quarantined' %}
@@ -164,20 +170,28 @@
       <span title="Events produced" class="data-live" style="font-family:var(--mono);">{{ p.events_produced }} events</span>
     </div>
 
-    <!-- Error details (if failing/degraded/quarantined) -->
-    {% if p.status in ['failing', 'quarantined', 'degraded'] %}
+    <!-- Error details (if failing/degraded/stale/quarantined) -->
+    {% if p.status in ['failing', 'quarantined', 'degraded', 'stale'] %}
     <details style="font-size:0.7rem;" {% if p.consecutive_failures and p.consecutive_failures > 2 %}open{% endif %}>
-      <summary style="cursor:pointer; color:{% if p.status == 'degraded' %}var(--amber){% else %}var(--red){% endif %}; user-select:none; padding:2px 0;">
+      <summary style="cursor:pointer; color:{% if p.status in ['degraded', 'stale'] %}var(--amber){% else %}var(--red){% endif %}; user-select:none; padding:2px 0;">
         {% if p.consecutive_failures %}{{ p.consecutive_failures }} failure{{ 's' if p.consecutive_failures != 1 else '' }}{% endif %}
         {% if p.last_error %} — {{ p.last_error[:60] }}{% if p.last_error | length > 60 %}…{% endif %}{% endif %}
-        {% if not p.last_error and not p.consecutive_failures %}no recent data{% endif %}
+        {% if p.status == 'stale' and not p.last_error and not p.consecutive_failures %}stale heartbeat{% endif %}
+        {% if p.zero_events_warning and not p.last_error and not p.consecutive_failures %}0 events on last run{% endif %}
+        {% if not p.last_error and not p.consecutive_failures and p.status not in ['stale'] and not p.zero_events_warning %}no recent data{% endif %}
       </summary>
-      <div style="margin-top:4px; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:3px; border-left:2px solid {% if p.status == 'degraded' %}var(--amber){% else %}var(--red){% endif %};">
+      <div style="margin-top:4px; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:3px; border-left:2px solid {% if p.status in ['degraded', 'stale'] %}var(--amber){% else %}var(--red){% endif %};">
         {% if p.last_error %}
         <div style="font-family:var(--mono); color:var(--text-bright); word-break:break-word; margin-bottom:4px;">{{ p.last_error }}</div>
         {% endif %}
         {% if p.quarantined_until %}
         <div style="color:var(--red); margin-bottom:4px;">⛔ quarantined until {{ p.quarantined_until }}</div>
+        {% endif %}
+        {% if p.status == 'stale' %}
+        <div style="color:var(--amber); margin-bottom:4px;">⌛ stale: last run {{ p.last_run }} (older than 30m)</div>
+        {% endif %}
+        {% if p.zero_events_warning %}
+        <div style="color:var(--amber); margin-bottom:4px;">⚠ producer ran but emitted 0 events</div>
         {% endif %}
         <!-- Fix hints based on error type -->
         {% if p.last_error and ('401' in p.last_error or 'Unauthorized' in p.last_error or 'auth' in p.last_error|lower) %}
@@ -192,6 +206,10 @@
         <div style="color:var(--amber); margin-top:4px;">💡 Fix: Missing credential. Set <code>producers.{{ p.name }}.api_key</code> in <code>user.yaml</code></div>
         {% elif p.consecutive_failures and p.consecutive_failures >= 3 %}
         <div style="color:var(--amber); margin-top:4px;">💡 Fix: Click Restart to clear quarantine, then Run Now to test.</div>
+        {% elif p.zero_events_warning %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: validate producer filters/symbol mapping — a successful run should emit events.</div>
+        {% elif p.status == 'stale' %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: run now and inspect scheduler/worker heartbeat if this repeats.</div>
         {% else %}
         <div style="color:var(--text-dim); margin-top:4px;">Run Now to retry, or check <code>b1e55ed doctor</code> for details.</div>
         {% endif %}

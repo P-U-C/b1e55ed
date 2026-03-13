@@ -1,5 +1,10 @@
 <div class="panel-header">
-  <span class="panel-title">{{ p.id }} · {{ p.symbol }} · <span class="{{ 'text-bull' if p.direction in ['long','buy'] else ('text-bear' if p.direction in ['short','sell'] else 'text-dim') }}">{{ p.direction | upper }}</span></span>
+  <span class="panel-title">
+    {{ p.id }} · {{ p.symbol }} · <span class="{{ 'text-bull' if p.direction in ['long','buy'] else ('text-bear' if p.direction in ['short','sell'] else 'text-dim') }}">{{ p.direction | upper }}</span>
+    {% if p.conviction_conflict %}
+    <span class="badge" style="margin-left:0.5rem; border-color:rgba(245,158,11,0.35); color:var(--amber);">⚠ conviction conflict</span>
+    {% endif %}
+  </span>
   <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }} data-live" style="font-size:0.85rem; font-weight:400;">
     {{ '%+.1f' | format(p.pnl_pct) }}%
   </span>
@@ -24,7 +29,7 @@
   </div>
   <div>
     <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">P&L</span><br>
-    <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }} data-live">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+    <span class="{{ 'text-bull' if p.pnl_usd > 0 else ('text-bear' if p.pnl_usd < 0 else 'text-dim') }} data-live">${{ '%+.0f' | format(p.pnl_usd) }}</span>
   </div>
 </div>
 
@@ -62,7 +67,7 @@
   <div>Leverage: <span class="{{ 'text-warn' if p.leverage_warning else 'text-bright' }}">{{ p.leverage }}x</span>{% if p.leverage_warning %} <span class="text-warn">(exceeds max)</span>{% endif %}</div>
   <div>Opened: {{ p.opened | default('—') }}</div>
   <div>Conviction at entry: {{ p.conviction_entry | default('—') }}</div>
-  <div>Current conviction: {{ p.conviction_current | default('—') }}</div>
+  <div>Current conviction: {{ p.conviction_current | default('—') }}{% if p.conviction_conflict %} <span style="color:var(--amber);">⚠ opposes position</span>{% endif %}</div>
   <div>Regime at entry: {{ p.regime_entry | default('—') }}</div>
   <div>Held: {{ p.held | default('—') }}</div>
 </div>

@@ -574,3 +574,61 @@ def test_social_page_preserves_contextual_headers_on_htmx_refresh() -> None:
         assert "Collector Health" in resp.text
         assert 'id="social-status-refresh"' in resp.text
         assert 'id="collector-health-refresh"' in resp.text
+
+
+class SignalEpochApiClient(DummyApiClient):
+    def get_signals(self, domain: str | None = None) -> _Res:
+        return _Res(
+            {
+                "items": [
+                    {
+                        "type": "signal.ta.rsi.v1",
+                        "ts": 1741880000,
+                        "payload": {"symbol": "BTC", "desc": "Epoch ts", "score": 7.0, "direction": "▲"},
+                    }
+                ],
+                "total": 1,
+            },
+            True,
+        )
+
+
+def test_signals_page_emits_epoch_ms_for_timeline() -> None:
+    with TestClient(app) as client:
+        client.app.state.api_client = SignalEpochApiClient()
+        resp = client.get("/signals")
+        assert resp.status_code == 200
+        assert "1741880000000" in resp.text
+
+
+class PositionsConflictApiClient(DummyApiClient):
+    def get_positions(self) -> _Res:
+        return _Res(
+            [
+                {
+                    "id": "HL-123",
+                    "symbol": "BTC",
+                    "direction": "short",
+                    "entry_price": 100,
+                    "stop_loss": 110,
+                    "take_profit": 90,
+                    "size_notional": -1000,
+                    "leverage": 2,
+                    "status": "open",
+                }
+            ],
+            True,
+        )
+
+    def get_convictions(self, limit: int = 20) -> _Res:
+        return _Res({"items": [{"symbol": "BTC", "direction": "bullish", "confidence": 0.8, "ts": "2026-03-12T19:00:00Z"}]}, True)
+
+
+def test_positions_page_short_loss_uses_red_and_shows_conflict_badge() -> None:
+    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}), TestClient(app) as client:
+        client.app.state.api_client = PositionsConflictApiClient()
+        resp = client.get("/positions?view=open")
+        assert resp.status_code == 200
+        assert "⚠ conviction conflict" in resp.text
+        assert "$-100" in resp.text
+        assert "$+100" not in resp.text

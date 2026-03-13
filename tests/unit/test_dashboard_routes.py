@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -215,6 +216,42 @@ def test_producers_page_loads(tmp_path: Path, monkeypatch) -> None:
         resp = client.get("/producers")
         assert resp.status_code == 200
         assert "Producers" in resp.text
+
+
+def test_producers_page_degrades_zero_event_runs_and_marks_stale(tmp_path: Path, monkeypatch) -> None:
+    db_path = _make_db(tmp_path)
+    now = datetime.now(UTC)
+    recent_run = (now - timedelta(minutes=5)).isoformat()
+    stale_run = (now - timedelta(minutes=45)).isoformat()
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO producer_health
+        (name, domain, schedule, endpoint, last_run_at, last_success_at, last_error, consecutive_failures, events_produced, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("ta.zero-events", "ta", "*/15 * * * *", "/api/ta", recent_run, recent_run, None, 0, 0, now.isoformat()),
+    )
+    conn.execute(
+        """
+        INSERT INTO producer_health
+        (name, domain, schedule, endpoint, last_run_at, last_success_at, last_error, consecutive_failures, events_produced, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("ta.stale", "ta", "*/15 * * * *", "/api/ta", stale_run, stale_run, None, 0, 5, now.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("B1E55ED_DB_PATH", str(db_path))
+
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/producers")
+        assert resp.status_code == 200
+        assert "⚠ degraded" in resp.text
+        assert "⌛ stale" in resp.text
 
 
 def test_forecasts_page(tmp_path: Path, monkeypatch) -> None:
