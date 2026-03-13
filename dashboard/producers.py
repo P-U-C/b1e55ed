@@ -84,6 +84,7 @@ class ProducerRow:
     status: str
     is_stale: bool
     zero_events_warning: bool
+    no_source: bool
 
 
 def _producer_healthy(
@@ -154,6 +155,9 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 is_quarantined = True
                 quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
 
+        last_error_lc = last_error.lower() if last_error else ""
+        no_source = "no_source_configured" in last_error_lc or "no source configured" in last_error_lc or "not configured" in last_error_lc
+
         last_run_dt = _parse_dt(last_run_at)
         is_stale = bool(last_run_dt and (now - last_run_dt).total_seconds() > 30 * 60)
         zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
@@ -166,7 +170,7 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
             status = "stale"
         elif consecutive_failures > 4:
             status = "failing"
-        elif consecutive_failures > 0 or last_error or zero_events_warning:
+        elif no_source or consecutive_failures > 0 or last_error or zero_events_warning:
             status = "degraded"
         elif last_run_dt is not None:
             status = "healthy"
@@ -197,6 +201,7 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 status=status,
                 is_stale=is_stale,
                 zero_events_warning=zero_events_warning,
+                no_source=no_source,
             )
         )
 

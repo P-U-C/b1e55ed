@@ -297,15 +297,39 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
-def _latest_mark_prices() -> dict[str, float]:
-    """Best-effort latest mark prices from recent WS price signals."""
-    db_path = _get_brain_db()
-    if not db_path:
-        return {}
+def _latest_mark_prices(symbols: set[str] | None = None) -> dict[str, float]:
+    """Best-effort latest mark prices from WS price signals."""
+    requested = {str(s).strip().upper() for s in (symbols or set()) if str(s).strip()}
+
+    db_path = Path(os.environ.get("B1E55ED_DB_PATH", os.path.expanduser("~/.b1e55ed/data/brain.db")))
+    if not db_path.exists():
+        fallback = _get_brain_db()
+        if fallback is None:
+            return {}
+        db_path = fallback
 
     prices: dict[str, float] = {}
+    conn: sqlite3.Connection | None = None
     try:
         conn = sqlite3.connect(str(db_path))
+        if requested:
+            for sym in requested:
+                row = conn.execute(
+                    """
+                    SELECT json_extract(payload, '$.price')
+                    FROM events
+                    WHERE type = 'signal.price_ws.v1'
+                      AND json_extract(payload, '$.symbol') = ?
+                    ORDER BY ts DESC
+                    LIMIT 1
+                    """,
+                    (sym,),
+                ).fetchone()
+                if row and row[0] is not None:
+                    with contextlib.suppress(Exception):
+                        prices[sym] = float(row[0])
+            return prices
+
         rows = conn.execute(
             """
             SELECT json_extract(payload, '$.symbol') AS symbol,
@@ -316,9 +340,11 @@ def _latest_mark_prices() -> dict[str, float]:
             LIMIT 500
             """
         ).fetchall()
-        conn.close()
     except Exception:
         return {}
+    finally:
+        if conn is not None:
+            conn.close()
 
     for symbol, price in rows:
         sym = str(symbol or "").strip().upper()
@@ -333,18 +359,25 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
 
-    mark_prices = _latest_mark_prices()
+    symbols = {
+        str(p.get("asset") or p.get("symbol") or "").strip().upper()
+        for p in raw
+        if isinstance(p, dict) and str(p.get("asset") or p.get("symbol") or "").strip()
+    }
+    mark_prices = _latest_mark_prices(symbols=symbols)
 
     out: list[dict[str, Any]] = []
     for p in raw:
         if not isinstance(p, dict):
             continue
+
         entry = float(p.get("entry_price") or 0.0)
         stop = float(p.get("stop_loss") or entry)
         target = float(p.get("take_profit") or entry)
         leverage = float(p.get("leverage") or 1.0)
         direction = str(p.get("direction") or "neutral").lower()
-        symbol = str(p.get("asset") or p.get("symbol") or "—").upper()
+        asset = str(p.get("asset") or p.get("symbol") or "—").upper()
+        symbol = asset
         status = str(p.get("status") or "")
         size_notional = float(p.get("size_notional") or 0.0)
         notional_for_pnl = abs(size_notional)
@@ -355,26 +388,29 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 if qty > 0 and entry > 0:
                     notional_for_pnl = qty * entry
 
-        # Display-level guard: normalize obviously inverted risk levels from older buggy rows.
-        if direction in {"short", "sell"} and entry > 0:
-            if stop < entry and target > entry:
-                stop, target = target, stop
-        elif direction in {"long", "buy"} and entry > 0:
-            if stop > entry and target < entry:
-                stop, target = target, stop
+        # Display-level guard for legacy rows with inverted short risk levels.
+        risk_levels_autocorrected = False
+        if direction in {"short", "sell"} and entry > 0 and stop < entry:
+            stop, target = target, stop
+            risk_levels_autocorrected = True
+        elif direction in {"long", "buy"} and entry > 0 and stop > entry and target < entry:
+            stop, target = target, stop
 
-        current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
+        current_price = mark_prices.get(asset) if asset and asset != "—" else None
+        if current_price is None:
+            current = float(entry if entry > 0 else 0.0)
+        else:
+            current = float(current_price)
 
         if status.lower() == "closed":
             pnl_usd = float(p.get("realized_pnl") or 0.0)
             pnl_pct = float(p.get("pnl_pct") or 0.0)
         else:
             if direction in {"short", "sell"}:
-                ret = (entry - current) / entry if entry > 0 else 0.0
+                pnl_pct = ((entry - current) / entry * 100.0) if entry > 0 else 0.0
             else:
-                ret = (current - entry) / entry if entry > 0 else 0.0
-            pnl_usd = ret * notional_for_pnl if notional_for_pnl > 0 else 0.0
-            pnl_pct = ret * 100.0
+                pnl_pct = ((current - entry) / entry * 100.0) if entry > 0 else 0.0
+            pnl_usd = (pnl_pct / 100.0) * notional_for_pnl if notional_for_pnl > 0 else 0.0
 
         near_stop = False
         if entry > 0 and stop > 0 and current > 0:
@@ -389,9 +425,11 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 "symbol": symbol,
                 "direction": direction,
                 "current": current,
+                "current_price": current_price,
                 "entry": entry,
                 "stop": stop,
                 "target": target,
+                "risk_levels_autocorrected": risk_levels_autocorrected,
                 "pnl_pct": pnl_pct,
                 "pnl_usd": pnl_usd,
                 "leverage": leverage,
@@ -2528,7 +2566,10 @@ def producers_partial(request: Request) -> HTMLResponse:
                 continue
             healthy = v.get("healthy")
             consecutive_failures = int(v.get("consecutive_failures") or 0)
-            last_error = v.get("last_error") or None
+            last_error_raw = v.get("last_error")
+            last_error = str(last_error_raw).strip() if last_error_raw not in (None, "") else None
+            last_error_lc = last_error.lower() if last_error else ""
+            no_source = "no_source_configured" in last_error_lc or "no source configured" in last_error_lc or "not configured" in last_error_lc
             quarantined_until_raw = v.get("quarantined_until")
             events_produced = int(v.get("events_produced") or v.get("event_count") or 0)
 
@@ -2571,7 +2612,7 @@ def producers_partial(request: Request) -> HTMLResponse:
             elif consecutive_failures > 4:
                 status = "failing"
                 health = "error"
-            elif consecutive_failures > 0 or last_error or zero_events_warning:
+            elif no_source or consecutive_failures > 0 or last_error or zero_events_warning:
                 status = "degraded"
                 health = "degraded"
             elif healthy is True or last_run_dt is not None:
@@ -2586,11 +2627,6 @@ def producers_partial(request: Request) -> HTMLResponse:
 
             if status == "healthy":
                 producers_healthy += 1
-
-            # Detect "no source configured" vs actual runtime errors
-            no_source = False
-            if last_error and ("no_source_configured" in last_error or "not configured" in last_error.lower()):
-                no_source = True
 
             producers.append(
                 {

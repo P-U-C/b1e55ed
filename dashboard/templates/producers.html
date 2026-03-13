@@ -95,6 +95,8 @@
       <span style="font-weight:500; color:var(--text-bright); font-size:0.85rem;">{{ p.name }}</span>
       {% if p.status == 'healthy' %}
         <span class="producer-status-badge" style="color:var(--green); border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.08);">✓ healthy</span>
+      {% elif p.no_source %}
+        <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ needs configuration</span>
       {% elif p.status == 'degraded' %}
         <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ degraded</span>
       {% elif p.status == 'stale' %}
@@ -131,6 +133,8 @@
       <span style="font-weight:500; color:var(--text-bright); font-size:0.85rem;">{{ p.name }}</span>
       {% if p.status == 'healthy' %}
         <span class="producer-status-badge" style="color:var(--green); border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.08);">✓ healthy</span>
+      {% elif p.no_source %}
+        <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ needs configuration</span>
       {% elif p.status == 'degraded' %}
         <span class="producer-status-badge" style="color:var(--amber); border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.08);">⚠ degraded</span>
       {% elif p.status == 'stale' %}
@@ -174,11 +178,12 @@
     {% if p.status in ['failing', 'quarantined', 'degraded', 'stale'] %}
     <details style="font-size:0.7rem;" {% if p.consecutive_failures and p.consecutive_failures > 2 %}open{% endif %}>
       <summary style="cursor:pointer; color:{% if p.status in ['degraded', 'stale'] %}var(--amber){% else %}var(--red){% endif %}; user-select:none; padding:2px 0;">
-        {% if p.consecutive_failures %}{{ p.consecutive_failures }} failure{{ 's' if p.consecutive_failures != 1 else '' }}{% endif %}
+        {% if p.no_source %}needs configuration{% endif %}
+        {% if p.consecutive_failures %}{% if p.no_source %} · {% endif %}{{ p.consecutive_failures }} failure{{ 's' if p.consecutive_failures != 1 else '' }}{% endif %}
         {% if p.last_error %} — {{ p.last_error[:60] }}{% if p.last_error | length > 60 %}…{% endif %}{% endif %}
-        {% if p.status == 'stale' and not p.last_error and not p.consecutive_failures %}stale heartbeat{% endif %}
-        {% if p.zero_events_warning and not p.last_error and not p.consecutive_failures %}0 events on last run{% endif %}
-        {% if not p.last_error and not p.consecutive_failures and p.status not in ['stale'] and not p.zero_events_warning %}no recent data{% endif %}
+        {% if p.status == 'stale' and not p.last_error and not p.consecutive_failures and not p.no_source %}stale heartbeat{% endif %}
+        {% if p.zero_events_warning and not p.last_error and not p.consecutive_failures and not p.no_source %}0 events on last run{% endif %}
+        {% if not p.last_error and not p.consecutive_failures and p.status not in ['stale'] and not p.zero_events_warning and not p.no_source %}no recent data{% endif %}
       </summary>
       <div style="margin-top:4px; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:3px; border-left:2px solid {% if p.status in ['degraded', 'stale'] %}var(--amber){% else %}var(--red){% endif %};">
         {% if p.last_error %}
@@ -187,6 +192,9 @@
         {% if p.quarantined_until %}
         <div style="color:var(--red); margin-bottom:4px;">⛔ quarantined until {{ p.quarantined_until }}</div>
         {% endif %}
+        {% if p.no_source %}
+        <div style="color:var(--amber); margin-bottom:4px;">⚠ needs configuration: no source configured</div>
+        {% endif %}
         {% if p.status == 'stale' %}
         <div style="color:var(--amber); margin-bottom:4px;">⌛ stale: last run {{ p.last_run }} (older than 30m)</div>
         {% endif %}
@@ -194,7 +202,9 @@
         <div style="color:var(--amber); margin-bottom:4px;">⚠ producer ran but emitted 0 events</div>
         {% endif %}
         <!-- Fix hints based on error type -->
-        {% if p.last_error and ('401' in p.last_error or 'Unauthorized' in p.last_error or 'auth' in p.last_error|lower) %}
+        {% if p.no_source %}
+        <div style="color:var(--amber); margin-top:4px;">💡 Fix: add source configuration for <code>{{ p.name }}</code> in <code>user.yaml</code>, then run the producer.</div>
+        {% elif p.last_error and ('401' in p.last_error or 'Unauthorized' in p.last_error or 'auth' in p.last_error|lower) %}
         <div style="color:var(--amber); margin-top:4px;">💡 Fix: API key expired or missing. Update <code>user.yaml</code> → <code>producers.{{ p.name }}.api_key</code></div>
         {% elif p.last_error and ('403' in p.last_error or 'Forbidden' in p.last_error) %}
         <div style="color:var(--amber); margin-top:4px;">💡 Fix: API key lacks permissions or subscription lapsed. Check provider dashboard.</div>
