@@ -820,6 +820,16 @@
       "placement": "inline_comment",
       "pr_number": 365,
       "applied_at": "2026-03-13T02:26:34Z"
+    },
+    {
+      "id": "egg_283e36cb",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "# A blessing that arrives after the merge is not a blessing. It is a footnote.",
+      "tradition": "consensus-witnesses",
+      "content": "# CI is the witness set. A blessing that skips check-runs is ritual without audit.",
+      "placement": "constant",
+      "pr_number": 365,
+      "applied_at": "2026-03-13T04:32:00Z"
     }
   ]
 }

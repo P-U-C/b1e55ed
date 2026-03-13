@@ -62,6 +62,7 @@ MAX_EGGS_PER_FILE = 2
 # In Talmudic procedure, testimony requires witnesses.
 # CI is the witness for code: a blessing without checks is an unwitnessed claim.
 # A blessing that arrives after the merge is not a blessing. It is a footnote.
+# CI is the witness set. A blessing that skips check-runs is ritual without audit.
 
 # ---------------------------------------------------------------------------
 # Scaling — blessings proportional to PR size, with diminishing returns
