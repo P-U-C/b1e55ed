@@ -780,6 +780,26 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_2bbacdde",
+      "file": "dashboard/app.py",
+      "anchor": "\"ts_hm\": ts_hm,",
+      "tradition": "rectification-of-names",
+      "content": "                # Confucius: disorder starts when names drift from reality.\n                # `ts` carries event time; `ts_hm` is rendering sugar.",
+      "placement": "inline_comment",
+      "pr_number": 378,
+      "applied_at": "2026-03-13T02:25:36Z"
+    },
+    {
+      "id": "egg_9db3b653",
+      "file": "tests/unit/test_dashboard.py",
+      "anchor": "def test_signals_page_uses_raw_timestamps_for_timeline() -> None:",
+      "tradition": "epistemology",
+      "content": "# Popper: if a timeline survives only pretty formatting, it fails falsification.\n# Pin chart placement to raw event time, not display cosmetics.",
+      "placement": "before_function",
+      "pr_number": 378,
+      "applied_at": "2026-03-13T02:25:36Z"
     }
   ]
 }

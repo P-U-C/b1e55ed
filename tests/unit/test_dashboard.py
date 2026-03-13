@@ -251,6 +251,8 @@ class SocialPanelApiClient(DummyApiClient):
         )
 
 
+# Popper: if a timeline survives only pretty formatting, it fails falsification.
+# Pin chart placement to raw event time, not display cosmetics.
 def test_signals_page_uses_raw_timestamps_for_timeline() -> None:
     with TestClient(app) as client:
         client.app.state.api_client = SignalTimelineApiClient()

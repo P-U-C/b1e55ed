@@ -445,6 +445,8 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
             {
                 # Keep raw timestamp for timeline plotting; use ts_hm for display-only chips.
                 "ts": str(ts) if ts is not None else "",
+                # Confucius: disorder starts when names drift from reality.
+                # `ts` carries event time; `ts_hm` is rendering sugar.
                 "ts_hm": ts_hm,
                 "domain": domain,
                 "asset": str(asset),
