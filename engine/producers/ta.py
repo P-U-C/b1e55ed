@@ -249,12 +249,16 @@ class TechnicalAnalysisProducer(BaseProducer):
             return []
         return [row for row in data if isinstance(row, dict)]
 
+    _BINANCE_MISSING: set[str] = {"HYPE"}
+
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Klines). Always available."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         results: list[dict[str, Any]] = []
 
-        for sym in symbols[:10]:  # limit to avoid rate limits
+        for sym in symbols[:10]:
+            if sym in self._BINANCE_MISSING:
+                continue
             try:
                 resp = httpx.get(
                     "https://api.binance.com/api/v3/klines",

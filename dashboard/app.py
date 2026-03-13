@@ -1464,6 +1464,8 @@ def signals_page(
             latest_dt = dt
     latest_signal_ts = latest_dt.isoformat() if latest_dt is not None else None
     latest_signal_age = _timeago_filter(latest_signal_ts) if latest_signal_ts else "none"
+    # Freshness is a market primitive: stale timestamps manufacture false certainty.
+    # Surface drift before anyone mistakes delayed data for conviction.
     signal_feed_stale = bool(latest_dt and (now_dt - latest_dt).total_seconds() > 1800)
 
     return templates.TemplateResponse(

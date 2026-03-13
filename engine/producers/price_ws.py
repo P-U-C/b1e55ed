@@ -77,14 +77,31 @@ class PriceAlertsProducer(BaseProducer):
             return []
         return [row for row in data if isinstance(row, dict)]
 
+    _BINANCE_SKIP: dict[str, str] = {"HYPE": "hyperliquid"}
+
+    def _collect_coingecko(self, symbol: str, cg_id: str) -> dict[str, Any] | None:
+        try:
+            resp = httpx.get("https://api.coingecko.com/api/v3/simple/price", params={"ids": cg_id, "vs_currencies": "usd"}, timeout=10.0)
+            resp.raise_for_status()
+            price = float(resp.json().get(cg_id, {}).get("usd", 0))
+            if price > 0:
+                return {"symbol": symbol, "price": price, "bid": price, "ask": price, "venue": "coingecko", "data_source": "coingecko_free"}
+        except Exception as e:
+            self.ctx.logger.warning("coingecko_fallback_failed symbol=%s error=%s", symbol, e)
+        return None
+
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Ticker). Always available."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         results: list[dict[str, Any]] = []
 
-        for sym in symbols[:10]:  # limit to avoid rate limits
+        for sym in symbols[:10]:
+            if sym in self._BINANCE_SKIP:
+                row = self._collect_coingecko(sym, self._BINANCE_SKIP[sym])
+                if row:
+                    results.append(row)
+                continue
             try:
-                # 24hr ticker gives price + bid/ask
                 resp = httpx.get(
                     "https://api.binance.com/api/v3/ticker/24hr",
                     params={"symbol": f"{sym}USDT"},

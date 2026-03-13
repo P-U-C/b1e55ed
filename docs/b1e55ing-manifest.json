@@ -780,6 +780,26 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_800e3eaf",
+      "file": "engine/execution/oms.py",
+      "anchor": "if intent.stop_loss_pct is not None:",
+      "tradition": "markets-decision-theory",
+      "content": "# Short geometry inverts the map: risk is above entry, reward is below.\n# Get that wrong and every protective stop becomes a hidden liquidation trigger.",
+      "placement": "inline_comment",
+      "pr_number": 383,
+      "applied_at": "2026-03-13T03:57:09Z"
+    },
+    {
+      "id": "egg_f3275a30",
+      "file": "dashboard/app.py",
+      "anchor": "signal_feed_stale = bool(latest_dt and (now_dt - latest_dt).total_seconds() > 1800)",
+      "tradition": "cybernetics",
+      "content": "# Freshness is a market primitive: stale timestamps manufacture false certainty.\n# Surface drift before anyone mistakes delayed data for conviction.",
+      "placement": "inline_comment",
+      "pr_number": 383,
+      "applied_at": "2026-03-13T03:57:09Z"
     }
   ]
 }

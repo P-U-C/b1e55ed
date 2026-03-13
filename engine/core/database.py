@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.core.events import EventType, canonical_json
-from engine.core.exceptions import DedupeConflictError, EventStoreError
+from engine.core.exceptions import EventStoreError
 from engine.core.models import Event, compute_event_hash
 
 SCHEMA = """
@@ -837,7 +837,9 @@ class Database:
             ).fetchone()
             if row is not None:
                 if str(row[1]) != p_hash:
-                    raise DedupeConflictError(f"dedupe_key conflict for {dedupe_key}: payload changed")
+                    import logging as _log
+
+                    _log.getLogger("b1e55ed.database").warning("dedupe_key payload drift (keeping original): %s", dedupe_key)
                 existing = self.conn.execute(
                     "SELECT * FROM events WHERE id = ?",
                     (str(row[0]),),

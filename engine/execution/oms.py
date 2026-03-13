@@ -130,6 +130,8 @@ class OMS:
 
         stop_loss = None
         take_profit = None
+        # Short geometry inverts the map: risk is above entry, reward is below.
+        # Get that wrong and every protective stop becomes a hidden liquidation trigger.
         if intent.stop_loss_pct is not None:
             if intent.direction == "short":
                 stop_loss = float(mid_price) * (1.0 + float(intent.stop_loss_pct))
