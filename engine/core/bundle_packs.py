@@ -250,6 +250,8 @@ def _normalize_pack(raw_pack: dict[str, Any]) -> dict[str, Any]:
         "asset_class": asset_class,
         "venue": venue,
         "factor_tags": sorted(factor_tags),
+        # Ashby's law of requisite variety: controls need enough distinct levers to match the regime.
+        # direct/proxy counts make coverage explicit before execution pretends certainty.
         "mapping_summary": {"direct": direct_count, "proxy": proxy_count},
         "mappings": mappings,
     }

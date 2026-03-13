@@ -22,6 +22,7 @@ def test_pack_symbol_sets_match_expected_initial_coverage() -> None:
     assert mixed["symbols"] == ["BTC", "ETH", "SOL", "HYPE", "SUI"]
 
 
+# Popper in test form: proxy mapping is a claim that must survive contact with fixtures.
 def test_hl_pack_contains_proxy_mapping_metadata_and_factor_tags() -> None:
     pack = get_bundle_pack("hl-tradfi-perps")
     assert pack is not None

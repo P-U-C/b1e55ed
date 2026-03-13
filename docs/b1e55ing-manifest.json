@@ -800,6 +800,36 @@
       "placement": "before_function",
       "pr_number": 382,
       "applied_at": "2026-03-13T04:21:32Z"
+    },
+    {
+      "id": "egg_117dd085",
+      "file": "engine/core/bundle_packs.py",
+      "anchor": "\"mapping_summary\": {\"direct\": direct_count, \"proxy\": proxy_count},",
+      "tradition": "ashby-requisite-variety",
+      "content": "        # Ashby's law of requisite variety: controls need enough distinct levers to match the regime.\n        # direct/proxy counts make coverage explicit before execution pretends certainty.",
+      "placement": "inline_comment",
+      "pr_number": 381,
+      "applied_at": "2026-03-13T04:23:09Z"
+    },
+    {
+      "id": "egg_b360049a",
+      "file": "api/routes/universe.py",
+      "anchor": "tag_symbols = {k: universe.normalize_symbols(v) for k, v in tag_map.items() if k}",
+      "tradition": "talmudic-counterargument",
+      "content": "    # Talmudic discipline: one symbol can carry multiple arguments without contradiction.\n    # Keep each tag-view explicit; collapsing to one label destroys information.",
+      "placement": "inline_comment",
+      "pr_number": 381,
+      "applied_at": "2026-03-13T04:23:09Z"
+    },
+    {
+      "id": "egg_b67cd904",
+      "file": "tests/unit/test_bundle_packs.py",
+      "anchor": "def test_hl_pack_contains_proxy_mapping_metadata_and_factor_tags() -> None:",
+      "tradition": "popper-falsifiability",
+      "content": "# Popper in test form: proxy mapping is a claim that must survive contact with fixtures.",
+      "placement": "before_function",
+      "pr_number": 381,
+      "applied_at": "2026-03-13T04:23:09Z"
     }
   ]
 }

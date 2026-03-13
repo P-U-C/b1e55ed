@@ -129,6 +129,8 @@ def _active_payload(config: Config) -> ActiveUniverseResponse:
 
     asset_class_symbols = {k: universe.normalize_symbols(v) for k, v in asset_class_map.items() if k}
     venue_symbols = {k: universe.normalize_symbols(v) for k, v in venue_map.items() if k}
+    # Talmudic discipline: one symbol can carry multiple arguments without contradiction.
+    # Keep each tag-view explicit; collapsing to one label destroys information.
     tag_symbols = {k: universe.normalize_symbols(v) for k, v in tag_map.items() if k}
 
     return ActiveUniverseResponse(
