@@ -780,6 +780,16 @@
       "placement": "inline_comment",
       "pr_number": 357,
       "applied_at": "2026-03-10T00:54:03Z"
+    },
+    {
+      "id": "egg_ea3e7a68",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def fetch_pr(pr_number: int, github_token: str) -> dict[str, Any]:",
+      "tradition": "git-immutability-ledger",
+      "content": "# Git keeps receipts: a commit SHA is history, not a scratchpad.\n# Blessings should annotate the head commit, never rewrite it mid-flight.",
+      "placement": "before_function",
+      "pr_number": 376,
+      "applied_at": "2026-03-13T02:25:11Z"
     }
   ]
 }

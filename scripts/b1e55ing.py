@@ -207,6 +207,8 @@ def fetch_pr_files(pr_number: int, github_token: str) -> list[dict[str, Any]]:
         return resp.json()  # type: ignore[return-value]
 
 
+# Git keeps receipts: a commit SHA is history, not a scratchpad.
+# Blessings should annotate the head commit, never rewrite it mid-flight.
 def fetch_pr(pr_number: int, github_token: str) -> dict[str, Any]:
     """Return PR metadata from the GitHub PR API."""
     url = f"https://api.github.com/repos/{REPO}/pulls/{pr_number}"
