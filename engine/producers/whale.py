@@ -84,7 +84,10 @@ class WhaleTrackingProducer(BaseProducer):
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         results: list[dict[str, Any]] = []
 
-        for sym in symbols[:10]:  # limit to avoid rate limits
+        binance_skip = {"HYPE"}
+        for sym in symbols[:10]:
+            if sym in binance_skip:
+                continue
             try:
                 resp = httpx.get(
                     "https://api.binance.com/api/v3/trades",

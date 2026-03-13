@@ -329,6 +329,14 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         status = str(p.get("status") or "")
         size_notional = float(p.get("size_notional") or 0.0)
 
+        # Display-level guard: normalize obviously inverted risk levels from older buggy rows.
+        if direction in {"short", "sell"} and entry > 0:
+            if stop < entry and target > entry:
+                stop, target = target, stop
+        elif direction in {"long", "buy"} and entry > 0:
+            if stop > entry and target < entry:
+                stop, target = target, stop
+
         current = float(mark_prices.get(symbol, entry)) if entry > 0 else float(mark_prices.get(symbol, 0.0))
 
         if status.lower() == "closed":
@@ -1456,6 +1464,8 @@ def signals_page(
             latest_dt = dt
     latest_signal_ts = latest_dt.isoformat() if latest_dt is not None else None
     latest_signal_age = _timeago_filter(latest_signal_ts) if latest_signal_ts else "none"
+    # Freshness is a market primitive: stale timestamps manufacture false certainty.
+    # Surface drift before anyone mistakes delayed data for conviction.
     signal_feed_stale = bool(latest_dt and (now_dt - latest_dt).total_seconds() > 1800)
 
     return templates.TemplateResponse(
@@ -2160,7 +2170,9 @@ def regime_banner(request: Request) -> HTMLResponse:
 def positions_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     res = client.get_positions()
-    positions = _map_positions(res.data)
+    all_positions = _map_positions(res.data)
+    # Brain panel is "open positions" context — hide closed rows.
+    positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
     return templates.TemplateResponse(
         "partials/positions_panel.html",

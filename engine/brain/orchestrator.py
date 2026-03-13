@@ -107,7 +107,7 @@ class BrainOrchestrator:
             row = self.db.fetchone(
                 """
                 SELECT payload FROM events
-                WHERE type = 'PRICE_V1'
+                WHERE type IN ('signal.price_ws.v1', 'PRICE_V1')
                   AND json_extract(payload, '$.symbol') = ?
                 ORDER BY ts DESC LIMIT 1
                 """,
@@ -129,11 +129,31 @@ class BrainOrchestrator:
         except Exception:
             _log.debug("DB price lookup failed for %s", symbol, exc_info=True)
 
-        # 2) Fallback: Binance public API (no auth required)
+        # 2) Fallback: CoinGecko for HYPE, then Binance
+        cg_map = {"HYPE": "hyperliquid"}
+        sym_upper = symbol.upper()
+        if sym_upper in cg_map:
+            try:
+                import urllib.request
+
+                cg_id = cg_map[sym_upper]
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
+                req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    import json as _json
+
+                    data = _json.loads(resp.read())
+                    price = float(data.get(cg_id, {}).get("usd", 0))
+                    if price > 0:
+                        _log.debug("mid_price for %s from CoinGecko: %.4f", symbol, price)
+                        return price
+            except Exception:
+                _log.debug("CoinGecko price lookup failed for %s", symbol, exc_info=True)
+            return None
         try:
             import urllib.request
 
-            ticker_symbol = f"{symbol.upper()}USDT"
+            ticker_symbol = f"{sym_upper}USDT"
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={ticker_symbol}"
             req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
             with urllib.request.urlopen(req, timeout=5) as resp:
