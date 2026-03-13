@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from engine.core.database import Database
 from engine.core.events import EventType
-from engine.core.exceptions import DedupeConflictError
 
 
 def test_append_and_query_round_trip(temp_dir: Path) -> None:
@@ -38,12 +35,13 @@ def test_dedup_is_idempotent_and_conflicts_on_payload_change(temp_dir: Path) -> 
         e2 = db.append_event(event_type=EventType.SIGNAL_TA_V1, payload={"symbol": "BTC"}, dedupe_key=k)
         assert e1.id == e2.id
 
-        with pytest.raises(DedupeConflictError):
-            db.append_event(
-                event_type=EventType.SIGNAL_TA_V1,
-                payload={"symbol": "BTC", "rsi_14": 1.0},
-                dedupe_key=k,
-            )
+        # Payload drift now warns and returns original event.
+        e3 = db.append_event(
+            event_type=EventType.SIGNAL_TA_V1,
+            payload={"symbol": "BTC", "rsi_14": 1.0},
+            dedupe_key=k,
+        )
+        assert e3.id == e1.id
     finally:
         db.close()
 

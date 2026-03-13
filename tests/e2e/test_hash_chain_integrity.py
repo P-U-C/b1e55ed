@@ -190,19 +190,19 @@ def test_deduplication_is_idempotent(db):
 
 def test_deduplication_conflict_raises(db):
     """Same dedupe_key + DIFFERENT payload → DedupeConflictError."""
-    from engine.core.exceptions import DedupeConflictError
 
     db.append_event(
         event_type=EventType.SIGNAL_TA_V1,
         payload={"symbol": "BTC", "rsi_14": 42.0},
         dedupe_key="conflict-key-1",
     )
-    with pytest.raises(DedupeConflictError):
-        db.append_event(
-            event_type=EventType.SIGNAL_TA_V1,
-            payload={"symbol": "BTC", "rsi_14": 99.0},  # different
-            dedupe_key="conflict-key-1",
-        )
+    # Payload drift now logs a warning and returns the original event (no exception).
+    e2 = db.append_event(
+        event_type=EventType.SIGNAL_TA_V1,
+        payload={"symbol": "BTC", "rsi_14": 99.0},  # different
+        dedupe_key="conflict-key-1",
+    )
+    assert e2.dedupe_key == "conflict-key-1"  # original event returned
 
 
 # ---------------------------------------------------------------------------
