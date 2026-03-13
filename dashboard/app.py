@@ -9,7 +9,7 @@ import contextlib
 import os
 import sqlite3
 import time as _time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from datetime import UTC  # py311+
@@ -1445,6 +1445,19 @@ def signals_page(
     bundle_options = [b for b in raw_bundles if isinstance(b, dict) and str(b.get("id") or "") and (not enabled_ids or str(b.get("id")) in enabled_ids)]
     bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
+    now_dt = datetime.now(tz=UTC)
+    timeline_window_label = f"{(now_dt - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M')} → {now_dt.strftime('%Y-%m-%d %H:%M')} UTC"
+    latest_dt: datetime | None = None
+    for s in signals:
+        dt = _parse_dt(s.get("ts_iso") or s.get("ts"))
+        if dt is None:
+            continue
+        if latest_dt is None or dt > latest_dt:
+            latest_dt = dt
+    latest_signal_ts = latest_dt.isoformat() if latest_dt is not None else None
+    latest_signal_age = _timeago_filter(latest_signal_ts) if latest_signal_ts else "none"
+    signal_feed_stale = bool(latest_dt and (now_dt - latest_dt).total_seconds() > 1800)
+
     return templates.TemplateResponse(
         "signals.html",
         {
@@ -1464,6 +1477,10 @@ def signals_page(
             "active_tag": tag,
             "domain_filter_suffix": f"&{filter_qs}" if filter_qs else "",
             "all_filter_query": f"?{filter_qs}" if filter_qs else "",
+            "timeline_window_label": timeline_window_label,
+            "latest_signal_ts": latest_signal_ts,
+            "latest_signal_age": latest_signal_age,
+            "signal_feed_stale": signal_feed_stale,
         },
     )
 
