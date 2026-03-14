@@ -1852,8 +1852,8 @@ def performance_page(request: Request) -> HTMLResponse:
             perf.update(
                 {
                     "total_trades": len(pnls),
-                    "win_rate": f"{len(wins) / len(pnls) * 100:.1f}%" if pnls else "—",
-                    "avg_pnl": f"${sum(pnls) / len(pnls):.2f}" if pnls else "—",
+                    "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else None,
+                    "avg_pnl": round(sum(pnls) / len(pnls), 2) if pnls else None,
                     "total_pnl": round(total_pnl, 4),
                     "closed_positions": closed_list,
                     "trades": [
