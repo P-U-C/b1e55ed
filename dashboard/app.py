@@ -404,7 +404,9 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
 
         if status.lower() == "closed":
             pnl_usd = float(p.get("realized_pnl") or 0.0)
-            pnl_pct = float(p.get("pnl_pct") or 0.0)
+            # Compute pct from realized_pnl / notional (positions table has no pnl_pct col)
+            _notional = abs(float(p.get("size_notional") or 0.0))
+            pnl_pct = (pnl_usd / _notional * 100.0) if _notional > 0 else 0.0
         else:
             if direction in {"short", "sell"}:
                 pnl_pct = ((entry - current) / entry * 100.0) if entry > 0 else 0.0
@@ -1069,7 +1071,8 @@ def brain_overview(request: Request) -> HTMLResponse:
     regime_ctx = _regime_banner_context(regime_res.data, stale=not regime_res.ok)
 
     pos_res = client.get_positions()
-    positions = _annotate_positions_with_convictions(_map_positions(pos_res.data), client)
+    _all_pos = _annotate_positions_with_convictions(_map_positions(pos_res.data), client)
+    positions = [p for p in _all_pos if str(p.get("status") or "").lower() != "closed"]
     positions_age = "—" if pos_res.ok else "stale"
 
     sig_res = client.get_signals(domain=None)
