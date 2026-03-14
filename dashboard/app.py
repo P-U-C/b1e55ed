@@ -1602,9 +1602,22 @@ def signals_page(
     for s in signals:
         by_domain.setdefault(str(s.get("domain") or "unknown"), []).append(s)
 
+    try:
+        _universe_total = len(list(app.state.config.universe.active_symbols()))
+    except Exception:
+        _universe_total = 0
     domain_groups = []
     for d, items in sorted(by_domain.items()):
-        domain_groups.append({"domain": d, "age": "—" if res.ok else "stale", "signals": items[:4]})
+        covered = sorted({str(s.get("symbol") or s.get("asset") or "").upper() for s in items if s.get("symbol") or s.get("asset")})
+        domain_groups.append(
+            {
+                "domain": d,
+                "age": "—" if res.ok else "stale",
+                "signals": items[:4],
+                "symbol_count": len(covered),
+                "symbol_list": ", ".join(covered[:8]) + ("…" if len(covered) > 8 else ""),
+            }
+        )
 
     domains = [
         {"id": "ta", "label": "TA"},
