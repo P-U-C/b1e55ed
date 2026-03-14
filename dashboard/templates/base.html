@@ -121,6 +121,16 @@
   </script>
 
   <script>
+  // Guard: block full-shell injection into partial targets (prevents double-navbar)
+  document.body.addEventListener('htmx:beforeSwap', function(e) {
+    if (!e.detail.target || e.detail.target === document.body) return;
+    var text = (e.detail.xhr && e.detail.xhr.responseText) || '';
+    if (text.indexOf('<nav') !== -1 || text.indexOf('<!DOCTYPE') !== -1) {
+      console.warn('b1e55ed: blocked shell injection into partial', e.detail.target.id || e.detail.target.className);
+      e.detail.shouldSwap = false;
+    }
+  });
+
   document.body.addEventListener('htmx:responseError', function(e) {
     var target = e.detail.target;
     if (!target) return;
