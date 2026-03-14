@@ -1810,13 +1810,74 @@ def artifacts_page(request: Request) -> HTMLResponse:
 
 @app.get("/performance", response_class=HTMLResponse)
 def performance_page(request: Request) -> HTMLResponse:
+    # Pull real performance data from DB
+    perf: dict[str, Any] = {
+        "total_trades": 0,
+        "win_rate": None,
+        "avg_pnl": None,
+        "total_pnl": 0.0,
+        "sharpe": None,
+        "max_drawdown": None,
+        "closed_positions": [],
+        "open_positions": [],
+    }
+    try:
+        db_path = Path(os.environ.get("B1E55ED_DB_PATH", os.path.expanduser("~/.b1e55ed/data/brain.db")))
+        if db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            closed = conn.execute(
+                "SELECT asset, direction, entry_price, realized_pnl, size_notional, opened_at, closed_at "
+                "FROM positions WHERE status='closed' ORDER BY closed_at DESC"
+            ).fetchall()
+            open_pos = conn.execute(
+                "SELECT asset, direction, entry_price, size_notional, stop_loss, take_profit, opened_at "
+                "FROM positions WHERE status='open' ORDER BY opened_at DESC"
+            ).fetchall()
+            conn.close()
+
+            closed_list = [dict(r) for r in closed]
+            pnls = [r["realized_pnl"] for r in closed_list if r["realized_pnl"] is not None]
+            wins = [p for p in pnls if p > 0]
+            total_pnl = sum(pnls)
+
+            # Equity curve: cumulative PnL per trade
+            equity: list[dict] = []
+            cumulative = 0.0
+            for r in reversed(closed_list):
+                if r["realized_pnl"] is not None:
+                    cumulative += r["realized_pnl"]
+                    equity.append({"label": r["asset"], "value": round(cumulative, 4)})
+
+            perf.update(
+                {
+                    "total_trades": len(pnls),
+                    "win_rate": f"{len(wins) / len(pnls) * 100:.1f}%" if pnls else "—",
+                    "avg_pnl": f"${sum(pnls) / len(pnls):.2f}" if pnls else "—",
+                    "total_pnl": round(total_pnl, 4),
+                    "closed_positions": closed_list,
+                    "trades": [
+                        {
+                            "id": r.get("asset", "")[:6],
+                            "asset": r.get("asset", ""),
+                            "direction": r.get("direction", ""),
+                            "entry": r.get("entry_price") or 0,
+                            "exit": (r.get("entry_price") or 0) + ((r.get("realized_pnl") or 0) / (r.get("size_notional") or 1)) * (r.get("entry_price") or 1),
+                            "pnl": r.get("realized_pnl") or 0,
+                            "held": r.get("opened_at", "")[:10],
+                        }
+                        for r in closed_list
+                    ],
+                    "open_positions": [dict(r) for r in open_pos],
+                    "equity_curve": equity,
+                }
+            )
+    except Exception as _e:
+        pass
+
     return templates.TemplateResponse(
         "performance.html",
-        {
-            **_shell(request, "performance"),
-            "total_trades": 0,
-            "total_pnl": 0,
-        },
+        {**_shell(request, "performance"), **perf},
     )
 
 
