@@ -722,3 +722,9 @@ docs/deerflow.md (standalone — setup, tool reference, troubleshooting)
 ```text
 docs/signal-benchmarking-ops-guide.md (standalone — operational guide for oracle builders)
 ```
+
+## PFT Task Authorization Gate Specification
+
+```text
+docs/pft-authorization-gate-spec.md (standalone — network governance design specification)
+```
