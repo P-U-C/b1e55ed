@@ -194,6 +194,7 @@ class UniverseBundle(BaseModel):
 class UniverseConfig(BaseModel):
     symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "SUI", "HYPE"])
     max_size: int = 100
+    max_symbols: int = 0  # 0 = process all active symbols; set >0 to cap for performance
     bundles: list[UniverseBundle] = Field(default_factory=list)
 
     @staticmethod

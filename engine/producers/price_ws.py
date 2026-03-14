@@ -95,7 +95,9 @@ class PriceAlertsProducer(BaseProducer):
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         results: list[dict[str, Any]] = []
 
-        for sym in symbols[:10]:
+        _cap = getattr(self.ctx.config.universe, "max_symbols", 0)
+        _syms = symbols[:_cap] if _cap > 0 else symbols
+        for sym in _syms:
             if sym in self._BINANCE_SKIP:
                 row = self._collect_coingecko(sym, self._BINANCE_SKIP[sym])
                 if row:
