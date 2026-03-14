@@ -1845,6 +1845,15 @@ def settings_page(request: Request) -> HTMLResponse:
     ]
     api_keys = [{"name": k, "configured": bool(os.environ.get(k, "").strip())} for k in api_key_names]
 
+    # Surface the API auth token for settings display
+    _raw_token = str((cfg.get("api") or {}).get("auth_token", "") or os.environ.get("B1E55ED_API_TOKEN", "") or "")
+    _token_display = (_raw_token[:8] + "..." + _raw_token[-4:]) if len(_raw_token) > 12 else (_raw_token if _raw_token else "not set")
+    api_auth_token_info = {
+        "configured": bool(_raw_token),
+        "display": _token_display,
+        "hint": "Set via api.auth_token in user.yaml or B1E55ED_API_TOKEN env var",
+    }
+
     # Producer config discovery: collect configurable_fields from all producers
     producer_configs: list[dict[str, Any]] = []
     try:
@@ -1940,6 +1949,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "trading_mode": trading_mode,
             "risk_fields": risk_fields,
             "api_keys": api_keys,
+            "api_auth_token_info": api_auth_token_info,
             "producer_configs": producer_configs,
             # Config page data
             "preset": "custom",
