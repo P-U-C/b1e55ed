@@ -137,7 +137,7 @@
 <div class="grid" style="margin-bottom: 1rem;">
 
   <!-- LEFT: Positions -->
-  <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s" hx-swap="innerHTML">
+  <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s, refresh from:body" hx-swap="innerHTML">
     <div class="panel-header">
       <span class="panel-title">Positions</span>
       <span class="panel-age">{{ positions_age | default('—') }}</span>

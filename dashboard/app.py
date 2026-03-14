@@ -1602,9 +1602,22 @@ def signals_page(
     for s in signals:
         by_domain.setdefault(str(s.get("domain") or "unknown"), []).append(s)
 
+    try:
+        _universe_total = len(list(app.state.config.universe.active_symbols()))
+    except Exception:
+        _universe_total = 0
     domain_groups = []
     for d, items in sorted(by_domain.items()):
-        domain_groups.append({"domain": d, "age": "—" if res.ok else "stale", "signals": items[:4]})
+        covered = sorted({str(s.get("symbol") or s.get("asset") or "").upper() for s in items if s.get("symbol") or s.get("asset")})
+        domain_groups.append(
+            {
+                "domain": d,
+                "age": "—" if res.ok else "stale",
+                "signals": items[:4],
+                "symbol_count": len(covered),
+                "symbol_list": ", ".join(covered[:8]) + ("…" if len(covered) > 8 else ""),
+            }
+        )
 
     domains = [
         {"id": "ta", "label": "TA"},
@@ -1797,13 +1810,74 @@ def artifacts_page(request: Request) -> HTMLResponse:
 
 @app.get("/performance", response_class=HTMLResponse)
 def performance_page(request: Request) -> HTMLResponse:
+    # Pull real performance data from DB
+    perf: dict[str, Any] = {
+        "total_trades": 0,
+        "win_rate": None,
+        "avg_pnl": None,
+        "total_pnl": 0.0,
+        "sharpe": None,
+        "max_drawdown": None,
+        "closed_positions": [],
+        "open_positions": [],
+    }
+    try:
+        db_path = Path(os.environ.get("B1E55ED_DB_PATH", os.path.expanduser("~/.b1e55ed/data/brain.db")))
+        if db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            closed = conn.execute(
+                "SELECT asset, direction, entry_price, realized_pnl, size_notional, opened_at, closed_at "
+                "FROM positions WHERE status='closed' ORDER BY closed_at DESC"
+            ).fetchall()
+            open_pos = conn.execute(
+                "SELECT asset, direction, entry_price, size_notional, stop_loss, take_profit, opened_at "
+                "FROM positions WHERE status='open' ORDER BY opened_at DESC"
+            ).fetchall()
+            conn.close()
+
+            closed_list = [dict(r) for r in closed]
+            pnls = [r["realized_pnl"] for r in closed_list if r["realized_pnl"] is not None]
+            wins = [p for p in pnls if p > 0]
+            total_pnl = sum(pnls)
+
+            # Equity curve: cumulative PnL per trade
+            equity: list[dict] = []
+            cumulative = 0.0
+            for r in reversed(closed_list):
+                if r["realized_pnl"] is not None:
+                    cumulative += r["realized_pnl"]
+                    equity.append({"label": r["asset"], "value": round(cumulative, 4)})
+
+            perf.update(
+                {
+                    "total_trades": len(pnls),
+                    "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else None,
+                    "avg_pnl": round(sum(pnls) / len(pnls), 2) if pnls else None,
+                    "total_pnl": round(total_pnl, 4),
+                    "closed_positions": closed_list,
+                    "trades": [
+                        {
+                            "id": r.get("asset", "")[:6],
+                            "asset": r.get("asset", ""),
+                            "direction": r.get("direction", ""),
+                            "entry": r.get("entry_price") or 0,
+                            "exit": (r.get("entry_price") or 0) + ((r.get("realized_pnl") or 0) / (r.get("size_notional") or 1)) * (r.get("entry_price") or 1),
+                            "pnl": r.get("realized_pnl") or 0,
+                            "held": r.get("opened_at", "")[:10],
+                        }
+                        for r in closed_list
+                    ],
+                    "open_positions": [dict(r) for r in open_pos],
+                    "equity_curve": equity,
+                }
+            )
+    except Exception as _e:
+        pass
+
     return templates.TemplateResponse(
         "performance.html",
-        {
-            **_shell(request, "performance"),
-            "total_trades": 0,
-            "total_pnl": 0,
-        },
+        {**_shell(request, "performance"), **perf},
     )
 
 
@@ -1844,6 +1918,15 @@ def settings_page(request: Request) -> HTMLResponse:
         "OPENAI_API_KEY",
     ]
     api_keys = [{"name": k, "configured": bool(os.environ.get(k, "").strip())} for k in api_key_names]
+
+    # Surface the API auth token for settings display
+    _raw_token = str((cfg.get("api") or {}).get("auth_token", "") or os.environ.get("B1E55ED_API_TOKEN", "") or "")
+    _token_display = (_raw_token[:8] + "..." + _raw_token[-4:]) if len(_raw_token) > 12 else (_raw_token if _raw_token else "not set")
+    api_auth_token_info = {
+        "configured": bool(_raw_token),
+        "display": _token_display,
+        "hint": "Set via api.auth_token in user.yaml or B1E55ED_API_TOKEN env var",
+    }
 
     # Producer config discovery: collect configurable_fields from all producers
     producer_configs: list[dict[str, Any]] = []
@@ -1940,6 +2023,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "trading_mode": trading_mode,
             "risk_fields": risk_fields,
             "api_keys": api_keys,
+            "api_auth_token_info": api_auth_token_info,
             "producer_configs": producer_configs,
             # Config page data
             "preset": "custom",

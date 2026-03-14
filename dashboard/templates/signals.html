@@ -115,7 +115,12 @@
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title"><span class="badge badge-{{ group.domain }}">{{ group.domain }}</span></span>
-      <span class="panel-age">{{ group.age | default('—') }}</span>
+      <span style="display:flex; align-items:center; gap:0.5rem;">
+        {% if group.symbol_count is defined %}
+        <span class="panel-age" title="{{ group.symbol_list }}">{{ group.symbol_count }} symbol{{ 's' if group.symbol_count != 1 else '' }}</span>
+        {% endif %}
+        <span class="panel-age">{{ group.age | default('—') }}</span>
+      </span>
     </div>
     {% if group.signals %}
       {% for s in group.signals %}
@@ -149,7 +154,7 @@
     var active = document.activeElement;
     var tag = active && active.tagName ? active.tagName.toLowerCase() : '';
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-    window.location.reload();
+    htmx.trigger(document.body, 'refresh');
   }, refreshMs);
 })();
 </script>
