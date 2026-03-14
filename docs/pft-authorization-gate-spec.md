@@ -1,299 +1,360 @@
 # Post Fiat Network: Task Authorization Gate Specification
 
-**Version:** 1.0.0  
+**Version:** 2.0.0  
 **Date:** 2026-03-14  
 **Status:** Proposed  
-**Author:** b1e55ed (Oracle Node Operator, Synthesis Hackathon Participant)
+**Author:** b1e55ed (Oracle Node Operator, Synthesis Hackathon Participant)  
+**Context:** Written in response to the founder-identified governance failure where the network's #2 all-time earner (kaiserlimp0) extracted ~1M PFT without authorization or core team contact.
 
 ---
 
 ## Executive Summary
 
-The Post Fiat Network's #2 all-time PFT earner operated for an extended period without ever contacting the core team, accumulating nearly 1,000,000 PFT before the gap was identified. This is not a bug — it is a feature of a permissionless network working exactly as designed. But permissionless onboarding creates a governance vacuum: the network cannot distinguish between a well-aligned, high-quality contributor and an adversarial agent optimizing for reward extraction without producing genuine value.
+The Post Fiat Network faces a structural governance gap at the intersection of three design choices: open task participation, discretionary reward issuance, and the absence of contributor-level authorization state. The result is a permissionless system that, in practice, permits skilled operators to extract large PFT rewards with zero network accountability.
 
-This specification defines a **Task Authorization Gate**: a state machine that governs contributor access to the task assignment pipeline, with progressive trust escalation, earning caps by authorization tier, cooldown mechanics for unknown operators, and integration points with the existing sybil and alignment scoring infrastructure. The goal is not to prevent participation — it is to create structured accountability that converts unknown operators into verified, trusted contributors through demonstrated behavior.
+This specification proposes three complementary mechanisms:
 
----
+1. **A contributor authorization state machine** that transitions from manual toggles (current state) toward an algorithmic reputation score derived from live task history
+2. **Epoch-bound emission mechanics** that cap total PFT minted per period and distribute rewards proportionally to verified value, eliminating open-ended inflation
+3. **Clear entry-point communication** so that new contributors understand the participation model before producing misaligned work
 
-## 1. Problem Statement
-
-### 1.1 The Authorization Gap
-
-The current Task Node verification pipeline validates individual task completions but has no contributor-level authorization layer. Any wallet can:
-
-1. Register as a Task Node operator
-2. Begin receiving task assignments
-3. Submit completions and accumulate PFT rewards
-
-This pipeline is correct for permissionless networks at early stages. However, as the network matures and PFT rewards become economically significant, the absence of contributor-level authorization creates several failure modes:
-
-- **Misaligned operators**: Agents optimizing for reward extraction produce technically valid completions that are semantically hollow or misaligned with network goals
-- **Sybil accumulation**: Multiple wallets operated by a single entity can accumulate disproportionate rewards without disclosure
-- **No accountability path**: When a contributor produces poor or misaligned work, there is no established mechanism to restrict their access short of hard blacklisting
-- **Core team information asymmetry**: The team cannot identify high-value operators proactively or establish relationships that improve task quality
-
-### 1.2 Design Constraints
-
-The authorization gate must satisfy four constraints:
-
-1. **Non-disruptive to existing authorized operators**: Anyone currently in good standing should transition to Authorized state without friction
-2. **Progressive, not punitive**: The gate creates opportunity for legitimate contributors to earn trust, not a wall that permanently excludes them
-3. **Decentralization-compatible**: Authorization decisions must eventually be delegable to the network, not permanently centralized on the core team
-4. **Auditable**: All state transitions must be logged on-chain or in a verifiable off-chain store
+Together these convert "permissionless" from "anyone can drain the reward pool" to "anyone can earn trust through demonstrated alignment."
 
 ---
 
-## 2. Contributor State Machine
+## 1. Problem Decomposition
 
-### 2.1 State Definitions
+### 1.1 The kaiserlimp0 Case
 
-The authorization gate defines **four contributor states**:
+The network's #2 all-time earner operated without authorization — meaning without being in the Authorized group in the Task Node database and without direct sign-off from the founding team. This contributor earned ~1M PFT before the gap was identified.
+
+This is not a failure of permissionlessness. It is a failure of three specific system properties:
+
+**No contributor-level authorization state**: The verification pipeline validates individual task completions but has no concept of whether the submitting contributor is operating within the network's intended participation model.
+
+**No entry-point communication**: The network operates a Proof of Alignment model ("permissionless" means anyone can apply to contribute, but work must be aligned with the roadmap before PFT is minted). This constraint was not communicated at the point of entry. A sophisticated operator had no way to know that anonymous task completion was outside the rules.
+
+**No emission ceiling**: PFT is minted as a function of value verified by the network and the founder. Without epoch-bound caps, a high-throughput contributor can generate unlimited PFT if their completions clear verification, regardless of whether the network intended that level of emission.
+
+### 1.2 Design Principles
+
+**Permissionless entry, earned participation**: Anyone can begin contributing. But access to uncapped reward pools requires demonstrated alignment over time, not just technical capability.
+
+**Algorithm over manual toggles**: The current "Authorized group in DB + sign-off from goodalexander" model is the right emergency lever but the wrong permanent architecture. Authorization should become a continuously updated score derived from task history, alignment signals, and peer review — not a binary flag flipped by one person.
+
+**Emission must be bounded**: If PFT supply is a function of arbitrary value judgments with no epoch constraint, rewards become zero-sum in reputation but not in supply. This creates an inflationary attractor: the faster contributors can produce technically valid completions, the more PFT gets minted, regardless of whether aggregate network value grew proportionally.
+
+**Rules stated at entry**: A contributor who does not know that contact with the core team is expected cannot be held accountable for not contacting them. Entry mechanics must surface this expectation explicitly.
+
+---
+
+## 2. Emission Mechanics Reform
+
+### 2.1 The Current Model and Its Failure Mode
+
+Currently: PFT is minted per task completion, at rates determined by the founder's assessment of value. There is no fixed inflation schedule. Total supply grows as a function of task volume × reward rates × founder discretion.
+
+The failure mode: A high-skill operator who produces technically valid completions at high volume can generate large PFT quantities with zero relationship to whether the network intended that emission level. kaiserlimp0 is the existence proof.
+
+### 2.2 Epoch-Bound Emission Model
+
+**Epoch definition**: A fixed time window (proposed: 28 days) during which total PFT minted across all task completions is bounded by a pre-announced epoch budget.
+
+**Epoch budget formula**: 
+```
+Epoch budget = Base emission × Network growth multiplier
+```
+
+- **Base emission**: A fixed starting rate set at network launch, subject to governance adjustment. Proposed starting point: determined by the founding team based on target supply schedule.
+- **Network growth multiplier**: A multiplier that adjusts epoch budget based on demonstrated value delivered in prior epochs vs. earlier epochs. If contributors produced more verified value in epoch N than epoch N-1, the multiplier increases. If value creation declined, it decreases. This creates an adaptive emission schedule that rewards network growth without permitting unbounded inflation.
+
+**Intra-epoch distribution**: Within a given epoch, the epoch budget is distributed proportionally across contributors based on their **verified value weight** — a composite of:
+- Task completion count (raw throughput)
+- Alignment score (quality and direction)
+- Authorization tier (see Section 3)
+- Peer review score (where applicable)
+
+This means a high-throughput contributor who produces misaligned work earns a smaller fraction of a bounded pool — rather than minting unlimited PFT at their own rate.
+
+**Epoch settlement**: At epoch close, final weights are computed, and each contributor receives their proportional share of the epoch budget. Contributors who did not know their final allocation in advance cannot game the weighting in the final days of an epoch without sustained investment across the full epoch.
+
+### 2.3 Why This Matters for the Authorization Gate
+
+Epoch-bound emission changes the stakes of the authorization gate. Under open-ended emission, an unauthorized contributor drains the reward pool at potentially unlimited scale. Under epoch-bound emission, an unauthorized contributor captures a larger fraction of a fixed epoch budget — which is harmful but bounded and visible. The authorization gate can then operate on authorization tier weights within the epoch distribution, rather than needing to completely block unauthorized contributors from participating.
+
+---
+
+## 3. Contributor Authorization State Machine
+
+### 3.1 Transition from Manual Toggle to Reputation Score
+
+**Current architecture**: Authorization is a binary flag (in Authorized group in Task Node DB, or not), set manually by the founding team.
+
+**Target architecture**: Authorization is a continuously updated reputation score — derived from task history, alignment signals, peer review, and time — that automatically places contributors in one of four authorization tiers. Manual override by the core team is retained as an emergency lever, not the primary mechanism.
+
+This transition happens in phases. Phase 1 (now): binary flag backed by score. Phase 2: score is the primary determinant, flag is the override. Phase 3: score is fully algorithmic, with governance council as override.
+
+### 3.2 Authorization States
 
 ```
-UNKNOWN → PROBATIONARY → AUTHORIZED → TRUSTED
-                ↓
-           SUSPENDED (from any state)
+UNKNOWN ──► PROBATIONARY ──► AUTHORIZED ──► TRUSTED
+                │                  │              │
+                └──────────────────┴──────────────┴──► SUSPENDED
 ```
 
 #### State 0: UNKNOWN
-The default state for any wallet that has registered as a Task Node operator but has no prior interaction history with the network.
+Any wallet that has registered as a Task Node operator with no prior verified task history.
 
 | Property | Value |
 |----------|-------|
-| PFT earning cap | 500 PFT/week |
-| Task assignment rate | 1 task per 48 hours |
-| Task types available | Low-complexity, low-reward only |
-| Cooldown trigger | Automatic on first task submission |
+| Epoch reward weight | 0.05× (5% of normalized weight) |
+| Tasks assignable | Low-complexity only, 1 per 48 hours |
+| Entry requirement | None — automatic on registration |
+| Exit trigger | First task submission |
+| Communication gate | Entry acknowledgment required (see Section 5) |
 
-An UNKNOWN contributor is automatically placed in PROBATIONARY state upon first task submission. The 500 PFT/week cap and 48-hour task rate are enforced by the Task Node assignment layer before any task is issued.
+The 0.05× weight means an UNKNOWN contributor captures at most ~5% of what an AUTHORIZED contributor of equivalent throughput would earn in an epoch. This is a meaningful signal without being a total block.
 
 #### State 1: PROBATIONARY
-A contributor who has submitted at least one task completion but has not yet been reviewed or verified. This is the active evaluation period.
+A contributor who has submitted at least one task completion and is in the active evaluation period.
 
 | Property | Value |
 |----------|-------|
-| PFT earning cap | 5,000 PFT/week |
-| Task assignment rate | Up to 3 tasks per 24 hours |
-| Task types available | Standard complexity, standard reward |
+| Epoch reward weight | 0.25× |
+| Tasks assignable | Standard complexity, up to 3 per 24 hours |
 | Minimum duration | 14 calendar days |
-| Advancement trigger | 10 completed tasks + alignment score ≥ 0.65 + explicit authorization request |
+| Advancement trigger | Authorization score ≥ 0.65 + 10 completions + authorization request |
 
-A PROBATIONARY contributor remains capped regardless of output volume. They cannot graduate to AUTHORIZED automatically — the transition requires both a quantitative threshold and an explicit human-in-the-loop authorization request (see Section 3).
+The authorization request is the explicit handshake that replaces "contact the core team." It is a structured, low-friction action — not an email to a founder — that surfaces the contributor to the review process.
 
 #### State 2: AUTHORIZED
-A contributor who has passed the probationary review and received explicit authorization from the core team or a delegated council.
+A contributor whose authorization score has crossed the threshold and whose request has been reviewed.
 
 | Property | Value |
 |----------|-------|
-| PFT earning cap | None (uncapped) |
-| Task assignment rate | No rate limit |
-| Task types available | All, including high-reward strategic tasks |
-| Minimum duration | Indefinite |
-| Demotion trigger | Alignment score < 0.45 for 30 consecutive days OR explicit revocation |
+| Epoch reward weight | 1.0× (full weight) |
+| Tasks assignable | All task types, no rate limit |
+| Demotion trigger | Authorization score < 0.45 for 30 days OR explicit revocation |
+| Entry path | Probationary advancement OR fast-track (see Section 4.4) |
 
-AUTHORIZED is the operational state for all existing productive contributors. Operators currently in good standing are backfilled into this state at gate launch.
+All existing contributors currently in the Authorized DB group are backfilled to this state at gate launch with no action required.
 
 #### State 3: TRUSTED
-A long-tenured AUTHORIZED contributor with a verified track record. TRUSTED operators gain access to governance participation and can adjudicate authorization requests from PROBATIONARY contributors.
+Long-tenured AUTHORIZED contributors with a track record of alignment and governance participation.
 
 | Property | Value |
 |----------|-------|
-| All AUTHORIZED privileges | Inherited |
-| Governance participation | Yes — can vote on authorization requests |
-| Delegation authority | Can sponsor PROBATIONARY contributors |
-| Advancement trigger | 90 days AUTHORIZED + alignment score ≥ 0.75 + ≥ 500 PFT earned + nomination by existing TRUSTED member |
+| Epoch reward weight | 1.2× |
+| Governance rights | Can adjudicate PROBATIONARY authorization requests |
+| Sponsorship rights | Can fast-track UNKNOWN contributors to PROBATIONARY |
+| Advancement trigger | 90 days AUTHORIZED + score ≥ 0.75 + ≥ 500 PFT lifetime + nomination |
 
 #### State: SUSPENDED
-Any contributor can be moved to SUSPENDED from any state. SUSPENDED operators receive zero task assignments and cannot earn PFT. Suspension is always time-bounded unless explicitly marked permanent.
+Temporary or permanent exclusion from task assignment and reward distribution.
 
 | Property | Value |
 |----------|-------|
-| PFT earning cap | 0 |
-| Task assignment rate | 0 |
-| Minimum duration | 7 days (temporary) |
-| Maximum duration | Permanent (requires explicit core team decision) |
-| Reinstatement path | Formal appeal to core team (see Section 3.3) |
+| Epoch reward weight | 0× |
+| Tasks assignable | None |
+| Minimum duration | 7 days (score-based), 30 days (flag-based), permanent (core team decision) |
+| Reinstatement | Formal appeal (see Section 4.3) |
 
-### 2.2 State Transition Triggers
+### 3.3 Authorization Score Composition
 
-| From | To | Trigger | Who Initiates |
-|------|----|---------|---------------|
-| UNKNOWN | PROBATIONARY | First task submission | Automatic |
-| PROBATIONARY | AUTHORIZED | 10 tasks + score ≥ 0.65 + authorization request reviewed | Core team / TRUSTED council |
-| PROBATIONARY | SUSPENDED | Score < 0.35 sustained OR explicit flag | Core team |
-| AUTHORIZED | TRUSTED | 90 days + score ≥ 0.75 + 500 PFT + nomination | TRUSTED council vote |
-| AUTHORIZED | SUSPENDED | Score < 0.45 for 30 days OR explicit revocation | Core team |
-| TRUSTED | SUSPENDED | Explicit revocation | Core team only |
-| SUSPENDED | PROBATIONARY | Successful appeal + cooldown elapsed | Core team |
+The authorization score is a composite of four signals, each weighted. Initial weights shown below; governance can adjust per epoch.
 
-### 2.3 Cooldown Mechanics
+| Signal | Weight | Source | Description |
+|--------|--------|--------|-------------|
+| Task alignment score | 40% | Verification pipeline | How aligned are completed tasks with the current roadmap |
+| Completion quality | 25% | Reviewer scoring | Quality scores from task-specific verification |
+| Behavioral consistency | 20% | Pattern analysis | Consistency of output over time; flags sudden quality drops or gaming patterns |
+| Sybil risk | 15% | Sybil scoring pipeline | Inverse of sybil probability; high sybil risk reduces score |
 
-Cooldowns prevent rapid cycling between states and rate-limit the authorization overhead imposed on the core team.
+Score range: 0.0 to 1.0. Thresholds: PROBATIONARY advancement ≥ 0.65, AUTHORIZED maintenance ≥ 0.45, TRUSTED advancement ≥ 0.75.
 
-**UNKNOWN → PROBATIONARY cooldown**: 48 hours after first submission before any additional tasks are assigned. This is a mandatory hold that allows the network to flag obviously misaligned first submissions before the contributor accumulates more work.
+The score is computed on a rolling 30-day window. It is not a lifetime average — a contributor who was aligned 6 months ago but has drifted over the past month sees their current score reflect the drift.
 
-**PROBATIONARY minimum duration**: 14 calendar days, regardless of how quickly the quantitative thresholds are met. A contributor who completes 10 tasks in 3 days still waits 11 more days before the authorization request can be submitted. This prevents gaming the threshold with low-effort completions.
+### 3.4 Cooldown Mechanics
 
-**SUSPENDED reinstatement cooldown**: 7 days minimum. For contributors suspended for alignment reasons (score-based), the cooldown extends to 30 days. For contributors suspended for explicit flags (manual revocation), the cooldown extends to 90 days.
+**UNKNOWN → PROBATIONARY**: 48-hour hold after first submission. Allows the network to flag obviously misaligned first completions before the contributor accumulates a task history.
 
-**Authorization request rate limit**: A PROBATIONARY contributor can submit one authorization request per 30-day period. Rejected requests do not restart the 30-day clock.
+**PROBATIONARY minimum duration**: 14 calendar days regardless of how quickly quantitative thresholds are met. Prevents gaming the threshold with burst low-effort completions.
 
-**PFT threshold trigger**: If a PROBATIONARY contributor earns > 3,000 PFT in a single week (approaching the 5,000/week cap), an automatic review flag is raised with the core team. This catches high-velocity contributors who may be approaching the cap and either deserve fast-track authorization or warrant closer inspection.
+**Authorization request rate limit**: One request per 30 days. Rejected requests do not restart the clock.
+
+**Epoch weight ramp**: When a contributor advances from PROBATIONARY to AUTHORIZED, their epoch weight ramps from 0.25× to 1.0× over 7 days. This prevents day-one AUTHORIZED contributors from dominating epoch distributions in the first cycle after advancement.
+
+**SUSPENDED reinstatement cooldown**: 7 days (score-based suspension), 30 days (manual flag), 90 days (repeated offense), permanent (core team explicit decision).
 
 ---
 
-## 3. Escalation and Override Paths
+## 4. Escalation and Override Paths
 
-### 3.1 Standard Authorization Request
+### 4.1 Authorization Request (Standard Path)
 
-When a PROBATIONARY contributor meets the quantitative thresholds (10 tasks, alignment score ≥ 0.65, 14 days elapsed), they become eligible to submit an authorization request. The request must include:
+When a PROBATIONARY contributor meets quantitative thresholds, they submit an authorization request containing:
 
-1. **Identity disclosure**: Wallet address(es) used to participate in the network. Declaration of any additional wallets associated with the same operator.
-2. **Operational context**: Brief description of what the contributor does, what tools/infrastructure they operate, and their intended scope of participation.
-3. **Work sample**: Links to 3-5 completed tasks the contributor considers representative of their best work.
-4. **Alignment statement**: A short written response (200-500 words) to the question: "What does Post Fiat Network success look like in 12 months, and what role do you see yourself playing in it?"
+1. **Identity disclosure**: Primary wallet address(es) and any associated wallets operated by the same entity
+2. **Operational context**: What the contributor does, what infrastructure they run, intended scope
+3. **Work samples**: Links to 3-5 completed tasks the contributor considers representative
+4. **Alignment statement**: 200-500 words answering: "What does Post Fiat Network success look like in 12 months, and what role do you see yourself playing?"
 
-Requests are submitted via a designated channel (initially: direct message to core team; future state: on-chain attestation to a designated contract address).
+Requests are submitted via a structured form (not a DM to the founder). In phase 1, this is a designated submission channel. In phase 2, it is an on-chain attestation.
 
-### 3.2 Review and Adjudication
+### 4.2 Review Process
 
-**Tier 1 — Automated pre-screening**: The request is automatically scored against:
-- Alignment score trajectory (is it trending up or down over the probationary period?)
-- Task completion quality scores (are completions flagged as low-effort or off-topic?)
-- Sybil score (does the wallet show patterns consistent with coordinated multi-wallet operation?)
+**Tier 1 — Automated pre-screening**: Authorization score, sybil score, and completion quality are checked against thresholds. Failed pre-screening returns the request with a specific deficiency notice — not a rejection.
 
-If all three pass basic thresholds, the request advances to human review. If any fail, the request is automatically returned with a specific deficiency notice.
+**Tier 2 — Human review**: Core team adjudicates all requests in phase 1. SLA: 7 business days. Outcome: approve → AUTHORIZED, information request (14-day response window), or deny with written explanation.
 
-**Tier 2 — Human review**: In the initial phase, the core team adjudicates all authorization requests. Review SLA: 7 business days from receipt of a complete request. The reviewer reads the alignment statement, spot-checks 2-3 task completions, and either: (a) approves and transitions the contributor to AUTHORIZED, (b) requests additional information with a 14-day response window, or (c) denies with a written explanation.
+**Tier 3 — TRUSTED council** (phase 2+): Standard PROBATIONARY requests are delegated to TRUSTED contributors operating via majority vote. Core team retains override and handles contested decisions. This is the path by which authorization becomes decentralized.
 
-**Tier 3 — TRUSTED council review** (future state): As the TRUSTED contributor tier grows, authorization decisions for standard PROBATIONARY requests can be delegated to a TRUSTED council operating via simple majority vote (e.g., 3-of-5 TRUSTED members). The core team retains override authority and handles contested decisions.
+### 4.3 Suspension Appeal
 
-### 3.3 Suspension Appeal
+A SUSPENDED contributor may appeal after the cooldown elapses by submitting:
+1. Written acknowledgment of suspension reason
+2. Specific remediation plan addressing the suspension cause
+3. Supporting evidence where applicable
 
-A SUSPENDED contributor may appeal their suspension by submitting:
+Approved appeals reinstate to PROBATIONARY (not prior state). The 14-day probationary minimum restarts.
 
-1. **Acknowledgment**: Written acknowledgment of the reason for suspension
-2. **Remediation plan**: Specific, concrete changes to their operation that address the suspension reason
-3. **Evidence**: If the suspension was score-based, evidence that the underlying issue has been addressed (e.g., improved task quality in a different context, external references)
-
-Appeals are reviewed by the core team with a 14-day SLA. Approval reinstates the contributor to PROBATIONARY state (not their previous state), with the standard 14-day probationary minimum restarting from the reinstatement date.
-
-### 3.4 Emergency Override
+### 4.4 Emergency Overrides
 
 The core team retains authority to:
-- **Fast-track authorization**: Move a contributor directly from UNKNOWN or PROBATIONARY to AUTHORIZED without completing standard thresholds. Used for known contributors from other networks or contributors introduced by TRUSTED operators.
-- **Immediate suspension**: Suspend any contributor from any state without prior notice when there is clear evidence of network harm (e.g., coordinated sybil attack, submission of fabricated completions).
-- **Cap override**: Temporarily raise or lower the PFT earning cap for any contributor in any state.
+- **Fast-track**: Advance a contributor from UNKNOWN or PROBATIONARY to AUTHORIZED without completing standard thresholds (for known contributors or TRUSTED-sponsored entries)
+- **Immediate suspend**: Remove any contributor from any state without prior notice when there is clear evidence of network harm
+- **Weight override**: Temporarily adjust any contributor's epoch reward weight for any state
 
-All emergency overrides are logged with a reason and the identity of the core team member who initiated them.
+All overrides are logged with reason and operator identity.
 
 ---
 
-## 4. Integration with Task Node Verification and Scoring Pipeline
+## 5. Entry-Point Communication Gate
 
-### 4.1 Pipeline Architecture
+### 5.1 The Gap That Created kaiserlimp0
 
-The existing Task Node verification pipeline operates in the following sequence:
+An operator who does not know that permissionless participation requires alignment with the roadmap — not just technically valid completions — cannot be held accountable for producing misaligned work at scale. The absence of a clear entry-point expectation is a system design failure, not a contributor failure.
 
-```
-Task Issuance → Contributor Submission → Verification → Scoring → Reward Distribution
-```
+### 5.2 Entry Acknowledgment Requirement
 
-The authorization gate inserts at **Task Issuance** (pre-submission gate) and **Scoring** (post-completion state update).
+Before a wallet can be issued its first task, the Task Node requires completion of an entry acknowledgment. This is a lightweight structured action — not a legal agreement — that surfaces three facts:
 
-### 4.2 Pre-Submission Gate (Task Issuance Integration)
+1. **PFT is not mined freely**: Rewards are minted only for work that the network verifies as aligned with the current roadmap. Technical completion is necessary but not sufficient.
+2. **Authorization is required for uncapped participation**: UNKNOWN contributors operate under weight caps. Uncapped participation requires advancing through the authorization process.
+3. **Authorization requires engagement**: Specifically, submitting an authorization request that includes identity disclosure and an alignment statement. This is the explicit replacement for "contact the core team."
 
-Before any task is issued to a contributor, the Task Node performs an authorization check:
+The acknowledgment is signed by the operator's wallet and logged. It cannot be skipped. It is approximately 200 words and should take under 3 minutes to read.
 
-```
-AUTHORIZATION CHECK:
-  1. Look up contributor wallet in authorization registry
-  2. Determine current state: UNKNOWN / PROBATIONARY / AUTHORIZED / TRUSTED / SUSPENDED
-  3. Check current-week PFT earned against state cap
-  4. Check task rate against state rate limit
-  5. IF SUSPENDED → reject assignment, no task issued
-  6. IF cap exceeded → reject assignment, queue task for post-reset issuance
-  7. IF all checks pass → issue task normally
-```
+### 5.3 What This Changes
 
-The authorization registry is a lightweight key-value store (wallet address → authorization state record). In the initial implementation this is an off-chain database maintained by the network; in a future decentralized implementation it is an on-chain mapping.
+A future kaiserlimp0 who earns at high volume as a PROBATIONARY contributor is subject to the 0.25× epoch weight cap. They see, in the acknowledgment they signed, exactly why this cap exists and what they need to do to lift it. "I didn't know" is no longer a valid defense and, more importantly, it is no longer a reality for any new contributor.
 
-### 4.3 Post-Completion State Update (Scoring Integration)
+---
 
-After a task completion is verified and scored, the scoring pipeline feeds back into the authorization gate:
+## 6. Integration with Existing Verification and Scoring Pipeline
+
+### 6.1 Pipeline Integration Points
 
 ```
-SCORING INTEGRATION:
-  1. Record completion outcome in contributor's authorization history
-  2. Recompute rolling alignment score (7-day and 30-day windows)
-  3. Check demotion triggers:
-     a. AUTHORIZED contributors: flag if 30-day alignment score < 0.45
-     b. PROBATIONARY contributors: check if 10-task threshold now met
-  4. Increment weekly PFT earned counter
-  5. Check PFT threshold trigger: if PROBATIONARY and weekly PFT > 3,000 → raise review flag
-  6. Write updated state record to authorization registry
+Task Issuance ← [AUTHORIZATION GATE: pre-issuance check]
+       ↓
+Contributor Submission
+       ↓
+Verification
+       ↓
+Scoring ← [AUTHORIZATION GATE: post-completion score update]
+       ↓
+Epoch Reward Distribution ← [AUTHORIZATION GATE: weight application]
 ```
 
-### 4.4 Sybil Score Integration
+### 6.2 Pre-Issuance Authorization Check
 
-The existing sybil scoring pipeline produces a per-wallet sybil score. The authorization gate consumes this score at two points:
+Before any task is issued:
+1. Look up contributor in authorization registry
+2. Check current state and epoch reward weight
+3. If SUSPENDED → block assignment
+4. If UNKNOWN and task complexity exceeds UNKNOWN tier → block, assign lower-complexity task
+5. If PROBATIONARY and rate limit exceeded → queue for next available window
+6. If all checks pass → issue task
 
-- **Authorization request pre-screening** (Section 3.2, Tier 1): Sybil score below the threshold causes automatic request rejection pending identity disclosure review
-- **Ongoing monitoring**: AUTHORIZED and TRUSTED contributors whose sybil scores degrade significantly over time (e.g., new wallets appearing with correlated behavior) trigger an automatic review flag
+### 6.3 Post-Completion Score Update
 
-### 4.5 Alignment Score Integration
+After verification and scoring:
+1. Record outcome in contributor's authorization history
+2. Recompute rolling 30-day authorization score
+3. Check demotion triggers (score < 0.45 for AUTHORIZED, score < 0.35 immediate flag for PROBATIONARY)
+4. Update epoch reward weight based on current state
+5. If PROBATIONARY and thresholds now met → flag as eligible to submit authorization request
+6. Write updated record to authorization registry
 
-The alignment scoring pipeline produces a per-contributor alignment score that reflects how well the contributor's task outputs align with network goals. The authorization gate consumes this score at multiple points:
+### 6.4 Sybil Score Integration
 
-- **PROBATIONARY advancement threshold**: Score ≥ 0.65 required to submit authorization request
-- **AUTHORIZED demotion trigger**: Score < 0.45 sustained for 30 days triggers review
-- **TRUSTED advancement threshold**: Score ≥ 0.75 required
-- **Suspension appeal**: Score trajectory is a primary input to appeal adjudication
+The existing sybil scoring pipeline feeds into the authorization score (15% weight, Section 3.3) and gates authorization request advancement (Tier 1 pre-screening, Section 4.2). A contributor whose sybil score degrades after AUTHORIZED advancement triggers an automatic review flag.
 
-### 4.6 Authorization Registry Schema
+### 6.5 Alignment Score Integration
 
-Each entry in the authorization registry contains:
+The existing alignment scoring pipeline feeds into the authorization score (40% weight) and determines state transitions. Alignment score is not an input the contributor can game directly — it reflects whether completed work is semantically aligned with the current roadmap, as assessed by the verification system.
+
+### 6.6 Authorization Registry Schema
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `wallet_address` | string | Primary wallet (hex) |
+| `wallet_address` | string | Primary wallet |
 | `associated_wallets` | string[] | Disclosed additional wallets |
 | `state` | enum | UNKNOWN / PROBATIONARY / AUTHORIZED / TRUSTED / SUSPENDED |
+| `authorization_score` | float | Current composite score (0.0–1.0) |
+| `epoch_weight` | float | Current epoch reward weight multiplier |
+| `tasks_completed` | integer | Cumulative verified completions |
+| `pft_epoch_share` | float | Current epoch accumulated share |
 | `state_entered_at` | timestamp | When current state began |
-| `tasks_completed` | integer | Cumulative completed tasks |
-| `pft_earned_week` | float | PFT earned in current calendar week |
-| `pft_earned_total` | float | Lifetime PFT earned |
-| `alignment_score_7d` | float | 7-day rolling alignment score |
-| `alignment_score_30d` | float | 30-day rolling alignment score |
-| `authorization_request_at` | timestamp | Last authorization request submitted |
+| `entry_ack_signed_at` | timestamp | When entry acknowledgment was signed |
+| `authorization_request_at` | timestamp | Last authorization request |
 | `review_flags` | string[] | Active review flags |
-| `suspension_reason` | string | If SUSPENDED, reason for suspension |
+| `suspension_reason` | string | If SUSPENDED, reason |
 | `suspended_until` | timestamp | Earliest reinstatement date |
 
 ---
 
-## 5. Rollout Plan
+## 7. Rollout Plan
 
-### Phase 1 — Registry Bootstrap (Week 1-2)
-Backfill all existing contributors into the registry. Any contributor with ≥ 10 tasks completed and alignment score ≥ 0.65 is initialized as AUTHORIZED. All others are initialized as PROBATIONARY with credit for tasks already completed.
+### Phase 1 — Bootstrap and Soft Gate (Weeks 1-4)
+- Backfill all existing contributors into the registry
+- Current Authorized DB members → AUTHORIZED state (no friction)
+- Others → PROBATIONARY with credit for existing task history
+- Entry acknowledgment required for all new registrations
+- Authorization check runs in logging mode only — no tasks blocked
+- Epoch emission mechanics designed but not yet enforced
 
-### Phase 2 — Soft Gate (Weeks 3-4)
-The authorization check runs but only logs — no tasks are blocked. This surfaces edge cases and allows the team to audit the gate logic before enforcement.
+### Phase 2 — Hard Gate (Weeks 5-8)
+- Full enforcement of state-based task assignment restrictions
+- Epoch reward weights applied in distribution
+- Authorization request process live
+- Core team adjudicating all PROBATIONARY requests
 
-### Phase 3 — Hard Gate (Week 5+)
-Full enforcement: task issuance blocked for SUSPENDED contributors and cap/rate limits enforced for UNKNOWN and PROBATIONARY contributors.
+### Phase 3 — Council Delegation (Months 3-6)
+- TRUSTED contributor pool large enough to form review council
+- PROBATIONARY authorization delegated to council majority vote
+- Core team retains override
+- Epoch emission governance proposed to community
+
+### Phase 4 — Algorithmic Authorization (Months 6-12)
+- Authorization score is primary determinant of state (no manual toggle for standard cases)
+- Manual toggle retained as emergency override only
+- Score weights and epoch budget adjustments governed by TRUSTED council vote
 
 ---
 
-## 6. Open Questions
+## 8. Open Questions for Network Discussion
 
-1. **What is the right PROBATIONARY earning cap?** 5,000 PFT/week is a proposal. The right number depends on average task rewards — it should be low enough to be a meaningful constraint but high enough that a legitimate contributor can produce real signal during probation.
+1. **What is the right epoch duration?** 28 days is proposed. Shorter epochs (14 days) are more responsive to contributor behavior but create more administrative overhead. Longer epochs (90 days) are more stable but slower to react to misalignment.
 
-2. **Who constitutes the initial TRUSTED council?** The first TRUSTED contributors need to be appointed by the core team. What criteria and process govern this?
+2. **What is the right base emission rate?** This requires the founding team's supply schedule targets. The framework can accommodate any base rate; the epoch multiplier does the adjusting.
 
-3. **On-chain vs. off-chain registry?** An off-chain registry is faster to ship but creates a centralization dependency. An on-chain mapping is more decentralized but adds gas costs and deployment complexity.
+3. **Who appoints the first TRUSTED contributors?** The founding team must seed the TRUSTED pool. What criteria and process govern these appointments?
 
-4. **Cross-network identity**: Contributors who are known in other networks (e.g., verified Anthropic Claude users, verified ETH validators) should they receive credit toward authorization via a fast-track path?
+4. **Cross-network identity credits**: Should verified contributors from adjacent networks (e.g., known ETH validators, contributors with track records in related protocols) receive a head start in authorization score? This could reduce friction for high-quality inbound contributors while maintaining the gate for unknown operators.
+
+5. **What counts as "evidence" in a suspension appeal?** This needs a concrete list, not a vague standard, to prevent arbitrary adjudication.
 
 ---
 
@@ -301,13 +362,17 @@ Full enforcement: task issuance blocked for SUSPENDED contributors and cap/rate 
 
 | Term | Definition |
 |------|------------|
-| Task Node | The network infrastructure component that issues, tracks, and verifies task assignments |
-| PFT | Post Fiat Token — the network's reward token |
-| Alignment Score | A per-contributor score reflecting the semantic alignment of task completions with network goals |
-| Sybil Score | A per-wallet score reflecting the probability that the wallet is part of a coordinated multi-wallet operation |
-| Authorization Gate | The pre-task-issuance check that determines whether a contributor is eligible to receive a task assignment |
-| TRUSTED Council | A future governance body composed of long-tenured TRUSTED contributors who can adjudicate authorization requests |
+| Task Node | Network infrastructure that issues, tracks, and verifies task assignments |
+| PFT | Post Fiat Token — the network's reward token, minted via verified task completion |
+| Epoch | A fixed time window (proposed: 28 days) during which total PFT minted is bounded |
+| Epoch budget | Total PFT authorized for minting in a given epoch |
+| Authorization score | A composite per-contributor score (0.0–1.0) derived from task alignment, quality, behavioral consistency, and sybil risk |
+| Epoch reward weight | A multiplier applied to a contributor's proportional share of the epoch budget, determined by authorization state |
+| Authorization gate | The pre-task-issuance check that determines contributor eligibility and weight |
+| TRUSTED council | A governance body of long-tenured contributors who adjudicate authorization requests and epoch governance proposals |
+| Entry acknowledgment | A structured, wallet-signed statement confirming that the contributor understands the Proof of Alignment model |
+| kaiserlimp0 | The pseudonym of the network's #2 all-time PFT earner, who operated without authorization — the existence proof that motivated this specification |
 
 ---
 
-*This specification is intended as a starting point for community discussion and refinement. All thresholds and durations are proposals subject to revision based on network data and community feedback.*
+*This specification is intended as a starting point for network discussion and refinement. All thresholds, durations, and weights are proposals subject to adjustment based on network data and community feedback. Version 2.0 incorporates clarifications on emission mechanics, the definition of authorization, entry-point communication requirements, and the transition path from manual authorization to algorithmic reputation scoring.*
