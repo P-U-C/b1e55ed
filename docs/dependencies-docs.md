@@ -716,3 +716,9 @@ docs/deerflow.md (standalone — setup, tool reference, troubleshooting)
   → gateway/README.md
   → integrations/deerflow/extensions_config.json
 ```
+
+## Signal Benchmarking Operations Guide
+
+```text
+docs/signal-benchmarking-ops-guide.md (standalone — operational guide for oracle builders)
+```
