@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1892,6 +1892,38 @@ def system_page_redirect(request: Request) -> HTMLResponse:
     return RedirectResponse(url="/settings", status_code=302)
 
 
+@app.post("/api/settings/universe/tradfi", response_class=HTMLResponse)
+def settings_tradfi_symbols(request: Request, symbols: str = Form("")) -> HTMLResponse:
+    """Save TradFi symbols list to user config."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    try:
+        import yaml as _yaml
+
+        cfg_path = Path(os.environ.get("B1E55ED_CONFIG_PATH", os.path.expanduser("~/.b1e55ed/config/user.yaml")))
+        if cfg_path.exists():
+            with open(cfg_path) as f:
+                cfg_data = _yaml.safe_load(f) or {}
+        else:
+            cfg_data = {}
+        cfg_data.setdefault("universe", {})["tradfi_symbols"] = sym_list
+        with open(cfg_path, "w") as f:
+            _yaml.dump(cfg_data, f, default_flow_style=False)
+        status_ok, status_msg = True, f"Saved {len(sym_list)} TradFi symbols"
+    except Exception as e:
+        status_ok, status_msg = False, str(e)
+
+    return templates.TemplateResponse(
+        "partials/_tradfi_panel.html",
+        {
+            "request": request,
+            "tradfi_symbols": sym_list,
+            "tradfi_twelvedata_key_set": bool(os.environ.get("B1E55ED_TWELVEDATA_KEY")),
+            "tradfi_status_ok": status_ok,
+            "tradfi_status_msg": status_msg,
+        },
+    )
+
+
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request) -> HTMLResponse:
     client = _api(request)
@@ -2036,6 +2068,8 @@ def settings_page(request: Request) -> HTMLResponse:
             "universe_packs": universe_ctx.get("packs", []),
             "universe_pack_map": universe_ctx.get("pack_map", {}),
             "universe_active_symbols": universe_ctx.get("active_symbols", []),
+            "tradfi_symbols": (cfg.get("universe") or {}).get("tradfi_symbols") or [],
+            "tradfi_twelvedata_key_set": bool(os.environ.get("B1E55ED_TWELVEDATA_KEY")),
             "universe_fallback_to_symbols": universe_ctx.get("fallback_to_symbols", True),
             # System page data
             "producers": producers,

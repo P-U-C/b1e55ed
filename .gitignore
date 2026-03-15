@@ -1,6 +1,9 @@
 # Runtime data
 data/
 !data/.gitkeep
+# Allow engine/data/ (source module, not runtime data)
+!engine/data/
+!engine/data/**
 
 # User state
 user/*.md

@@ -197,6 +197,17 @@ class UniverseConfig(BaseModel):
     max_symbols: int = 0  # 0 = process all active symbols; set >0 to cap for performance
     bundles: list[UniverseBundle] = Field(default_factory=list)
 
+    # TradFi symbols (stocks / ETFs) — disabled by default, zero-config via yfinance.
+    # Enable by adding to your user config:
+    #   universe.tradfi_symbols: [SPY, QQQ, GLD, TLT]
+    #
+    # Supported symbols: SPY (S&P 500), QQQ (Nasdaq), GLD (Gold), TLT (Long bonds),
+    #                    IWM (Small-cap), USO (Oil) — any Yahoo Finance ticker works.
+    #
+    # These symbols are automatically merged into the active symbol list and routed
+    # to the TradFiFeed (yfinance primary, Twelve Data backup) inside the TA producer.
+    tradfi_symbols: list[str] = Field(default_factory=list)
+
     @staticmethod
     def normalize_symbols(values: list[str]) -> list[str]:
         out: list[str] = []
@@ -224,10 +235,15 @@ class UniverseConfig(BaseModel):
             max_size = 1
 
         bundle_symbols = self.normalize_symbols([s for b in self.enabled_bundles() for s in b.symbols])
-        if bundle_symbols:
-            return bundle_symbols[:max_size]
+        base = bundle_symbols if bundle_symbols else self.normalize_symbols(self.symbols)
 
-        return self.normalize_symbols(self.symbols)[:max_size]
+        # Merge optional TradFi symbols (appended after core symbols, deduped)
+        if self.tradfi_symbols:
+            tradfi = self.normalize_symbols(self.tradfi_symbols)
+            merged = list(dict.fromkeys(base + tradfi))  # preserve order, dedupe
+            return merged[:max_size]
+
+        return base[:max_size]
 
     def execution_metadata_for_symbol(self, symbol: str) -> dict[str, list[str]]:
         sym = str(symbol or "").strip().upper()
