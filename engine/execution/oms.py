@@ -146,17 +146,25 @@ class OMS:
                 take_profit = float(mid_price) * (1.0 + float(intent.take_profit_pct))
 
         if mode == "paper":
-            fill = self.paper.execute_market(
-                symbol=intent.symbol,
-                direction=intent.direction,
-                notional_usd=float(notional),
-                leverage=float(intent.leverage),
-                mid_price=float(mid_price),
-                stop_loss=stop_loss,
-                take_profit=take_profit,
-                idempotency_key=idem,
-                conviction_id=intent.conviction_id,
-            )
+            try:
+                fill = self.paper.execute_market(
+                    symbol=intent.symbol,
+                    direction=intent.direction,
+                    notional_usd=float(notional),
+                    leverage=float(intent.leverage),
+                    mid_price=float(mid_price),
+                    stop_loss=stop_loss,
+                    take_profit=take_profit,
+                    idempotency_key=idem,
+                    conviction_id=intent.conviction_id,
+                    regime_at_entry=str(intent.regime) if intent.regime else None,
+                    pcs_at_entry=float(intent.conviction_score),
+                )
+            except ValueError as _e:
+                # Deduplication rejection: same symbol already has an open position.
+                if "duplicate_open_position" in str(_e):
+                    return OMSResult(status="rejected", mode=mode, reasons=[str(_e)])
+                raise
 
             # Persist execution events as well (redundant with tables, but useful for the event bus).
             self.db.append_event(
