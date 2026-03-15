@@ -11,23 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
-try:
-    from enum import StrEnum  # py311+
-except ImportError:  # pragma: no cover
-    from enum import Enum
-
-    class StrEnum(str, Enum):  # type: ignore[no-redef]  # noqa: UP042
-        """Backport of Python 3.11's enum.StrEnum for Python 3.10.
-
-        Key behavior: str(member) should equal member.value.
-        """
-
-        def __str__(self) -> str:  # pragma: no cover
-            return str(self.value)
-
-        def __format__(self, spec: str) -> str:  # pragma: no cover
-            return format(str(self), spec)
-
+from engine.core._compat import StrEnum  # noqa: F401
 
 # Linnaeus proposed six ranks -- kingdom, class, order, genus, species, variety.
 # Six domains. Exhaustive, non-overlapping. Any addition requires a new system.
