@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -121,7 +124,8 @@ class ApiClient:
                 resp = client.post(url, json={})
                 resp.raise_for_status()
                 return ApiResult(resp.json(), True)
-        except Exception:
+        except Exception as exc:
+            logger.warning("run_brain_cycle failed: %s", exc)
             return ApiResult(None, False)
 
     def set_kill_switch(self, level: int, reason: str = "dashboard") -> ApiResult:
