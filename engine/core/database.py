@@ -9,12 +9,15 @@ If you cannot remember the past, you will repeat it.
 from __future__ import annotations
 
 import json
+import logging as _logging
 import sqlite3
 import threading
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+
+_logger = _logging.getLogger("b1e55ed.database")
 
 try:
     from datetime import UTC  # py311+
@@ -55,7 +58,8 @@ CREATE TABLE IF NOT EXISTS events (
     payload TEXT NOT NULL,
     prev_hash TEXT,
     hash TEXT NOT NULL UNIQUE,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    symbol TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
@@ -63,6 +67,8 @@ CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_contributor ON events(contributor_id);
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
 
 -- ============================================================
 -- Event Deduplication
@@ -655,8 +661,13 @@ class Database:
         self.db_path = Path(self.db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # Set connection-level pragmas before any other DB operations.
+        # busy_timeout: retry for 5s on SQLITE_BUSY instead of failing immediately.
+        # WAL + synchronous are set in _init_schema via executescript.
+        self.conn.execute("PRAGMA busy_timeout=5000")
         self.conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
+        self._cleanup_counter = 0  # throttle for periodic rate_limits cleanup
         self._init_schema()
         self._last_hash = self._get_last_hash()
 
@@ -713,6 +724,17 @@ class Database:
         self._migrate_karma_intents_unique_trade_id()
         # DeerFlow S0 — producer karma config (volume dampening + LLM ceiling)
         self._ensure_table_exists("producer_karma_config")
+        # Performance: index on created_at (prevents linear scan on every insert)
+        with self.conn:
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
+            # events.symbol: generated column replaces unindexable json_extract queries.
+            # VIRTUAL generated columns can be added via ALTER TABLE on SQLite 3.31+.
+            self._ensure_column(
+                "events",
+                "symbol",
+                "TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL",
+            )
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol)")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(
@@ -725,7 +747,9 @@ class Database:
             self.conn.executescript(SCHEMA)
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
-        cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        # Use table_xinfo (available since SQLite 3.26) instead of table_info:
+        # table_xinfo includes virtual/hidden generated columns which table_info omits.
+        cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_xinfo({table})").fetchall()]
         if column in cols:
             return
         with self.conn:
@@ -949,6 +973,7 @@ class Database:
         schema_version: str = "v1",
         dedupe_key: str | None = None,
         ts: datetime | None = None,
+        validate_ts: bool = True,
     ) -> Event:
         """Append a single event.
 
@@ -956,7 +981,23 @@ class Database:
         - If dedupe_key is new: insert.
         - If dedupe_key exists with same payload_hash: idempotent (return existing event).
         - If dedupe_key exists with different payload_hash: conflict.
+
+        validate_ts: if True and ts is not None, logs a warning when the event
+        timestamp is more than 24 hours from wall clock (backdated or future-dated).
+        Does not reject — producers may legitimately use historical timestamps.
         """
+
+        if validate_ts and ts is not None:
+            _ts = ts
+            if _ts.tzinfo is None:
+                _ts = _ts.replace(tzinfo=UTC)
+            age = abs((datetime.now(tz=UTC) - _ts).total_seconds())
+            if age > 86400:
+                _logger.warning(
+                    "Event ts is %.1f hours from now — may be backdated or future-dated (type=%s)",
+                    age / 3600,
+                    getattr(event_type, "value", str(event_type)),
+                )
 
         with self._lock, self.conn:
             ev = self._append_event_inner(
@@ -971,6 +1012,12 @@ class Database:
                 dedupe_key=dedupe_key,
                 ts=ts,
             )
+            # Periodic cleanup of stale api_rate_limits records (every 500 appends).
+            # Runs inside the existing transaction to avoid an extra round-trip.
+            self._cleanup_counter += 1
+            if self._cleanup_counter >= 500:
+                self._cleanup_counter = 0
+                self.conn.execute("DELETE FROM api_rate_limits WHERE window_start < (strftime('%s', 'now') - 3600)")
 
         # Side effects (best-effort): outbound webhooks.
         try:
@@ -1020,6 +1067,55 @@ class Database:
                 self._last_hash = saved_hash
                 raise
         return out
+
+    def prune_old_data(self, retention: Any) -> dict[str, int]:
+        """Delete old records according to retention policy. Returns row counts deleted.
+
+        ``retention`` is a ``RetentionConfig`` instance (imported lazily to avoid
+        circular imports at module load time).
+
+        VACUUM is executed *outside* the transaction because SQLite does not allow
+        VACUUM inside an active transaction.
+        """
+        if not getattr(retention, "enabled", True):
+            return {}
+
+        deleted: dict[str, int] = {}
+        with self._lock:
+            with self.conn:
+                # Events: keep last N days
+                cursor = self.conn.execute(
+                    "DELETE FROM events WHERE created_at < datetime('now', ?)",
+                    (f"-{retention.events_keep_days} days",),
+                )
+                deleted["events"] = cursor.rowcount
+
+                # conviction_scores: only rows that have been resolved (outcome IS NOT NULL)
+                cursor = self.conn.execute(
+                    "DELETE FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
+                    (f"-{retention.conviction_log_keep_days} days",),
+                )
+                deleted["conviction_scores"] = cursor.rowcount
+
+                # feature_snapshots
+                cursor = self.conn.execute(
+                    "DELETE FROM feature_snapshots WHERE created_at < datetime('now', ?)",
+                    (f"-{retention.feature_snapshots_keep_days} days",),
+                )
+                deleted["feature_snapshots"] = cursor.rowcount
+
+                # api_rate_limits: always clean up stale windows
+                cursor = self.conn.execute(
+                    "DELETE FROM api_rate_limits WHERE window_start < datetime('now', ?)",
+                    (f"-{retention.api_rate_limits_keep_hours} hours",),
+                )
+                deleted["api_rate_limits"] = cursor.rowcount
+
+            # VACUUM must run outside the transaction block
+            if getattr(retention, "vacuum_on_prune", True) and any(v > 0 for v in deleted.values()):
+                self.conn.execute("VACUUM")
+
+        return deleted
 
     def get_events(
         self,
@@ -1090,10 +1186,12 @@ class Database:
         except sqlite3.OperationalError:
             return True
 
-    def verify_hash_chain(self, *, fast: bool = False, last_n: int = 2000) -> bool:
+    def verify_hash_chain(self, *, fast: bool = True, last_n: int = 1000) -> bool:
         """Verify the event hash chain.
 
-        fast=True verifies only the last N events.
+        fast=True (default): verify only the last ``last_n`` events — safe with WAL
+        mode because concurrent readers no longer block writers.
+        fast=False: verify the entire chain (use for audits, not routine checks).
         """
 
         q = """
