@@ -239,7 +239,7 @@
       <div style="display:flex; gap:0.35rem;">
         <button class="btn btn-sm"
                 style="flex:1; font-size:0.65rem; padding:3px 6px;"
-                hx-post="/api/producers/{{ p.name }}/restart"
+                hx-post="/api/v1/producers/{{ p.name }}/restart"
                 hx-confirm="Restart {{ p.name }}?"
                 hx-target="#producer-{{ p.name }}-status"
                 hx-swap="innerHTML">
@@ -248,7 +248,7 @@
         {% if p.consecutive_failures is defined and p.consecutive_failures > 0 %}
         <button class="btn btn-sm"
                 style="flex:1; font-size:0.65rem; padding:3px 6px;"
-                hx-post="/api/producers/{{ p.name }}/reset-failures"
+                hx-post="/api/v1/producers/{{ p.name }}/reset-failures"
                 hx-target="#producer-{{ p.name }}-status"
                 hx-swap="innerHTML">
           ✕ Clear Failures
