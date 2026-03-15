@@ -447,10 +447,15 @@ class BrainOrchestrator:
 
             # Emit immutable audit event for accepted signals so acceptance
             # decisions are part of the hash-chained event log.
+            # NOTE: SIGNAL_ACCEPTED_V1 requires {trade_id, producer_id, domain, signal_event_id,
+            # direction, confidence} — those are only available after a trade is submitted.
+            # At synthesis time we emit AUDIT_V1 to preserve the bulk-acceptance record.
+            # The canonical SIGNAL_ACCEPTED_V1 events (one per signal) are emitted by OMS._emit_signal_accepted().
             if snap.source_event_ids:
                 self.db.append_event(
-                    event_type=EventType.SIGNAL_ACCEPTED_V1,
+                    event_type=EventType.AUDIT_V1,
                     payload={
+                        "reason": "signals_ingested_for_cycle",
                         "cycle_id": cycle_id,
                         "event_ids": list(snap.source_event_ids),
                         "symbol": sym,
@@ -584,7 +589,7 @@ class BrainOrchestrator:
                         if self._oms is None:
                             _log.warning("auto-paper-trade skipped: no OMS injected")
                             continue
-                        oms_result = self._oms.submit(ti, mid_price=mid_price, equity_usd=10000.0)
+                        oms_result = self._oms.submit(ti, mid_price=mid_price, equity_usd=float(self.config.risk.portfolio_value_usd))
                         _log.info("auto-paper-trade: %s %s @ %.2f -> %s", sym, direction, mid_price, oms_result.status)
                     except Exception:
                         _log.exception("auto-paper-trade failed for %s -- brain cycle continues", sym)
@@ -612,6 +617,29 @@ class BrainOrchestrator:
                     _mark = self._resolve_mid_price(_asset)
                     if _mark is None:
                         continue
+
+                    # Track max_drawdown_during: update each cycle before checking stop/target.
+                    try:
+                        _dd_row = self.db.fetchone(
+                            "SELECT entry_price, max_drawdown_during FROM positions WHERE id = ? AND status = 'open'",
+                            (_pid,),
+                        )
+                        if _dd_row is not None:
+                            _entry_px = float(_dd_row[0] or 0.0)
+                            _existing_dd = float(_dd_row[1] or 0.0)
+                            if _entry_px > 0:
+                                if _dirn == "long":
+                                    _drawdown = max(0.0, (_entry_px - _mark) / _entry_px)
+                                else:  # short
+                                    _drawdown = max(0.0, (_mark - _entry_px) / _entry_px)
+                                if _drawdown > _existing_dd:
+                                    with self.db._lock, self.db.conn:
+                                        self.db.execute(
+                                            "UPDATE positions SET max_drawdown_during = ? WHERE id = ? AND status = 'open'",
+                                            (_drawdown, _pid),
+                                        )
+                    except Exception:
+                        pass  # non-critical; don't disrupt close logic
 
                     _close_reason: str | None = None
                     if _dirn == "long":

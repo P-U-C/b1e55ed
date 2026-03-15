@@ -147,6 +147,19 @@ class OMS:
 
         if mode == "paper":
             try:
+                # Look up cts_score from conviction_scores table using conviction_id.
+                _cts_at_entry: float | None = None
+                if intent.conviction_id is not None:
+                    try:
+                        _cts_row = self.db.fetchone(
+                            "SELECT cts_score FROM conviction_scores WHERE id = ?",
+                            (intent.conviction_id,),
+                        )
+                        if _cts_row is not None and _cts_row[0] is not None:
+                            _cts_at_entry = float(_cts_row[0])
+                    except Exception:
+                        pass  # cts_at_entry remains None — non-critical
+
                 fill = self.paper.execute_market(
                     symbol=intent.symbol,
                     direction=intent.direction,
@@ -159,6 +172,7 @@ class OMS:
                     conviction_id=intent.conviction_id,
                     regime_at_entry=str(intent.regime) if intent.regime else None,
                     pcs_at_entry=float(intent.conviction_score),
+                    cts_at_entry=_cts_at_entry,
                 )
             except ValueError as _e:
                 # Deduplication rejection: same symbol already has an open position.

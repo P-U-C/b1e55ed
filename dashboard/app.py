@@ -2375,12 +2375,35 @@ async def run_producer_now(name: str, request: Request) -> HTMLResponse:
     return HTMLResponse('<span class="text-bear">✗ Failed</span>')
 
 
+@app.post("/api/positions/{position_id}/close", response_class=HTMLResponse)
+async def close_position_proxy(position_id: str, request: Request) -> HTMLResponse:
+    """Proxy close-position to the API and return an HTMX status fragment."""
+    form = await request.form()
+    exit_price_raw = form.get("exit_price")
+    body: dict = {"reason": "dashboard"}
+    if exit_price_raw:
+        with contextlib.suppress(ValueError, TypeError):
+            body["exit_price"] = float(exit_price_raw)
+    client = _api(request)
+    result = client._post_json(f"/positions/{position_id}/close", body)
+    if result.ok:
+        pnl = ""
+        if isinstance(result.data, dict):
+            pnl_val = result.data.get("realized_pnl")
+            if pnl_val is not None:
+                with contextlib.suppress(TypeError, ValueError):
+                    sign = "+" if float(pnl_val) >= 0 else ""
+                    pnl = f" (PnL: {sign}${float(pnl_val):.2f})"
+        return HTMLResponse(f'<span class="text-bull">✓ Position closed{pnl}</span>')
+    return HTMLResponse('<span class="text-bear">✗ Failed to close position</span>')
+
+
 @app.post("/api/positions/{position_id}/adjust-stop", response_class=HTMLResponse)
 async def adjust_stop(position_id: str, request: Request) -> HTMLResponse:
     form = await request.form()
     price = float(form.get("price", 0))
     client = _api(request)
-    result = client._post_json(f"/positions/{position_id}/stop", {"price": price})
+    result = client._patch_json(f"/positions/{position_id}/stop", {"stop_loss": price})
     if result.ok:
         return HTMLResponse(f'<span class="text-bull">Stop set to ${price:.2f}</span>')
     return HTMLResponse('<span class="text-bear">Failed to set stop</span>')
@@ -2391,10 +2414,81 @@ async def adjust_target(position_id: str, request: Request) -> HTMLResponse:
     form = await request.form()
     price = float(form.get("price", 0))
     client = _api(request)
-    result = client._post_json(f"/positions/{position_id}/target", {"price": price})
+    result = client._patch_json(f"/positions/{position_id}/target", {"take_profit": price})
     if result.ok:
         return HTMLResponse(f'<span class="text-bull">Target set to ${price:.2f}</span>')
     return HTMLResponse('<span class="text-bear">Failed to set target</span>')
+
+
+# ---- Karma settle proxy (3.5) --------------------------------------------
+
+
+@app.post("/api/karma/settle", response_class=HTMLResponse)
+async def karma_settle(request: Request) -> HTMLResponse:
+    """Proxy karma settle to the API and return an HTMX fragment."""
+    client = _api(request)
+    result = client._post_json("/karma/settle", {})
+    if result.ok:
+        settled = ""
+        if isinstance(result.data, dict):
+            n = result.data.get("settled") or result.data.get("count")
+            if n is not None:
+                settled = f" ({n} settled)"
+        return HTMLResponse(f'<span class="text-bull">✓ Karma settled{settled}</span>')
+    return HTMLResponse('<span class="text-warn">⚠ Karma settle failed — check API availability.</span>')
+
+
+# ---- Events verify-chain (3.6) -------------------------------------------
+
+
+@app.post("/api/events/verify-chain", response_class=HTMLResponse)
+async def events_verify_chain(request: Request) -> HTMLResponse:
+    """Verify the brain.db event hash chain and return an HTMX fragment."""
+    db_path = _get_brain_db()
+    if not db_path:
+        return HTMLResponse('<span class="text-warn">⚠ brain.db not found</span>')
+    try:
+        from engine.core.database import Database as _Database
+
+        db = _Database(db_path)
+        # Count events for context
+        row = db.conn.execute("SELECT COUNT(*) FROM events").fetchone()
+        event_count = int(row[0]) if row else 0
+        valid = db.verify_hash_chain(fast=True)
+        db.close()
+        if valid:
+            return HTMLResponse(f'<span class="text-bull">✓ Chain valid — {event_count:,} events checked</span>')
+        return HTMLResponse(f'<span class="text-bear">✗ Chain INVALID — {event_count:,} events checked. Possible tampering.</span>')
+    except Exception as exc:
+        return HTMLResponse(f'<span class="text-warn">⚠ Verify failed: {exc}</span>')
+
+
+# ---- Events export (3.7) -------------------------------------------------
+
+
+@app.get("/api/events/export")
+async def events_export(request: Request) -> Response:
+    """Export up to 10,000 recent events from brain.db as a JSON attachment."""
+    import json as _json
+
+    db_path = _get_brain_db()
+    if not db_path:
+        return HTMLResponse('<span class="text-warn">brain.db not found</span>', status_code=404)
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT id, type, payload, ts, source, trace_id, schema_version FROM events ORDER BY id DESC LIMIT 10000").fetchall()
+        conn.close()
+        # Reverse so oldest-first order in the export
+        events = [dict(r) for r in reversed(rows)]
+        body = _json.dumps({"count": len(events), "events": events}, default=str)
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="events.json"'},
+        )
+    except Exception as exc:
+        return HTMLResponse(f'<span class="text-warn">Export failed: {exc}</span>', status_code=500)
 
 
 @app.get("/config", response_class=HTMLResponse)
