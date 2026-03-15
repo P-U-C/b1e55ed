@@ -44,6 +44,7 @@ from engine.core.interpreter import Interpreter, NullInterpreter
 from engine.core.models import Event
 from engine.core.regime import RegimeConfig, RegimeMatrix
 from engine.core.types import ProducerHealth, ProducerResult
+from engine.data.tradfi_feed import TradFiFeed
 from engine.producers.base import BaseProducer
 from engine.producers.registry import register
 
@@ -250,20 +251,127 @@ class TechnicalAnalysisProducer(BaseProducer):
         return [row for row in data if isinstance(row, dict)]
 
     # Symbols not available on Binance (TradFi equities, special tokens, etc.).
-    # These are silently skipped by _collect_free; a custom TA endpoint
-    # (B1E55ED_TA_URL) must be configured if you want TA signals for them.
+    # For crypto-like tokens (HYPE) still no feed; for TradFi equities/ETFs
+    # (SPY, QQQ, GLD, TLT, IWM, USO) TradFiFeed (yfinance primary, Twelve Data
+    # backup) is used automatically — no API key required for yfinance.
+    #
+    # To add TradFi symbols to the universe, include them in your config:
+    #   universe.tradfi_symbols: [SPY, QQQ, GLD, TLT]
+    # They will be routed to TradFiFeed for TA calculation automatically.
     _BINANCE_MISSING: set[str] = {"HYPE", "SPY", "QQQ", "IWM", "GLD", "TLT", "USO"}
 
+    # Subset of _BINANCE_MISSING that TradFiFeed can serve (stock/ETF tickers).
+    # Anything NOT in this set is silently skipped (no Binance, no TradFi feed).
+    _TRADFI_SYMBOLS: set[str] = {"SPY", "QQQ", "IWM", "GLD", "TLT", "USO"}
+
+    @staticmethod
+    def _compute_ta_from_candles(
+        sym: str,
+        closes: list[float],
+        highs: list[float],
+        lows: list[float],
+        volumes: list[float],
+        data_source: str,
+    ) -> dict[str, Any] | None:
+        """Compute TA indicators from raw OHLCV lists and return a result dict."""
+        if len(closes) < 50:
+            return None
+
+        # RSI-14
+        rsi = _compute_rsi(closes, 14)
+
+        # EMAs
+        ema_20 = _ema(closes, 20)
+        ema_50 = _ema(closes, 50)
+        ema_200 = _ema(closes, 200) if len(closes) >= 200 else None
+
+        # Bollinger Bands (20-period, 2 std)
+        bb_window = closes[-20:]
+        bb_mid = statistics.mean(bb_window)
+        bb_std = statistics.stdev(bb_window)
+        bb_upper = bb_mid + 2 * bb_std
+        bb_lower = bb_mid - 2 * bb_std
+        current = closes[-1]
+        bb_range = bb_upper - bb_lower
+        bb_position = (current - bb_lower) / bb_range if bb_range > 0 else 0.5
+
+        # ATR-14
+        atr = _compute_atr(highs, lows, closes, 14)
+
+        # Volume ratio (current vs 20-period avg)
+        vol_avg = statistics.mean(volumes[-20:]) if len(volumes) >= 20 else volumes[-1]
+        volume_ratio = volumes[-1] / vol_avg if vol_avg > 0 else 1.0
+
+        # Trend detection
+        trend = "bullish" if ema_20 and ema_50 and ema_20 > ema_50 else "bearish"
+        trend_strength = abs(ema_20 - ema_50) / current if ema_20 and ema_50 and current > 0 else 0.0
+        trend_strength = min(trend_strength * 10, 1.0)  # normalize to 0-1
+
+        # Volatility compression
+        bb_width = (bb_upper - bb_lower) / bb_mid if bb_mid > 0 else 0
+        volatility_compression = bb_width < 0.04
+
+        # Support / resistance (simple: recent low/high)
+        recent_low = min(lows[-20:])
+        recent_high = max(highs[-20:])
+        support_distance = (current - recent_low) / current if current > 0 else 0
+        resistance_distance = (recent_high - current) / current if current > 0 else 0
+
+        return {
+            "symbol": sym,
+            "rsi_14": round(rsi, 2) if rsi else None,
+            "ema_20": round(ema_20, 4) if ema_20 else None,
+            "ema_50": round(ema_50, 4) if ema_50 else None,
+            "ema_200": round(ema_200, 4) if ema_200 else None,
+            "bb_upper": round(bb_upper, 4),
+            "bb_lower": round(bb_lower, 4),
+            "bb_mid": round(bb_mid, 4),
+            "bb_position": round(bb_position, 4),
+            "bb_width": round(bb_width, 4),
+            "atr_14": round(atr, 4) if atr else None,
+            "volume_ratio": round(volume_ratio, 2),
+            "trend": trend,
+            "trend_strength": round(trend_strength, 3),
+            "support_distance": round(support_distance, 4),
+            "resistance_distance": round(resistance_distance, 4),
+            "volatility_compression": volatility_compression,
+            "breakout_failure": False,
+            "data_source": data_source,
+        }
+
     def _collect_free(self) -> list[dict[str, Any]]:
-        """Free public API fallback (Binance Klines). Always available."""
+        """Free public API fallback (Binance Klines + TradFiFeed for TradFi). Always available."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         results: list[dict[str, Any]] = []
 
         _cap = getattr(self.ctx.config.universe, "max_symbols", 0)
         _syms = symbols[:_cap] if _cap > 0 else symbols
+        tradfi_feed: TradFiFeed | None = None  # lazy-init once needed
+
         for sym in _syms:
             if sym in self._BINANCE_MISSING:
+                # Route TradFi equities/ETFs through TradFiFeed
+                if sym not in self._TRADFI_SYMBOLS:
+                    # No feed available (e.g. HYPE) — skip silently
+                    continue
+                try:
+                    if tradfi_feed is None:
+                        tradfi_feed = TradFiFeed()
+                    candles = tradfi_feed.get_ohlcv(sym, interval="1h", bars=200)
+                    if not candles:
+                        self.ctx.logger.warning("ta_tradfi_empty symbol=%s", sym)
+                        continue
+                    closes = [c["close"] for c in candles]
+                    highs = [c["high"] for c in candles]
+                    lows = [c["low"] for c in candles]
+                    volumes = [c["volume"] for c in candles]
+                    row = self._compute_ta_from_candles(sym, closes, highs, lows, volumes, "tradfi_feed")
+                    if row:
+                        results.append(row)
+                except Exception as e:  # noqa: BLE001
+                    self.ctx.logger.warning("ta_tradfi_failed symbol=%s error=%s", sym, e)
                 continue
+
             try:
                 resp = httpx.get(
                     "https://api.binance.com/api/v3/klines",
@@ -272,77 +380,15 @@ class TechnicalAnalysisProducer(BaseProducer):
                 )
                 resp.raise_for_status()
                 candles = resp.json()
-                if len(candles) < 50:
-                    continue
 
                 closes = [float(c[4]) for c in candles]
                 highs = [float(c[2]) for c in candles]
                 lows = [float(c[3]) for c in candles]
                 volumes = [float(c[5]) for c in candles]
 
-                # RSI-14
-                rsi = _compute_rsi(closes, 14)
-
-                # EMAs
-                ema_20 = _ema(closes, 20)
-                ema_50 = _ema(closes, 50)
-                ema_200 = _ema(closes, 200) if len(closes) >= 200 else None
-
-                # Bollinger Bands (20-period, 2 std)
-                bb_window = closes[-20:]
-                bb_mid = statistics.mean(bb_window)
-                bb_std = statistics.stdev(bb_window)
-                bb_upper = bb_mid + 2 * bb_std
-                bb_lower = bb_mid - 2 * bb_std
-                current = closes[-1]
-                bb_range = bb_upper - bb_lower
-                bb_position = (current - bb_lower) / bb_range if bb_range > 0 else 0.5
-
-                # ATR-14
-                atr = _compute_atr(highs, lows, closes, 14)
-
-                # Volume ratio (current vs 20-period avg)
-                vol_avg = statistics.mean(volumes[-20:]) if len(volumes) >= 20 else volumes[-1]
-                volume_ratio = volumes[-1] / vol_avg if vol_avg > 0 else 1.0
-
-                # Trend detection
-                trend = "bullish" if ema_20 and ema_50 and ema_20 > ema_50 else "bearish"
-                trend_strength = abs(ema_20 - ema_50) / current if ema_20 and ema_50 and current > 0 else 0.0
-                trend_strength = min(trend_strength * 10, 1.0)  # normalize to 0-1
-
-                # Volatility compression
-                bb_width = (bb_upper - bb_lower) / bb_mid if bb_mid > 0 else 0
-                volatility_compression = bb_width < 0.04
-
-                # Support / resistance (simple: recent low/high)
-                recent_low = min(lows[-20:])
-                recent_high = max(highs[-20:])
-                support_distance = (current - recent_low) / current if current > 0 else 0
-                resistance_distance = (recent_high - current) / current if current > 0 else 0
-
-                results.append(
-                    {
-                        "symbol": sym,
-                        "rsi_14": round(rsi, 2) if rsi else None,
-                        "ema_20": round(ema_20, 4) if ema_20 else None,
-                        "ema_50": round(ema_50, 4) if ema_50 else None,
-                        "ema_200": round(ema_200, 4) if ema_200 else None,
-                        "bb_upper": round(bb_upper, 4),
-                        "bb_lower": round(bb_lower, 4),
-                        "bb_mid": round(bb_mid, 4),
-                        "bb_position": round(bb_position, 4),
-                        "bb_width": round(bb_width, 4),
-                        "atr_14": round(atr, 4) if atr else None,
-                        "volume_ratio": round(volume_ratio, 2),
-                        "trend": trend,
-                        "trend_strength": round(trend_strength, 3),
-                        "support_distance": round(support_distance, 4),
-                        "resistance_distance": round(resistance_distance, 4),
-                        "volatility_compression": volatility_compression,
-                        "breakout_failure": False,
-                        "data_source": "binance_free",
-                    }
-                )
+                row = self._compute_ta_from_candles(sym, closes, highs, lows, volumes, "binance_free")
+                if row:
+                    results.append(row)
             except Exception as e:  # noqa: BLE001
                 self.ctx.logger.warning("ta_free_symbol_failed symbol=%s error=%s", sym, e)
                 continue
