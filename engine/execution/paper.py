@@ -89,6 +89,7 @@ class PaperBroker:
         conviction_id: int | None = None,
         regime_at_entry: str | None = None,
         pcs_at_entry: float | None = None,
+        cts_at_entry: float | None = None,
     ) -> PaperFill:
         sym = str(symbol).upper().strip()
         dirn = str(direction).lower().strip()
@@ -152,8 +153,8 @@ class PaperBroker:
                 INSERT INTO positions (
                   id, platform, asset, direction, entry_price, size_notional, leverage,
                   stop_loss, take_profit, opened_at, status, conviction_id,
-                  regime_at_entry, pcs_at_entry
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+                  regime_at_entry, pcs_at_entry, cts_at_entry
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
                 """,
                 (
                     position_id,
@@ -169,6 +170,7 @@ class PaperBroker:
                     int(conviction_id) if conviction_id is not None else None,
                     str(regime_at_entry) if regime_at_entry is not None else None,
                     float(pcs_at_entry) if pcs_at_entry is not None else None,
+                    float(cts_at_entry) if cts_at_entry is not None else None,
                 ),
             )
             self.db.execute(

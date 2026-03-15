@@ -166,4 +166,5 @@ def cockpit_state(db: Database = Depends(get_db)) -> dict[str, Any]:
         "producer_signals": producer_signals,
         "benchmarks": benchmarks,
         "system": system,
+        "conviction": top_call.get("pcs_score") if top_call else None,
     }
