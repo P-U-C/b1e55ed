@@ -1894,21 +1894,41 @@ def system_page_redirect(request: Request) -> HTMLResponse:
 
 @app.post("/api/settings/universe/tradfi", response_class=HTMLResponse)
 def settings_tradfi_symbols(request: Request, symbols: str = Form("")) -> HTMLResponse:
-    """Save TradFi symbols list to user config."""
+    """Save TradFi symbols list to user config via API (triggers hot-reload)."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     try:
-        import yaml as _yaml
+        client = _api(request)
+        # Fetch current config, merge tradfi_symbols, POST back via API so daemon hot-reloads
+        cfg_res = client._get_json("/config")
+        cfg_data: dict[str, Any] = {}
+        if cfg_res.ok and isinstance(cfg_res.data, dict):
+            # Strip redacted sentinel values so we don't overwrite real secrets with "***REDACTED***"
+            import copy as _copy
 
-        cfg_path = Path(os.environ.get("B1E55ED_CONFIG_PATH", os.path.expanduser("~/.b1e55ed/config/user.yaml")))
-        if cfg_path.exists():
-            with open(cfg_path) as f:
-                cfg_data = _yaml.safe_load(f) or {}
-        else:
-            cfg_data = {}
+            cfg_data = _copy.deepcopy(cfg_res.data)
+            for _section in cfg_data.values():
+                if not isinstance(_section, dict):
+                    continue
+                for _k, _v in list(_section.items()):
+                    if isinstance(_v, str) and _v == "***REDACTED***":
+                        del _section[_k]
         cfg_data.setdefault("universe", {})["tradfi_symbols"] = sym_list
-        with open(cfg_path, "w") as f:
-            _yaml.dump(cfg_data, f, default_flow_style=False)
-        status_ok, status_msg = True, f"Saved {len(sym_list)} TradFi symbols"
+        save_res = client._post_json("/config", cfg_data)
+        if save_res.ok:
+            status_ok, status_msg = True, f"Saved {len(sym_list)} TradFi symbols"
+        else:
+            # Fallback: write yaml directly if API unavailable
+            import yaml as _yaml
+
+            cfg_path = Path(os.environ.get("B1E55ED_CONFIG_PATH", os.path.expanduser("~/.b1e55ed/config/user.yaml")))
+            raw: dict[str, Any] = {}
+            if cfg_path.exists():
+                with open(cfg_path) as f:
+                    raw = _yaml.safe_load(f) or {}
+            raw.setdefault("universe", {})["tradfi_symbols"] = sym_list
+            with open(cfg_path, "w") as f:
+                _yaml.dump(raw, f, default_flow_style=False)
+            status_ok, status_msg = True, f"Saved {len(sym_list)} TradFi symbols (yaml fallback)"
     except Exception as e:
         status_ok, status_msg = False, str(e)
 
