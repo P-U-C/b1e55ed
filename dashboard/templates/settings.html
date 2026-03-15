@@ -197,6 +197,40 @@
   {% include "partials/universe_bundles_panel.html" %}
 </div>
 
+<!-- TradFi Symbols -->
+<div class="panel" style="margin-bottom:1.5rem;">
+  <div class="panel-header">
+    <span class="panel-title">TradFi Symbols</span>
+    <span class="panel-age">yfinance · free · no API key</span>
+  </div>
+  <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.75rem; line-height:1.4;">
+    Add equities and ETFs to the signal universe. Prices fetched via yfinance (primary) with Twelve Data as backup.
+    Set <code>B1E55ED_TWELVEDATA_KEY</code> in your env for the backup feed.
+  </div>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+    {% for sym in tradfi_symbols %}
+    <span class="badge" style="background:rgba(99,102,241,0.15); border-color:rgba(99,102,241,0.4); font-size:0.7rem;">{{ sym }}</span>
+    {% endfor %}
+    {% if not tradfi_symbols %}
+    <span class="text-dim" style="font-size:0.75rem;">No TradFi symbols configured</span>
+    {% endif %}
+  </div>
+  <form hx-post="/api/settings/universe/tradfi" hx-target="closest .panel" hx-swap="outerHTML"
+        style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+    <label>
+      <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Symbols (comma-separated)</div>
+      <input class="btn" name="symbols" placeholder="SPY, QQQ, GLD, TLT" style="width:260px; text-align:left;"
+             value="{{ tradfi_symbols | join(', ') }}">
+    </label>
+    <button class="btn" type="submit" style="font-size:0.7rem; padding:6px 12px;">Save</button>
+    {% if tradfi_twelvedata_key_set %}
+    <span class="text-bull" style="font-size:0.72rem; align-self:center;">✓ Twelve Data key configured</span>
+    {% else %}
+    <span class="text-dim" style="font-size:0.72rem; align-self:center;">Twelve Data key not set (optional backup)</span>
+    {% endif %}
+  </form>
+</div>
+
 <!-- E. API Keys Status -->
 <div class="panel" style="margin-bottom:1.5rem;">
   <div class="panel-header">
