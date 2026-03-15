@@ -2451,9 +2451,6 @@ async def events_verify_chain(request: Request) -> HTMLResponse:
         from engine.core.database import Database as _Database
 
         db = _Database(db_path)
-        # Count events for context
-        row = db.conn.execute("SELECT COUNT(*) FROM events").fetchone()
-        event_count = int(row[0]) if row else 0
         valid = db.verify_hash_chain(fast=True)
         db.close()
         # fast=True only checks recent events, not the full chain.
@@ -2461,13 +2458,9 @@ async def events_verify_chain(request: Request) -> HTMLResponse:
         fast_label = "recent events (fast mode)"
         if valid:
             return HTMLResponse(
-                f'<span class="text-bull">✓ Chain valid — {fast_label} verified. '
-                f'Run <code>python -m engine verify-chain</code> from CLI for full audit.</span>'
+                f'<span class="text-bull">✓ Chain valid — {fast_label} verified. Run <code>python -m engine verify-chain</code> from CLI for full audit.</span>'
             )
-        return HTMLResponse(
-            f'<span class="text-bear">✗ Chain INVALID — {fast_label} checked. Possible tampering. '
-            f'Run full CLI verify for details.</span>'
-        )
+        return HTMLResponse(f'<span class="text-bear">✗ Chain INVALID — {fast_label} checked. Possible tampering. Run full CLI verify for details.</span>')
     except Exception as exc:
         return HTMLResponse(f'<span class="text-warn">⚠ Verify failed: {exc}</span>')
 
