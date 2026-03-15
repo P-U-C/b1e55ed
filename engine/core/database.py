@@ -67,7 +67,6 @@ CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_contributor ON events(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
 
 -- ============================================================
 -- Event Deduplication
