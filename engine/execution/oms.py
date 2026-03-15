@@ -18,6 +18,7 @@ No dry_run mode (DECISIONS_V3 #4).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -180,7 +181,9 @@ class OMS:
                     return OMSResult(status="rejected", mode=mode, reasons=[str(_e)])
                 raise
 
-            # Persist execution events as well (redundant with tables, but useful for the event bus).
+            # Persist execution events (redundant with tables, but useful for the event bus).
+            # dedupe_key anchors each event to its order/position so reconcile_execution_events()
+            # can backfill idempotently after a crash between persist and event append.
             self.db.append_event(
                 event_type=EventType.ORDER_SUBMITTED_V1,
                 payload={
@@ -194,6 +197,7 @@ class OMS:
                     "idempotency_key": idem,
                 },
                 source="execution.oms",
+                dedupe_key=f"order_submitted:{fill.order_id}",
             )
             self.db.append_event(
                 event_type=EventType.ORDER_FILLED_V1,
@@ -205,6 +209,7 @@ class OMS:
                     "fee_usd": float(fill.fee_usd),
                 },
                 source="execution.oms",
+                dedupe_key=f"order_filled:{fill.order_id}",
             )
             self.db.append_event(
                 event_type=EventType.POSITION_OPENED_V1,
@@ -218,6 +223,7 @@ class OMS:
                     "leverage": float(intent.leverage),
                 },
                 source="execution.oms",
+                dedupe_key=f"position_opened:{fill.position_id}",
             )
 
             # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution)
@@ -307,7 +313,165 @@ class OMS:
                 event_type=EventType.SIGNAL_ACCEPTED_V1,
                 payload=payload,
                 source="execution.oms",
+                dedupe_key=f"signal_accepted:{trade_id}:{event_id}",
             )
+
+
+_LOG = logging.getLogger("b1e55ed.execution.oms")
+
+
+def _has_dedupe_key(db: Database, dedupe_key: str) -> bool:
+    """Return True if *dedupe_key* already exists in the event_dedup table."""
+    row = db.fetchone("SELECT 1 FROM event_dedup WHERE dedupe_key = ?", (dedupe_key,))
+    return row is not None
+
+
+def reconcile_execution_events(db: Database) -> dict[str, int]:
+    """Scan all positions and backfill any missing provenance events.
+
+    Idempotent: safe to run multiple times. Uses ``dedupe_key`` to prevent
+    duplicate insertions. Returns a dict with the count of newly-emitted events
+    by type.
+
+    Call this at daemon startup (or via ``b1e55ed reconcile``) to repair the
+    crash window between position persistence and event emission in the OMS.
+    """
+    log = logging.getLogger("b1e55ed.execution.oms.reconcile")
+    counts: dict[str, int] = {
+        "order_submitted": 0,
+        "order_filled": 0,
+        "position_opened": 0,
+        "signal_accepted": 0,
+    }
+
+    rows = db.fetchall(
+        """
+        SELECT
+            p.id       AS position_id,
+            p.platform,
+            p.asset,
+            p.direction,
+            p.entry_price,
+            p.size_notional,
+            p.leverage,
+            o.id       AS order_id,
+            o.venue,
+            o.side,
+            o.symbol,
+            o.fill_price,
+            o.fill_size,
+            o.idempotency_key
+        FROM positions p
+        LEFT JOIN orders o ON o.position_id = p.id
+        ORDER BY p.opened_at ASC
+        """,
+        (),
+    )
+
+    for _row in rows:
+        row = dict(_row)
+        position_id: str = row["position_id"]
+        order_id: str | None = row.get("order_id")
+
+        if order_id is None:
+            continue  # position exists but no order yet — skip
+
+        # ------------------------------------------------------------------ #
+        # ORDER_SUBMITTED_V1                                                    #
+        # ------------------------------------------------------------------ #
+        dk_submitted = f"order_submitted:{order_id}"
+        if not _has_dedupe_key(db, dk_submitted):
+            db.append_event(
+                event_type=EventType.ORDER_SUBMITTED_V1,
+                payload={
+                    "order_id": order_id,
+                    "position_id": position_id,
+                    "venue": row.get("venue") or "paper",
+                    "type": "market",
+                    "side": row.get("side") or "buy",
+                    "symbol": row.get("symbol") or row.get("asset") or "",
+                    "size": float(row.get("fill_size") or 0.0),
+                    "idempotency_key": row.get("idempotency_key") or "",
+                },
+                source="execution.oms.reconcile",
+                dedupe_key=dk_submitted,
+            )
+            counts["order_submitted"] += 1
+            log.info("reconcile: backfilled ORDER_SUBMITTED_V1 for order %s", order_id)
+
+        # ------------------------------------------------------------------ #
+        # ORDER_FILLED_V1                                                       #
+        # ------------------------------------------------------------------ #
+        dk_filled = f"order_filled:{order_id}"
+        if not _has_dedupe_key(db, dk_filled):
+            db.append_event(
+                event_type=EventType.ORDER_FILLED_V1,
+                payload={
+                    "order_id": order_id,
+                    "position_id": position_id,
+                    "fill_price": float(row.get("fill_price") or 0.0),
+                    "fill_size": float(row.get("fill_size") or 0.0),
+                    "fee_usd": 0.0,  # not stored in orders table; 0.0 on reconcile
+                },
+                source="execution.oms.reconcile",
+                dedupe_key=dk_filled,
+            )
+            counts["order_filled"] += 1
+            log.info("reconcile: backfilled ORDER_FILLED_V1 for order %s", order_id)
+
+        # ------------------------------------------------------------------ #
+        # POSITION_OPENED_V1                                                    #
+        # ------------------------------------------------------------------ #
+        dk_opened = f"position_opened:{position_id}"
+        if not _has_dedupe_key(db, dk_opened):
+            db.append_event(
+                event_type=EventType.POSITION_OPENED_V1,
+                payload={
+                    "position_id": position_id,
+                    "platform": row.get("platform") or "paper",
+                    "asset": row.get("asset") or "",
+                    "direction": row.get("direction") or "",
+                    "entry_price": float(row.get("entry_price") or 0.0),
+                    "size_notional": float(row.get("size_notional") or 0.0),
+                    "leverage": float(row.get("leverage") or 1.0),
+                },
+                source="execution.oms.reconcile",
+                dedupe_key=dk_opened,
+            )
+            counts["position_opened"] += 1
+            log.info("reconcile: backfilled POSITION_OPENED_V1 for position %s", position_id)
+
+        # ------------------------------------------------------------------ #
+        # SIGNAL_ACCEPTED_V1                                                    #
+        # The canonical trade_id in SIGNAL_ACCEPTED_V1 is position_id          #
+        # (matches what _emit_signal_accepted uses and what pnl.py looks up).  #
+        # ------------------------------------------------------------------ #
+        existing_sa = db.fetchone(
+            "SELECT id FROM events WHERE type = ? AND json_extract(payload, '$.trade_id') = ? LIMIT 1",
+            (EventType.SIGNAL_ACCEPTED_V1.value, position_id),
+        )
+        dk_sa = f"signal_accepted:{position_id}:reconciled"
+        if existing_sa is None and not _has_dedupe_key(db, dk_sa):
+            db.append_event(
+                event_type=EventType.SIGNAL_ACCEPTED_V1,
+                payload=SignalAcceptedPayload(
+                    trade_id=position_id,
+                    producer_id="reconciled",
+                    domain="unknown",
+                    signal_event_id=position_id,  # placeholder
+                    contribution_weight=1.0,
+                    direction=row.get("direction") or "long",
+                    confidence=0.0,  # unknown at reconcile time
+                ).model_dump(mode="json"),
+                source="execution.oms.reconcile",
+                dedupe_key=dk_sa,
+            )
+            counts["signal_accepted"] += 1
+            log.info("reconcile: backfilled SIGNAL_ACCEPTED_V1 for position %s", position_id)
+
+    total = sum(counts.values())
+    log.info("reconcile_execution_events complete: %d events backfilled — %s", total, counts)
+    return counts
 
 
 def default_sizer_from_config(cfg: Config) -> CorrelationAwareSizer:
