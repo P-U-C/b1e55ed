@@ -431,3 +431,17 @@ b1e55ed resolve-outcomes
 ```
 
 Returns: count of forecasts resolved in this run. Exit 0 always.
+
+### `b1e55ed prune`
+
+Prune old data records according to the retention policy defined in `config/user.yaml`.
+
+```text
+b1e55ed prune [--dry-run] [--events-days N] [--json]
+```
+
+- `--dry-run` — show row counts that *would* be deleted without actually deleting
+- `--events-days N` — override `retention.events_keep_days` for this run
+- `--json` — machine-readable JSON output
+
+Returns: counts of deleted (or would-delete) rows per table. Runs `VACUUM` after deletion if configured.

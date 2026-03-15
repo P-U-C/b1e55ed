@@ -62,6 +62,55 @@ class RiskConfig(BaseModel):
     max_open_risk_pct: float = 0.05
     max_single_loss_pct: float = 0.02
 
+    @field_validator("max_leverage")
+    @classmethod
+    def max_leverage_positive(cls, v: float) -> float:
+        if v < 1.0:
+            raise ValueError(f"max_leverage must be >= 1.0, got {v}")
+        return v
+
+    @field_validator("max_position_pct")
+    @classmethod
+    def max_position_pct_valid(cls, v: float) -> float:
+        if not 0 < v <= 1.0:
+            raise ValueError(f"max_position_pct must be between 0 and 1.0, got {v}")
+        return v
+
+    @field_validator("daily_loss_limit_pct")
+    @classmethod
+    def daily_loss_limit_pct_valid(cls, v: float) -> float:
+        if not 0 < v <= 1.0:
+            raise ValueError(f"daily_loss_limit_pct must be between 0 and 1.0, got {v}")
+        return v
+
+    @field_validator("max_drawdown_pct")
+    @classmethod
+    def max_drawdown_pct_valid(cls, v: float) -> float:
+        if not 0 < v <= 1.0:
+            raise ValueError(f"max_drawdown_pct must be between 0 and 1.0, got {v}")
+        return v
+
+    @field_validator("portfolio_value_usd")
+    @classmethod
+    def portfolio_value_usd_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"portfolio_value_usd must be > 0, got {v}")
+        return v
+
+    @field_validator("max_open_risk_pct")
+    @classmethod
+    def max_open_risk_pct_valid(cls, v: float) -> float:
+        if not 0 < v <= 1.0:
+            raise ValueError(f"max_open_risk_pct must be between 0 and 1.0, got {v}")
+        return v
+
+    @field_validator("max_single_loss_pct")
+    @classmethod
+    def max_single_loss_pct_valid(cls, v: float) -> float:
+        if not 0 < v <= 1.0:
+            raise ValueError(f"max_single_loss_pct must be between 0 and 1.0, got {v}")
+        return v
+
 
 class BrainConfig(BaseModel):
     cycle_interval_seconds: int = 1800
@@ -129,6 +178,16 @@ class DaemonConfig(BaseModel):
     brain_interval_seconds: int = 300  # 5 min
     brain_full_interval_seconds: int = 21600  # 6 hours
     resolver_interval_seconds: int = 1800  # 30 min
+    prune_interval_seconds: int = 86400  # 24 hours
+
+
+class RetentionConfig(BaseModel):
+    enabled: bool = True
+    events_keep_days: int = 90  # Keep events for 90 days
+    conviction_log_keep_days: int = 180  # Keep conviction history longer
+    feature_snapshots_keep_days: int = 90
+    api_rate_limits_keep_hours: int = 2
+    vacuum_on_prune: bool = True  # VACUUM after pruning
 
 
 class UniverseBundle(BaseModel):
@@ -348,6 +407,7 @@ class Config(BaseSettings):
     publish: PublishConfig = Field(default_factory=PublishConfig)
     github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)
 
     model_config = {"env_prefix": "B1E55ED_", "env_nested_delimiter": "__"}
 

@@ -68,6 +68,7 @@ class EventType(StrEnum):
     KARMA_SETTLEMENT_V1 = "karma.settlement.v1"
     KARMA_RECEIPT_V1 = "karma.receipt.v1"
     KARMA_WALLET_MIGRATION_V1 = "karma.wallet_migration.v1"
+    KARMA_UPDATE_V1 = "KARMA_UPDATE_V1"
 
     # Learning
     LEARNING_OUTCOME_V1 = "learning.outcome.v1"
@@ -328,6 +329,23 @@ class TradeIntentPayload(BaseModel):
     take_profit_pct: float | None = None
 
 
+class KarmaUpdatePayload(BaseModel):
+    """Payload for KARMA_UPDATE_V1 — emitted on every producer_karma mutation.
+
+    Enables full karma history reconstruction from events alone (event-sourced audit trail).
+    """
+
+    producer_id: str
+    producer_name: str
+    karma_delta: float  # Change in karma score
+    karma_score_after: float  # New karma score
+    win_count_after: int
+    loss_count_after: int
+    trade_id: str | None = None  # Trade that triggered this update
+    realized_pnl: float | None = None
+    update_reason: str  # "trade_win" | "trade_loss" | "manual" | "settlement"
+
+
 class KarmaIntentPayload(BaseModel):
     trade_id: str
     realized_pnl_usd: float
@@ -467,6 +485,7 @@ PayloadModel = (
     | ACISignalPayload
     | ConvictionPayload
     | TradeIntentPayload
+    | KarmaUpdatePayload
     | KarmaIntentPayload
     | KillSwitchPayload
     | LearningOutcomePayload
@@ -497,6 +516,7 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.CONVICTION_V1: ConvictionPayload,
     EventType.TRADE_INTENT_V1: TradeIntentPayload,
     # Karma
+    EventType.KARMA_UPDATE_V1: KarmaUpdatePayload,
     EventType.KARMA_INTENT_V1: KarmaIntentPayload,
     # Kill switch
     EventType.KILL_SWITCH_V1: KillSwitchPayload,

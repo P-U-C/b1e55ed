@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS events (
     payload TEXT NOT NULL,
     prev_hash TEXT,
     hash TEXT NOT NULL UNIQUE,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    symbol TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
@@ -66,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_contributor ON events(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
 
 -- ============================================================
 -- Event Deduplication

@@ -161,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit machine-readable JSON.",
     )
+    p_brain.add_argument(
+        "--force",
+        action="store_true",
+        help="Run even if daemon is already running (override concurrent cycle warning).",
+    )
 
     p_signal = sub.add_parser("signal", help="Ingest operator intel as a curator signal")
     # NOTE: "rest" is remainder to allow flexible ordering of flags and subcommand-like forms.
@@ -216,6 +221,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
+    )
+    pos_sub = p_positions.add_subparsers(dest="positions_cmd")
+    p_pos_close = pos_sub.add_parser("close", help="Manually close an open position")
+    p_pos_close.add_argument("position_id", help="Position ID to close")
+    p_pos_close.add_argument(
+        "--exit-price",
+        type=float,
+        default=None,
+        dest="exit_price",
+        help="Exit price (defaults to current market price).",
     )
 
     # -- kelly --
@@ -528,6 +543,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_report_parser(sub)
 
+    # -- prune --
+    p_prune = sub.add_parser("prune", help="Prune old data according to retention policy")
+    p_prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted without actually deleting.",
+    )
+    p_prune.add_argument(
+        "--events-days",
+        type=int,
+        default=None,
+        help="Override events retention days (default: from config).",
+    )
+    p_prune.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -648,6 +682,30 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
 
 
 def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
+    # Fix 5: Warn if daemon is already running (brain cycles are automatic when daemon is active)
+    force = bool(getattr(args, "force", False))
+    if not force:
+        _daemon_running = False
+        try:
+            import psutil  # type: ignore[import-not-found,import-untyped,unused-ignore]
+
+            for _proc in psutil.process_iter(["pid", "cmdline"]):
+                _cmdline = " ".join(_proc.info.get("cmdline") or [])
+                if "b1e55ed" in _cmdline and "daemon" in _cmdline:
+                    _daemon_running = True
+                    break
+        except Exception:
+            # psutil unavailable or access denied — fall back to lock-file check
+            _lock_path = Path.home() / ".b1e55ed" / "daemon.lock"
+            _daemon_running = _lock_path.exists()
+
+        if _daemon_running:
+            print(
+                "⚠ Daemon is already running — brain cycles are automatic. Use --force to run manually.",
+                file=sys.stderr,
+            )
+            return 0
+
     # Lazy import: brain pipeline can be heavy.
     from engine.core.config import Config
     from engine.core.database import Database
@@ -1170,7 +1228,61 @@ def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_positions_close(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Close an open position by ID."""
+    from engine.core.config import Config
+    from engine.core.database import Database
+    from engine.execution.pnl import PnLTracker
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    db = Database(_resolve_db_path(repo_root, config))
+    tracker = PnLTracker(db, config)
+
+    position_id = str(args.position_id)
+    exit_price: float | None = getattr(args, "exit_price", None)
+
+    # Resolve exit price from market if not provided
+    if exit_price is None:
+        row = db.fetchone("SELECT asset FROM positions WHERE id = ? AND status = 'open'", (position_id,))
+        if row is None:
+            print(f"error: position not found or not open: {position_id}", file=sys.stderr)
+            return 1
+        asset = str(row[0]).upper()
+        try:
+            from engine.brain.orchestrator import BrainOrchestrator
+            from engine.security.identity import generate_node_identity
+
+            _orch = BrainOrchestrator(config=config, db=db, identity=generate_node_identity())
+            exit_price = _orch._resolve_mid_price(asset)
+        except Exception:
+            pass
+
+    if exit_price is None:
+        print("error: could not resolve market price; provide --exit-price", file=sys.stderr)
+        return 1
+
+    try:
+        tracker.close_position(position_id=position_id, exit_price=float(exit_price), reason="manual_close")
+    except Exception as e:
+        print(f"error closing position {position_id}: {e}", file=sys.stderr)
+        return 1
+
+    out = {"status": "ok", "position_id": position_id, "exit_price": float(exit_price), "reason": "manual_close"}
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(f"closed position {position_id} at {exit_price:.4f}")
+    return 0
+
+
 def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
+    # Dispatch to subcommand if given
+    positions_cmd = getattr(args, "positions_cmd", None)
+    if positions_cmd == "close":
+        return _cmd_positions_close(ctx, args)
+
     from engine.core.database import Database
     from engine.execution.pnl import PnLTracker
 
@@ -2629,6 +2741,82 @@ def _write_user_config(*, user_cfg_path: Path, preset: str) -> None:
         ]
     )
     user_cfg_path.write_text(content, encoding="utf-8")
+
+
+def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Prune old records according to retention policy."""
+    from engine.core.config import Config
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    db = Database(_resolve_db_path(repo_root, config))
+
+    retention = config.retention
+
+    # Apply CLI overrides
+    if getattr(args, "events_days", None) is not None:
+        from copy import copy
+
+        retention = copy(retention)
+        object.__setattr__(retention, "events_keep_days", int(args.events_days))
+
+    dry_run = bool(getattr(args, "dry_run", False))
+    as_json = bool(getattr(args, "json", False))
+
+    if dry_run:
+        # Count without deleting (approximate — uses same WHERE clause)
+        result: dict[str, int] = {}
+        result["events"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM events WHERE created_at < datetime('now', ?)",
+                (f"-{retention.events_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["conviction_scores"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
+                (f"-{retention.conviction_log_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["feature_snapshots"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM feature_snapshots WHERE created_at < datetime('now', ?)",
+                (f"-{retention.feature_snapshots_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["api_rate_limits"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < datetime('now', ?)",
+                (f"-{retention.api_rate_limits_keep_hours} hours",),
+            )
+            or (0,)
+        )[0]
+        out: dict[str, object] = {"dry_run": True, "would_delete": result}
+    else:
+        deleted = db.prune_old_data(retention)
+        out = {"dry_run": False, "deleted": deleted}
+
+    db.close()
+
+    if as_json:
+        print(_json_dumps(out))
+    else:
+        mode = "DRY RUN — would delete" if dry_run else "Deleted"
+        _raw_counts = out.get("would_delete") or out.get("deleted") or {}
+        counts: dict[str, int] = {str(k): int(v) for k, v in _raw_counts.items()} if isinstance(_raw_counts, dict) else {}
+        print(f"b1e55ed prune ({mode}):")
+        for table, count in counts.items():
+            print(f"  {table}: {count} rows")
+        total = sum(counts.values())
+        print(f"  total: {total} rows")
+        if dry_run:
+            print("\n  Run without --dry-run to apply.")
+    return 0
 
 
 def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
