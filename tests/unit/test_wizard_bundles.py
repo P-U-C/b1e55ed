@@ -18,14 +18,14 @@ def test_starter_bundle_pack_selection() -> None:
 
     mixed_pack = wizard._starter_bundles_for_choice("4", ["BTC", "ETH", "SOL"])
     assert [b["id"] for b in mixed_pack] == ["mixed-market"]
-    assert "SUI" in mixed_pack[0]["symbols"]
+    assert "NVDA" in mixed_pack[0]["symbols"]
 
 
 def test_active_symbols_resolve_from_enabled_bundles_with_fallback() -> None:
     base = ["BTC", "ETH"]
     hl = wizard._starter_bundles_for_choice("3", base)
     active = wizard._active_symbols_from_bundles(base, hl)
-    assert active == ["HYPE", "SOL", "BTC", "ETH"]
+    assert active == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
 
     for bundle in hl:
         bundle["enabled"] = False
@@ -38,6 +38,6 @@ def test_bundles_yaml_block_renders_expected_shape() -> None:
     yaml_block = wizard._bundles_yaml_block(bundles)
 
     assert 'id: "hl-tradfi-perps"' in yaml_block
-    assert 'asset_class: "crypto"' in yaml_block
+    assert 'asset_class: "tradfi"' in yaml_block
     assert 'venue: "hyperliquid"' in yaml_block
     assert 'source: "wizard"' in yaml_block
