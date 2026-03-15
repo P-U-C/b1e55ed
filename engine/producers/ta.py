@@ -341,7 +341,9 @@ class TechnicalAnalysisProducer(BaseProducer):
 
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Klines + TradFiFeed for TradFi). Always available."""
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        # Use active_symbols() so tradfi_symbols configured via universe.tradfi_symbols
+        # are included automatically (they are merged + deduped in active_symbols()).
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.active_symbols()]
         results: list[dict[str, Any]] = []
 
         _cap = getattr(self.ctx.config.universe, "max_symbols", 0)
