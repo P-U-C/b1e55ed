@@ -242,26 +242,87 @@ class OMS:
         return OMSResult(status="error", mode=mode, reasons=[f"unknown_mode:{mode}"])
 
     def _emit_signal_accepted(self, *, trade_id: str, intent: TradeIntent) -> None:
-        """Emit SIGNAL_ACCEPTED_V1 for each source event that contributed to this trade."""
+        """Emit SIGNAL_ACCEPTED_V1 for each source event that contributed to this trade.
+
+        source_event_ids are populated by two paths (merged, deduplicated):
+        1. Any IDs already on the intent (e.g. passed from synthesis snapshot).
+        2. DB query: recent signal events (type LIKE 'signal.%') for intent.symbol
+           within the last 60 minutes — compensates for call sites that no longer
+           forward source_event_ids from the snapshot.
+
+        If no signal events are found via either path, a single fallback
+        SIGNAL_ACCEPTED_V1 is still emitted (producer_id='unknown', domain='unknown',
+        signal_event_id='') so that the flywheel attribution chain is never silently
+        skipped and downstream consumers always have a record to process.
+        """
+        import datetime as _dt
+
         from engine.brain.synthesis import FeatureExtractor
 
-        if not intent.source_event_ids:
-            return
-
+        _log = logging.getLogger("b1e55ed.execution.oms")
         extractor = FeatureExtractor()
 
-        for event_id in intent.source_event_ids:
-            # Look up the original event to get producer/domain info
-            row = self.db.fetchone(
-                "SELECT type, source FROM events WHERE id = ?",
-                (event_id,),
+        # --- Step 1: query DB for recent signal events for this symbol ---
+        try:
+            cutoff_ts = (_dt.datetime.now(tz=_dt.UTC) - _dt.timedelta(minutes=60)).isoformat()
+        except Exception:
+            cutoff_ts = "1970-01-01T00:00:00+00:00"
+
+        try:
+            db_rows = self.db.fetchall(
+                "SELECT id, type, source FROM events WHERE symbol = ? AND type LIKE 'signal.%' AND ts >= ? ORDER BY ts DESC LIMIT 50",
+                (intent.symbol, cutoff_ts),
             )
-            if row is None:
-                continue
+        except Exception:
+            _log.warning("_emit_signal_accepted: DB query for recent signals failed", exc_info=True)
+            db_rows = []
 
-            event_type_str = str(row["type"])
-            source = str(row["source"]) if row["source"] else "unknown"
+        # --- Step 2: merge DB results with intent.source_event_ids (dedup) ---
+        seen: set[str] = set()
+        event_infos: list[tuple[str, str, str]] = []  # (event_id, type_str, source_str)
 
+        for row in db_rows:
+            eid = str(row["id"])
+            if eid not in seen:
+                seen.add(eid)
+                event_infos.append((eid, str(row["type"]), str(row["source"] or "unknown")))
+
+        for eid in intent.source_event_ids:
+            if eid not in seen:
+                seen.add(eid)
+                irow = self.db.fetchone("SELECT type, source FROM events WHERE id = ?", (eid,))
+                if irow is not None:
+                    event_infos.append((eid, str(irow["type"]), str(irow["source"] or "unknown")))
+
+        # --- Step 3: emit SIGNAL_ACCEPTED_V1 ---
+        if not event_infos:
+            # Fallback: always emit at least one SIGNAL_ACCEPTED_V1 so the flywheel
+            # is never silently skipped.  Downstream consumers should treat
+            # signal_event_id='' as "no attributed signal".
+            _log.debug(
+                "_emit_signal_accepted: no signal events found for %s — emitting fallback",
+                intent.symbol,
+            )
+            fallback_payload = SignalAcceptedPayload(
+                trade_id=trade_id,
+                producer_id="unknown",
+                domain="unknown",
+                signal_event_id="",
+                contribution_weight=1.0,
+                direction=intent.direction,
+                confidence=float(intent.conviction_score),
+                horizon=intent.horizon,
+                invalidation=intent.invalidation,
+            ).model_dump(mode="json")
+            self.db.append_event(
+                event_type=EventType.SIGNAL_ACCEPTED_V1,
+                payload=fallback_payload,
+                source="execution.oms",
+                dedupe_key=f"signal_accepted:{trade_id}:fallback",
+            )
+            return
+
+        for event_id, event_type_str, source in event_infos:
             # Derive domain from event type
             try:
                 et = EventType(event_type_str)
