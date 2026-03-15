@@ -5,7 +5,12 @@ import json
 import pytest
 
 
-def test_identity_show_with_no_identity(tmp_path, capsys) -> None:
+def test_identity_show_with_no_identity(tmp_path, monkeypatch, capsys) -> None:
+    # Isolate from production identity by redirecting HOME to a clean temp dir.
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+
     from engine.cli import CliContext, _identity_show
 
     ctx = CliContext(repo_root=tmp_path)
