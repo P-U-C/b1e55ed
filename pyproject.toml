@@ -50,6 +50,11 @@ exchange = [
 mcp = [
     "mcp[cli]>=1.0",
 ]
+tradfi = [
+    # TradFi price feeds for TA producer (yfinance primary, twelvedata backup)
+    "yfinance>=0.2",
+    "twelvedata>=1.2",
+]
 
 [project.scripts]
 b1e55ed = "engine.cli:main"
@@ -87,6 +92,15 @@ module = [
     "sha3",
     "web3",
     "web3.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "yfinance",
+    "yfinance.*",
+    "twelvedata",
+    "twelvedata.*",
 ]
 ignore_missing_imports = true
 
