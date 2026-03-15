@@ -87,6 +87,8 @@ class PaperBroker:
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
         conviction_id: int | None = None,
+        regime_at_entry: str | None = None,
+        pcs_at_entry: float | None = None,
     ) -> PaperFill:
         sym = str(symbol).upper().strip()
         dirn = str(direction).lower().strip()
@@ -133,6 +135,13 @@ class PaperBroker:
                 realized_pnl_usd=None,
             )
 
+        # Deduplication: reject if an open position already exists for this symbol.
+        # Prevents the same asset accumulating multiple open positions from repeated
+        # brain cycles that fire before the first position is closed.
+        existing_pos = self._existing_open_position(sym)
+        if existing_pos is not None:
+            raise ValueError(f"duplicate_open_position: {sym} already has an open position (id={existing_pos['id']})")
+
         order_id = str(uuid.uuid4())
         position_id = str(uuid.uuid4())
 
@@ -142,8 +151,9 @@ class PaperBroker:
                 """
                 INSERT INTO positions (
                   id, platform, asset, direction, entry_price, size_notional, leverage,
-                  stop_loss, take_profit, opened_at, status, conviction_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+                  stop_loss, take_profit, opened_at, status, conviction_id,
+                  regime_at_entry, pcs_at_entry
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
                 """,
                 (
                     position_id,
@@ -157,6 +167,8 @@ class PaperBroker:
                     float(take_profit) if take_profit is not None else None,
                     now,
                     int(conviction_id) if conviction_id is not None else None,
+                    str(regime_at_entry) if regime_at_entry is not None else None,
+                    float(pcs_at_entry) if pcs_at_entry is not None else None,
                 ),
             )
             self.db.execute(

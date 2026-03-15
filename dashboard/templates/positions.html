@@ -94,7 +94,8 @@
       {% endif %}
     </div>
 
-    <!-- Actions -->
+    <!-- Actions (hidden for closed positions) -->
+    {% if p.status != 'closed' %}
     <div id="pos-{{ p.id }}-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
       <button class="btn" onclick="this.style.display='none'; document.getElementById('stop-form-{{ p.id }}').style.display='flex';">Adjust Stop</button>
       <button class="btn" onclick="this.style.display='none'; document.getElementById('target-form-{{ p.id }}').style.display='flex';">Adjust Target</button>
@@ -118,6 +119,7 @@
         <button type="button" class="btn" onclick="this.closest('form').style.display='none'; this.closest('form').previousElementSibling.previousElementSibling.previousElementSibling.previousElementSibling.style.display='';">Cancel</button>
       </form>
     </div>
+    {% endif %}
   </div>
   {% endfor %}
 {% else %}

@@ -249,7 +249,10 @@ class TechnicalAnalysisProducer(BaseProducer):
             return []
         return [row for row in data if isinstance(row, dict)]
 
-    _BINANCE_MISSING: set[str] = {"HYPE"}
+    # Symbols not available on Binance (TradFi equities, special tokens, etc.).
+    # These are silently skipped by _collect_free; a custom TA endpoint
+    # (B1E55ED_TA_URL) must be configured if you want TA signals for them.
+    _BINANCE_MISSING: set[str] = {"HYPE", "SPY", "QQQ", "IWM", "GLD", "TLT", "USO"}
 
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Klines). Always available."""

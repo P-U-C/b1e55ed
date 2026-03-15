@@ -43,11 +43,18 @@ TARGET_SIZE_USD = 500.0
 EV_MIN_THRESHOLD = 0.03
 
 WATCHLIST_SLUGS = [
-    "will-the-fed-cut-rates-in-march-2026",
+    # Fed rate decisions
     "will-the-fed-cut-rates-in-may-2026",
+    "will-the-fed-cut-rates-in-june-2026",
+    "will-the-fed-cut-rates-in-july-2026",
+    # BTC targets
     "will-bitcoin-reach-100000-in-2026",
     "will-btc-be-above-100000-on-december-31-2026",
+    "will-bitcoin-hit-150000-in-2026",
+    # ETH targets
     "will-ethereum-reach-5000-in-2026",
+    # Broad market
+    "will-the-sp500-hit-7000-in-2026",
 ]
 
 
@@ -388,6 +395,13 @@ class PolymarketProducer(BaseProducer):
 
         ev = p_true_estimate - executable_price
         if ev < EV_MIN_THRESHOLD:
+            self.ctx.logger.debug(
+                "polymarket_ev_filtered contract=%s ev=%.4f threshold=%.4f p_true_method=%s",
+                contract,
+                ev,
+                EV_MIN_THRESHOLD,
+                p_true_method,
+            )
             return None
 
         ev_return_rate = ev / executable_price if executable_price > 0 else 0.0
@@ -445,16 +459,24 @@ class PolymarketProducer(BaseProducer):
 
         try:
             with httpx.Client(timeout=TIMEOUT) as client:
+                evaluated = 0
                 for market in raw:
                     if not isinstance(market, dict):
                         continue
-
+                    evaluated += 1
                     event = self._normalize_market(market, client=client, ts=ts)
                     if event is not None:
                         out.append(event)
         except httpx.HTTPError as exc:
             self.ctx.logger.warning("polymarket_normalize_http_error", extra={"error": str(exc)})
             return []
+
+        if evaluated > 0 and len(out) == 0:
+            self.ctx.logger.info(
+                "polymarket_no_edge: evaluated=%d markets, none passed EV threshold=%.2f. This is expected when all markets are efficiently priced.",
+                evaluated,
+                EV_MIN_THRESHOLD,
+            )
 
         return out
 

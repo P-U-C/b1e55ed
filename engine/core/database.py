@@ -605,6 +605,23 @@ CREATE TABLE IF NOT EXISTS llm_shadow_log (
     ts REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_llm_shadow_producer_ts ON llm_shadow_log(producer, ts);
+
+-- ============================================================
+-- Signal Log (dashboard signal history, time-series confidence)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS signal_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    producer_id TEXT NOT NULL,
+    domain TEXT,
+    asset TEXT,
+    direction TEXT,
+    confidence REAL,
+    score REAL,
+    source TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_signal_log_producer ON signal_log(producer_id);
+CREATE INDEX IF NOT EXISTS idx_signal_log_created ON signal_log(created_at);
 """
 
 
