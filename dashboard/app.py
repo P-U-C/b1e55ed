@@ -1405,17 +1405,44 @@ def forecasts_page(
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
 
-            latest = conn.execute(
-                """
-                SELECT cs.*
-                FROM conviction_scores cs
-                INNER JOIN (
-                    SELECT symbol, MAX(ts) as max_ts
-                    FROM conviction_scores GROUP BY symbol
-                ) l ON cs.symbol = l.symbol AND cs.ts = l.max_ts
-                ORDER BY cs.confidence DESC
-                """
-            ).fetchall()
+            # Only show symbols in the active universe that have data within 48h
+            _active_syms: list[str] = []
+            try:
+                _cfg = getattr(getattr(app, "state", None), "config", None)
+                if _cfg:
+                    _active_syms = [s.upper() for s in _cfg.universe.active_symbols()]
+            except Exception:
+                pass
+
+            if _active_syms:
+                _ph = ",".join("?" * len(_active_syms))
+                latest = conn.execute(
+                    f"""
+                    SELECT cs.*
+                    FROM conviction_scores cs
+                    INNER JOIN (
+                        SELECT symbol, MAX(ts) as max_ts
+                        FROM conviction_scores GROUP BY symbol
+                    ) l ON cs.symbol = l.symbol AND cs.ts = l.max_ts
+                    WHERE cs.symbol IN ({_ph})
+                      AND cs.ts >= datetime('now', '-48 hours')
+                    ORDER BY cs.confidence DESC
+                    """,
+                    _active_syms,
+                ).fetchall()
+            else:
+                latest = conn.execute(
+                    """
+                    SELECT cs.*
+                    FROM conviction_scores cs
+                    INNER JOIN (
+                        SELECT symbol, MAX(ts) as max_ts
+                        FROM conviction_scores GROUP BY symbol
+                    ) l ON cs.symbol = l.symbol AND cs.ts = l.max_ts
+                    WHERE cs.ts >= datetime('now', '-48 hours')
+                    ORDER BY cs.confidence DESC
+                    """
+                ).fetchall()
 
             all_rows = conn.execute(
                 """
