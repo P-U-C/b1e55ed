@@ -742,3 +742,152 @@ def test_producers_partial_marks_no_source_as_needs_configuration() -> None:
         assert resp.status_code == 200
         assert "needs configuration" in resp.text
         assert "0/1 healthy" in resp.text
+
+
+# ── Bug regression tests added by dashboard audit ──────────────────────────
+
+
+class ClosedPositionApiClient(DummyApiClient):
+    """Returns one closed position and one open position."""
+
+    def get_positions(self) -> _Res:
+        return _Res(
+            [
+                {
+                    "id": "HL-BTC-LONG",
+                    "asset": "BTC",
+                    "direction": "long",
+                    "entry_price": 80000.0,
+                    "stop_loss": 77000.0,
+                    "take_profit": 85000.0,
+                    "size_notional": 1000,
+                    "leverage": 1,
+                    "status": "closed",
+                    "realized_pnl": -200.0,
+                },
+                {
+                    "id": "HL-ETH-LONG",
+                    "asset": "ETH",
+                    "direction": "long",
+                    "entry_price": 3000.0,
+                    "stop_loss": 2800.0,
+                    "take_profit": 3500.0,
+                    "size_notional": 500,
+                    "leverage": 1,
+                    "status": "open",
+                },
+            ],
+            True,
+        )
+
+
+def test_brain_positions_partial_excludes_closed_positions() -> None:
+    """Bug: closed positions must NEVER appear in /partials/positions (brain page)."""
+    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0, "ETH": 3100.0}), TestClient(app) as client:
+        client.app.state.api_client = ClosedPositionApiClient()
+        resp = client.get("/partials/positions")
+        assert resp.status_code == 200
+        # Open position should appear
+        assert "ETH" in resp.text
+        # Closed position id should be absent
+        assert "HL-BTC-LONG" not in resp.text
+
+
+def test_conviction_partial_returns_fragment_not_shell_html() -> None:
+    """Bug: /partials/conviction was returning full shell HTML (extends base.html),
+    causing entire page HTML to be injected into a panel innerHTML by HTMX."""
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/conviction")
+        assert resp.status_code == 200
+        # Must NOT contain shell HTML elements
+        assert "<!DOCTYPE html>" not in resp.text
+        assert "<nav" not in resp.text
+        assert "<body" not in resp.text
+
+
+def test_closed_positions_page_hides_action_buttons() -> None:
+    """Bug: positions.html showed Adjust Stop/Target/Close buttons for closed positions."""
+    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0}), TestClient(app) as client:
+        client.app.state.api_client = ClosedPositionApiClient()
+        resp = client.get("/positions?view=closed")
+        assert resp.status_code == 200
+        # Closed-position view must not show mutating action buttons
+        assert "Close Position" not in resp.text
+        assert "Adjust Stop" not in resp.text
+
+
+def test_open_positions_page_shows_action_buttons() -> None:
+    """Regression guard: open positions must still show action buttons."""
+    with patch("dashboard.app._latest_mark_prices", return_value={"ETH": 3100.0}), TestClient(app) as client:
+        client.app.state.api_client = ClosedPositionApiClient()
+        resp = client.get("/positions?view=open")
+        assert resp.status_code == 200
+        # Open positions should show action buttons
+        assert "Close Position" in resp.text
+        assert "Adjust Stop" in resp.text
+
+
+def test_positions_panel_pnl_negative_shows_bear_class() -> None:
+    """Bug: positions_panel.html used pnl_pct >= 0 showing 0% as green.
+    Fix: use > 0 / < 0 / else dim, consistent with position_detail_panel."""
+    with patch("dashboard.app._latest_mark_prices", return_value={"ETH": 2900.0}), TestClient(app) as client:
+        # ETH open: entry=3000, current=2900 -> pnl_pct ~= -3.3% (negative = bear)
+        client.app.state.api_client = ClosedPositionApiClient()
+        resp = client.get("/partials/positions")
+        assert resp.status_code == 200
+        # ETH is losing -- must show text-bear
+        assert "text-bear" in resp.text
+
+
+def test_performance_page_provides_max_dd() -> None:
+    """Bug: performance route provided max_drawdown but template used max_dd (name mismatch)."""
+    import os as _os
+    import sqlite3
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = _os.path.join(tmp, "brain.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "CREATE TABLE positions "
+            "(asset TEXT, direction TEXT, entry_price REAL, realized_pnl REAL, "
+            "size_notional REAL, opened_at TEXT, closed_at TEXT, status TEXT, "
+            "stop_loss REAL, take_profit REAL)"
+        )
+        # +100 then -200 net => drawdown exists
+        conn.execute(
+            "INSERT INTO positions VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("BTC", "long", 80000, 100, 1000, "2024-01-01", "2024-01-02", "closed", 77000, 85000),
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("ETH", "long", 3000, -200, 500, "2024-01-02", "2024-01-03", "closed", 2800, 3500),
+        )
+        conn.commit()
+        conn.close()
+
+        _os.environ["B1E55ED_DB_PATH"] = db_path
+        try:
+            with TestClient(app) as client:
+                client.app.state.api_client = DummyApiClient()
+                resp = client.get("/performance")
+                assert resp.status_code == 200
+                # Page should render without error
+                assert "Performance" in resp.text
+        finally:
+            _os.environ.pop("B1E55ED_DB_PATH", None)
+
+
+def test_discretionary_signals_partial_is_fragment_only() -> None:
+    """Bug: hx-get on outer panel div with hx-swap=innerHTML was swapping entire
+    panel (including the submission form) on every auto-refresh."""
+    with TestClient(app) as client:
+        client.app.state.api_client = DummyApiClient()
+        resp = client.get("/partials/discretionary-signals")
+        assert resp.status_code == 200
+        # Must be a fragment -- no shell HTML
+        assert "<!DOCTYPE html>" not in resp.text
+        assert "<nav" not in resp.text
+        # Must NOT include the submission form (that lives in the parent panel)
+        assert 'id="disc-form"' not in resp.text

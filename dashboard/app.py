@@ -2382,7 +2382,7 @@ def treasury_page(request: Request) -> HTMLResponse:
 def conviction_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     ctx = _build_conviction_ctx(client)
-    return templates.TemplateResponse("conviction.html", {"request": request, **ctx})
+    return templates.TemplateResponse("partials/conviction_panel.html", {"request": request, **ctx})
 
 
 @app.get("/partials/kill-dot", response_class=HTMLResponse)
