@@ -25,8 +25,6 @@ from engine.core.models import Event, compute_event_hash
 
 _logger = _logging.getLogger("b1e55ed.database")
 
-_logger = _logging.getLogger("b1e55ed.database")
-
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
