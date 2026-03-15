@@ -314,6 +314,33 @@ class KarmaEngine:
                         (producer_id, new_karma, win_count, loss_count, total_trades, now_iso),
                     )
 
+                # Emit KARMA_UPDATE_V1 — event-sourced audit trail for every karma mutation.
+                # This allows auditors to reconstruct karma history from events alone.
+                try:
+                    from engine.core.events import KarmaUpdatePayload
+
+                    update_reason = "trade_win" if outcome > 0 else ("trade_loss" if outcome < 0 else "settlement")
+                    _karma_update_payload = KarmaUpdatePayload(
+                        producer_id=producer_id,
+                        producer_name=producer_id,
+                        karma_delta=karma_delta,
+                        karma_score_after=new_karma,
+                        win_count_after=win_count,
+                        loss_count_after=loss_count,
+                        trade_id=str(trade_id),
+                        realized_pnl=pnl,
+                        update_reason=update_reason,
+                    )
+                    self._db.append_event(
+                        event_type=EventType.KARMA_UPDATE_V1,
+                        payload=_karma_update_payload.model_dump(mode="json"),
+                        source="karma.attribution",
+                        contributor_id=producer_id,
+                    )
+                except Exception:
+                    # Never break attribution for karma event emission failure.
+                    pass
+
                 producers.append(
                     {
                         "producer_id": producer_id,

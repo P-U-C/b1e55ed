@@ -90,6 +90,7 @@ class Scheduler:
     last_run: float = 0.0
     running: bool = False
     _logger: logging.Logger | None = field(default=None, repr=False)
+    _active_proc: Any = field(default=None, repr=False)  # asyncio.subprocess.Process | None
 
     def _init_logger(self) -> None:
         if self.log_path and self._logger is None:
@@ -242,10 +243,14 @@ class Supervisor:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
-                    if proc.stdout:
-                        await self._stream_output(sch.name, proc.stdout, sch._logger)
-                    returncode = await proc.wait()
-                    self._log_supervisor(f"{sch.name} finished (code={returncode})")
+                    sch._active_proc = proc
+                    try:
+                        if proc.stdout:
+                            await self._stream_output(sch.name, proc.stdout, sch._logger)
+                        returncode = await proc.wait()
+                        self._log_supervisor(f"{sch.name} finished (code={returncode})")
+                    finally:
+                        sch._active_proc = None
                 except Exception as exc:
                     self._log_supervisor(f"{sch.name} error: {exc}")
                 finally:
@@ -328,7 +333,16 @@ class Supervisor:
                 except ProcessLookupError:
                     pass
 
-        # Wait up to 10 seconds for all to exit
+        # Send SIGTERM to any active scheduler subprocess (brain, resolver, etc.)
+        for sch in self.schedulers:
+            if sch._active_proc and sch._active_proc.returncode is None:
+                try:
+                    sch._active_proc.terminate()
+                    self._log_supervisor(f"Sent SIGTERM to {sch.name} scheduler (pid={sch._active_proc.pid})")
+                except ProcessLookupError:
+                    pass
+
+        # Wait up to 10 seconds for all services to exit
         deadline = time.monotonic() + 10.0
         for svc in self.services:
             if svc.process and svc.process.returncode is None:
@@ -341,6 +355,21 @@ class Supervisor:
                     try:
                         svc.process.kill()
                         self._log_supervisor(f"Sent SIGKILL to {svc.name}")
+                    except ProcessLookupError:
+                        pass
+
+        # Wait up to 10 seconds for active scheduler processes to exit
+        sched_deadline = time.monotonic() + 10.0
+        for sch in self.schedulers:
+            if sch._active_proc and sch._active_proc.returncode is None:
+                remaining = max(0.1, sched_deadline - time.monotonic())
+                try:
+                    await asyncio.wait_for(sch._active_proc.wait(), timeout=remaining)
+                    self._log_supervisor(f"{sch.name} scheduler exited cleanly")
+                except TimeoutError:
+                    try:
+                        sch._active_proc.kill()
+                        self._log_supervisor(f"Sent SIGKILL to {sch.name} scheduler")
                     except ProcessLookupError:
                         pass
 

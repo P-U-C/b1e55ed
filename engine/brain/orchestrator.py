@@ -498,6 +498,7 @@ class BrainOrchestrator:
                 regime=regime_res.state.regime,
                 kill_level=self.kill_switch.level,
                 trace_id=cycle_id,
+                source_event_ids=list(synth.snapshot.source_event_ids or []),
             )
             if intent is not None:
                 # TradeIntent is a frozen slots dataclass.
@@ -585,6 +586,7 @@ class BrainOrchestrator:
                             take_profit_pct=0.10,
                             intended_price=mid_price,
                             conviction_id=_conv_id,
+                            source_event_ids=list(synth_results[sym].snapshot.source_event_ids or []),
                         )
                         if self._oms is None:
                             _log.warning("auto-paper-trade skipped: no OMS injected")
