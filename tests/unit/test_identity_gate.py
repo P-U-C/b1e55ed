@@ -54,6 +54,10 @@ def test_require_identity_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_cli_gate_blocks_commands_without_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys) -> None:
     from engine.cli import main
 
+    # Redirect HOME so _identity_dir() cannot find the production identity.
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.delenv("B1E55ED_DEV_MODE", raising=False)
     monkeypatch.chdir(tmp_path)
 
@@ -67,6 +71,10 @@ def test_cli_gate_blocks_commands_without_identity(monkeypatch: pytest.MonkeyPat
 def test_cli_gate_json_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys) -> None:
     from engine.cli import main
 
+    # Redirect HOME so _identity_dir() cannot find the production identity.
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.delenv("B1E55ED_DEV_MODE", raising=False)
     monkeypatch.chdir(tmp_path)
 
@@ -126,6 +134,10 @@ def test_api_returns_403_without_identity_when_not_dev_mode(monkeypatch: pytest.
     _seed_repo_config(tmp_path)
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
 
+    # Redirect HOME so the identity gate cannot find the production identity.
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("B1E55ED_INSECURE_OK", "1")
     monkeypatch.setenv("B1E55ED_DEV_MODE", "0")
