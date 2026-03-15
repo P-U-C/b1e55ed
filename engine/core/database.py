@@ -16,6 +16,12 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from engine.core.events import EventType, canonical_json
+from engine.core.exceptions import EventStoreError
+from engine.core.models import Event, compute_event_hash
 
 _logger = _logging.getLogger("b1e55ed.database")
 
@@ -25,13 +31,6 @@ except ImportError:  # pragma: no cover
     from datetime import timezone as _tz  # noqa: PLC0415
 
     UTC = _tz.utc  # noqa: N806, UP017
-
-from pathlib import Path
-from typing import Any
-
-from engine.core.events import EventType, canonical_json
-from engine.core.exceptions import EventStoreError
-from engine.core.models import Event, compute_event_hash
 
 SCHEMA = """
 -- ============================================================
@@ -58,8 +57,7 @@ CREATE TABLE IF NOT EXISTS events (
     payload TEXT NOT NULL,
     prev_hash TEXT,
     hash TEXT NOT NULL UNIQUE,
-    created_at TEXT DEFAULT (datetime('now')),
-    symbol TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL
+    created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
@@ -68,7 +66,6 @@ CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_contributor ON events(contributor_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol);
 
 -- ============================================================
 -- Event Deduplication
