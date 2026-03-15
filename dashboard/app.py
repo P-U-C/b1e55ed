@@ -9,6 +9,8 @@ import contextlib
 import os
 import sqlite3
 import time as _time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 try:
@@ -23,7 +25,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -32,7 +34,33 @@ from dashboard.services.api_client import ApiClient
 
 _HERE = Path(__file__).resolve().parent
 
-app = FastAPI(title="b1e55ed dashboard", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Startup / shutdown lifecycle for the dashboard app."""
+    from engine.core.config import Config
+    from engine.core.paths import config_dir
+
+    base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050/api/v1")
+    token = os.getenv("B1E55ED_API_TOKEN")
+    kill_switch_token = os.getenv("B1E55ED_KILL_SWITCH_TOKEN")
+    if not token or not kill_switch_token:
+        try:
+            user_path = config_dir() / "user.yaml"
+            cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(None)
+            if not token:
+                token = str(getattr(cfg.api, "auth_token", "") or "")
+            if not kill_switch_token:
+                kill_switch_token = str(getattr(cfg.api, "kill_switch_token", "") or "")
+        except Exception:
+            pass
+
+    application.state.api_client = ApiClient(base_url=base_url, token=token or None)
+    application.state.kill_switch_api_client = ApiClient(base_url=base_url, token=kill_switch_token or token or None)
+    yield
+
+
+app = FastAPI(title="b1e55ed dashboard", docs_url=None, redoc_url=None, lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 
 templates = Jinja2Templates(directory=_HERE / "templates")
@@ -163,32 +191,6 @@ async def _identity_gate(request: Request, call_next):
         )
 
     return await call_next(request)
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    from engine.core.config import Config
-    from engine.core.paths import config_dir
-
-    base_url = os.getenv("B1E55ED_API_BASE_URL", "http://127.0.0.1:5050/api/v1")
-    # Prefer explicit env var; fall back to user config so the dashboard
-    # works out of the box without extra env wiring.
-    token = os.getenv("B1E55ED_API_TOKEN")
-    kill_switch_token = os.getenv("B1E55ED_KILL_SWITCH_TOKEN")
-    if not token or not kill_switch_token:
-        try:
-            user_path = config_dir() / "user.yaml"
-            cfg = Config.from_yaml(user_path) if user_path.exists() else Config.from_repo_defaults(None)
-            if not token:
-                token = str(getattr(cfg.api, "auth_token", "") or "")
-            if not kill_switch_token:
-                kill_switch_token = str(getattr(cfg.api, "kill_switch_token", "") or "")
-        except Exception:
-            pass
-
-    app.state.api_client = ApiClient(base_url=base_url, token=token or None)
-    # Kill-switch endpoints use a separate auth boundary.
-    app.state.kill_switch_api_client = ApiClient(base_url=base_url, token=kill_switch_token or token or None)
 
 
 def _api(request: Request) -> ApiClient:
@@ -585,7 +587,7 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
     for s in items:
         if not isinstance(s, dict):
             continue
-        payload = s.get("payload") if isinstance(s.get("payload"), dict) else {}
+        payload: dict[str, Any] = s.get("payload") if isinstance(s.get("payload"), dict) else {}
         t = str(s.get("type") or "")
         domain = _domain_from_type(t)
 
@@ -844,7 +846,7 @@ def _build_conviction_ctx(client: Any) -> dict[str, Any]:
     else:
         # Fallback: read directly from DB (handles older API versions without the endpoint)
         try:
-            from engine.core.config import data_dir
+            from engine.core.paths import data_dir
 
             db_path = data_dir() / "brain.db"
             if db_path.exists():
@@ -983,7 +985,7 @@ def _system_status_ctx() -> dict[str, Any]:
     events_today: int = 0
     uptime: str = "—"
     try:
-        from engine.core.config import data_dir
+        from engine.core.paths import data_dir
 
         db_path = data_dir() / "brain.db"
         if db_path.exists():
@@ -1548,7 +1550,7 @@ def forecasts_page(
     }
 
     enabled_ids = set(universe_ctx.get("enabled_bundle_ids") or [])
-    raw_bundles = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
+    raw_bundles: list[Any] = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
     bundle_options = [b for b in raw_bundles if isinstance(b, dict) and str(b.get("id") or "") and (not enabled_ids or str(b.get("id")) in enabled_ids)]
     bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
@@ -1672,7 +1674,7 @@ def signals_page(
     filter_qs = urlencode(filter_params)
 
     enabled_ids = set(universe_ctx.get("enabled_bundle_ids") or [])
-    raw_bundles = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
+    raw_bundles: list[Any] = universe_ctx.get("bundles") if isinstance(universe_ctx.get("bundles"), list) else []
     bundle_options = [b for b in raw_bundles if isinstance(b, dict) and str(b.get("id") or "") and (not enabled_ids or str(b.get("id")) in enabled_ids)]
     bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
@@ -1912,7 +1914,7 @@ def performance_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/system", response_class=HTMLResponse)
-def system_page_redirect(request: Request) -> HTMLResponse:
+def system_page_redirect(request: Request) -> Response:
     """System merged into Settings — redirect for backward compat."""
     from fastapi.responses import RedirectResponse
 
@@ -2396,7 +2398,7 @@ async def adjust_target(position_id: str, request: Request) -> HTMLResponse:
 
 
 @app.get("/config", response_class=HTMLResponse)
-def config_page_redirect(request: Request) -> HTMLResponse:
+def config_page_redirect(request: Request) -> Response:
     """Config merged into Settings — redirect for backward compat."""
     from fastapi.responses import RedirectResponse
 
@@ -2597,10 +2599,12 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
         except Exception:
             pass
     try:
-        from engine.core.config import load_config
+        from engine.core.config import Config
+        from engine.core.paths import config_dir as _config_dir
 
-        cfg = load_config()
-        if getattr(getattr(cfg, "execution", None), "paper_trading", True) is False:
+        _cfg_path = _config_dir() / "user.yaml"
+        _cfg = Config.from_yaml(_cfg_path) if _cfg_path.exists() else Config.from_repo_defaults(None)
+        if getattr(getattr(_cfg, "execution", None), "paper_trading", True) is False:
             mode = "LIVE"
     except Exception:
         pass
