@@ -148,15 +148,18 @@ async def test_universe_pack_catalog_and_pack_based_bundle_creation(temp_dir: Pa
         assert create_from_pack.status_code == 200, create_from_pack.text
         bundle = create_from_pack.json()
         assert bundle["id"] == "hl-tradfi-perps"
-        assert bundle["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
+        # hl-tradfi-perps now contains HL equity perps (non-crypto stocks)
+        from engine.core.bundle_packs import get_bundle_pack
+
+        expected_symbols = get_bundle_pack("hl-tradfi-perps")["symbols"]
+        assert bundle["symbols"] == expected_symbols
         assert "pack:hl-tradfi-perps" in bundle["tags"]
-        assert "vol" in bundle["tags"]
+        assert "tradfi" in bundle["tags"]
 
         active = await ac.get("/api/v1/universe/active", headers=headers)
         assert active.status_code == 200
         active_js = active.json()
-        assert active_js["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
-        assert "vol" in active_js["tags"]
-        assert active_js["tag_symbols"]["vol"] == ["HYPE", "SOL", "BTC", "ETH"]
+        assert active_js["symbols"] == expected_symbols
+        assert "tradfi" in active_js["tags"]
 
     db.close()
