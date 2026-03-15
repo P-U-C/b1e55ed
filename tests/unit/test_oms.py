@@ -50,9 +50,9 @@ def test_submit_intent_paper_creates_fill_and_events(temp_dir: Path, test_config
     assert pos["status"] == "open"
 
     # execution events emitted
+    # Note: trade_intent.v1 is now emitted by decision.py, not OMS
     evs = db.get_events(limit=50)
     types = {e.type for e in evs}
-    assert "execution.trade_intent.v1" in {str(t) for t in types}
     assert "execution.order_filled.v1" in {str(t) for t in types}
 
 
