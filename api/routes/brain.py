@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from api.auth import AuthDep
 from api.deps import get_config, get_db, get_kill_switch
@@ -213,20 +213,49 @@ def trigger_cycle(
 
 
 @router.get("/convictions")
-def get_convictions(db: Database = Depends(get_db), limit: int = 20) -> list[dict]:
-    """Latest conviction scores, one per asset (most recent)."""
-    rows = db.execute(
-        """
-        SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
-        FROM conviction_scores
-        WHERE (symbol, ts) IN (
-            SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
-        )
-        ORDER BY confidence DESC, magnitude DESC
-        LIMIT ?
-        """,
-        (limit,),
-    ).fetchall()
+def get_convictions(request: Request, db: Database = Depends(get_db), limit: int = 20) -> list[dict]:
+    """Latest conviction scores for active universe symbols (max 48h old)."""
+    # Only return symbols in the active universe — prevents stale wizard symbols polluting the view
+    active: list[str] = []
+    try:
+        cfg = getattr(getattr(request, "app", None), "state", None)
+        if cfg:
+            cfg = getattr(cfg, "config", None)
+        if cfg:
+            active = [s.upper() for s in cfg.universe.active_symbols()]
+    except Exception:
+        pass
+
+    if active:
+        placeholders = ",".join("?" * len(active))
+        rows = db.execute(
+            f"""
+            SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
+            FROM conviction_scores
+            WHERE symbol IN ({placeholders})
+              AND (symbol, ts) IN (
+                SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
+              )
+              AND ts >= datetime('now', '-48 hours')
+            ORDER BY confidence DESC, magnitude DESC
+            LIMIT ?
+            """,
+            (*active, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """
+            SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
+            FROM conviction_scores
+            WHERE (symbol, ts) IN (
+                SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
+            )
+              AND ts >= datetime('now', '-48 hours')
+            ORDER BY confidence DESC, magnitude DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
     result = []
     for r in rows:
         result.append(
