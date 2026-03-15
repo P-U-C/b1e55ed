@@ -22,7 +22,8 @@ class ApiClient:
     def __init__(self, base_url: str, token: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
-        self._timeout = httpx.Timeout(2.0)
+        self._timeout = httpx.Timeout(10.0)
+        self._long_timeout = httpx.Timeout(60.0)
 
     def _headers(self) -> dict[str, str]:
         if not self.token:
@@ -114,7 +115,14 @@ class ApiClient:
         return self._get_json("/brain/status")
 
     def run_brain_cycle(self) -> ApiResult:
-        return self._post_json("/brain/run", {})
+        url = f"{self.base_url}/brain/run"
+        try:
+            with httpx.Client(timeout=self._long_timeout, headers=self._headers()) as client:
+                resp = client.post(url, json={})
+                resp.raise_for_status()
+                return ApiResult(resp.json(), True)
+        except Exception:
+            return ApiResult(None, False)
 
     def set_kill_switch(self, level: int, reason: str = "dashboard") -> ApiResult:
         return self._post_json("/kill-switch/set", {"level": int(level), "reason": reason})
