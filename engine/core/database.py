@@ -723,6 +723,9 @@ class Database:
         self._migrate_karma_intents_unique_trade_id()
         # DeerFlow S0 — producer karma config (volume dampening + LLM ceiling)
         self._ensure_table_exists("producer_karma_config")
+        # Retention fix: conviction_scores needs created_at for time-based pruning.
+        # Default to datetime('now') so existing rows are treated as recent.
+        self._ensure_column("conviction_scores", "created_at", "TEXT DEFAULT (datetime('now'))")
         # Performance: index on created_at (prevents linear scan on every insert)
         with self.conn:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
@@ -1082,14 +1085,29 @@ class Database:
         deleted: dict[str, int] = {}
         with self._lock:
             with self.conn:
-                # Events: keep last N days
-                cursor = self.conn.execute(
-                    "DELETE FROM events WHERE created_at < datetime('now', ?)",
+                # Events: keep last N days.
+                # Bug fix: must delete from event_dedup (FK child) BEFORE events (FK parent)
+                # to avoid FOREIGN KEY constraint violations when foreign_keys=ON.
+                old_event_rows = self.conn.execute(
+                    "SELECT id FROM events WHERE created_at < datetime('now', ?)",
                     (f"-{retention.events_keep_days} days",),
-                )
-                deleted["events"] = cursor.rowcount
+                ).fetchall()
+                old_event_ids = [str(r[0]) for r in old_event_rows]
+                if old_event_ids:
+                    placeholders = ",".join("?" * len(old_event_ids))
+                    self.conn.execute(
+                        f"DELETE FROM event_dedup WHERE event_id IN ({placeholders})",
+                        old_event_ids,
+                    )
+                    self.conn.execute(
+                        f"DELETE FROM events WHERE id IN ({placeholders})",
+                        old_event_ids,
+                    )
+                deleted["events"] = len(old_event_ids)
 
-                # conviction_scores: only rows that have been resolved (outcome IS NOT NULL)
+                # conviction_scores: only rows that have been resolved (outcome IS NOT NULL).
+                # Bug fix: created_at column is added via migration in _init_schema();
+                # referencing it here is now safe.
                 cursor = self.conn.execute(
                     "DELETE FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
                     (f"-{retention.conviction_log_keep_days} days",),
@@ -1103,10 +1121,12 @@ class Database:
                 )
                 deleted["feature_snapshots"] = cursor.rowcount
 
-                # api_rate_limits: always clean up stale windows
+                # api_rate_limits: window_start is an INTEGER epoch (seconds since Unix epoch).
+                # Bug fix: old code compared integer epoch to datetime text, which always
+                # evaluated as zero deleted rows.  Use strftime('%s','now') arithmetic instead.
                 cursor = self.conn.execute(
-                    "DELETE FROM api_rate_limits WHERE window_start < datetime('now', ?)",
-                    (f"-{retention.api_rate_limits_keep_hours} hours",),
+                    "DELETE FROM api_rate_limits WHERE window_start < strftime('%s','now') - (? * 3600)",
+                    (retention.api_rate_limits_keep_hours,),
                 )
                 deleted["api_rate_limits"] = cursor.rowcount
 

@@ -34,7 +34,7 @@ except ImportError:  # pragma: no cover
 from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database
-from engine.core.events import EventType, SignalAcceptedPayload, TradeIntentPayload
+from engine.core.events import EventType, SignalAcceptedPayload
 from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
 from engine.execution.paper import PaperBroker
@@ -88,25 +88,8 @@ class OMS:
         mode = str(self.config.execution.mode)
         idem = idempotency_key or str(uuid.uuid4())
 
-        # Record intent event for auditability.
-        payload = TradeIntentPayload(
-            symbol=intent.symbol,
-            direction=intent.direction,
-            size_pct=float(intent.size_pct),
-            leverage=float(intent.leverage),
-            conviction_score=float(intent.conviction_score),
-            regime=str(intent.regime),
-            rationale=str(intent.rationale),
-            stop_loss_pct=float(intent.stop_loss_pct) if intent.stop_loss_pct is not None else None,
-            take_profit_pct=float(intent.take_profit_pct) if intent.take_profit_pct is not None else None,
-        ).model_dump(mode="json")
-        self.db.append_event(
-            event_type=EventType.TRADE_INTENT_V1,
-            payload=payload,
-            source="execution.oms",
-            dedupe_key=f"{EventType.TRADE_INTENT_V1}:{idem}",
-            ts=_utc_now(),
-        )
+        # Intent events are emitted exclusively by engine.brain.decision (DecisionEngine).
+        # Removed duplicate emission here to prevent double-counting in the event bus.
 
         pf = self.preflight.check(
             intent,
