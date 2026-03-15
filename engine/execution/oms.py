@@ -181,7 +181,9 @@ class OMS:
                     return OMSResult(status="rejected", mode=mode, reasons=[str(_e)])
                 raise
 
-            # Persist execution events as well (redundant with tables, but useful for the event bus).
+            # Persist execution events (redundant with tables, but useful for the event bus).
+            # dedupe_key anchors each event to its order/position so reconcile_execution_events()
+            # can backfill idempotently after a crash between persist and event append.
             self.db.append_event(
                 event_type=EventType.ORDER_SUBMITTED_V1,
                 payload={
@@ -195,6 +197,7 @@ class OMS:
                     "idempotency_key": idem,
                 },
                 source="execution.oms",
+                dedupe_key=f"order_submitted:{fill.order_id}",
             )
             self.db.append_event(
                 event_type=EventType.ORDER_FILLED_V1,
@@ -206,6 +209,7 @@ class OMS:
                     "fee_usd": float(fill.fee_usd),
                 },
                 source="execution.oms",
+                dedupe_key=f"order_filled:{fill.order_id}",
             )
             self.db.append_event(
                 event_type=EventType.POSITION_OPENED_V1,
@@ -219,6 +223,7 @@ class OMS:
                     "leverage": float(intent.leverage),
                 },
                 source="execution.oms",
+                dedupe_key=f"position_opened:{fill.position_id}",
             )
 
             # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution)
