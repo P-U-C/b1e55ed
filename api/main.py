@@ -424,7 +424,7 @@ def create_app() -> FastAPI:
         return build_system_manifest()
 
     @app.get("/", include_in_schema=False)
-    def root() -> dict:
+    def root_page() -> dict:  # renamed to avoid shadowing module-level `root`
         """API info page — lists key endpoints."""
         import engine as _engine
 

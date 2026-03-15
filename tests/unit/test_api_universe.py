@@ -148,15 +148,16 @@ async def test_universe_pack_catalog_and_pack_based_bundle_creation(temp_dir: Pa
         assert create_from_pack.status_code == 200, create_from_pack.text
         bundle = create_from_pack.json()
         assert bundle["id"] == "hl-tradfi-perps"
-        assert bundle["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
+        # Pack contains actual Hyperliquid TradFi perp symbols
+        assert bundle["symbols"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
         assert "pack:hl-tradfi-perps" in bundle["tags"]
         assert "vol" in bundle["tags"]
 
         active = await ac.get("/api/v1/universe/active", headers=headers)
         assert active.status_code == 200
         active_js = active.json()
-        assert active_js["symbols"] == ["HYPE", "SOL", "BTC", "ETH"]
+        assert active_js["symbols"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
         assert "vol" in active_js["tags"]
-        assert active_js["tag_symbols"]["vol"] == ["HYPE", "SOL", "BTC", "ETH"]
+        assert active_js["tag_symbols"]["vol"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
 
     db.close()

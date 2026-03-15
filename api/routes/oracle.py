@@ -202,10 +202,10 @@ def oracle_register_contributor(
 
         raise HTTPException(status_code=409, detail="contributor already registered") from None
 
-    issue_url: str | None = None
+    new_issue_url: str | None = None
     pub = (c.metadata.get("publish") or {}).get("github") if isinstance(c.metadata, dict) else None
     if isinstance(pub, dict):
-        issue_url = pub.get("html_url")
+        new_issue_url = pub.get("html_url")
 
     return ContributorRegisterOracleResponse(
         contributor_id=c.id,
@@ -213,5 +213,5 @@ def oracle_register_contributor(
         name=c.name,
         role=c.role,
         registered_at=c.registered_at,
-        issue_url=issue_url,
+        issue_url=new_issue_url,
     )

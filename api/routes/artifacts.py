@@ -134,11 +134,11 @@ def get_artifact_meta(
 # ------------------------------------------------------------------
 
 
-@router.post("/ingest")
+@router.post("/ingest", response_model=None)
 def ingest_artifact(
     body: dict[str, Any],
     store: ArtifactStore = Depends(_get_store),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     content_b64 = body.get("content_base64", "")
     filename = body.get("filename", "unnamed")
     content_type = body.get("content_type", "application/octet-stream")
