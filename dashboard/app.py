@@ -2394,7 +2394,18 @@ async def close_position_proxy(position_id: str, request: Request) -> HTMLRespon
                 with contextlib.suppress(TypeError, ValueError):
                     sign = "+" if float(pnl_val) >= 0 else ""
                     pnl = f" (PnL: {sign}${float(pnl_val):.2f})"
-        return HTMLResponse(f'<span class="text-bull">✓ Position closed{pnl}</span>')
+        closed_panel = (
+            f'<div id="pos-panel-{position_id}" class="panel" '
+            f'style="margin-bottom:1rem; opacity:0.5;">'
+            f'<div class="panel-header">'
+            f'<span class="panel-title text-dim">{position_id} — closed</span>'
+            f'<span class="text-bull" style="font-size:0.85rem;">✓ Closed{pnl}</span>'
+            f"</div></div>"
+        )
+        return HTMLResponse(
+            closed_panel,
+            headers={"HX-Trigger": "positionsRefresh"},
+        )
     return HTMLResponse('<span class="text-bear">✗ Failed to close position</span>')
 
 
@@ -2456,9 +2467,14 @@ async def events_verify_chain(request: Request) -> HTMLResponse:
         event_count = int(row[0]) if row else 0
         valid = db.verify_hash_chain(fast=True)
         db.close()
+        # fast=True only checks recent events, not the full chain.
+        # Report accurately to avoid misleading operators.
+        fast_label = "recent events (fast mode)"
         if valid:
-            return HTMLResponse(f'<span class="text-bull">✓ Chain valid — {event_count:,} events checked</span>')
-        return HTMLResponse(f'<span class="text-bear">✗ Chain INVALID — {event_count:,} events checked. Possible tampering.</span>')
+            return HTMLResponse(
+                f'<span class="text-bull">✓ Chain valid — {fast_label} verified. Run <code>python -m engine verify-chain</code> from CLI for full audit.</span>'
+            )
+        return HTMLResponse(f'<span class="text-bear">✗ Chain INVALID — {fast_label} checked. Possible tampering. Run full CLI verify for details.</span>')
     except Exception as exc:
         return HTMLResponse(f'<span class="text-warn">⚠ Verify failed: {exc}</span>')
 

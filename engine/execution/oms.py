@@ -74,7 +74,7 @@ class OMS:
         mode = str(self.config.execution.mode)
         idem = idempotency_key or str(uuid.uuid4())
 
-        # TRADE_INTENT_V1 is emitted exclusively by engine.brain.decision.DecisionEngine.
+        # Intent events are emitted exclusively by engine.brain.decision (DecisionEngine).
         # Removed duplicate emission here to prevent double-counting in the event bus.
 
         pf = self.preflight.check(
