@@ -20,29 +20,16 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
-
-try:
-    from datetime import UTC  # py311+
-except ImportError:  # pragma: no cover
-    from datetime import timezone as _tz  # noqa: PLC0415
-
-    UTC = _tz.utc  # noqa: N806, UP017
-
 
 from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
 from engine.core.database import Database
-from engine.core.events import EventType, SignalAcceptedPayload, TradeIntentPayload
+from engine.core.events import EventType, SignalAcceptedPayload
 from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
 from engine.execution.paper import PaperBroker
 from engine.execution.position_sizer import CorrelationAwareSizer, PositionSizer, RiskLimits
 from engine.execution.preflight import Preflight
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC).replace(microsecond=0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,25 +74,8 @@ class OMS:
         mode = str(self.config.execution.mode)
         idem = idempotency_key or str(uuid.uuid4())
 
-        # Record intent event for auditability.
-        payload = TradeIntentPayload(
-            symbol=intent.symbol,
-            direction=intent.direction,
-            size_pct=float(intent.size_pct),
-            leverage=float(intent.leverage),
-            conviction_score=float(intent.conviction_score),
-            regime=str(intent.regime),
-            rationale=str(intent.rationale),
-            stop_loss_pct=float(intent.stop_loss_pct) if intent.stop_loss_pct is not None else None,
-            take_profit_pct=float(intent.take_profit_pct) if intent.take_profit_pct is not None else None,
-        ).model_dump(mode="json")
-        self.db.append_event(
-            event_type=EventType.TRADE_INTENT_V1,
-            payload=payload,
-            source="execution.oms",
-            dedupe_key=f"{EventType.TRADE_INTENT_V1}:{idem}",
-            ts=_utc_now(),
-        )
+        # TRADE_INTENT_V1 is emitted exclusively by engine.brain.decision.DecisionEngine.
+        # Removed duplicate emission here to prevent double-counting in the event bus.
 
         pf = self.preflight.check(
             intent,
@@ -220,9 +190,11 @@ class OMS:
                 source="execution.oms",
             )
 
-            # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution)
+            # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution).
+            # Canonical trade identity is position_id — pnl.py and karma.py both look up
+            # attribution events by str(position_id), so we must emit with the same key.
             self._emit_signal_accepted(
-                trade_id=fill.order_id,
+                trade_id=fill.position_id,
                 intent=intent,
             )
 
