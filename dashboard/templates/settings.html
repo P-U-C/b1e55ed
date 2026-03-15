@@ -71,17 +71,18 @@
 
   <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
     <span class="text-dim" style="font-size:0.75rem;">Preset</span>
-    <select class="btn" style="padding:6px 10px;" name="preset"
+    <select class="btn" style="padding:6px 10px; opacity:0.45; cursor:not-allowed;" name="preset"
             hx-post="/api/settings/config/preset"
             hx-target="#config-save-result"
             hx-swap="innerHTML"
+            title="Not yet available"
             disabled>
       {% for p in presets %}
       <option value="{{ p }}" {% if preset == p %}selected{% endif %}>{{ p }}</option>
       {% endfor %}
     </select>
-    <button class="btn" hx-get="/api/settings/config/reload" hx-target="#config-save-result" hx-swap="innerHTML" disabled>Reload</button>
-    <button class="btn" hx-post="/api/settings/config/save" hx-confirm="Save configuration?" hx-target="#config-save-result" hx-swap="innerHTML" disabled>Save</button>
+    <button class="btn" hx-get="/api/settings/config/reload" hx-target="#config-save-result" hx-swap="innerHTML" title="Not yet available" style="opacity:0.45; cursor:not-allowed;" disabled>Reload</button>
+    <button class="btn" hx-post="/api/settings/config/save" hx-confirm="Save configuration?" hx-target="#config-save-result" hx-swap="innerHTML" title="Not yet available" style="opacity:0.45; cursor:not-allowed;" disabled>Save</button>
     <span id="config-save-result" class="text-warn" style="font-size:0.75rem;">Config write actions are disabled in dashboard (not implemented yet).</span>
   </div>
 
@@ -417,17 +418,19 @@
     <span class="panel-title" style="color:var(--red);">Danger Zone</span>
   </div>
   <div style="display:flex; gap:0.75rem; flex-wrap:wrap; padding:0.5rem 0;">
-    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
+    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red); opacity:0.45; cursor:not-allowed;"
             hx-post="/api/settings/reset-defaults"
             hx-confirm="Reset ALL settings to defaults? This cannot be undone."
             hx-target="#danger-status" hx-swap="innerHTML"
+            title="Not yet available"
             disabled>
       Reset All to Defaults
     </button>
-    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red);"
+    <button class="btn" style="border-color:rgba(220,38,38,0.4); color:var(--red); opacity:0.45; cursor:not-allowed;"
             hx-post="/api/settings/clear-signals"
             hx-confirm="Clear ALL signal history from brain.db? This cannot be undone."
             hx-target="#danger-status" hx-swap="innerHTML"
+            title="Not yet available"
             disabled>
       Clear Signal History
     </button>

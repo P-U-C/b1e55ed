@@ -13,7 +13,7 @@
 
 {% if positions %}
   {% for p in positions %}
-  <div class="panel" style="margin-bottom:1rem;{% if p.conviction_conflict %} border-color:rgba(245,158,11,0.55); box-shadow:inset 0 0 0 1px rgba(245,158,11,0.28);{% endif %}" hx-get="/partials/position/{{ p.id }}" hx-trigger="every 30s" hx-swap="innerHTML">
+  <div id="pos-panel-{{ p.id }}" class="panel" style="margin-bottom:1rem;{% if p.conviction_conflict %} border-color:rgba(245,158,11,0.55); box-shadow:inset 0 0 0 1px rgba(245,158,11,0.28);{% endif %}" hx-get="/partials/position/{{ p.id }}" hx-trigger="every 30s" hx-swap="innerHTML">
     <div class="panel-header">
       <span class="panel-title">
         {{ p.id }} · {{ p.symbol }} · <span class="{{ 'text-bull' if p.direction in ['long','buy'] else ('text-bear' if p.direction in ['short','sell'] else 'text-dim') }}">{{ p.direction | upper }}</span>
@@ -99,7 +99,11 @@
     <div id="pos-{{ p.id }}-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
       <button class="btn" onclick="this.style.display='none'; document.getElementById('stop-form-{{ p.id }}').style.display='flex';">Adjust Stop</button>
       <button class="btn" onclick="this.style.display='none'; document.getElementById('target-form-{{ p.id }}').style.display='flex';">Adjust Target</button>
-      <button class="btn btn-danger" hx-post="/api/positions/{{ p.id }}/close" hx-confirm="Close position {{ p.id }}?">Close Position</button>
+      <button class="btn btn-danger"
+              hx-post="/api/positions/{{ p.id }}/close"
+              hx-confirm="Close position {{ p.id }}?"
+              hx-target="#pos-panel-{{ p.id }}"
+              hx-swap="outerHTML">Close Position</button>
 
       <form id="stop-form-{{ p.id }}" style="display:none; gap:0.5rem; align-items:center;"
             hx-post="/api/positions/{{ p.id }}/adjust-stop"

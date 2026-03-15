@@ -21,15 +21,6 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
-
-try:
-    from datetime import UTC  # py311+
-except ImportError:  # pragma: no cover
-    from datetime import timezone as _tz  # noqa: PLC0415
-
-    UTC = _tz.utc  # noqa: N806, UP017
-
 
 from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
@@ -40,10 +31,6 @@ from engine.core.types import TradeIntent
 from engine.execution.paper import PaperBroker
 from engine.execution.position_sizer import CorrelationAwareSizer, PositionSizer, RiskLimits
 from engine.execution.preflight import Preflight
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC).replace(microsecond=0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,9 +196,11 @@ class OMS:
                 dedupe_key=f"position_opened:{fill.position_id}",
             )
 
-            # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution)
+            # Emit SIGNAL_ACCEPTED_V1 for each contributing signal (flywheel attribution).
+            # Canonical trade identity is position_id — pnl.py and karma.py both look up
+            # attribution events by str(position_id), so we must emit with the same key.
             self._emit_signal_accepted(
-                trade_id=fill.order_id,
+                trade_id=fill.position_id,
                 intent=intent,
             )
 

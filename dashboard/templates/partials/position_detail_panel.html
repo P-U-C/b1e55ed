@@ -79,6 +79,10 @@
 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
   <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-stop" hx-confirm="Adjust stop loss?">Adjust Stop</button>
   <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-target" hx-confirm="Adjust target?">Adjust Target</button>
-  <button class="btn btn-danger" hx-post="/api/positions/{{ p.id }}/close" hx-confirm="Close position {{ p.id }}?">Close Position</button>
+  <button class="btn btn-danger"
+          hx-post="/api/positions/{{ p.id }}/close"
+          hx-confirm="Close position {{ p.id }}?"
+          hx-target="#pos-panel-{{ p.id }}"
+          hx-swap="outerHTML">Close Position</button>
 </div>
 {% endif %}

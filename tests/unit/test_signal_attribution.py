@@ -138,7 +138,7 @@ class TestSignalAcceptedEmission:
         assert len(accepted_events) >= 1
 
         payload = accepted_events[0].payload
-        assert payload["trade_id"] == result.order_id
+        assert payload["trade_id"] == str(result.position_id)
         assert payload["signal_event_id"] == ev.id
         assert payload["direction"] == "long"
         assert payload["domain"] == "technical"

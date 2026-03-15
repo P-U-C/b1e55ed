@@ -2394,7 +2394,18 @@ async def close_position_proxy(position_id: str, request: Request) -> HTMLRespon
                 with contextlib.suppress(TypeError, ValueError):
                     sign = "+" if float(pnl_val) >= 0 else ""
                     pnl = f" (PnL: {sign}${float(pnl_val):.2f})"
-        return HTMLResponse(f'<span class="text-bull">✓ Position closed{pnl}</span>')
+        closed_panel = (
+            f'<div id="pos-panel-{position_id}" class="panel" '
+            f'style="margin-bottom:1rem; opacity:0.5;">'
+            f'<div class="panel-header">'
+            f'<span class="panel-title text-dim">{position_id} — closed</span>'
+            f'<span class="text-bull" style="font-size:0.85rem;">✓ Closed{pnl}</span>'
+            f"</div></div>"
+        )
+        return HTMLResponse(
+            closed_panel,
+            headers={"HX-Trigger": "positionsRefresh"},
+        )
     return HTMLResponse('<span class="text-bear">✗ Failed to close position</span>')
 
 
