@@ -240,7 +240,7 @@
 </div>
 
 <!-- ── Discretionary Signals + Form ──────────── -->
-<div class="panel" style="margin-bottom:1rem;" hx-get="/partials/discretionary-signals" hx-trigger="every 300s" hx-swap="innerHTML">
+<div class="panel" style="margin-bottom:1rem;">
   <div class="panel-header">
     <span class="panel-title">Discretionary Signals</span>
     <span class="panel-age">active</span>
@@ -280,6 +280,10 @@
     Example: <code style="font-size:0.65rem; background:rgba(255,255,255,0.04); padding:2px 4px; border-radius:2px;">{"symbol": "BTC", "direction": "bullish", "confidence": 7, "notes": "Cup and handle on 4h"}</code>
   </div>
 
+  <div id="disc-signals-list"
+       hx-get="/partials/discretionary-signals"
+       hx-trigger="every 300s"
+       hx-swap="innerHTML">
   {% if disc_signals %}
   {% for s in disc_signals %}
   <div style="display:flex; align-items:center; gap:0.75rem; padding:6px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
@@ -295,6 +299,7 @@
   {% else %}
   <div style="color:var(--text-dim); font-size:0.75rem;">No discretionary signals yet.</div>
   {% endif %}
+  </div>
 </div>
 
 <!-- ── 5. Full-width: Producer Breakdown + Benchmarks (from cockpit) ── -->

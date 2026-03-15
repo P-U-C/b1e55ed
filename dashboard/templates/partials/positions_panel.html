@@ -8,7 +8,7 @@
   <div style="margin-bottom: 0.75rem;">
     <div style="display:flex; justify-content:space-between; align-items:baseline;">
       <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
-      <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-weight:400;">
+      <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }} data-live" style="font-weight:400;">
         {{ '%+.1f' | format(p.pnl_pct) }}%
       </span>
     </div>
@@ -19,7 +19,7 @@
       <div><span class="text-dim">Target</span><br>${{ '%.2f' | format(p.target) }}</div>
     </div>
     <div style="margin-top:0.25rem; font-size:0.75rem; color:var(--text-dim);">
-      P&L: <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+      P&L: <span class="{{ 'text-bull' if p.pnl_usd > 0 else ('text-bear' if p.pnl_usd < 0 else 'text-dim') }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
       {% if p.leverage_warning %}
         · <span class="text-warn">{{ p.leverage }}x leverage (exceeds max)</span>
       {% endif %}
