@@ -18,6 +18,7 @@ No dry_run mode (DECISIONS_V3 #4).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
