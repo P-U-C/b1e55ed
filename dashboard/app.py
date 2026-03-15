@@ -2068,7 +2068,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "universe_packs": universe_ctx.get("packs", []),
             "universe_pack_map": universe_ctx.get("pack_map", {}),
             "universe_active_symbols": universe_ctx.get("active_symbols", []),
-            "tradfi_symbols": (getattr(getattr(globals().get("_cfg"), "universe", None), "tradfi_symbols", None) or []),
+            "tradfi_symbols": (cfg.get("universe") or {}).get("tradfi_symbols") or [],
             "tradfi_twelvedata_key_set": bool(os.environ.get("B1E55ED_TWELVEDATA_KEY")),
             "universe_fallback_to_symbols": universe_ctx.get("fallback_to_symbols", True),
             # System page data
