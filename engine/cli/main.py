@@ -687,7 +687,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
     if not force:
         _daemon_running = False
         try:
-            import psutil  # type: ignore[import]
+            import psutil  # type: ignore[import-not-found,import-untyped,unused-ignore]
 
             for _proc in psutil.process_iter(["pid", "cmdline"]):
                 _cmdline = " ".join(_proc.info.get("cmdline") or [])
@@ -2768,23 +2768,35 @@ def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
     if dry_run:
         # Count without deleting (approximate — uses same WHERE clause)
         result: dict[str, int] = {}
-        result["events"] = db.fetchone(
-            "SELECT COUNT(*) FROM events WHERE created_at < datetime('now', ?)",
-            (f"-{retention.events_keep_days} days",),
+        result["events"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM events WHERE created_at < datetime('now', ?)",
+                (f"-{retention.events_keep_days} days",),
+            )
+            or (0,)
         )[0]
-        result["conviction_scores"] = db.fetchone(
-            "SELECT COUNT(*) FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
-            (f"-{retention.conviction_log_keep_days} days",),
+        result["conviction_scores"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
+                (f"-{retention.conviction_log_keep_days} days",),
+            )
+            or (0,)
         )[0]
-        result["feature_snapshots"] = db.fetchone(
-            "SELECT COUNT(*) FROM feature_snapshots WHERE created_at < datetime('now', ?)",
-            (f"-{retention.feature_snapshots_keep_days} days",),
+        result["feature_snapshots"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM feature_snapshots WHERE created_at < datetime('now', ?)",
+                (f"-{retention.feature_snapshots_keep_days} days",),
+            )
+            or (0,)
         )[0]
-        result["api_rate_limits"] = db.fetchone(
-            "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < datetime('now', ?)",
-            (f"-{retention.api_rate_limits_keep_hours} hours",),
+        result["api_rate_limits"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < datetime('now', ?)",
+                (f"-{retention.api_rate_limits_keep_hours} hours",),
+            )
+            or (0,)
         )[0]
-        out = {"dry_run": True, "would_delete": result}
+        out: dict[str, object] = {"dry_run": True, "would_delete": result}
     else:
         deleted = db.prune_old_data(retention)
         out = {"dry_run": False, "deleted": deleted}
@@ -2795,7 +2807,8 @@ def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
         print(_json_dumps(out))
     else:
         mode = "DRY RUN — would delete" if dry_run else "Deleted"
-        counts = out.get("would_delete") or out.get("deleted") or {}
+        _raw_counts = out.get("would_delete") or out.get("deleted") or {}
+        counts: dict[str, int] = {str(k): int(v) for k, v in _raw_counts.items()} if isinstance(_raw_counts, dict) else {}
         print(f"b1e55ed prune ({mode}):")
         for table, count in counts.items():
             print(f"  {table}: {count} rows")
