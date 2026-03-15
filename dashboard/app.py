@@ -2462,9 +2462,6 @@ async def events_verify_chain(request: Request) -> HTMLResponse:
         from engine.core.database import Database as _Database
 
         db = _Database(db_path)
-        # Count events for context
-        row = db.conn.execute("SELECT COUNT(*) FROM events").fetchone()
-        event_count = int(row[0]) if row else 0
         valid = db.verify_hash_chain(fast=True)
         db.close()
         # fast=True only checks recent events, not the full chain.
