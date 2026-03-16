@@ -25,6 +25,8 @@ from api.routes import (
     signals,
     signals_validate,
     social,
+    spi,
+    spi_admin,
     trace,
     universe,
 )
@@ -53,6 +55,8 @@ def get_api_router() -> APIRouter:
     router.include_router(karma.router, tags=["karma"])
     router.include_router(social.router, tags=["social"])
     router.include_router(trace.router, tags=["trace"])
+    router.include_router(spi.router, tags=["spi"])
+    router.include_router(spi_admin.router, tags=["spi-admin"])
 
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
