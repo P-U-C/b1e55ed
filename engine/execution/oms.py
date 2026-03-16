@@ -463,17 +463,20 @@ def reconcile_execution_events(db: Database) -> dict[str, int]:
         )
         dk_sa = f"signal_accepted:{position_id}:reconciled"
         if existing_sa is None and not _has_dedupe_key(db, dk_sa):
+            _sa_payload = SignalAcceptedPayload(
+                trade_id=position_id,
+                producer_id="reconciled",
+                domain="unknown",
+                signal_event_id=position_id,  # placeholder
+                contribution_weight=1.0,
+                direction=row.get("direction") or "long",
+                confidence=0.0,  # unknown at reconcile time
+            ).model_dump(mode="json")
+            # recovery_placeholder=True marks synthetic backfill — not real signal attribution
+            _sa_payload["recovery_placeholder"] = True
             db.append_event(
                 event_type=EventType.SIGNAL_ACCEPTED_V1,
-                payload=SignalAcceptedPayload(
-                    trade_id=position_id,
-                    producer_id="reconciled",
-                    domain="unknown",
-                    signal_event_id=position_id,  # placeholder
-                    contribution_weight=1.0,
-                    direction=row.get("direction") or "long",
-                    confidence=0.0,  # unknown at reconcile time
-                ).model_dump(mode="json"),
+                payload=_sa_payload,
                 source="execution.oms.reconcile",
                 dedupe_key=dk_sa,
             )

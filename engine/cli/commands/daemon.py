@@ -493,6 +493,29 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     if "PYTHONPATH" not in os.environ:
         os.environ["PYTHONPATH"] = str(repo_root)
 
+    # Startup reconciliation: backfill provenance events lost in any prior crash.
+    # Must run before schedulers start so the event bus is consistent from the first cycle.
+    try:
+        import logging as _logging
+
+        from engine.core.database import Database as _Database
+        from engine.core.paths import data_dir as _data_dir
+        from engine.execution.oms import reconcile_execution_events
+
+        _db_path = _data_dir() / "brain.db"
+        if _db_path.exists():
+            _db = _Database(_db_path)
+            _result = reconcile_execution_events(_db)
+            _db.close()
+            _recon_logger = _logging.getLogger("b1e55ed.daemon")
+            _recon_logger.info(f"Startup reconciliation: repaired {_result['signal_accepted']} missing attribution events")
+            print(
+                f"[daemon] Startup reconciliation: repaired {_result['signal_accepted']} missing attribution events",
+                flush=True,
+            )
+    except Exception:
+        pass
+
     import contextlib
 
     with contextlib.suppress(KeyboardInterrupt):
