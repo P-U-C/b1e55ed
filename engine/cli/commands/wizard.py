@@ -1080,8 +1080,9 @@ def _step_register_contributor(repo_root: Path) -> None:
     try:
         from engine.core.contributors import ContributorRegistry as _Registry
         from engine.core.database import Database as _Database
+        from engine.core.paths import get_db_path as _get_db_path
 
-        _db_path = repo_root / "data" / "brain.db"
+        _db_path = _get_db_path()
         _db_path.parent.mkdir(parents=True, exist_ok=True)
         _reg = _Registry(_Database(str(_db_path)))
         _reg.register(

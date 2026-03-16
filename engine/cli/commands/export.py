@@ -181,9 +181,13 @@ def run_export(args: argparse.Namespace, *, repo_root: Path) -> int:
         return 2
 
     # -----------------------------------------------------------------------
-    # Resolve database
+    # Resolve database — get_db_path() is the single source of truth.
+    # Pass base_data_dir so callers that supply a repo_root-relative data
+    # directory (e.g. integration tests) are still honoured.
     # -----------------------------------------------------------------------
-    db_path = repo_root / "data" / "brain.db"
+    from engine.core.paths import get_db_path
+
+    db_path = get_db_path(base_data_dir=repo_root / "data")
     if not db_path.exists():
         print(f"error: database not found: {db_path}", file=sys.stderr)
         print("  Run `b1e55ed setup` first.", file=sys.stderr)

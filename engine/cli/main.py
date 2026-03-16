@@ -21,7 +21,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from engine.core.paths import b1e55ed_dir, data_dir
+from engine.core.paths import b1e55ed_dir, get_db_path
 
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
@@ -108,16 +108,8 @@ def _identity_dir(ctx: CliContext) -> Path:
 
 
 def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
-    """Derive brain.db path from config.data_dir, falling back to ~/.b1e55ed/data."""
-    default = data_dir()
-    if config is not None:
-        cfg_data_dir = getattr(config, "data_dir", None)
-        if cfg_data_dir is not None:
-            cfg_data_dir = Path(cfg_data_dir)
-            if not cfg_data_dir.is_absolute():
-                cfg_data_dir = b1e55ed_dir() / cfg_data_dir
-            return cfg_data_dir / "brain.db"
-    return default / "brain.db"
+    """Derive brain.db path — delegates to get_db_path() (single source of truth)."""
+    return get_db_path(config)
 
 
 def _load_config(ctx: CliContext) -> Config | None:
@@ -669,9 +661,8 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     identity = ensure_identity()
 
     # Initialize database
-    dd = data_dir()
-    dd.mkdir(parents=True, exist_ok=True)
-    db_path = dd / "brain.db"
+    db_path = get_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     _ = Database(db_path)
 
     print("\nStatus summary")

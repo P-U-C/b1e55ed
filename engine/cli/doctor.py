@@ -65,9 +65,9 @@ def _auto_fix(results: list[CheckResult]) -> list[str]:
             try:
                 from engine.core.database import Database
                 from engine.core.events import EventType
-                from engine.core.paths import data_dir
+                from engine.core.paths import get_db_path
 
-                db_path = data_dir() / "brain.db"
+                db_path = get_db_path()
                 if db_path.exists():
                     db = Database(db_path)
                     try:
