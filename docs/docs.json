@@ -70,6 +70,14 @@
         ]
       },
       {
+        "group": "Signal Producers",
+        "pages": [
+          "spi/README",
+          "spi/interface-spec",
+          "spi/adapter-spec"
+        ]
+      },
+      {
         "group": "Operations",
         "pages": [
           "operations/daily",
