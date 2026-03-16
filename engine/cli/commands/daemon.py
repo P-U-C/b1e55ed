@@ -508,13 +508,15 @@ def run_daemon(repo_root: Path, config: Any) -> int:
             _result = reconcile_execution_events(_db)
             _db.close()
             _recon_logger = _logging.getLogger("b1e55ed.daemon")
-            _recon_logger.info(f"Startup reconciliation: repaired {_result['signal_accepted']} missing attribution events")
+            _recon_logger.info(f"Startup reconciliation: repaired {_result.get('signal_accepted', 0)} missing attribution events")
             print(
-                f"[daemon] Startup reconciliation: repaired {_result['signal_accepted']} missing attribution events",
+                f"[daemon] Startup reconciliation: repaired {_result.get('signal_accepted', 0)} missing attribution events",
                 flush=True,
             )
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _log2
+
+        _log2.getLogger("b1e55ed.daemon").warning(f"Startup reconciliation failed: {_exc}", exc_info=True)
 
     import contextlib
 
