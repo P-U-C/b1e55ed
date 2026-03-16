@@ -116,8 +116,8 @@ The producer's confidence values may be on a different scale. Configure normaliz
 
 ```yaml
 confidence_normalization:
-  strategy: linear_scale | logistic | passthrough
-  # For linear_scale:
+  strategy: direct | hit_rate | logistic
+  # For hit_rate:
   input_min: 0.0
   input_max: 100.0
   output_min: 0.55
@@ -127,15 +127,17 @@ confidence_normalization:
   steepness: 10
 ```
 
-#### `passthrough` (default)
+> **Note:** Unknown strategy values silently floor confidence at `0.55`.
+
+#### `direct` (default)
 Use the producer's confidence value directly. Assumes it's already in `[0.55, 0.99]`. Values outside this range are clamped.
 
-#### `linear_scale`
-Linearly rescale from the producer's range to SPI's range:
+#### `hit_rate`
+Uses the producer's historical hit rate to calibrate confidence. Linearly rescales from the producer's range to SPI's range:
 ```
 output = output_min + (input - input_min) / (input_max - input_min) × (output_max - output_min)
 ```
-Example: Producer uses `[0, 100]` → `linear_scale` maps to `[0.55, 0.95]`.
+Example: Producer uses `[0, 100]` → `hit_rate` maps to `[0.55, 0.95]`.
 
 #### `logistic`
 Apply a logistic function to map any range to `(0, 1)`, then clamp to `[0.55, 0.99]`:
@@ -192,7 +194,7 @@ direction_mapping:
   HOLD: neutral
 
 confidence_normalization:
-  strategy: passthrough     # post-fiat already outputs [0.55, 0.99]
+  strategy: direct     # post-fiat already outputs [0.55, 0.99]
 ```
 
 **Reading this spec:**
@@ -286,7 +288,7 @@ b1e55ed adapter dry-run engine/external/specs/my-adapter.yaml --verbose
 **Confidence values clamped to 0.55**
 
 - Producer is returning values below `min_confidence`
-- Review `confidence_normalization` — may need `linear_scale` if producer uses a different range
+- Review `confidence_normalization` — may need `hit_rate` if producer uses a different range
 
 **Direction not mapping correctly**
 

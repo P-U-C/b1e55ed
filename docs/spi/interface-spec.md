@@ -161,17 +161,16 @@ Where:
 **Per-epoch karma update:**
 
 ```
-epoch_brier_mean = mean(brier_scores for all signals resolved in epoch)
-karma_delta = 0.25 - epoch_brier_mean   # positive if better than coin-flip
-new_karma = clip(old_karma + (smoothing_factor × karma_delta), 0.0, 1.0)
+epoch_karma = 1 - brier_score   # per resolved signal; averaged across epoch
+new_karma = clip((0.70 × old_karma) + (0.30 × epoch_karma), 0.0, 1.0)
 ```
 
-**Smoothing factor:** `0.15` (exponential moving average — prevents single epoch from dominating).
+**Smoothing factor:** `0.70` (EMA — retains 70% of prior karma per epoch, preventing a single epoch from dominating).
 
 **Interpretation:**
-- Perfect epoch (all correct, well-calibrated): `karma_delta ≈ +0.20` → karma rises
-- Coin-flip epoch: `karma_delta ≈ 0` → karma unchanged
-- Poor epoch (mostly wrong or overconfident): `karma_delta < 0` → karma falls
+- Perfect epoch (all correct, well-calibrated): `epoch_karma ≈ 1.0` → karma rises
+- Coin-flip epoch: `epoch_karma ≈ 0.75` → karma roughly unchanged
+- Poor epoch (mostly wrong or overconfident): `epoch_karma` low → karma falls
 
 **Thresholds:**
 
