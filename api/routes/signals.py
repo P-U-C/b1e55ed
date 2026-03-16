@@ -255,13 +255,67 @@ def list_signals(
     offset: int = Query(0, ge=0),
     domain: str | None = Query(None, description="Filter by domain (ta/onchain/tradfi/social/etc)"),
     hours: int = Query(24, ge=1, le=168, description="Time window in hours (default 24)"),
+    timeline: bool = Query(False, description="Return top-N per hourly bucket for timeline display"),
+    top_n: int = Query(10, ge=1, le=50, description="Max signals per hourly bucket (timeline mode only)"),
 ) -> PaginatedResponse[SignalResponse]:
+    import json
+    from collections import defaultdict
+
     like = "signal.%"
     if domain:
         like = f"signal.{domain}.%"
 
     hours_param = f"-{hours} hours"
 
+    if timeline:
+        # Fetch all signals in the time window (no limit), then bucket by hour
+        rows = db.execute(
+            """
+            SELECT id, type, ts, source, payload,
+                   strftime('%Y-%m-%d %H', datetime(substr(ts,1,19))) as hour_bucket
+            FROM events
+            WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)
+            ORDER BY ts DESC
+            """,
+            (like, hours_param),
+        ).fetchall()
+
+        def score_key(r: object) -> float:
+            try:
+                p = json.loads(str(r[4])) if r[4] is not None else {}  # type: ignore[index]
+                s = float(p.get("score", p.get("conviction", 5)) or 5)
+                return -abs(s - 5)  # negate for descending sort (most decisive first)
+            except Exception:
+                return 0.0
+
+        buckets: dict = defaultdict(list)
+        for r in rows:
+            buckets[r[5]].append(r)
+
+        sampled = []
+        for bucket_rows in buckets.values():
+            bucket_rows.sort(key=score_key)
+            sampled.extend(bucket_rows[:top_n])
+
+        # Sort final result by ts descending
+        sampled.sort(key=lambda r: r[2], reverse=True)
+
+        items: list[SignalResponse] = []
+        for r in sampled:
+            items.append(
+                SignalResponse(
+                    id=str(r[0]),
+                    type=str(r[1]),
+                    ts=_parse_dt(str(r[2])),
+                    source=str(r[3]) if r[3] is not None else None,
+                    payload=json.loads(str(r[4])) if r[4] is not None else {},
+                )
+            )
+
+        total = len(items)
+        return PaginatedResponse(items=items, limit=limit, offset=offset, total=total)
+
+    # --- Standard (non-timeline) mode ---
     total_row = db.execute(
         "SELECT COUNT(1) FROM events WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)",
         (like, hours_param),
@@ -279,8 +333,7 @@ def list_signals(
         (like, hours_param, limit, offset),
     ).fetchall()
 
-    items: list[SignalResponse] = []
-    import json
+    items = []
 
     for r in rows:
         items.append(
