@@ -591,6 +591,16 @@ def _map_signals(resp: Any) -> list[dict[str, Any]]:
 
         ts = s.get("ts")
         ts_dt = _parse_dt(ts)
+        # Fallback: try ts_epoch_ms directly, or parse ts_iso if ts_dt is still None
+        if ts_dt is None:
+            epoch_ms = s.get("ts_epoch_ms")
+            if epoch_ms is not None:
+                with contextlib.suppress(Exception):
+                    ts_dt = datetime.fromtimestamp(float(epoch_ms) / 1000, tz=UTC)
+        if ts_dt is None:
+            ts_iso_raw = s.get("ts_iso")
+            if ts_iso_raw:
+                ts_dt = _parse_dt(ts_iso_raw)
         ts_hm = ts_dt.strftime("%H:%M") if ts_dt is not None else "—"
         ts_iso = ts_dt.isoformat() if ts_dt is not None else (str(ts) if ts is not None else "")
         ts_ms = int(ts_dt.timestamp() * 1000) if ts_dt is not None else None
