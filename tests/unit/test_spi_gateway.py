@@ -257,13 +257,13 @@ async def test_activate_producer_changes_lifecycle(temp_dir, test_config):
     _ensure_tables(db)
     _ensure_key_column(db)
 
-    # Insert producer in onboarding state
+    # Insert producer in shadow state (shadow→active is valid; onboarding→active is not)
     now = datetime.now(tz=UTC).isoformat()
     db.execute(
         """
         INSERT INTO spi_producers (producer_id, producer_name, lifecycle_state, ingress_mode,
             api_key_hash, registered_at, created_at, updated_at)
-        VALUES (?, ?, 'onboarding', 'native', ?, ?, ?, ?)
+        VALUES (?, ?, 'shadow', 'native', ?, ?, ?, ?)
         """,
         ("onboard_prod", "Onboarding Prod", "fakehash", now, now, now),
     )

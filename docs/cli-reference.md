@@ -473,3 +473,48 @@ b1e55ed reconcile [--json]
 - `--json` — machine-readable JSON output
 
 Returns: counts of backfilled events per type. Backfilled `SIGNAL_ACCEPTED_V1` events carry `recovery_placeholder=true` to distinguish them from real attribution events.
+
+
+---
+
+## spi
+
+Manage SPI (Standard Producer Interface) signal producers.
+
+### `b1e55ed spi register`
+
+Register a new external signal producer interactively.
+
+```text
+b1e55ed spi register
+```
+
+Prompts for producer ID, name, ingress mode, and API URL (adapter mode only). Saves producer config to `~/.b1e55ed/spi/producers/{id}.json`. The API key is displayed once — store it securely.
+
+### `b1e55ed spi status`
+
+List all registered producers and their lifecycle states.
+
+```text
+b1e55ed spi status
+```
+
+Displays: producer_id | state | ingress | karma | resolved
+
+### `b1e55ed spi promote`
+
+Manually advance a producer's lifecycle state.
+
+```text
+b1e55ed spi promote <producer_id>
+```
+
+### `b1e55ed spi test-key`
+
+Validate an API key for a registered producer.
+
+```text
+b1e55ed spi test-key <producer_id>
+```
+
+Prompts for the API key and tests it against the running API server.
