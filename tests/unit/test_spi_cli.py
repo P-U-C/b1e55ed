@@ -293,7 +293,7 @@ def test_spi_test_key_valid(tmp_path: Path, monkeypatch, capsys):
     """spi test-key valid key → 'Key valid' message, rc=0."""
     _cmd_spi, _, _ = _import_spi_cmd()
 
-    monkeypatch.setattr("builtins.input", lambda prompt="": "spi_key_validtestkey")
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "spi_key_validtestkey")
 
     mock_resp = MagicMock()
     mock_resp.__enter__ = lambda s: s
