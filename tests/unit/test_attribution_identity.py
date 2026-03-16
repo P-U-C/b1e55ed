@@ -1,17 +1,17 @@
 """tests/unit/test_attribution_identity.py
 
-Regression tests for P0-1: canonical trade identity is position_id, not order_id.
+Regression tests for attribution identity correctness.
 
-The bug: OMS emitted SIGNAL_ACCEPTED_V1 with trade_id=fill.order_id, but
-karma.py and pnl.py looked up attribution by trade_id=str(position_id).
-This silently broke producer attribution and karma.
-
-The fix: SIGNAL_ACCEPTED_V1 must be emitted with trade_id=fill.position_id.
+P0-1: canonical trade identity is position_id, not order_id.
+Wave-1: source_event_ids is the only authoritative attribution source — DB signal
+        lookup must NOT inflate attribution with unrelated recent signals.
 
 Covers:
 - test_signal_accepted_links_to_position_id
 - test_close_position_finds_signal_accepted_events
 - test_producer_karma_updates_after_position_close
+- test_only_snapshot_signals_get_accepted (Wave-1)
+- test_unrelated_recent_signals_not_credited (Wave-1)
 """
 
 from __future__ import annotations
@@ -269,3 +269,141 @@ def test_producer_karma_updates_after_position_close(tmp_path: Path) -> None:
     assert attr_events, "ATTRIBUTION_OUTCOME_V1 event not emitted after position close"
     attr_payload = attr_events[0].payload if isinstance(attr_events[0].payload, dict) else json.loads(attr_events[0].payload)
     assert attr_payload["trade_id"] == position_id, f"ATTRIBUTION_OUTCOME_V1 trade_id mismatch: got '{attr_payload['trade_id']}', expected '{position_id}'"
+
+
+# ---------------------------------------------------------------------------
+# Wave-1 Test 4: Only snapshot signals (source_event_ids) get credited
+# ---------------------------------------------------------------------------
+
+
+def test_only_snapshot_signals_get_accepted(tmp_path: Path) -> None:
+    """Only the 2 source_event_ids from the intent appear in SIGNAL_ACCEPTED_V1 events.
+
+    Regression for: OMS used to also query the DB for all recent signal.* events
+    for the same symbol and merge them in — meaning producers got credit just for
+    being recent, not for being in the synthesis snapshot.
+
+    Fix: source_event_ids is the ONLY authoritative source.
+    """
+    db = Database(tmp_path / "db.sqlite")
+    cfg = _karma_config(tmp_path)
+    oms = _make_oms(tmp_path, cfg, db)
+
+    # Insert 2 real signal events that WILL be in the intent snapshot
+    ev1 = db.append_event(
+        event_type=EventType.SIGNAL_TA_V1,
+        payload={"symbol": "BTC", "direction": "long", "confidence": 0.8},
+        source="producer.ta",
+    )
+    ev2 = db.append_event(
+        event_type=EventType.SIGNAL_TA_V1,
+        payload={"symbol": "BTC", "direction": "long", "confidence": 0.7},
+        source="producer.momentum",
+    )
+    snapshot_ids = {ev1.id, ev2.id}
+
+    # Insert an EXTRA signal event for the same symbol that was NOT in the snapshot
+    ev_extra = db.append_event(
+        event_type=EventType.SIGNAL_TA_V1,
+        payload={"symbol": "BTC", "direction": "long", "confidence": 0.6},
+        source="producer.unrelated",
+    )
+    extra_id = ev_extra.id
+
+    intent = TradeIntent(
+        symbol="BTC",
+        direction="long",
+        size_pct=0.05,
+        leverage=1.0,
+        conviction_score=80.0,
+        regime="BULL",
+        rationale="wave-1 attribution truthfulness test",
+        source_event_ids=list(snapshot_ids),
+    )
+
+    result = oms.submit(intent, mid_price=50_000.0, equity_usd=10_000.0)
+    assert result.status == "filled", f"Unexpected OMS result: {result}"
+    position_id = result.position_id
+
+    # Collect all emitted SIGNAL_ACCEPTED_V1 signal_event_ids
+    signal_accepted_events = [e for e in db.get_events(limit=200) if str(e.type) == str(EventType.SIGNAL_ACCEPTED_V1)]
+    emitted_ids: set[str] = set()
+    for ev in signal_accepted_events:
+        payload = ev.payload if isinstance(ev.payload, dict) else json.loads(ev.payload)
+        if payload.get("trade_id") == position_id:
+            sig_id = payload.get("signal_event_id", "")
+            if sig_id:
+                emitted_ids.add(sig_id)
+
+    # Exactly the 2 snapshot IDs must appear — no more, no less
+    assert emitted_ids == snapshot_ids, (
+        f"Expected exactly snapshot IDs {snapshot_ids}, got {emitted_ids}. Extra/unrelated ID {extra_id!r} must NOT be credited."
+    )
+    assert extra_id not in emitted_ids, f"Unrelated signal {extra_id!r} from 'producer.unrelated' was incorrectly credited."
+
+
+# ---------------------------------------------------------------------------
+# Wave-1 Test 5: Unrelated recent DB signals must NOT inflate the fallback
+# ---------------------------------------------------------------------------
+
+
+def test_unrelated_recent_signals_not_credited(tmp_path: Path) -> None:
+    """When source_event_ids is empty, the fallback event uses producer_id='unknown'.
+
+    Regression for: with the old DB-query path, even an empty source_event_ids
+    would cause OMS to query the DB, find recent signals for the symbol, and emit
+    SIGNAL_ACCEPTED_V1 events for those producers — giving undeserved credit.
+
+    Fix: fallback must always use producer_id='unknown', never the DB signals.
+    """
+    db = Database(tmp_path / "db.sqlite")
+    cfg = _karma_config(tmp_path)
+    oms = _make_oms(tmp_path, cfg, db)
+
+    # Insert 3 unrelated recent signal events for the same symbol
+    for i in range(3):
+        db.append_event(
+            event_type=EventType.SIGNAL_TA_V1,
+            payload={"symbol": "ETH", "direction": "long", "confidence": 0.7},
+            source=f"producer.unrelated_{i}",
+        )
+
+    # Submit a trade with NO source_event_ids
+    intent = TradeIntent(
+        symbol="ETH",
+        direction="long",
+        size_pct=0.05,
+        leverage=1.0,
+        conviction_score=70.0,
+        regime="BULL",
+        rationale="wave-1 fallback test",
+        source_event_ids=[],  # empty — forces fallback path
+    )
+
+    result = oms.submit(intent, mid_price=3_000.0, equity_usd=10_000.0)
+    assert result.status == "filled", f"Unexpected OMS result: {result}"
+    position_id = result.position_id
+
+    # Collect all SIGNAL_ACCEPTED_V1 events for this trade
+    signal_accepted_events = [e for e in db.get_events(limit=200) if str(e.type) == str(EventType.SIGNAL_ACCEPTED_V1)]
+    trade_events = []
+    for ev in signal_accepted_events:
+        payload = ev.payload if isinstance(ev.payload, dict) else json.loads(ev.payload)
+        if payload.get("trade_id") == position_id:
+            trade_events.append(payload)
+
+    assert trade_events, "Expected at least one SIGNAL_ACCEPTED_V1 fallback event"
+
+    # Every fallback event must have producer_id='unknown'
+    for payload in trade_events:
+        assert payload.get("producer_id") == "unknown", (
+            f"Fallback SIGNAL_ACCEPTED_V1 has producer_id={payload.get('producer_id')!r} "
+            f"but expected 'unknown'. Unrelated DB signals must NOT inflate the fallback. "
+            f"Full payload: {payload}"
+        )
+
+    # There must be no event crediting any of the unrelated producers
+    credited_producers = {p.get("producer_id") for p in trade_events}
+    for i in range(3):
+        unrelated = f"producer.unrelated_{i}"
+        assert unrelated not in credited_producers, f"Unrelated producer {unrelated!r} was incorrectly credited in fallback path."
