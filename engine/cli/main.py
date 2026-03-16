@@ -12,6 +12,7 @@ The hex is blessed: 0xb1e55ed.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
@@ -2009,7 +2010,9 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
                 try:
                     from datetime import UTC  # py311+
                 except ImportError:  # pragma: no cover
-                    UTC = UTC  # noqa: N806
+                    from datetime import timezone
+
+                    UTC = timezone.utc  # noqa: N806,E702,UP017,I001
                 last_ts = datetime.fromisoformat(str(last_cycle[0]).replace("Z", "+00:00"))
                 if last_ts.tzinfo is None:
                     last_ts = last_ts.replace(tzinfo=UTC)
@@ -3645,7 +3648,13 @@ def _spi_register_flow(api_url: str) -> int:
     print()
 
     # Save producer config (without the key)
-    from datetime import UTC, datetime
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
+    from datetime import datetime
 
     config_dir = _spi_config_dir()
     config_path = config_dir / f"{producer_id}.json"
@@ -3657,6 +3666,7 @@ def _spi_register_flow(api_url: str) -> int:
         "api_base_url": api_base_url,
     }
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    config_path.chmod(0o600)  # producer config contains sensitive metadata
     print(f"  Config saved → {config_path}")
     print(f"  Producer '{producer_id}' registered successfully.")
     return 0
@@ -3779,7 +3789,7 @@ def _cmd_spi(ctx: CliContext, args: argparse.Namespace) -> int:
 
     if cmd == "test-key":
         producer_id = str(args.producer_id)
-        api_key = input(f"  API key for '{producer_id}': ").strip()
+        api_key = getpass.getpass(f"  API key for '{producer_id}': ").strip()
         if not api_key:
             print("error: key is required", file=sys.stderr)
             return 1

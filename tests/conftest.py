@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import datetime as _dt
 import os
 import shutil
 from pathlib import Path
+
+# Backport datetime.UTC for Python < 3.11
+if not hasattr(_dt, "UTC"):
+    _dt.UTC = _dt.UTC  # type: ignore[attr-defined]
 
 import pytest
 

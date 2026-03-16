@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 
 from dashboard.app import app
 
+UTC = UTC
+
 
 @dataclass
 class _Res:

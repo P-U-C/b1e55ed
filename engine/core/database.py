@@ -728,7 +728,7 @@ class Database:
         self._ensure_table_exists("producer_karma_config")
         # Retention fix: conviction_scores needs created_at for time-based pruning.
         # Default to datetime('now') so existing rows are treated as recent.
-        self._ensure_column("conviction_scores", "created_at", "TEXT DEFAULT (datetime('now'))")
+        self._ensure_column("conviction_scores", "created_at", "TEXT")
         # Performance: index on created_at (prevents linear scan on every insert)
         with self.conn:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
