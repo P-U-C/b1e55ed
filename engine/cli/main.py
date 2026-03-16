@@ -3645,7 +3645,13 @@ def _spi_register_flow(api_url: str) -> int:
     print()
 
     # Save producer config (without the key)
-    from datetime import UTC, datetime
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
+    from datetime import datetime
 
     config_dir = _spi_config_dir()
     config_path = config_dir / f"{producer_id}.json"
