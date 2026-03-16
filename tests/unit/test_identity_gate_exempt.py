@@ -56,7 +56,7 @@ class TestDoctorRunsWithoutIdentity:
         from engine.cli.doctor import run_doctor
 
         args = argparse.Namespace(tier=0, json=True, fix=False, api_port=5050, dashboard_port=5051, auth_token=None)
-        rc = run_doctor(args)
+        run_doctor(args)
 
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -75,7 +75,7 @@ class TestHealthRunsWithoutIdentity:
         """Invoke _cmd_health with no identity configured — must produce health payload."""
         _no_identity_home(tmp_path, monkeypatch)
 
-        from engine.cli.main import CliContext, _cmd_health
+        from engine.cli.main import CliContext, _cmd_health  # type: ignore[attr-defined]
 
         # Scaffold minimal repo structure
         (tmp_path / "config").mkdir(parents=True, exist_ok=True)
@@ -86,7 +86,7 @@ class TestHealthRunsWithoutIdentity:
 
         ctx = CliContext(repo_root=tmp_path)
         args = argparse.Namespace(json=False)
-        rc = _cmd_health(ctx, args)
+        _cmd_health(ctx, args)
 
         out = capsys.readouterr().out
 
@@ -101,7 +101,7 @@ class TestHealthRunsWithoutIdentity:
         """health --json must produce a parseable JSON payload without identity."""
         _no_identity_home(tmp_path, monkeypatch)
 
-        from engine.cli.main import CliContext, _cmd_health
+        from engine.cli.main import CliContext, _cmd_health  # type: ignore[attr-defined]
 
         (tmp_path / "config").mkdir(parents=True, exist_ok=True)
         src_config = Path(__file__).resolve().parents[2] / "config" / "default.yaml"
@@ -111,7 +111,7 @@ class TestHealthRunsWithoutIdentity:
 
         ctx = CliContext(repo_root=tmp_path)
         args = argparse.Namespace(json=True)
-        rc = _cmd_health(ctx, args)
+        _cmd_health(ctx, args)
 
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -124,7 +124,7 @@ class TestHealthRunsWithoutIdentity:
 
 
 class TestIdentityGateExemptList:
-    """Verify the IDENTITY_GATE_EXEMPT set is defined and contains expected commands."""
+    """Verify the identity_gate_exempt set is defined and contains expected commands."""
 
     def test_exempt_set_contains_operational_commands(self):
         """The allowlist must include the commands operators need for recovery."""
@@ -134,32 +134,33 @@ class TestIdentityGateExemptList:
         source = Path(__file__).resolve().parents[2] / "engine" / "cli" / "main.py"
         text = source.read_text()
 
-        # Match the full set literal on a single line: IDENTITY_GATE_EXEMPT = {...}
-        match = re.search(r"IDENTITY_GATE_EXEMPT\s*=\s*(\{[^}]+\})", text)
-        assert match is not None, "IDENTITY_GATE_EXEMPT not found in engine/cli/main.py"
+        # Match the full set literal on a single line: identity_gate_exempt = {...}
+        match = re.search(r"identity_gate_exempt\s*=\s*(\{[^}]+\})", text)
+        assert match is not None, "identity_gate_exempt not found in engine/cli/main.py"
 
         exempt = ast.literal_eval(match.group(1))
 
         expected = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
         for cmd in expected:
-            assert cmd in exempt, f"'{cmd}' missing from IDENTITY_GATE_EXEMPT"
+            assert cmd in exempt, f"'{cmd}' missing from identity_gate_exempt"
 
     def test_exempt_commands_bypass_gate_in_main(self, tmp_path, monkeypatch, capsys):
         """main() must not return IDENTITY_REQUIRED for health when no identity is set."""
         _no_identity_home(tmp_path, monkeypatch)
 
-        # Patch is_dev_mode to return False and load_identity to return None
-        # so the gate logic is exercised without real identity
         import unittest.mock as mock
 
-        with mock.patch("engine.core.identity_gate.is_dev_mode", return_value=False), mock.patch("engine.core.identity_gate.load_identity", return_value=None):
+        with (
+            mock.patch("engine.core.identity_gate.is_dev_mode", return_value=False),
+            mock.patch("engine.core.identity_gate.load_identity", return_value=None),
+        ):
+            import contextlib
+
             from engine.cli import main
 
             # health should NOT be blocked even with no identity
-            try:
-                rc = main(["health"])
-            except SystemExit as e:
-                rc = e.code
+            with contextlib.suppress(SystemExit):
+                main(["health"])
 
             out = capsys.readouterr().out + capsys.readouterr().err
 

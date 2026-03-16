@@ -3539,7 +3539,7 @@ def main(argv: list[str] | None = None) -> int:
     # Operational commands are identity-gate exempt — they must run to diagnose the identity itself.
     # An operator with a broken identity still needs doctor/health/integrity to recover.
     # These commands may still REPORT identity status internally, but they must not be blocked.
-    IDENTITY_GATE_EXEMPT = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
+    identity_gate_exempt = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
 
     cmd = getattr(args, "command", None)
 
@@ -3551,7 +3551,7 @@ def main(argv: list[str] | None = None) -> int:
         cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
     )
 
-    if cmd not in ungated_commands and cmd not in IDENTITY_GATE_EXEMPT and not _contributors_register_with_node_id:
+    if cmd not in ungated_commands and cmd not in identity_gate_exempt and not _contributors_register_with_node_id:
         from engine.core.identity_gate import is_dev_mode, load_identity
 
         if not is_dev_mode() and load_identity(ctx.repo_root) is None:
