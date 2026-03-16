@@ -244,48 +244,26 @@ class OMS:
     def _emit_signal_accepted(self, *, trade_id: str, intent: TradeIntent) -> None:
         """Emit SIGNAL_ACCEPTED_V1 for each source event that contributed to this trade.
 
-        source_event_ids are populated by two paths (merged, deduplicated):
-        1. Any IDs already on the intent (e.g. passed from synthesis snapshot).
-        2. DB query: recent signal events (type LIKE 'signal.%') for intent.symbol
-           within the last 60 minutes — compensates for call sites that no longer
-           forward source_event_ids from the snapshot.
+        source_event_ids is the ONLY authoritative attribution source — injected from
+        the synthesis snapshot at decision time. DB signal lookup is NOT used for
+        normal-path attribution. Using recent DB signals would incorrectly credit any
+        producer that happened to emit a signal for the same symbol in the last hour,
+        even if their signal was never part of the synthesis snapshot that produced
+        this trade.
 
-        If no signal events are found via either path, a single fallback
-        SIGNAL_ACCEPTED_V1 is still emitted (producer_id='unknown', domain='unknown',
-        signal_event_id='') so that the flywheel attribution chain is never silently
-        skipped and downstream consumers always have a record to process.
+        If source_event_ids is empty (e.g. legacy call sites or synthesis produced no
+        events), a single fallback SIGNAL_ACCEPTED_V1 is emitted with
+        producer_id='unknown' so that the flywheel attribution chain is never silently
+        skipped. The fallback is NOT inflated with unrelated DB signals.
         """
-        import datetime as _dt
-
         from engine.brain.synthesis import FeatureExtractor
 
         _log = logging.getLogger("b1e55ed.execution.oms")
         extractor = FeatureExtractor()
 
-        # --- Step 1: query DB for recent signal events for this symbol ---
-        try:
-            cutoff_ts = (_dt.datetime.now(tz=_dt.UTC) - _dt.timedelta(minutes=60)).isoformat()
-        except Exception:
-            cutoff_ts = "1970-01-01T00:00:00+00:00"
-
-        try:
-            db_rows = self.db.fetchall(
-                "SELECT id, type, source FROM events WHERE symbol = ? AND type LIKE 'signal.%' AND ts >= ? ORDER BY ts DESC LIMIT 50",
-                (intent.symbol, cutoff_ts),
-            )
-        except Exception:
-            _log.warning("_emit_signal_accepted: DB query for recent signals failed", exc_info=True)
-            db_rows = []
-
-        # --- Step 2: merge DB results with intent.source_event_ids (dedup) ---
+        # --- Build event_infos exclusively from intent.source_event_ids ---
         seen: set[str] = set()
         event_infos: list[tuple[str, str, str]] = []  # (event_id, type_str, source_str)
-
-        for row in db_rows:
-            eid = str(row["id"])
-            if eid not in seen:
-                seen.add(eid)
-                event_infos.append((eid, str(row["type"]), str(row["source"] or "unknown")))
 
         for eid in intent.source_event_ids:
             if eid not in seen:
@@ -294,7 +272,7 @@ class OMS:
                 if irow is not None:
                     event_infos.append((eid, str(irow["type"]), str(irow["source"] or "unknown")))
 
-        # --- Step 3: emit SIGNAL_ACCEPTED_V1 ---
+        # --- Emit SIGNAL_ACCEPTED_V1 ---
         if not event_infos:
             # Fallback: always emit at least one SIGNAL_ACCEPTED_V1 so the flywheel
             # is never silently skipped.  Downstream consumers should treat

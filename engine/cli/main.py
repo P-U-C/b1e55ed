@@ -573,6 +573,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_integrity.add_argument("--fast", action="store_true", help="Check only recent events")
     p_integrity.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- verify-chain --
+    p_verify_chain = sub.add_parser("verify-chain", help="Verify the full event hash chain (alias for integrity --no-fast)")
+    p_verify_chain.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     return parser
 
 
@@ -2791,8 +2795,8 @@ def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
         )[0]
         result["api_rate_limits"] = (
             db.fetchone(
-                "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < datetime('now', ?)",
-                (f"-{retention.api_rate_limits_keep_hours} hours",),
+                "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < strftime('%s','now') - (? * 3600)",
+                (retention.api_rate_limits_keep_hours,),
             )
             or (0,)
         )[0]
@@ -2917,6 +2921,37 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
                 print(f"  {icon} {name}: {val}")
             print(f"  Completed in {elapsed:.3f}s")
         return 0 if all_pass else 1
+    finally:
+        db.close()
+
+
+def _cmd_verify_chain(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Run a full (non-fast) hash chain verification and print results."""
+    import time
+
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+
+    try:
+        t0 = time.monotonic()
+        valid = db.verify_hash_chain()  # full scan, no fast=True
+        elapsed = time.monotonic() - t0
+
+        result = {
+            "status": "ok" if valid else "FAIL",
+            "hash_chain": "pass" if valid else "FAIL",
+            "elapsed_seconds": round(elapsed, 3),
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            icon = "✅" if valid else "❌"
+            print(f"verify-chain: {icon} {'PASS' if valid else 'FAIL'} (full scan, {elapsed:.3f}s)")
+
+        return 0 if valid else 1
     finally:
         db.close()
 

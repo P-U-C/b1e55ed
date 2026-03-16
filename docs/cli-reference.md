@@ -445,3 +445,17 @@ b1e55ed prune [--dry-run] [--events-days N] [--json]
 - `--json` — machine-readable JSON output
 
 Returns: counts of deleted (or would-delete) rows per table. Runs `VACUUM` after deletion if configured.
+
+---
+
+### `b1e55ed verify-chain`
+
+Run a full hash-chain integrity verification across all events in the event store. Unlike the dashboard fast-verify (which checks only recent events), this scans the complete event log.
+
+```text
+b1e55ed verify-chain [--json]
+```
+
+- `--json` — machine-readable JSON output
+
+Returns: `PASS` or `FAIL` with event count and first failing event ID if integrity is broken.
