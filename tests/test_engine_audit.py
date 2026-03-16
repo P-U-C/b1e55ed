@@ -18,6 +18,7 @@ import pytest
 try:
     from datetime import UTC
 except ImportError:
+
     UTC = UTC
 
 from engine.core.database import Database
