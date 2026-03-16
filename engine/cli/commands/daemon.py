@@ -493,16 +493,21 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     if "PYTHONPATH" not in os.environ:
         os.environ["PYTHONPATH"] = str(repo_root)
 
+    # Signal to the API subprocess that the daemon owns the scheduler.
+    # This prevents the embedded brain scheduler in api/main.py from starting,
+    # avoiding duplicate cycles, overlapping writes, and split event chronology.
+    os.environ["B1E55ED_DAEMON_MODE"] = "1"
+
     # Startup reconciliation: backfill provenance events lost in any prior crash.
     # Must run before schedulers start so the event bus is consistent from the first cycle.
     try:
         import logging as _logging
 
         from engine.core.database import Database as _Database
-        from engine.core.paths import data_dir as _data_dir
+        from engine.core.paths import get_db_path as _get_db_path
         from engine.execution.oms import reconcile_execution_events
 
-        _db_path = _data_dir() / "brain.db"
+        _db_path = _get_db_path()
         if _db_path.exists():
             _db = _Database(_db_path)
             _result = reconcile_execution_events(_db)

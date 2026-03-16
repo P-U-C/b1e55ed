@@ -19,6 +19,9 @@ from pydantic_settings import BaseSettings
 
 from engine.core.exceptions import ConfigError
 from engine.core.paths import data_dir as _data_dir
+from engine.core.paths import get_db_path as get_db_path  # re-exported: single DB path authority
+
+__all__ = ["get_db_path"]
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:

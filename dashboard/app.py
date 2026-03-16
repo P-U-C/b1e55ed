@@ -304,12 +304,9 @@ def _latest_mark_prices(symbols: set[str] | None = None) -> dict[str, float]:
     """Best-effort latest mark prices from WS price signals."""
     requested = {str(s).strip().upper() for s in (symbols or set()) if str(s).strip()}
 
-    db_path = Path(os.environ.get("B1E55ED_DB_PATH", os.path.expanduser("~/.b1e55ed/data/brain.db")))
-    if not db_path.exists():
-        fallback = _get_brain_db()
-        if fallback is None:
-            return {}
-        db_path = fallback
+    db_path = _get_brain_db()
+    if db_path is None:
+        return {}
 
     prices: dict[str, float] = {}
     conn: sqlite3.Connection | None = None
@@ -847,10 +844,8 @@ def _build_conviction_ctx(client: Any) -> dict[str, Any]:
     else:
         # Fallback: read directly from DB (handles older API versions without the endpoint)
         try:
-            from engine.core.paths import data_dir
-
-            db_path = data_dir() / "brain.db"
-            if db_path.exists():
+            db_path = _get_brain_db()
+            if db_path is not None:
                 import sqlite3
 
                 conn = sqlite3.connect(str(db_path))
@@ -986,10 +981,8 @@ def _system_status_ctx() -> dict[str, Any]:
     events_today: int = 0
     uptime: str = "—"
     try:
-        from engine.core.paths import data_dir
-
-        db_path = data_dir() / "brain.db"
-        if db_path.exists():
+        db_path = _get_brain_db()
+        if db_path is not None:
             size_bytes = db_path.stat().st_size
             if size_bytes >= 1_048_576:
                 db_size = f"{size_bytes / 1_048_576:.1f} MB"
@@ -1171,18 +1164,21 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
 
 
 def _get_brain_db() -> Path | None:
-    """Resolve path to brain.db — shared helper used by all DB-querying functions."""
-    override = os.environ.get("B1E55ED_REPO_ROOT")
-    if override:
-        db_path = Path(override) / "data" / "brain.db"
-    else:
-        try:
-            from engine.core.paths import b1e55ed_dir
+    """Resolve path to brain.db — shared helper used by all DB-querying functions.
 
-            db_path = b1e55ed_dir() / "data" / "brain.db"
-        except Exception:
-            db_path = Path(__file__).resolve().parent.parent / "data" / "brain.db"
+    Delegates to get_db_path() for the canonical path, then honours the legacy
+    B1E55ED_DB_PATH env var as a direct full-path override (dashboard-only escape
+    hatch, primarily used in tests).
+    """
+    try:
+        from engine.core.paths import get_db_path
 
+        db_path = get_db_path()
+    except Exception:
+        # engine.core.paths unavailable — cannot resolve DB path.
+        return None
+
+    # Legacy full-path override (tests, custom deployments).
     db_override = os.getenv("B1E55ED_DB_PATH")
     if db_override:
         db_path = Path(db_override)
@@ -1863,8 +1859,8 @@ def performance_page(request: Request) -> HTMLResponse:
         "open_positions": [],
     }
     try:
-        db_path = Path(os.environ.get("B1E55ED_DB_PATH", os.path.expanduser("~/.b1e55ed/data/brain.db")))
-        if db_path.exists():
+        db_path = _get_brain_db()
+        if db_path is not None:
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
             closed = conn.execute(
