@@ -16,6 +16,7 @@ import asyncio
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -499,6 +500,7 @@ class TestRunDaemon:
         config.daemon.brain_interval_seconds = 60
         config.daemon.brain_full_interval_seconds = 3600
         config.daemon.resolver_interval_seconds = 600
+        config.daemon.prune_interval_seconds = 86400
         config.api.port = 5050
 
         # Patch asyncio.run to avoid actually running the supervisor
@@ -507,3 +509,37 @@ class TestRunDaemon:
             assert rc == 0
             # asyncio.run should have been called with the supervisor
             assert mock_run.called
+
+    def _capture_schedulers(self, tmp_path: Path, prune_interval: Any) -> list[Any]:
+        """Helper: run run_daemon and capture schedulers passed to Supervisor."""
+        config = MagicMock()
+        config.daemon.brain_interval_seconds = 300
+        config.daemon.brain_full_interval_seconds = 21600
+        config.daemon.resolver_interval_seconds = 1800
+        config.daemon.prune_interval_seconds = prune_interval
+        config.api.port = 5050
+
+        captured: list[Any] = []
+        _orig = Supervisor.__init__
+
+        def _capturing_init(self_: Any, services: Any, schedulers: Any, **kwargs: Any) -> None:
+            captured.extend(schedulers)
+            _orig(self_, services, schedulers, **kwargs)
+
+        with patch.object(Supervisor, "__init__", _capturing_init), patch("asyncio.run"):
+            run_daemon(tmp_path, config)
+        return captured
+
+    def test_prune_scheduler_registered_in_daemon(self, tmp_path: Path) -> None:
+        """Prune scheduler should be added when prune_interval_seconds > 0."""
+        schedulers = self._capture_schedulers(tmp_path, prune_interval=86400)
+        prune_schedulers = [s for s in schedulers if s.name == "prune"]
+        assert len(prune_schedulers) == 1, "Expected exactly one prune scheduler"
+        assert prune_schedulers[0].interval == 86400
+
+    def test_prune_scheduler_skipped_when_zero(self, tmp_path: Path) -> None:
+        """No prune scheduler should be created when prune_interval_seconds is 0 or None."""
+        for interval in (0, None):
+            schedulers = self._capture_schedulers(tmp_path, prune_interval=interval)
+            prune_schedulers = [s for s in schedulers if s.name == "prune"]
+            assert len(prune_schedulers) == 0, f"Expected no prune scheduler for interval={interval!r}"

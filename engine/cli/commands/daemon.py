@@ -442,8 +442,9 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     # Read intervals from config (with safe defaults)
     daemon_cfg = getattr(config, "daemon", None)
     brain_interval = getattr(daemon_cfg, "brain_interval_seconds", 300)
-    brain_full_interval = getattr(daemon_cfg, "brain_full_interval_seconds", 21600)
-    resolver_interval = getattr(daemon_cfg, "resolver_interval_seconds", 1800)
+    brain_full_interval = int(getattr(daemon_cfg, "brain_full_interval_seconds", 21600) or 21600)
+    resolver_interval = int(getattr(daemon_cfg, "resolver_interval_seconds", 1800) or 1800)
+    prune_interval = int(getattr(daemon_cfg, "prune_interval_seconds", 86400) or 86400)
 
     api_cfg = getattr(config, "api", None)
     api_port = getattr(api_cfg, "port", 5050)
@@ -478,6 +479,15 @@ def run_daemon(repo_root: Path, config: Any) -> int:
             interval=resolver_interval,
         ),
     ]
+    if prune_interval and prune_interval > 0:
+        schedulers.append(
+            Scheduler(
+                "prune",
+                _cmd(["prune"]),
+                interval=prune_interval,
+            )
+        )
+        print(f"[daemon] Prune scheduler: every {prune_interval}s")
 
     supervisor = Supervisor(services, schedulers, log_dir=log_dir, api_port=api_port)
 
@@ -487,6 +497,10 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     print(f"  brain:      every {brain_interval}s ({brain_interval // 60}m)")
     print(f"  brain-full: every {brain_full_interval}s ({brain_full_interval // 3600}h)")
     print(f"  resolver:   every {resolver_interval}s ({resolver_interval // 60}m)")
+    if prune_interval and prune_interval > 0:
+        print(f"  prune:      every {prune_interval}s ({prune_interval // 3600}h)")
+    else:
+        print("  prune:      disabled (prune_interval_seconds=0) — run 'b1e55ed prune' manually")
     print()
 
     # Set PYTHONPATH so subprocesses can import engine

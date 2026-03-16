@@ -1974,11 +1974,64 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001
         ks_info = {"describe": "⚠ keystore unavailable"}
 
+    # Brain cycle freshness
+    stale_threshold_minutes = 30
+    cycle_age_minutes = None
+    brain_cycle_status = "unknown"
+    if db_ok and db is not None:
+        try:
+            last_cycle = db.fetchone("SELECT ts FROM events WHERE type = 'brain.cycle.v1' ORDER BY ts DESC LIMIT 1")
+            if last_cycle:
+                from datetime import datetime
+
+                try:
+                    from datetime import UTC  # py311+
+                except ImportError:  # pragma: no cover
+                    UTC = UTC  # noqa: N806
+
+                last_ts = datetime.fromisoformat(str(last_cycle[0]).replace("Z", "+00:00"))
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=UTC)
+                cycle_age_minutes = (datetime.now(UTC) - last_ts).total_seconds() / 60
+                brain_cycle_status = "stale" if cycle_age_minutes > stale_threshold_minutes else "ok"
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Kill switch state
+    kill_switch_level = 0
+    kill_switch_active = False
+    if db_ok and db is not None:
+        try:
+            ks_row = db.fetchone("SELECT payload FROM events WHERE type = 'system.kill_switch.v1' ORDER BY ts DESC LIMIT 1")
+            if ks_row:
+                ks_payload = json.loads(ks_row[0])
+                kill_switch_level = int(ks_payload.get("level", 0))
+                kill_switch_active = kill_switch_level > 0
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Overall health: degrade on stale cycle or active kill switch
+    base_ok = bool(cfg_ok) and bool(db_ok) and (chain_ok is not False)
+    degraded = brain_cycle_status == "stale" or kill_switch_active
+    overall_status = "ok" if (base_ok and not degraded) else "degraded" if base_ok else "unhealthy"
+
     payload = {
         "ok": bool(cfg_ok) and bool(db_ok) and (chain_ok is not False),
+        "status": overall_status,
         "uptime_s": float(time.monotonic() - start),
         "config": {"path": str(cfg_path), "present": bool(cfg_path.exists()), "ok": bool(cfg_ok), "error": cfg_error},
         "db": {"path": str(db_path), "present": bool(db_ok), "hash_chain_ok": chain_ok},
+        "brain_cycle_status": brain_cycle_status,
+        "brain": {
+            "last_cycle_age_minutes": cycle_age_minutes,
+            "cycle_status": brain_cycle_status,
+            "stale_threshold_minutes": stale_threshold_minutes,
+        },
+        "kill_switch": {
+            "level": kill_switch_level,
+            "active": kill_switch_active,
+            **({"status": "active"} if kill_switch_active else {}),
+        },
         "identity": identity_status(),
         "keystore": ks_info,
     }
