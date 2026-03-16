@@ -277,5 +277,5 @@ See [Adapter Spec](./adapter-spec.md) for the full YAML format.
 
 - **Spec:** [`docs/spi/interface-spec.md`](./interface-spec.md)
 - **Adapter format:** [`docs/spi/adapter-spec.md`](./adapter-spec.md)
-- **Full SPI spec:** [`docs/spi-v1.0-spec.md`](../spi-v1.0-spec.md)
+- **Full interface contract:** [`docs/spi/interface-spec.md`](./interface-spec.md)
 - **Contact:** Reach the operator to request registration or raise issues

@@ -722,3 +722,22 @@ docs/deerflow.md (standalone — setup, tool reference, troubleshooting)
 ```text
 docs/signal-benchmarking-ops-guide.md (standalone — operational guide for oracle builders)
 ```
+
+## SPI External Producer Guide
+
+```text
+docs/spi/README.md
+  depends on: docs/spi/interface-spec.md, docs/spi/adapter-spec.md
+```
+
+## SPI Interface Specification
+
+```text
+docs/spi/interface-spec.md (standalone — formal SPI protocol contract)
+```
+
+## SPI Adapter Spec
+
+```text
+docs/spi/adapter-spec.md (standalone — YAML adapter spec reference)
+```
