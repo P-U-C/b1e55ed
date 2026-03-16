@@ -79,6 +79,7 @@ def transition(db, producer_id: str, to_state: str) -> dict:  # noqa: ANN001
         "UPDATE spi_producers SET lifecycle_state = ?, updated_at = ? WHERE producer_id = ?",
         (to_state, now, producer_id),
     )
+    db.conn.commit()
     logger.info(
         "spi.lifecycle.transition producer=%s %s → %s",
         producer_id,

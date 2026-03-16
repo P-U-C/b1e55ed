@@ -27,7 +27,6 @@ import pytest
 try:
     from datetime import UTC
 except ImportError:
-
     UTC = UTC
 
 from engine.brain.kill_switch import KillSwitch

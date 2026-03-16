@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
-from engine.spi.lifecycle import transition
+from engine.spi.lifecycle import get_producer, transition
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,9 @@ def apply_slash(db, producer_id: str, condition: str, severity: str) -> dict:  #
         }
 
     if severity == "suspend":
+        producer = get_producer(db, producer_id)
+        if producer and producer.get("lifecycle_state") == "suspended":
+            return {"result": "already_suspended", "producer_id": producer_id}
         try:
             transition(db, producer_id, "suspended")
             logger.warning(

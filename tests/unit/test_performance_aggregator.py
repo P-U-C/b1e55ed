@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-
     UTC = UTC
 
 from engine.brain.performance_aggregator import PerformanceAggregator

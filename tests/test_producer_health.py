@@ -23,7 +23,6 @@ from datetime import datetime, timedelta
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-
     UTC = UTC
 
 import pytest

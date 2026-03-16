@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-
     UTC = UTC  # noqa: N806
 
 

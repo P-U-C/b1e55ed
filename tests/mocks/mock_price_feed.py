@@ -23,7 +23,6 @@ from typing import Any
 try:
     from datetime import UTC
 except ImportError:
-
     UTC = UTC
 
 

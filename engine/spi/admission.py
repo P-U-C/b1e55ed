@@ -161,8 +161,13 @@ def accept_signal(
             from engine.spi.lifecycle import maybe_auto_promote  # noqa: PLC0415
 
             maybe_auto_promote(db, producer_id)
-        except Exception:  # noqa: BLE001
-            pass  # never block admission
+        except Exception as exc:  # noqa: BLE001
+            import logging  # noqa: PLC0415
+
+            logging.getLogger(__name__).warning(
+                "spi_auto_promote_failed",
+                extra={"producer_id": producer_id, "error": str(exc)},
+            )
         return result
 
     return accepted  # fresh insert (shouldn't reach here but safe fallback)

@@ -10,7 +10,6 @@ from types import SimpleNamespace
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-
     UTC = UTC
 
 from engine.core.database import Database

@@ -9,7 +9,6 @@ from unittest.mock import patch
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-
     UTC = UTC
 
 from engine.brain.outcome_resolver import OutcomeResolver, _parse_horizon_seconds
