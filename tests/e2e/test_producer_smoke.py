@@ -85,6 +85,9 @@ _ENV_SKIP_KEYWORDS = [
     "ECONNREFUSED",
     "Name or service not known",
     "No such file or directory",
+    # External adapter env vars not set in CI
+    "unresolved env var placeholders",
+    "POST_FIAT_SIGNALS_URL",
 ]
 
 

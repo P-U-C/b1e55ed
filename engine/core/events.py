@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from engine.core._compat import StrEnum  # noqa: F401
 
@@ -159,6 +159,8 @@ class OnchainSignalPayload(BaseModel):
 
 
 class TradFiSignalPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     symbol: str
     basis_annualized: float | None = None
     funding_annualized: float | None = None

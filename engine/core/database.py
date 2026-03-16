@@ -653,6 +653,10 @@ def _iso_to_dt(value: str | None) -> datetime | None:
 class Database:
     """Event-sourced SQLite database with hash chain."""
 
+    # dataclass auto-generates __eq__ which sets __hash__ = None; restore it
+    # so Database instances are usable in sets/weakrefs (identity-based hash).
+    __hash__ = object.__hash__
+
     db_path: Path
 
     def __post_init__(self) -> None:
