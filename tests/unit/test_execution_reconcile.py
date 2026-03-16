@@ -259,6 +259,7 @@ def test_reconcile_runs_on_startup(tmp_path: Path) -> None:
         brain_interval_seconds=300,
         brain_full_interval_seconds=21600,
         resolver_interval_seconds=1800,
+        prune_interval_seconds=0,
     )
     config.api = MagicMock(port=5050)
 
