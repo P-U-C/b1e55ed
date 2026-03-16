@@ -2468,10 +2468,10 @@ async def events_verify_chain(request: Request) -> HTMLResponse:
         # Report accurately to avoid misleading operators.
         fast_label = "recent events (fast mode)"
         if valid:
-            return HTMLResponse(
-                f'<span class="text-bull">✓ Chain valid — {fast_label} verified. Run <code>python -m engine verify-chain</code> from CLI for full audit.</span>'
-            )
-        return HTMLResponse(f'<span class="text-bear">✗ Chain INVALID — {fast_label} checked. Possible tampering. Run full CLI verify for details.</span>')
+            return HTMLResponse(f'<span class="text-bull">✓ Chain valid — {fast_label} verified. Run <code>b1e55ed verify-chain</code> for full audit.</span>')
+        return HTMLResponse(
+            f'<span class="text-bear">✗ Chain INVALID — {fast_label} checked. Possible tampering. Run <code>b1e55ed verify-chain</code> for details.</span>'
+        )
     except Exception as exc:
         return HTMLResponse(f'<span class="text-warn">⚠ Verify failed: {exc}</span>')
 
