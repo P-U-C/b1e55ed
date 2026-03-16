@@ -210,14 +210,14 @@
     }
 
     var raw = s.ts;
-    if (raw === null || raw === undefined) return now;
+    if (raw === null || raw === undefined) return null;
 
     if (typeof raw === 'number' && isFinite(raw)) {
       return Math.abs(raw) < 1e11 ? raw * 1000 : raw;
     }
 
     var txt = String(raw).trim();
-    if (!txt) return now;
+    if (!txt) return null;
 
     if (/^-?\d+(\.\d+)?$/.test(txt)) {
       var numeric = Number(txt);
@@ -235,7 +235,7 @@
     if (!isNaN(parsed)) return parsed;
 
     parsed = Date.parse(txt);
-    return isNaN(parsed) ? now : parsed;
+    return isNaN(parsed) ? null : parsed;
   }
 
   // Parse timestamps
@@ -243,8 +243,8 @@
     s._time = parseSignalTs(s);
   });
 
-  // Filter to last 24h & sort
-  signals = signals.filter(function(s) { return s._time >= t24h; });
+  // Filter to last 24h & sort; exclude signals with no parseable timestamp
+  signals = signals.filter(function(s) { return s._time !== null && s._time >= t24h; });
   signals.sort(function(a, b) { return a._time - b._time; });
 
   // X position

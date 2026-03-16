@@ -55,6 +55,8 @@
       }
 
       cv = parseFloat(cv);
+      // normalize: pcs_score is 0-100, gauge expects 0-10
+      if (cv > 10) cv = cv / 10;
       var color = cv < 3 ? 'var(--red)' : (cv < 7 ? 'var(--amber)' : 'var(--green)');
       var label = cv < 3 ? 'BEAR' : (cv < 7 ? 'NEUTRAL' : 'BULL');
 
