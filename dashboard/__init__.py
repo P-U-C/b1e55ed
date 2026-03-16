@@ -7,5 +7,5 @@ A grimoire is not a textbook. It is a book of names, invocations, and hard-won p
 
 from __future__ import annotations
 
-# Re-export the dashboard ASGI app.
-from dashboard.app import app  # noqa: F401
+# Note: dashboard.app submodule is accessed directly to avoid shadowing.
+# Do not re-export `app` here — it shadows the `dashboard.app` submodule.
