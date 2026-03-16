@@ -3460,6 +3460,35 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reconcile(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Backfill provenance events for positions whose events were lost in a crash."""
+    from engine.core.database import Database
+    from engine.execution.oms import reconcile_execution_events
+
+    repo_root = ctx.repo_root
+    db_path = _resolve_db_path(repo_root)
+    if not db_path.exists():
+        msg = f"error: {db_path} not found. Run `b1e55ed setup` first."
+        print(msg, file=sys.stderr)
+        return 1
+
+    db = Database(db_path)
+    result = reconcile_execution_events(db)
+    db.close()
+
+    total = sum(result.values())
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"status": "ok", "repaired": result, "total": total}))
+    else:
+        print(f"reconcile complete: {total} events backfilled")
+        for event_type, count in result.items():
+            if count > 0:
+                print(f"  {event_type}: {count}")
+        if total == 0:
+            print("  (nothing to repair)")
+    return 0
+
+
 def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.wizard import run_wizard
 
@@ -3561,6 +3590,8 @@ def main(argv: list[str] | None = None) -> int:
         "status": _cmd_status,
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,
+        "verify-chain": _cmd_verify_chain,
+        "reconcile": _cmd_reconcile,
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
         "doctor": lambda ctx, args: __import__("engine.cli.doctor", fromlist=["run_doctor"]).run_doctor(args),
