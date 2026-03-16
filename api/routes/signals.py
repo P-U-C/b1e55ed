@@ -263,7 +263,7 @@ def list_signals(
     hours_param = f"-{hours} hours"
 
     total_row = db.execute(
-        "SELECT COUNT(1) FROM events WHERE type LIKE ? AND ts >= datetime('now', ?)",
+        "SELECT COUNT(1) FROM events WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)",
         (like, hours_param),
     ).fetchone()
     total = int(total_row[0]) if total_row is not None else 0
@@ -272,7 +272,7 @@ def list_signals(
         """
         SELECT id, type, ts, source, payload
         FROM events
-        WHERE type LIKE ? AND ts >= datetime('now', ?)
+        WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)
         ORDER BY ts DESC
         LIMIT ? OFFSET ?
         """,
