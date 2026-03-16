@@ -251,17 +251,20 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
 @router.get("", response_model=PaginatedResponse[SignalResponse])
 def list_signals(
     db: Database = Depends(get_db),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     domain: str | None = Query(None, description="Filter by domain (ta/onchain/tradfi/social/etc)"),
+    hours: int = Query(24, ge=1, le=168, description="Time window in hours (default 24)"),
 ) -> PaginatedResponse[SignalResponse]:
     like = "signal.%"
     if domain:
         like = f"signal.{domain}.%"
 
+    hours_param = f"-{hours} hours"
+
     total_row = db.execute(
-        "SELECT COUNT(1) FROM events WHERE type LIKE ?",
-        (like,),
+        "SELECT COUNT(1) FROM events WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)",
+        (like, hours_param),
     ).fetchone()
     total = int(total_row[0]) if total_row is not None else 0
 
@@ -269,11 +272,11 @@ def list_signals(
         """
         SELECT id, type, ts, source, payload
         FROM events
-        WHERE type LIKE ?
+        WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)
         ORDER BY ts DESC
         LIMIT ? OFFSET ?
         """,
-        (like, limit, offset),
+        (like, hours_param, limit, offset),
     ).fetchall()
 
     items: list[SignalResponse] = []
