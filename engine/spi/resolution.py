@@ -148,39 +148,33 @@ def _update_karma(  # noqa: ANN001
     db,
     producer_id: str,
     epoch: int,
-    epoch_brier: float,
-    new_running_karma: float,
+    brier: float,
+    new_karma: float,
 ) -> None:
-    """Upsert karma row for (producer_id, epoch); increments resolved_count."""
+    """Upsert karma row for (producer_id, epoch); accumulates brier within epoch.
+
+    Fix 4: epoch_brier is a running average across all resolved signals in the epoch,
+    not an overwrite.  The ON CONFLICT clause computes the incremental mean:
+        new_avg = (old_avg * old_count + new_value) / (old_count + 1)
+    """
+    new_karma = max(0.0, min(1.0, new_karma))
     now = datetime.now(tz=UTC).isoformat()
-    new_running_karma = max(0.0, min(1.0, new_running_karma))
-    epoch_karma = 1.0 - epoch_brier
-
-    existing = db.fetchone(
-        "SELECT resolved_count FROM spi_karma WHERE producer_id = ? AND epoch = ?",
-        (producer_id, epoch),
+    db.execute(
+        """
+        INSERT INTO spi_karma (producer_id, epoch, epoch_brier, epoch_karma,
+                               running_karma, resolved_count, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+        ON CONFLICT(producer_id, epoch) DO UPDATE SET
+            epoch_brier = (epoch_brier * resolved_count + excluded.epoch_brier)
+                          / (resolved_count + 1),
+            epoch_karma = 1.0 - ((epoch_brier * resolved_count + excluded.epoch_brier)
+                                  / (resolved_count + 1)),
+            running_karma = excluded.running_karma,
+            resolved_count = resolved_count + 1,
+            updated_at = excluded.updated_at
+        """,
+        (producer_id, epoch, brier, 1.0 - brier, new_karma, now),
     )
-
-    if existing:
-        db.execute(
-            """
-            UPDATE spi_karma
-            SET epoch_brier = ?, epoch_karma = ?, running_karma = ?,
-                resolved_count = resolved_count + 1, updated_at = ?
-            WHERE producer_id = ? AND epoch = ?
-            """,
-            (epoch_brier, epoch_karma, new_running_karma, now, producer_id, epoch),
-        )
-    else:
-        db.execute(
-            """
-            INSERT INTO spi_karma
-                (producer_id, epoch, epoch_brier, epoch_karma, running_karma,
-                 resolved_count, updated_at)
-            VALUES (?, ?, ?, ?, ?, 1, ?)
-            """,
-            (producer_id, epoch, epoch_brier, epoch_karma, new_running_karma, now),
-        )
 
 
 def _write_outcome(  # noqa: ANN001, PLR0913

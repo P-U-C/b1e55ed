@@ -187,7 +187,7 @@ class BaseExternalProducer(BaseProducer):
         try:
             accept_signal(
                 producer_id=getattr(self, "name", self.__class__.__name__),
-                signal_client_id=dedupe_key,
+                signal_client_id=f"{getattr(self, 'name', self.__class__.__name__)}:{obs.symbol}",
                 submission_id=dedupe_key,
                 symbol=obs.symbol,
                 direction=obs.direction,
