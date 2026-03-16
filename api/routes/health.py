@@ -80,14 +80,41 @@ def health(request: Request, db: Database = Depends(get_db)) -> JSONResponse:
     except Exception:  # noqa: BLE001
         pass
 
+    # Determine brain_cycle_status
+    stale_threshold_minutes = 30
+    if cycle_age_minutes is None:
+        brain_cycle_status = "unknown"
+    elif cycle_age_minutes > stale_threshold_minutes:
+        brain_cycle_status = "stale"
+    else:
+        brain_cycle_status = "ok"
+
+    # Determine kill_switch status
+    kill_switch_active = kill_switch_level > 0
+
+    # Compute overall status: degrade on stale cycle or active kill switch
+    if not db_ok or brain_cycle_status == "stale" or kill_switch_active:
+        overall_status = "degraded"
+    else:
+        overall_status = "ok"
+
     payload: dict[str, Any] = {
-        "status": "ok" if db_ok else "degraded",
+        "status": overall_status,
         "version": __version__,
         "uptime_seconds": uptime,
         "db_size_bytes": db_size,
         "db": {"ok": db_ok, "error": db_error},
-        "brain": {"last_cycle_age_minutes": cycle_age_minutes},
-        "kill_switch": {"level": kill_switch_level},
+        "brain": {
+            "last_cycle_age_minutes": cycle_age_minutes,
+            "cycle_status": brain_cycle_status,
+            "stale_threshold_minutes": stale_threshold_minutes,
+        },
+        "kill_switch": {
+            "level": kill_switch_level,
+            "active": kill_switch_active,
+            **({"status": "active"} if kill_switch_active else {}),
+        },
+        "brain_cycle_status": brain_cycle_status,
     }
 
     status_code = 200 if db_ok else 503
