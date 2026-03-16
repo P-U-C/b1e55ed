@@ -260,7 +260,7 @@ def list_signals(
     if domain:
         like = f"signal.{domain}.%"
 
-    hours_param = f"-{hours}"
+    hours_param = f"-{hours} hours"
 
     total_row = db.execute(
         "SELECT COUNT(1) FROM events WHERE type LIKE ? AND ts >= datetime('now', ?)",
