@@ -124,8 +124,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "webhooks.html",
-            {
+            request=request,
+            name="webhooks.html",
+            context={
                 "request": request,
                 "active_page": "webhooks",
                 "kill_switch_level": 0,

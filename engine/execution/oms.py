@@ -252,9 +252,10 @@ class OMS:
         this trade.
 
         If source_event_ids is empty (e.g. legacy call sites or synthesis produced no
-        events), a single fallback SIGNAL_ACCEPTED_V1 is emitted with
-        producer_id='unknown' so that the flywheel attribution chain is never silently
-        skipped. The fallback is NOT inflated with unrelated DB signals.
+        events), a single ATTRIBUTION_GAP_V1 is emitted with producer_id='unknown' so
+        that the missing attribution is explicitly recorded.  This is NOT a real
+        SIGNAL_ACCEPTED_V1; downstream karma should ignore it.
+        The fallback is NOT inflated with unrelated DB signals.
         """
         from engine.brain.synthesis import FeatureExtractor
 
@@ -274,11 +275,11 @@ class OMS:
 
         # --- Emit SIGNAL_ACCEPTED_V1 ---
         if not event_infos:
-            # Fallback: always emit at least one SIGNAL_ACCEPTED_V1 so the flywheel
-            # is never silently skipped.  Downstream consumers should treat
-            # signal_event_id='' as "no attributed signal".
+            # ATTRIBUTION_GAP_V1 — emitted when no source_event_ids available; not real attribution
+            # Downstream consumers must treat this event type as "attribution missing",
+            # not as a real producer credit.  signal_event_id='' signals no attributed signal.
             _log.debug(
-                "_emit_signal_accepted: no signal events found for %s — emitting fallback",
+                "_emit_signal_accepted: no signal events found for %s — emitting ATTRIBUTION_GAP_V1",
                 intent.symbol,
             )
             fallback_payload = SignalAcceptedPayload(
@@ -293,7 +294,7 @@ class OMS:
                 invalidation=intent.invalidation,
             ).model_dump(mode="json")
             self.db.append_event(
-                event_type=EventType.SIGNAL_ACCEPTED_V1,
+                event_type=EventType.ATTRIBUTION_GAP_V1,
                 payload=fallback_payload,
                 source="execution.oms",
                 dedupe_key=f"signal_accepted:{trade_id}:fallback",

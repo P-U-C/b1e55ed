@@ -255,8 +255,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "producers.html",
-            {
+            request=request,
+            name="producers.html",
+            context={
                 "request": request,
                 "active_page": "producers",
                 "kill_switch_level": 0,
@@ -290,8 +291,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "producers.html",
-            {
+            request=request,
+            name="producers.html",
+            context={
                 "request": request,
                 "active_page": "producers",
                 "kill_switch_level": 0,

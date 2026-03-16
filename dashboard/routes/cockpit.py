@@ -23,6 +23,7 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
         res = client.get_cockpit_state()
         state = res.data if (res.ok and isinstance(res.data, dict)) else {}
         return templates.TemplateResponse(
-            "partials/cockpit_content.html",
-            {"request": request, "state": state},
+            request=request,
+            name="partials/cockpit_content.html",
+            context={"request": request, "state": state},
         )

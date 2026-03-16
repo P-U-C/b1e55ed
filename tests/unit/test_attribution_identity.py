@@ -384,20 +384,21 @@ def test_unrelated_recent_signals_not_credited(tmp_path: Path) -> None:
     assert result.status == "filled", f"Unexpected OMS result: {result}"
     position_id = result.position_id
 
-    # Collect all SIGNAL_ACCEPTED_V1 events for this trade
-    signal_accepted_events = [e for e in db.get_events(limit=200) if str(e.type) == str(EventType.SIGNAL_ACCEPTED_V1)]
+    # Collect all ATTRIBUTION_GAP_V1 events for this trade
+    # (fallback path now emits ATTRIBUTION_GAP_V1, not SIGNAL_ACCEPTED_V1)
+    gap_events = [e for e in db.get_events(limit=200) if str(e.type) == str(EventType.ATTRIBUTION_GAP_V1)]
     trade_events = []
-    for ev in signal_accepted_events:
+    for ev in gap_events:
         payload = ev.payload if isinstance(ev.payload, dict) else json.loads(ev.payload)
         if payload.get("trade_id") == position_id:
             trade_events.append(payload)
 
-    assert trade_events, "Expected at least one SIGNAL_ACCEPTED_V1 fallback event"
+    assert trade_events, "Expected at least one ATTRIBUTION_GAP_V1 fallback event (emitted when source_event_ids is empty)"
 
     # Every fallback event must have producer_id='unknown'
     for payload in trade_events:
         assert payload.get("producer_id") == "unknown", (
-            f"Fallback SIGNAL_ACCEPTED_V1 has producer_id={payload.get('producer_id')!r} "
+            f"Fallback ATTRIBUTION_GAP_V1 has producer_id={payload.get('producer_id')!r} "
             f"but expected 'unknown'. Unrelated DB signals must NOT inflate the fallback. "
             f"Full payload: {payload}"
         )

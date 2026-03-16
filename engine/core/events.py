@@ -77,6 +77,7 @@ class EventType(StrEnum):
 
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+    ATTRIBUTION_GAP_V1 = "attribution.gap.v1"
 
     # Forecast events (producers → brain)
     FORECAST_V1 = "forecast.v1"
