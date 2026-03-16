@@ -1987,7 +1987,8 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
                 try:
                     from datetime import UTC  # py311+
                 except ImportError:  # pragma: no cover
-                    UTC = UTC  # noqa: N806
+                    from datetime import timezone
+                    UTC = timezone.utc  # noqa: N806
                 last_ts = datetime.fromisoformat(str(last_cycle[0]).replace("Z", "+00:00"))
                 if last_ts.tzinfo is None:
                     last_ts = last_ts.replace(tzinfo=UTC)
