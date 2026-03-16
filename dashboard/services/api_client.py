@@ -83,8 +83,8 @@ class ApiClient:
     def get_positions(self) -> ApiResult:
         return self._get_json("/positions")
 
-    def get_signals(self, domain: str | None = None) -> ApiResult:
-        params: dict[str, Any] = {"limit": 100, "offset": 0}
+    def get_signals(self, domain: str | None = None, hours: int = 24) -> ApiResult:
+        params: dict[str, Any] = {"limit": 500, "offset": 0, "hours": hours}
         if domain:
             params["domain"] = domain
         return self._get_json("/signals", params=params)
