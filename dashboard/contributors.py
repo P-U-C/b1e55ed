@@ -206,8 +206,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "contributors.html",
-            {
+            request=request,
+            name="contributors.html",
+            context={
                 "request": request,
                 "active_page": "contributors",
                 "kill_switch_level": 0,

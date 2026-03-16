@@ -11,8 +11,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get("/conviction", response_class=HTMLResponse)
     def conviction_page(request: Request, symbol: str | None = None) -> HTMLResponse:
         return templates.TemplateResponse(
-            "conviction.html",
-            {
+            request=request,
+            name="conviction.html",
+            context={
                 "request": request,
                 "active_page": "conviction",
                 "symbol": symbol,
@@ -24,8 +25,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get("/partials/conviction", response_class=HTMLResponse)
     def conviction_partial(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
-            "partials/conviction_panel.html",
-            {
+            request=request,
+            name="partials/conviction_panel.html",
+            context={
                 "request": request,
                 "convictions": [],
                 "conviction_age": "stale",
@@ -35,8 +37,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get("/partials/conviction-history", response_class=HTMLResponse)
     def conviction_history_partial(request: Request, symbol: str | None = None) -> HTMLResponse:
         return templates.TemplateResponse(
-            "partials/conviction_panel.html",
-            {
+            request=request,
+            name="partials/conviction_panel.html",
+            context={
                 "request": request,
                 "convictions": [],
                 "conviction_age": "stale",

@@ -180,8 +180,9 @@ async def _identity_gate(request: Request, call_next):
     identity = load_identity(_repo_root())
     if identity is None:
         return templates.TemplateResponse(
-            "forge_required.html",
-            {
+            request=request,
+            name="forge_required.html",
+            context={
                 "request": request,
                 "active_page": "identity",
                 "kill_switch_level": 0,
@@ -1054,7 +1055,7 @@ def _is_new_operator() -> bool:
 @app.get("/home", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     # kept for backward-compat with early shell
-    return templates.TemplateResponse("home.html", {**_shell(request, "brain")})
+    return templates.TemplateResponse(request=request, name="home.html", context={**_shell(request, "brain")})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1121,8 +1122,9 @@ def brain_overview(request: Request) -> HTMLResponse:
         pass
 
     return templates.TemplateResponse(
-        "brain.html",
-        {
+        request=request,
+        name="brain.html",
+        context={
             **_shell(request, "brain", kill_switch_level=ks_level, regime=regime_ctx.get("regime_class")),
             **regime_ctx,
             "positions": positions,
@@ -1158,8 +1160,9 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
         positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
     return templates.TemplateResponse(
-        "positions.html",
-        {
+        request=request,
+        name="positions.html",
+        context={
             **_shell(request, "positions"),
             "view": view,
             "positions": positions,
@@ -1555,8 +1558,9 @@ def forecasts_page(
     bundle_options = sorted(bundle_options, key=lambda b: str(b.get("name") or b.get("id") or ""))
 
     return templates.TemplateResponse(
-        "forecasts.html",
-        {
+        request=request,
+        name="forecasts.html",
+        context={
             **_shell(request, "forecasts"),
             "asset_groups": asset_groups,
             "summary": summary,
@@ -1576,8 +1580,9 @@ def forecasts_page(
 def forecasts_table_partial(request: Request, asset: str | None = None, horizon: str | None = None, status: str = "pending") -> HTMLResponse:
     data = _query_forecasts(asset=asset, horizon=horizon, status=status)
     return templates.TemplateResponse(
-        "partials/forecasts_table_inner.html",
-        {"request": request, "forecasts": data["forecasts"]},
+        request=request,
+        name="partials/forecasts_table_inner.html",
+        context={"request": request, "forecasts": data["forecasts"]},
     )
 
 
@@ -1585,8 +1590,9 @@ def forecasts_table_partial(request: Request, asset: str | None = None, horizon:
 def discretionary_signals_partial(request: Request) -> HTMLResponse:
     signals = _query_discretionary_signals()
     return templates.TemplateResponse(
-        "partials/discretionary_signals_inner.html",
-        {"request": request, "disc_signals": signals},
+        request=request,
+        name="partials/discretionary_signals_inner.html",
+        context={"request": request, "disc_signals": signals},
     )
 
 
@@ -1694,8 +1700,9 @@ def signals_page(
     signal_feed_stale = bool(latest_dt and (now_dt - latest_dt).total_seconds() > 1800)
 
     return templates.TemplateResponse(
-        "signals.html",
-        {
+        request=request,
+        name="signals.html",
+        context={
             **_shell(request, "signals"),
             "domains": domains,
             "active_domain": domain,
@@ -1787,8 +1794,9 @@ def social_page(request: Request) -> HTMLResponse:
     collector_data = coll_res.data if (coll_res.ok and isinstance(coll_res.data, dict)) else {}
 
     return templates.TemplateResponse(
-        "social.html",
-        {
+        request=request,
+        name="social.html",
+        context={
             **_shell(request, "social"),
             "pipeline_active": pipeline_active,
             "pipeline_status": pipeline_status,
@@ -1832,8 +1840,9 @@ def artifacts_page(request: Request) -> HTMLResponse:
     artifacts = art_res.data.get("items") if (art_res.ok and isinstance(art_res.data, dict)) else []
 
     return templates.TemplateResponse(
-        "artifacts.html",
-        {
+        request=request,
+        name="artifacts.html",
+        context={
             **_shell(request, "artifacts"),
             "artifacts": artifacts if isinstance(artifacts, list) else [],
         },
@@ -1908,8 +1917,9 @@ def performance_page(request: Request) -> HTMLResponse:
         pass
 
     return templates.TemplateResponse(
-        "performance.html",
-        {**_shell(request, "performance"), **perf},
+        request=request,
+        name="performance.html",
+        context={**_shell(request, "performance"), **perf},
     )
 
 
@@ -1962,8 +1972,9 @@ def settings_tradfi_symbols(request: Request, symbols: str = Form("")) -> HTMLRe
         status_ok, status_msg = False, str(e)
 
     return templates.TemplateResponse(
-        "partials/_tradfi_panel.html",
-        {
+        request=request,
+        name="partials/_tradfi_panel.html",
+        context={
             "request": request,
             "tradfi_symbols": sym_list,
             "tradfi_twelvedata_key_set": bool(os.environ.get("B1E55ED_TWELVEDATA_KEY")),
@@ -2101,8 +2112,9 @@ def settings_page(request: Request) -> HTMLResponse:
     label = "NORMAL" if ks_level == 0 else f"LEVEL {ks_level}"
 
     return templates.TemplateResponse(
-        "settings.html",
-        {
+        request=request,
+        name="settings.html",
+        context={
             **_shell(request, "settings", kill_switch_level=ks_level),
             "trading_mode": trading_mode,
             "risk_fields": risk_fields,
@@ -2140,8 +2152,9 @@ def _render_universe_bundles_panel(
 ) -> HTMLResponse:
     ctx = _universe_bundle_context(_api(request))
     return templates.TemplateResponse(
-        "partials/universe_bundles_panel.html",
-        {
+        request=request,
+        name="partials/universe_bundles_panel.html",
+        context={
             "request": request,
             "universe_bundles": ctx.get("bundles", []),
             "universe_packs": ctx.get("packs", []),
@@ -2340,8 +2353,9 @@ def artifact_preview(request: Request, artifact_id: str) -> HTMLResponse:
 
     artifact["content"] = content
     return templates.TemplateResponse(
-        "partials/artifact_preview.html",
-        {"request": request, "artifact": artifact},
+        request=request,
+        name="partials/artifact_preview.html",
+        context={"request": request, "artifact": artifact},
     )
 
 
@@ -2548,8 +2562,9 @@ def treasury_page(request: Request) -> HTMLResponse:
         treasury_addr = str(summary_res.data.get("treasury_address") or "—")
 
     return templates.TemplateResponse(
-        "treasury.html",
-        {
+        request=request,
+        name="treasury.html",
+        context={
             **_shell(request, "treasury"),
             "intents": intents if isinstance(intents, list) else [],
             "receipts": receipts if isinstance(receipts, list) else [],
@@ -2572,7 +2587,7 @@ def treasury_page(request: Request) -> HTMLResponse:
 def conviction_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     ctx = _build_conviction_ctx(client)
-    return templates.TemplateResponse("partials/conviction_panel.html", {"request": request, **ctx})
+    return templates.TemplateResponse(request=request, name="partials/conviction_panel.html", context={"request": request, **ctx})
 
 
 @app.get("/partials/kill-dot", response_class=HTMLResponse)
@@ -2632,8 +2647,9 @@ def positions_partial(request: Request) -> HTMLResponse:
     positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
     return templates.TemplateResponse(
-        "partials/positions_panel.html",
-        {
+        request=request,
+        name="partials/positions_panel.html",
+        context={
             "request": request,
             "positions": positions,
             "positions_age": "—" if res.ok else "stale",
@@ -2651,8 +2667,9 @@ def position_partial(request: Request, position_id: str) -> HTMLResponse:
         return HTMLResponse('<div class="empty-state">Position not found.</div>')
 
     return templates.TemplateResponse(
-        "partials/position_detail_panel.html",
-        {"request": request, "p": p},
+        request=request,
+        name="partials/position_detail_panel.html",
+        context={"request": request, "p": p},
     )
 
 
@@ -2716,8 +2733,9 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
     except Exception:
         pass
     return templates.TemplateResponse(
-        "partials/vitals_bar.html",
-        {
+        request=request,
+        name="partials/vitals_bar.html",
+        context={
             "request": request,
             "last_signal_age": last_signal_age,
             "producer_count": producer_count,
@@ -2747,8 +2765,9 @@ def signal_detail_partial(request: Request, signal_id: str) -> HTMLResponse:
         except Exception:
             pass
     return templates.TemplateResponse(
-        "partials/signal_detail.html",
-        {
+        request=request,
+        name="partials/signal_detail.html",
+        context={
             "request": request,
             "signal": signal,
             "similar": similar,
@@ -2764,8 +2783,9 @@ def signal_feed_partial(request: Request) -> HTMLResponse:
     total = res.data.get("total") if (res.ok and isinstance(res.data, dict)) else 0
 
     return templates.TemplateResponse(
-        "partials/signal_feed.html",
-        {"request": request, "signals": signals[:30], "total_signals": total},
+        request=request,
+        name="partials/signal_feed.html",
+        context={"request": request, "signals": signals[:30], "total_signals": total},
     )
 
 
@@ -2805,8 +2825,9 @@ def system_status_partial(request: Request) -> HTMLResponse:
         karma_pending = f"{pending_n} intents"
 
     return templates.TemplateResponse(
-        "partials/system_status_panel.html",
-        {
+        request=request,
+        name="partials/system_status_panel.html",
+        context={
             "request": request,
             "cycle_age": cycle_age,
             "cycle_age_min": cycle_age_min,
@@ -2926,8 +2947,9 @@ def producers_partial(request: Request) -> HTMLResponse:
             )
 
     return templates.TemplateResponse(
-        "partials/producers_panel.html",
-        {
+        request=request,
+        name="partials/producers_panel.html",
+        context={
             "request": request,
             "producers": producers,
             "producers_healthy": producers_healthy,
@@ -2961,8 +2983,9 @@ def kill_switch_partial(request: Request) -> HTMLResponse:
     label = "NORMAL" if level == 0 else f"LEVEL {level}"
 
     return templates.TemplateResponse(
-        "partials/kill_switch_panel.html",
-        {
+        request=request,
+        name="partials/kill_switch_panel.html",
+        context={
             "request": request,
             "kill_switch_level": level,
             "kill_switch_label": label,
@@ -2991,8 +3014,9 @@ def sentiment_map_partial(request: Request) -> HTMLResponse:
                 sources_active = len(source_items)
 
     return templates.TemplateResponse(
-        "partials/sentiment_map_panel.html",
-        {
+        request=request,
+        name="partials/sentiment_map_panel.html",
+        context={
             "request": request,
             "sentiment_age": "—" if sent_res.ok else "stale",
             "sources_active": sources_active,
@@ -3009,8 +3033,9 @@ def social_alerts_partial(request: Request) -> HTMLResponse:
     alerts = res.data.get("items") if (res.ok and isinstance(res.data, dict)) else []
 
     return templates.TemplateResponse(
-        "partials/social_alerts_panel.html",
-        {"request": request, "alerts": alerts if isinstance(alerts, list) else []},
+        request=request,
+        name="partials/social_alerts_panel.html",
+        context={"request": request, "alerts": alerts if isinstance(alerts, list) else []},
     )
 
 
@@ -3021,8 +3046,9 @@ def curator_feed_partial(request: Request) -> HTMLResponse:
     curator_signals = res.data.get("items") if (res.ok and isinstance(res.data, dict)) else []
 
     return templates.TemplateResponse(
-        "partials/curator_feed.html",
-        {"request": request, "curator_signals": curator_signals if isinstance(curator_signals, list) else []},
+        request=request,
+        name="partials/curator_feed.html",
+        context={"request": request, "curator_signals": curator_signals if isinstance(curator_signals, list) else []},
     )
 
 
@@ -3033,8 +3059,9 @@ def karma_intents_partial(request: Request) -> HTMLResponse:
     intents = res.data.get("items") if (res.ok and isinstance(res.data, dict)) else []
 
     return templates.TemplateResponse(
-        "partials/karma_intents_panel.html",
-        {"request": request, "intents": intents if isinstance(intents, list) else []},
+        request=request,
+        name="partials/karma_intents_panel.html",
+        context={"request": request, "intents": intents if isinstance(intents, list) else []},
     )
 
 
@@ -3046,8 +3073,9 @@ def signal_history_partial(request: Request, domain: str | None = None) -> HTMLR
     total = res.data.get("total") if (res.ok and isinstance(res.data, dict)) else 0
 
     return templates.TemplateResponse(
-        "partials/signal_history.html",
-        {"request": request, "signals": signals, "total_signals": total, "active_domain": domain},
+        request=request,
+        name="partials/signal_history.html",
+        context={"request": request, "signals": signals, "total_signals": total, "active_domain": domain},
     )
 
 
@@ -3206,8 +3234,9 @@ def _social_status_partial(request: Request, feedback: dict[str, str] | None = N
         status_feedback = _feedback("Unable to refresh status from API", "error")
 
     return templates.TemplateResponse(
-        "partials/social_status_panel.html",
-        {
+        request=request,
+        name="partials/social_status_panel.html",
+        context={
             "request": request,
             "pipeline_active": pipeline_active,
             "pipeline_status": pipeline_status,
@@ -3239,8 +3268,9 @@ def _social_watchlist_partial(request: Request, feedback: dict[str, str] | None 
         status_feedback = _feedback("Unable to refresh watchlist from API", "error")
 
     return templates.TemplateResponse(
-        "partials/social_watchlist_panel.html",
-        {
+        request=request,
+        name="partials/social_watchlist_panel.html",
+        context={
             "request": request,
             "watchlist": symbols,
             "watchlist_count": len(symbols),
@@ -3262,8 +3292,9 @@ def _social_sources_partial(request: Request, feedback: dict[str, str] | None = 
         status_feedback = _feedback("Unable to refresh sources from API", "error")
 
     return templates.TemplateResponse(
-        "partials/social_sources_panel.html",
-        {
+        request=request,
+        name="partials/social_sources_panel.html",
+        context={
             "request": request,
             "sources": sources if isinstance(sources, list) else [],
             "status_feedback": status_feedback,
@@ -3287,8 +3318,9 @@ def collector_health_partial(request: Request) -> HTMLResponse:
         health_error = "Unable to reach collector health endpoint"
 
     return templates.TemplateResponse(
-        "partials/social_collector_health.html",
-        {
+        request=request,
+        name="partials/social_collector_health.html",
+        context={
             "request": request,
             "collectors": collectors,
             "collector_summary": summary,

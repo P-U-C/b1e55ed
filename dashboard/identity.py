@@ -106,8 +106,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
         eas = _eas_status(cfg)
 
         return templates.TemplateResponse(
-            "identity.html",
-            {
+            request=request,
+            name="identity.html",
+            context={
                 "request": request,
                 "active_page": "identity",
                 "kill_switch_level": 0,
