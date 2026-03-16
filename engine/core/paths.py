@@ -45,19 +45,23 @@ def config_dir() -> Path:
     return b1e55ed_dir() / "config"
 
 
-def get_db_path(cfg=None) -> Path:
+_DB_FILENAME = "brain.db"
+
+
+def get_db_path(cfg=None, *, base_data_dir: Path | None = None) -> Path:
     """Single source of truth for the brain.db path.
 
     Priority:
     1. B1E55ED_DATA_DIR env var  →  $B1E55ED_DATA_DIR/brain.db
     2. cfg.data_dir if a Config object is supplied
-    3. ~/.b1e55ed/data/brain.db  (default)
+    3. base_data_dir if explicitly provided (caller-supplied data directory)
+    4. ~/.b1e55ed/data/brain.db  (default)
 
     Use this everywhere instead of constructing the path inline.
     """
     env_data = os.environ.get("B1E55ED_DATA_DIR")
     if env_data:
-        return Path(env_data) / "brain.db"
+        return Path(env_data) / _DB_FILENAME
 
     if cfg is not None:
         cfg_data_dir = getattr(cfg, "data_dir", None)
@@ -65,6 +69,9 @@ def get_db_path(cfg=None) -> Path:
             p = Path(cfg_data_dir)
             if not p.is_absolute():
                 p = b1e55ed_dir() / p
-            return p / "brain.db"
+            return p / _DB_FILENAME
 
-    return data_dir() / "brain.db"
+    if base_data_dir is not None:
+        return Path(base_data_dir) / _DB_FILENAME
+
+    return data_dir() / _DB_FILENAME
