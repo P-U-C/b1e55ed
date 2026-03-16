@@ -6,9 +6,12 @@ Hashcash lineage precedes Bitcoin (1997). The code remembers.
 from __future__ import annotations
 
 import contextlib
+import json as _json
+import logging
 import os
 import sqlite3
 import time as _time
+import urllib.request
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -33,6 +36,11 @@ from dashboard.__version__ import VERSION as DASHBOARD_VERSION
 from dashboard.services.api_client import ApiClient
 
 _HERE = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
+
+# Cache for live price fallbacks: symbol -> (price, fetched_at_timestamp)
+_price_cache: dict[str, tuple[float, float]] = {}
+_PRICE_CACHE_TTL = 60.0  # seconds
 
 
 @asynccontextmanager
@@ -300,6 +308,50 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
+def _fetch_live_price_fallback(sym: str) -> float:
+    """Fetch live price for *sym* from Binance (then CoinGecko) with a 60-s cache.
+
+    Returns 0.0 if all sources fail so callers can distinguish missing from valid zero.
+    """
+    now = _time.monotonic()
+    cached = _price_cache.get(sym)
+    if cached is not None:
+        price, ts = cached
+        if now - ts < _PRICE_CACHE_TTL:
+            return price
+
+    price = 0.0
+    source = "none"
+
+    # --- Binance ---
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT"
+        with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+        price = float(data["price"])
+        source = "binance"
+    except Exception:
+        pass
+
+    # --- CoinGecko fallback ---
+    if price == 0.0:
+        try:
+            cg_id = sym.lower()
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
+            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+                data = _json.loads(resp.read())
+            price = float(data[cg_id]["usd"])
+            source = "coingecko"
+        except Exception:
+            pass
+
+    if price != 0.0:
+        logger.warning("price_ws_miss_fallback symbol=%s source=%s price=%s", sym, source, price)
+        _price_cache[sym] = (price, now)
+
+    return price
+
+
 def _latest_mark_prices(symbols: set[str] | None = None) -> dict[str, float]:
     """Best-effort latest mark prices from WS price signals."""
     requested = {str(s).strip().upper() for s in (symbols or set()) if str(s).strip()}
@@ -328,6 +380,10 @@ def _latest_mark_prices(symbols: set[str] | None = None) -> dict[str, float]:
                 if row and row[0] is not None:
                     with contextlib.suppress(Exception):
                         prices[sym] = float(row[0])
+            # Fetch live price for any symbol missing from DB
+            missing = requested - prices.keys()
+            for sym in missing:
+                prices[sym] = _fetch_live_price_fallback(sym)
             return prices
 
         rows = conn.execute(
