@@ -180,6 +180,27 @@ class BaseExternalProducer(BaseProducer):
         )
         self.publish([event])
         payload["_event_id"] = event.id
+
+        # Register in SPI admission pipeline — both adapter and gateway paths funnel here.
+        from engine.spi.admission import accept_signal  # noqa: PLC0415
+
+        try:
+            accept_signal(
+                producer_id=getattr(self, "name", self.__class__.__name__),
+                signal_client_id=dedupe_key,
+                submission_id=dedupe_key,
+                symbol=obs.symbol,
+                direction=obs.direction,
+                confidence=normalize_confidence(obs.confidence),
+                horizon_hours=obs.horizon_hours,
+                ingress_mode=self.INGRESS_MODE,
+                event_id=event.id,
+                signal_payload=payload,
+                db=self.ctx.db,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.ctx.logger.warning("spi_admission_failed", extra={"error": str(exc)})
+
         return payload
 
     # ------------------------------------------------------------------
