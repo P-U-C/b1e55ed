@@ -445,3 +445,31 @@ b1e55ed prune [--dry-run] [--events-days N] [--json]
 - `--json` — machine-readable JSON output
 
 Returns: counts of deleted (or would-delete) rows per table. Runs `VACUUM` after deletion if configured.
+
+---
+
+### `b1e55ed verify-chain`
+
+Run a full hash-chain integrity verification across all events in the event store. Unlike the dashboard fast-verify (which checks only recent events), this scans the complete event log.
+
+```text
+b1e55ed verify-chain [--json]
+```
+
+- `--json` — machine-readable JSON output
+
+Returns: `PASS` or `FAIL` with event count and first failing event ID if integrity is broken.
+
+---
+
+### `b1e55ed reconcile`
+
+Scan all positions and orders for missing provenance events and backfill them idempotently. Safe to run multiple times. Runs automatically at daemon startup.
+
+```text
+b1e55ed reconcile [--json]
+```
+
+- `--json` — machine-readable JSON output
+
+Returns: counts of backfilled events per type. Backfilled `SIGNAL_ACCEPTED_V1` events carry `recovery_placeholder=true` to distinguish them from real attribution events.
