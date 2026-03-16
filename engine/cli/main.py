@@ -507,6 +507,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
 
+    # -- spi --
+    p_spi = sub.add_parser("spi", help="SPI signal producer management")
+    spi_sub = p_spi.add_subparsers(dest="spi_cmd")
+
+    spi_sub.add_parser("register", help="Interactively register a new SPI signal producer")
+    spi_sub.add_parser("status", help="Show all registered SPI producers and lifecycle states")
+
+    p_spi_promote = spi_sub.add_parser("promote", help="Manually promote a producer to the next lifecycle state")
+    p_spi_promote.add_argument("producer_id", help="Producer ID to promote")
+
+    p_spi_test_key = spi_sub.add_parser("test-key", help="Test that an API key is valid")
+    p_spi_test_key.add_argument("producer_id", help="Producer ID whose key to test")
+
+    p_spi.add_argument("--api-url", default="http://127.0.0.1:5050", help="API base URL (default: http://127.0.0.1:5050)")
+
     p_uninstall = sub.add_parser("uninstall", help="Uninstall b1e55ed and clean up all related files")
     p_uninstall.add_argument(
         "--yes",
@@ -675,6 +690,13 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     print(f"- identity: {identity.path}")
     print(f"- keystore: {keystore.describe()}")
     print(f"- db: {db_path}")
+
+    # Optional: SPI producer registration
+    if not non_interactive:
+        spi_ans = input("\nWould you like to register an SPI signal producer? [y/N]: ").strip().lower()
+        if spi_ans in {"y", "yes"}:
+            spi_api_url = os.getenv("B1E55ED_API_URL", "http://127.0.0.1:5050")
+            _spi_register_flow(spi_api_url)
 
     print("\nYou're blessed. Run `b1e55ed brain` to start.")
     return 0
@@ -3542,6 +3564,250 @@ def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
     return run_wizard(ctx, args)
 
 
+# ---------------------------------------------------------------------------
+# SPI helpers
+# ---------------------------------------------------------------------------
+
+_SPI_LIFECYCLE_ORDER = ["onboarding", "shadow", "active", "suspended", "retired"]
+
+
+def _spi_next_state(current: str) -> str | None:
+    """Return the next logical promotion state, or None if terminal."""
+    promotable = {"onboarding": "shadow", "shadow": "active"}
+    return promotable.get(current)
+
+
+def _spi_config_dir() -> Path:
+    """Return ~/.b1e55ed/spi/producers/, creating it if necessary."""
+    d = Path.home() / ".b1e55ed" / "spi" / "producers"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _spi_register_flow(api_url: str) -> int:
+    """Interactive producer registration flow. Returns 0 on success, 1 on error."""
+    import urllib.error
+    import urllib.request
+
+    print("\n  SPI Producer Registration")
+    print("  " + "-" * 40)
+
+    producer_id = input("  Producer ID (slug, e.g. sendoeth): ").strip()
+    if not producer_id:
+        print("error: producer_id is required", file=sys.stderr)
+        return 1
+
+    producer_name = input(f"  Producer name [default: {producer_id} Signal Producer]: ").strip()
+    if not producer_name:
+        producer_name = f"{producer_id} Signal Producer"
+
+    ingress_mode = _prompt_choice(
+        "  Ingress mode",
+        choices=["native", "adapter"],
+        default="native",
+    )
+
+    api_base_url: str | None = None
+    if ingress_mode == "adapter":
+        api_base_url = input("  API base URL: ").strip() or None
+
+    payload = json.dumps({"producer_id": producer_id, "producer_name": producer_name, "ingress_mode": ingress_mode}).encode()
+    req = urllib.request.Request(
+        f"{api_url}/api/v1/spi/producers",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        try:
+            err = json.loads(body)
+            msg = err.get("detail", {}).get("message", body) if isinstance(err.get("detail"), dict) else err.get("detail", body)
+        except Exception:  # noqa: BLE001
+            msg = body
+        print(f"error: {exc.code} — {msg}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+        return 1
+
+    api_key = data.get("api_key", "")
+
+    print()
+    print("  ┌─────────────────────────────────────────────────────────────┐")
+    print("  │  ⚠  STORE THIS KEY — IT WILL NOT BE SHOWN AGAIN            │")
+    print("  │                                                             │")
+    print(f"  │  {api_key:<59}│")
+    print("  └─────────────────────────────────────────────────────────────┘")
+    print()
+
+    # Save producer config (without the key)
+    from datetime import UTC, datetime
+
+    config_dir = _spi_config_dir()
+    config_path = config_dir / f"{producer_id}.json"
+    config = {
+        "producer_id": producer_id,
+        "producer_name": producer_name,
+        "ingress_mode": ingress_mode,
+        "registered_at": datetime.now(tz=UTC).isoformat(),
+        "api_base_url": api_base_url,
+    }
+    config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    print(f"  Config saved → {config_path}")
+    print(f"  Producer '{producer_id}' registered successfully.")
+    return 0
+
+
+def _cmd_spi(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Dispatch SPI subcommands."""
+    import urllib.error
+    import urllib.request
+
+    cmd = str(getattr(args, "spi_cmd", "") or "")
+    api_url = str(getattr(args, "api_url", "http://127.0.0.1:5050"))
+
+    if not cmd:
+        print("error: missing spi subcommand (register|status|promote|test-key)", file=sys.stderr)
+        return 2
+
+    if cmd == "register":
+        return _spi_register_flow(api_url)
+
+    if cmd == "status":
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        producers = data.get("producers", [])
+        if not producers:
+            print("(no registered SPI producers)")
+            return 0
+
+        # Fetch karma for each producer to enrich the table
+        rows: list[list[str]] = []
+        for p in producers:
+            pid = p.get("producer_id", "")
+            state = p.get("lifecycle_state", "")
+            ingress = p.get("ingress_mode", "")
+            # Try to get karma details
+            karma_str = "-"
+            resolved_str = "-"
+            try:
+                kreq = urllib.request.Request(
+                    f"{api_url}/api/v1/spi/producers/{pid}",
+                    headers={"Accept": "application/json"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(kreq, timeout=5) as kresp:  # noqa: S310
+                    kdata = json.loads(kresp.read())
+                    k = kdata.get("running_karma")
+                    karma_str = f"{k:.3f}" if k is not None else "-"
+                    resolved_str = str(kdata.get("resolved_count", "-"))
+            except Exception:  # noqa: BLE001
+                pass
+            rows.append([pid, state, ingress, karma_str, resolved_str])
+
+        _print_table(["producer_id", "state", "ingress", "karma", "resolved"], rows)
+        return 0
+
+    if cmd == "promote":
+        producer_id = str(args.producer_id)
+        # Get current state first
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers/{producer_id}",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                pdata = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        current_state = pdata.get("lifecycle_state", "")
+        next_state = _spi_next_state(current_state)
+        if next_state is None:
+            print(f"error: producer '{producer_id}' is in terminal state '{current_state}' — cannot promote", file=sys.stderr)
+            return 1
+
+        payload = json.dumps({"to_state": next_state}).encode()
+        treq = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers/{producer_id}/transition",
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(treq, timeout=10) as tresp:  # noqa: S310
+                tdata = json.loads(tresp.read())
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            try:
+                err = json.loads(body)
+                msg = err.get("detail", {}).get("message", body) if isinstance(err.get("detail"), dict) else err.get("detail", body)
+            except Exception:  # noqa: BLE001
+                msg = body
+            print(f"error: {exc.code} — {msg}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        prev = tdata.get("previous_state", current_state)
+        new = tdata.get("lifecycle_state", next_state)
+        print(f"  {producer_id}: {prev} → {new}")
+        return 0
+
+    if cmd == "test-key":
+        producer_id = str(args.producer_id)
+        api_key = input(f"  API key for '{producer_id}': ").strip()
+        if not api_key:
+            print("error: key is required", file=sys.stderr)
+            return 1
+
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/signals",
+            headers={"Accept": "application/json", "X-Producer-Key": api_key},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                resp.read()  # consume body
+            print(f"  Key valid — producer '{producer_id}' authenticated successfully.")
+            return 0
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                print("error: key rejected (403 Forbidden) — key may be invalid or producer inactive", file=sys.stderr)
+            else:
+                print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+    print(f"error: unknown spi subcommand: {cmd}", file=sys.stderr)
+    return 2
+
+
 def _cmd_uninstall(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.uninstall import run_uninstall
 
@@ -3652,6 +3918,7 @@ def main(argv: list[str] | None = None) -> int:
         "wizard": _cmd_wizard,
         "uninstall": _cmd_uninstall,
         "report": lambda ctx, args: __import__("engine.cli.commands.report", fromlist=["run_report"]).run_report(ctx, args),
+        "spi": _cmd_spi,
     }
 
     fn = dispatch.get(str(args.command))

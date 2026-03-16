@@ -137,7 +137,7 @@ def accept_signal(
     if existing:
         # Return the canonical record (may differ from what we just tried to insert
         # if this was a duplicate submission).
-        return AcceptedSignal(
+        result = AcceptedSignal(
             signal_id=existing[0],
             signal_client_id=existing[1],
             submission_id=existing[2],
@@ -156,6 +156,15 @@ def accept_signal(
             created_at=existing[15],
             updated_at=existing[16],
         )
+        # Phase 2B: auto-promote producer after signal acceptance
+        try:
+            from engine.spi.lifecycle import maybe_auto_promote  # noqa: PLC0415
+
+            maybe_auto_promote(db, producer_id)
+        except Exception:  # noqa: BLE001
+            pass  # never block admission
+        return result
+
     return accepted  # fresh insert (shouldn't reach here but safe fallback)
 
 

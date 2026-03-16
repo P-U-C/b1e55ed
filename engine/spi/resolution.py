@@ -98,6 +98,15 @@ def resolve_expired_signals(db, current_epoch: int = 0) -> list[SignalOutcome]: 
         )
         outcomes.append(outcome)
 
+        # Phase 2B: check slash conditions after karma update and apply if triggered
+        try:
+            from engine.spi.slash import apply_slash, check_slash_conditions  # noqa: PLC0415
+
+            for triggered in check_slash_conditions(db, producer_id):
+                apply_slash(db, producer_id, triggered["condition"], triggered["severity"])
+        except Exception:  # noqa: BLE001
+            pass  # never block resolution
+
     return outcomes
 
 
