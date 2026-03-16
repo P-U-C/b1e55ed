@@ -250,10 +250,10 @@ def create_app() -> FastAPI:
 
         created_db = False
         if getattr(app.state, "db", None) is None:
-            from engine.core.paths import data_dir
+            from engine.core.paths import get_db_path
 
             # The map is not the territory. Path.cwd() is not the database.
-            app.state.db = Database(data_dir() / "brain.db")
+            app.state.db = Database(get_db_path())
             created_db = True
 
         from engine.producers import registry as producer_registry
@@ -310,22 +310,28 @@ def create_app() -> FastAPI:
         except Exception:
             pass  # Never block startup on recovery failure.
 
-        # Start background Brain cycle scheduler
+        # Start background Brain cycle scheduler — skipped in daemon mode
+        # (daemon.py runs its own authoritative scheduler; running both would
+        # cause duplicate cycles, overlapping writes, and split event chronology).
         brain_task: asyncio.Task | None = None
-        try:
-            brain_task = asyncio.create_task(
-                _brain_cycle_scheduler(app),
-                name="brain-cycle-scheduler",
-            )
-            logging.getLogger("b1e55ed.startup").info(
-                "Brain cycle scheduler started (interval=%ds)",
-                _brain_cycle_interval,
-            )
-        except Exception:
-            logging.getLogger("b1e55ed.startup").warning(
-                "Failed to start brain cycle scheduler",
-                exc_info=True,
-            )
+        _daemon_mode = os.environ.get("B1E55ED_DAEMON_MODE", "").lower() in ("1", "true", "yes")
+        if _daemon_mode:
+            logging.getLogger("b1e55ed.startup").info("[api] Daemon mode detected — embedded scheduler disabled")
+        else:
+            try:
+                brain_task = asyncio.create_task(
+                    _brain_cycle_scheduler(app),
+                    name="brain-cycle-scheduler",
+                )
+                logging.getLogger("b1e55ed.startup").info(
+                    "Brain cycle scheduler started (interval=%ds)",
+                    _brain_cycle_interval,
+                )
+            except Exception:
+                logging.getLogger("b1e55ed.startup").warning(
+                    "Failed to start brain cycle scheduler",
+                    exc_info=True,
+                )
 
         yield
 

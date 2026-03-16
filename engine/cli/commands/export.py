@@ -183,7 +183,9 @@ def run_export(args: argparse.Namespace, *, repo_root: Path) -> int:
     # -----------------------------------------------------------------------
     # Resolve database
     # -----------------------------------------------------------------------
-    db_path = repo_root / "data" / "brain.db"
+    from engine.core.paths import get_db_path
+
+    db_path = get_db_path()
     if not db_path.exists():
         print(f"error: database not found: {db_path}", file=sys.stderr)
         print("  Run `b1e55ed setup` first.", file=sys.stderr)

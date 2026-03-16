@@ -33,9 +33,9 @@ def get_db(request: Request) -> Database:
     db = getattr(request.app.state, "db", None)
     if db is not None:
         return db
-    from engine.core.paths import data_dir
+    from engine.core.paths import get_db_path
 
-    return Database(data_dir() / "brain.db")
+    return Database(get_db_path())
 
 
 def get_registry(request: Request):

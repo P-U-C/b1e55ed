@@ -35,7 +35,9 @@ def _db_path() -> Path:
     override = os.getenv("B1E55ED_DB_PATH")
     if override:
         return Path(override)
-    return _repo_root() / "data" / "brain.db"
+    from engine.core.paths import get_db_path
+
+    return get_db_path()
 
 
 def _connect_db() -> sqlite3.Connection | None:
