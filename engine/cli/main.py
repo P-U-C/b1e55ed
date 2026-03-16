@@ -577,6 +577,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify_chain = sub.add_parser("verify-chain", help="Verify the full event hash chain (alias for integrity --no-fast)")
     p_verify_chain.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- reconcile --
+    p_reconcile = sub.add_parser("reconcile", help="Backfill missing execution provenance events. Safe to run multiple times.")
+    p_reconcile.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     return parser
 
 
@@ -3532,6 +3536,11 @@ def main(argv: list[str] | None = None) -> int:
     # The conductor doesn't audition. The orchestra does.
     ungated_commands = {"identity", "setup", "wizard", "uninstall", "daemon", "start"}
 
+    # Operational commands are identity-gate exempt — they must run to diagnose the identity itself.
+    # An operator with a broken identity still needs doctor/health/integrity to recover.
+    # These commands may still REPORT identity status internally, but they must not be blocked.
+    IDENTITY_GATE_EXEMPT = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
+
     cmd = getattr(args, "command", None)
 
     # contributors register --node-id bypasses identity gate (explicit identity provided)
@@ -3542,7 +3551,7 @@ def main(argv: list[str] | None = None) -> int:
         cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
     )
 
-    if cmd not in ungated_commands and not _contributors_register_with_node_id:
+    if cmd not in ungated_commands and cmd not in IDENTITY_GATE_EXEMPT and not _contributors_register_with_node_id:
         from engine.core.identity_gate import is_dev_mode, load_identity
 
         if not is_dev_mode() and load_identity(ctx.repo_root) is None:
