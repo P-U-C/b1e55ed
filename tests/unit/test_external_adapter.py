@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from engine.external.confidence import normalize_confidence
 from engine.external.models import ExternalObservation, RawExternalRecord
 from engine.external.policy import AdapterPolicy
+from engine.external.spec import load_spec
 from engine.producers.post_fiat_signals import PostFiatSignalsProducer
 
 # ---------------------------------------------------------------------------
@@ -232,3 +235,39 @@ def test_normalize_empty_signals() -> None:
     raw = _make_raw([])
     obs = _producer.normalize(raw)
     assert obs == []
+
+
+# ---------------------------------------------------------------------------
+# load_spec — unresolved env var validation
+# ---------------------------------------------------------------------------
+
+
+def test_load_spec_raises_on_unresolved_env_var(tmp_path, monkeypatch) -> None:
+    """load_spec() raises ValueError when base_url contains unexpanded ${VAR} placeholders."""
+    spec_yaml = textwrap.dedent("""\
+        name: test-adapter
+        version: "1.0.0"
+        domain: tradfi
+        base_url: "${UNSET_ENV_VAR_XYZ}/api"
+        min_confidence: 0.55
+        stale_threshold_sec: 300
+        poll_interval_sec: 60
+        signals_endpoint:
+          path: /signals
+          method: GET
+          timeout_sec: 10
+        field_mapping:
+          symbol: "ticker"
+          direction: "action"
+          confidence: "confidence"
+          horizon_hours: "168"
+          observed_at: "timestamp"
+    """)
+    spec_file = tmp_path / "test_adapter.yaml"
+    spec_file.write_text(spec_yaml)
+
+    # Ensure the env var is NOT set.
+    monkeypatch.delenv("UNSET_ENV_VAR_XYZ", raising=False)
+
+    with pytest.raises(ValueError, match="unresolved env var placeholders"):
+        load_spec(spec_file)

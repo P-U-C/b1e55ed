@@ -96,6 +96,14 @@ def load_spec(path: str | Path) -> AdapterSpec:
 
     base_url = _expand_env(str(data["base_url"]))
 
+    # Check for unexpanded placeholders (env vars not set in the environment).
+    remaining = re.findall(r"\$\{[^}]+\}", base_url)
+    if remaining:
+        raise ValueError(
+            f"Adapter spec '{data['name']}' has unresolved env var placeholders in base_url: {remaining}. "
+            f"Set the required environment variables before starting."
+        )
+
     signals_ep_data = data.get("signals_endpoint")
     if signals_ep_data is None:
         raise ValueError("spec missing required 'signals_endpoint'")

@@ -179,6 +179,7 @@ class BaseExternalProducer(BaseProducer):
             dedupe_key=dedupe_key,
         )
         self.publish([event])
+        payload["_event_id"] = event.id
         return payload
 
     # ------------------------------------------------------------------
