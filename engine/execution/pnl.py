@@ -101,6 +101,15 @@ class PnLTracker:
 
             # KS-1: Consecutive loss tracking
             try:
+                # In paper mode with paper_ignore_consecutive_loss_gate=True (default),
+                # we track the count but never escalate the kill switch.  This keeps
+                # paper trading alive through losing streaks without contaminating
+                # live-mode circuit-breaker state.
+                _paper_gate_bypass = (
+                    self._config is not None
+                    and str(getattr(self._config.execution, "mode", "paper")) == "paper"
+                    and bool(getattr(self._config.execution, "paper_ignore_consecutive_loss_gate", True))
+                )
                 if realized < 0:
                     row_cl = self.db.fetchone("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'")
                     count = int(row_cl[0]) if row_cl else 0
@@ -109,12 +118,17 @@ class PnLTracker:
                         "INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', ?, datetime('now'))",
                         (str(count),),
                     )
-                    if count >= 3 and self._config is not None:
+                    if not _paper_gate_bypass and count >= 3 and self._config is not None:
                         from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
 
                         ks = KillSwitch(self._config, self.db)
                         ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
                         _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
+                    elif _paper_gate_bypass and count >= 3:
+                        _log.info(
+                            "KS-1: %d consecutive paper losses — kill-switch escalation suppressed (paper_ignore_consecutive_loss_gate=True)",
+                            count,
+                        )
                 else:
                     self.db.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
             except Exception:

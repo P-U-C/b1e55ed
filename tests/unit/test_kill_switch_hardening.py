@@ -54,7 +54,9 @@ def _open_position(db: Database, position_id: str, entry_price: float = 50000.0,
 
 
 def test_ks1_three_consecutive_losses_triggers_defensive(temp_dir: Path, test_config: Config) -> None:
-    db, ks, oms, pnl, pf = _make_stack(temp_dir, test_config)
+    # Disable paper bypass so kill-switch escalation fires (tests the underlying live-mode path)
+    live_config = test_config.model_copy(update={"execution": test_config.execution.model_copy(update={"paper_ignore_consecutive_loss_gate": False})})
+    db, ks, oms, pnl, pf = _make_stack(temp_dir, live_config)
 
     for i in range(3):
         pid = f"loss-{i}"
