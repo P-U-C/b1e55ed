@@ -265,6 +265,84 @@ class PnLTracker:
             _log.warning("KS-2 auto-close check failed for %s", position_id, exc_info=True)
         return False
 
+    def expire_stale_positions(self, *, current_prices: dict[str, float]) -> list[str]:
+        """Time-stop: close paper positions that have been open longer than
+        ``execution.paper_max_hold_hours`` (default 72h).
+
+        Returns a list of closed position_ids.  Emits ``execution.position_closed.v1``
+        with ``reason="time_stop"`` for each expired position.
+        Only runs when ``execution.mode == "paper"`` and ``paper_max_hold_hours > 0``.
+        """
+        if self._config is None:
+            return []
+        max_hours = int(getattr(self._config.execution, "paper_max_hold_hours", 72))
+        if max_hours <= 0:
+            return []
+        if str(self._config.execution.mode) != "paper":
+            return []
+
+        from engine.core.events import EventType
+
+        now = _utc_now()
+        closed_ids: list[str] = []
+
+        rows = self.db.fetchall(
+            "SELECT id, asset, opened_at FROM positions WHERE status = 'open'",
+            (),
+        )
+        for row in rows:
+            position_id = str(row[0])
+            asset = str(row[1]).upper()
+            opened_at_str = str(row[2])
+            try:
+                opened_at = datetime.fromisoformat(opened_at_str.replace("Z", "+00:00"))
+                if opened_at.tzinfo is None:
+                    opened_at = opened_at.replace(tzinfo=UTC)
+            except Exception:
+                _log.debug("expire_stale_positions: cannot parse opened_at '%s' for %s", opened_at_str, position_id)
+                continue
+
+            age_hours = (now - opened_at).total_seconds() / 3600.0
+            if age_hours < max_hours:
+                continue
+
+            mark_price = current_prices.get(asset)
+            if mark_price is None or mark_price <= 0:
+                _log.debug("expire_stale_positions: no mark price for %s, skipping time-stop", asset)
+                continue
+
+            try:
+                realized = self.close_position(
+                    position_id=position_id,
+                    exit_price=mark_price,
+                    reason="time_stop",
+                )
+                self.db.append_event(
+                    event_type=EventType.POSITION_CLOSED_V1,
+                    payload={
+                        "position_id": position_id,
+                        "asset": asset,
+                        "exit_price": mark_price,
+                        "realized_pnl": float(realized),
+                        "reason": "time_stop",
+                        "age_hours": round(age_hours, 2),
+                    },
+                    source="execution.pnl",
+                    dedupe_key=f"position_time_stop:{position_id}",
+                )
+                _log.info(
+                    "TIME_STOP: closed %s position %s after %.1fh, realized_pnl=%.2f USD",
+                    asset,
+                    position_id,
+                    age_hours,
+                    realized,
+                )
+                closed_ids.append(position_id)
+            except Exception:
+                _log.warning("Time-stop close failed for position %s", position_id, exc_info=True)
+
+        return closed_ids
+
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0
         for row in self.db.fetchall("SELECT id, asset FROM positions WHERE status = 'open'"):

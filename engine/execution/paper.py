@@ -39,6 +39,9 @@ class PaperConfig:
     fee_rate: float = 0.0006
     platform: str = "paper"
     venue: str = "paper"
+    max_positions_per_symbol: int = 1
+    """Maximum concurrent open positions per symbol. Default 1 (legacy). OMS overrides to
+    execution.paper_max_positions_per_symbol from config when constructing PaperBroker."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +76,13 @@ class PaperBroker:
             (symbol,),
         )
         return None if row is None else dict(row)
+
+    def _count_open_positions(self, symbol: str) -> int:
+        row = self.db.fetchone(
+            "SELECT COUNT(*) FROM positions WHERE asset = ? AND status = 'open'",
+            (symbol,),
+        )
+        return int(row[0]) if row else 0
 
     def execute_market(
         self,
@@ -136,12 +146,14 @@ class PaperBroker:
                 realized_pnl_usd=None,
             )
 
-        # Deduplication: reject if an open position already exists for this symbol.
-        # Prevents the same asset accumulating multiple open positions from repeated
-        # brain cycles that fire before the first position is closed.
-        existing_pos = self._existing_open_position(sym)
-        if existing_pos is not None:
-            raise ValueError(f"duplicate_open_position: {sym} already has an open position (id={existing_pos['id']})")
+        # Deduplication: reject if open positions for this symbol exceed the limit.
+        # In paper mode paper_max_positions_per_symbol (default 2) allows a second
+        # position to open while one is still live — useful for conviction-flip entries.
+        # Legacy behaviour (single position per symbol) is max_positions_per_symbol=1.
+        open_count = self._count_open_positions(sym)
+        max_pos = int(self.cfg.max_positions_per_symbol)
+        if open_count >= max_pos:
+            raise ValueError(f"duplicate_open_position: {sym} already has {open_count} open position(s) (limit={max_pos})")
 
         order_id = str(uuid.uuid4())
         position_id = str(uuid.uuid4())
