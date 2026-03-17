@@ -367,6 +367,11 @@ class UniverseConfig(BaseModel):
 
         base = get_scoring_symbols(self)
 
+        if not base:
+            import logging as _log_uni
+
+            _log_uni.getLogger("b1e55ed.universe").warning("UNIVERSE_EMPTY: no symbols to score — set universe.symbols or configure bundles")
+
         # Merge optional TradFi symbols (appended after core symbols, deduped)
         if self.tradfi_symbols:
             tradfi = self.normalize_symbols(self.tradfi_symbols)
