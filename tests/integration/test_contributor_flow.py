@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.deps import _load_config
@@ -19,11 +18,12 @@ def _make_app(tmp_path: Path):
     app.state.db = Database(tmp_path / "brain.db")
     # Inject a clean config with no auth_token so tests don't require a Bearer header.
     # This prevents user.yaml's real auth_token from leaking into integration tests.
-    app.state.config = Config(api=ApiConfig(auth_token=""))
+    from engine.core.config import UniverseConfig
+
+    app.state.config = Config(api=ApiConfig(auth_token=""), universe=UniverseConfig(symbols=["BTC", "ETH", "SOL"]))
     return app
 
 
-@pytest.mark.xfail(reason="pre-existing: contributor_signals.accepted not set by brain/run", strict=False)
 def test_contributor_register_submit_signal_and_attribution(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("B1E55ED_DEV_MODE", "1")

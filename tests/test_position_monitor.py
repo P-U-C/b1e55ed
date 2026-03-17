@@ -24,9 +24,7 @@ import pytest
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.execution.pnl import PnLTracker
-from engine.execution.position_monitor import (
-    monitor_positions,
-)
+from engine.execution.position_monitor import monitor_positions
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -287,7 +285,7 @@ class TestConsecutiveLossGate:
         # Force 3 paper losses by closing a position 3 times through PnLTracker
         pnl = PnLTracker(tmp_db, paper_config)
 
-        for _ in range(3):
+        for _i in range(3):
             pos_id = _insert_position(
                 tmp_db,
                 direction="long",
