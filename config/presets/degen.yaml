@@ -1,16 +1,20 @@
-# Degen preset
+# ⚠️ High-risk preset — suitable for testing or experienced operators only.
+# Degen preset — higher leverage, larger positions, elevated social/narrative weighting.
+# Significantly more volatile than balanced or conservative. Losses can be severe.
+# Used when preset: degen in default.yaml.
 
 weights:
-  curator: 0.20
-  onchain: 0.25
-  tradfi: 0.15
-  social: 0.20
-  technical: 0.15
-  events: 0.05
+  # Domain weights must sum to 1.0. These control how much each signal source influences conviction.
+  curator: 0.20    # Weight for operator-curated signals (your own alpha) — reduced vs balanced
+  onchain: 0.25    # Weight for on-chain data (wallet flows, whale activity)
+  tradfi: 0.15     # Weight for traditional finance signals (earnings, macro, equities) — reduced vs balanced
+  social: 0.20     # Weight for social/sentiment signals (CT, trending narratives) — elevated vs balanced
+  technical: 0.15  # Weight for technical analysis signals (RSI, MA crossovers, structure) — elevated vs balanced
+  events: 0.05     # Weight for discrete events (listings, protocol upgrades, news)
 
 risk:
-  max_leverage: 5.0
-  max_position_pct: 0.20
-  max_portfolio_heat_pct: 0.10
-  daily_loss_limit_pct: 0.05
-  max_drawdown_pct: 0.40
+  max_leverage: 5.0           # Maximum leverage allowed on any position — 5x, use with extreme care
+  max_position_pct: 0.20      # Maximum size of any single position as % of portfolio (20%) — double balanced
+  max_portfolio_heat_pct: 0.10  # Maximum total capital at risk across all open positions (10%) — elevated vs balanced
+  daily_loss_limit_pct: 0.05  # Kill switch trigger: stop trading if daily loss exceeds 5%
+  max_drawdown_pct: 0.40      # Kill switch trigger: stop trading if drawdown from peak exceeds 40%

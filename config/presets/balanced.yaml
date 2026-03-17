@@ -1,22 +1,24 @@
-# Balanced preset (source of truth for default domain weights)
+# Balanced preset — equal weight on on-chain and curator signals, moderate risk.
+# Good default for most operators. Used when preset: balanced in default.yaml.
 
 weights:
-  curator: 0.25
-  onchain: 0.25
-  tradfi: 0.20
-  social: 0.15
-  technical: 0.10
-  events: 0.05
+  # Domain weights must sum to 1.0. These control how much each signal source influences conviction.
+  curator: 0.25    # Weight for operator-curated signals (your own alpha)
+  onchain: 0.25    # Weight for on-chain data (wallet flows, whale activity)
+  tradfi: 0.20     # Weight for traditional finance signals (earnings, macro, equities)
+  social: 0.15     # Weight for social/sentiment signals (CT, trending narratives)
+  technical: 0.10  # Weight for technical analysis signals (RSI, MA crossovers, structure)
+  events: 0.05     # Weight for discrete events (listings, protocol upgrades, news)
 
 risk:
-  max_leverage: 2.0
-  max_position_pct: 0.10
-  max_portfolio_heat_pct: 0.06
-  daily_loss_limit_pct: 0.03
-  max_drawdown_pct: 0.30
+  max_leverage: 2.0           # Maximum leverage allowed on any position
+  max_position_pct: 0.10      # Maximum size of any single position as % of portfolio (10%)
+  max_portfolio_heat_pct: 0.06  # Maximum total capital at risk across all open positions (6%)
+  daily_loss_limit_pct: 0.03  # Kill switch trigger: stop trading if daily loss exceeds 3%
+  max_drawdown_pct: 0.30      # Kill switch trigger: stop trading if drawdown from peak exceeds 30%
 
 kill_switch:
-  l1_daily_loss_pct: 0.03
-  l2_portfolio_heat_pct: 0.06
-  l3_crisis_threshold: 2
-  l4_max_drawdown_pct: 0.30
+  l1_daily_loss_pct: 0.03     # Level 1: daily loss limit — pauses trading for the day
+  l2_portfolio_heat_pct: 0.06 # Level 2: too many positions open — blocks new entries
+  l3_crisis_threshold: 2      # Level 3: number of L1/L2 triggers in a window before escalating
+  l4_max_drawdown_pct: 0.30   # Level 4: maximum drawdown — halts all trading until manual reset
