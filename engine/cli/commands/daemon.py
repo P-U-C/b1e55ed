@@ -445,6 +445,7 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     brain_full_interval = getattr(daemon_cfg, "brain_full_interval_seconds", 21600)
     resolver_interval = getattr(daemon_cfg, "resolver_interval_seconds", 1800)
     prune_interval = getattr(daemon_cfg, "prune_interval_seconds", 86400)
+    position_monitor_interval = brain_interval  # same cadence as brain
 
     api_cfg = getattr(config, "api", None)
     api_port = getattr(api_cfg, "port", 5050)
@@ -478,6 +479,11 @@ def run_daemon(repo_root: Path, config: Any) -> int:
             _cmd(["resolve-outcomes"]),
             interval=resolver_interval,
         ),
+        Scheduler(
+            "position-monitor",
+            _cmd(["monitor-positions"]),
+            interval=position_monitor_interval,
+        ),
     ]
     if prune_interval and prune_interval > 0:
         schedulers.append(
@@ -497,6 +503,7 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     print(f"  brain:      every {brain_interval}s ({brain_interval // 60}m)")
     print(f"  brain-full: every {brain_full_interval}s ({brain_full_interval // 3600}h)")
     print(f"  resolver:   every {resolver_interval}s ({resolver_interval // 60}m)")
+    print(f"  pos-monitor: every {position_monitor_interval}s ({position_monitor_interval // 60}m)")
     if prune_interval and prune_interval > 0:
         print(f"  prune:      every {prune_interval}s ({prune_interval // 3600}h)")
     else:

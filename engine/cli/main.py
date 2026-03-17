@@ -430,6 +430,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve = sub.add_parser("resolve-outcomes", help="Resolve elapsed FORECAST_V1 events into FORECAST_OUTCOME_V1")
     p_resolve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- monitor-positions --
+    p_mon = sub.add_parser(
+        "monitor-positions",
+        help="Evaluate stop-loss, take-profit and time-based stops for all open positions.",
+    )
+    p_mon.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_keys = sub.add_parser("keys", help="Manage API keys")
     keys_sub = p_keys.add_subparsers(dest="keys_cmd")
 
@@ -2094,6 +2101,52 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
         print(_json_dumps({"resolved": resolved, "skipped_missing_price": skipped}))
     else:
         print(f"resolved {resolved} forecasts, skipped {skipped} (missing price data)")
+    return 0
+
+
+def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Evaluate stop/target/time-stop for every open position. Exit code 0."""
+    from engine.core.database import Database
+    from engine.execution.position_monitor import monitor_positions
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+    config = None
+    try:
+        from engine.core.config import Config
+
+        config = Config.load(repo_root)
+    except Exception:
+        try:
+            from engine.core.config import Config
+
+            config = Config()
+        except Exception:
+            pass
+
+    result: dict = {"evaluated": 0, "closed_stop": 0, "closed_target": 0, "closed_time_stop": 0, "errors": 0}
+    try:
+        result = monitor_positions(db, config)
+    except Exception as exc:
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps({"error": str(exc), **result}))
+        else:
+            print(f"monitor-positions failed: {exc}", file=sys.stderr)
+        return 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(result))
+    else:
+        closed = result["closed_stop"] + result["closed_target"] + result["closed_time_stop"]
+        print(
+            f"position-monitor: evaluated={result['evaluated']} "
+            f"closed_stop={result['closed_stop']} "
+            f"closed_target={result['closed_target']} "
+            f"closed_time_stop={result['closed_time_stop']} "
+            f"errors={result['errors']}"
+        )
+        if closed:
+            print(f"  ✓ {closed} position(s) auto-closed")
     return 0
 
 
@@ -3909,6 +3962,7 @@ def main(argv: list[str] | None = None) -> int:
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "resolve-outcomes": _cmd_resolve_outcomes,
+        "monitor-positions": _cmd_monitor_positions,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
         "start": _cmd_start,
