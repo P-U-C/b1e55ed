@@ -58,10 +58,35 @@ risk:
 ```yaml
 brain:
   cycle_interval_seconds: 1800
-  auto_paper_trade: true      # Auto-open paper trades when confidence ≥ 0.65
+  auto_paper_trade: true
+  auto_paper_trade_min_confidence: 0.35
+  auto_paper_trade_min_magnitude: 5.0
 ```
 
-When `auto_paper_trade` is enabled (default: `true`), the brain automatically opens paper trades for any conviction with confidence ≥ 0.65. Disable to require manual confirmation for all trades.
+#### `brain.auto_paper_trade`
+
+- **Type**: bool
+- **Default**: `true`
+- **Description**: Enable automatic paper trading when a conviction meets both the confidence and magnitude thresholds. Set to `false` to require manual confirmation for every trade.
+
+#### `brain.auto_paper_trade_min_confidence`
+
+- **Type**: float
+- **Default**: `0.35`
+- **Range**: 0.0–1.0
+- **Description**: Minimum confidence score required to open a paper trade. Signals scoring below this threshold are observed but not acted on. Lower values allow trades on less-certain signals.
+
+#### `brain.auto_paper_trade_min_magnitude`
+
+- **Type**: float
+- **Default**: `5.0`
+- **Range**: 0.0–10.0
+- **Description**: Minimum conviction magnitude required to open a paper trade. Signals scoring below this threshold are observed but not acted on.
+- **⚠️ Warning**: Values below `3.0` will trade on weak signals. Use lower values only in testing/paper mode. For live trading, keep at `5.0` or above.
+- **Tuning guide**:
+  - `5.0` — production default, high-quality signals only
+  - `3.0–4.9` — testing/paper: moderate signal quality
+  - `< 3.0` — stress testing only: high noise, expect many false trades
 
 ### `execution`
 

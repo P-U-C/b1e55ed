@@ -543,6 +543,13 @@ class BrainOrchestrator:
 
                     # Fix 2: Minimum magnitude threshold — low-magnitude signals lack conviction.
                     min_magnitude = float(getattr(self.config.brain, "auto_paper_trade_min_magnitude", 5.0) or 5.0)
+                    if min_magnitude < 3.0:
+                        _log.warning(
+                            "auto_paper_trade_min_magnitude=%.1f is below 3.0 — "
+                            "this will trigger trades on weak signals. "
+                            "Suitable for testing only; raise to ≥5.0 before live trading.",
+                            min_magnitude,
+                        )
                     if magnitude < min_magnitude:
                         _log.info(
                             "auto-paper-trade skipped: %s magnitude %.2f < %.2f threshold",
