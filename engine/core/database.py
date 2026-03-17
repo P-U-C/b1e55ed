@@ -740,6 +740,18 @@ class Database:
                 "TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL",
             )
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol)")
+        # Benchmark stratification: additive columns for benchmark comparison rows.
+        self._ensure_column("signal_stratification", "position_id", "TEXT")
+        self._ensure_column("signal_stratification", "benchmark_name", "TEXT")
+        self._ensure_column("signal_stratification", "benchmark_direction", "TEXT")
+        self._ensure_column("signal_stratification", "benchmark_pnl", "REAL")
+        self._ensure_column("signal_stratification", "system_pnl", "REAL")
+        self._ensure_column("signal_stratification", "system_confidence", "REAL")
+        self._ensure_column("signal_stratification", "system_direction", "TEXT")
+        self._ensure_column("signal_stratification", "recorded_at", "TEXT")
+        with self.conn:
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_position ON signal_stratification(position_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_benchmark ON signal_stratification(benchmark_name)")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(

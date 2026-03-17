@@ -141,6 +141,7 @@ class ExecutionConfig(BaseModel):
     paper_start_balance: float = 10000.0
     confirmation_threshold_usd: float = 500.0
     paper_min_days: int = 14
+    paper_ignore_consecutive_loss_gate: bool = True  # Paper mode: track losses but do NOT escalate kill switch
 
     # Paper-mode throughput settings
     paper_max_positions_per_symbol: int = 2

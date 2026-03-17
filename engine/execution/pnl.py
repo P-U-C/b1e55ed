@@ -240,6 +240,21 @@ class PnLTracker:
                     exc_info=True,
                 )
 
+            # Benchmark stratification: record what each benchmark would have done.
+            try:
+                from engine.brain.stratification_recorder import record_benchmark_stratification
+
+                record_benchmark_stratification(
+                    db=self.db,
+                    position_id=str(position_id),
+                )
+            except Exception:
+                _log.warning(
+                    "benchmark stratification recording failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
         return float(realized)
 
     def check_auto_close(self, *, position_id: str, mark_price: float) -> bool:

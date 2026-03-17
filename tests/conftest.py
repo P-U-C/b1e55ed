@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Backport datetime.UTC for Python < 3.11
 if not hasattr(_dt, "UTC"):
-    _dt.UTC = _dt.UTC  # type: ignore[attr-defined]
+    _dt.UTC = _dt.timezone.utc  # type: ignore[attr-defined]
 
 import pytest
 
