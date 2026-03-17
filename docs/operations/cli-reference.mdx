@@ -403,7 +403,7 @@ b1e55ed export karma \
   b1e55ed kelly [--json]
   ```
 
-  ### Backtesting
+  ### `b1e55ed backtest`
 
   Walk-forward:
 
@@ -437,6 +437,8 @@ b1e55ed export karma \
 
   <Accordion title="Webhooks">
 
+  ### `b1e55ed webhooks`
+
   Webhook subscriptions are stored in the local database.
 
   ```bash
@@ -448,6 +450,8 @@ b1e55ed export karma \
   </Accordion>
 
   <Accordion title="EAS integration">
+
+  ### `b1e55ed eas`
 
   ```bash
   b1e55ed eas status [--json]
@@ -464,6 +468,83 @@ b1e55ed export karma \
 ---
 
 ## Uninstall
+
+### `b1e55ed daemon`
+
+Run b1e55ed as a background daemon (brain cycles + resolver + retention on schedule).
+
+```bash
+b1e55ed daemon
+```
+
+Intervals are configured via `daemon.*` in `config/user.yaml`. The daemon is started automatically by `b1e55ed start`.
+
+---
+
+### `b1e55ed report`
+
+Generate a performance report with stratification by confidence band.
+
+```bash
+b1e55ed report [--stratification] [--json]
+```
+
+---
+
+### `b1e55ed prune`
+
+Prune old events and data according to the configured retention policy.
+
+```bash
+b1e55ed prune [--dry-run]
+```
+
+---
+
+### `b1e55ed reconcile`
+
+Backfill missing execution provenance events. Safe to run multiple times.
+
+```bash
+b1e55ed reconcile [--dry-run]
+```
+
+---
+
+### `b1e55ed resolve-outcomes`
+
+Resolve elapsed `FORECAST_V1` events into `FORECAST_OUTCOME_V1` scored records.
+
+```bash
+b1e55ed resolve-outcomes [--dry-run]
+```
+
+---
+
+### `b1e55ed spi`
+
+SPI signal producer management (register, status, promote, test-key).
+
+```bash
+b1e55ed spi register --name <name> --domain <domain>
+b1e55ed spi status --id <producer-id>
+b1e55ed spi promote --id <producer-id>
+b1e55ed spi test-key --id <producer-id>
+```
+
+See [External Producers](../producers/external-producers) for the full SPI guide.
+
+---
+
+### `b1e55ed verify-chain`
+
+Verify the full event hash chain (alias for `integrity --no-fast`).
+
+```bash
+b1e55ed verify-chain [--json]
+```
+
+---
 
 ### `b1e55ed uninstall`
 
