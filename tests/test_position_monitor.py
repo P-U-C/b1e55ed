@@ -287,7 +287,7 @@ class TestConsecutiveLossGate:
         # Force 3 paper losses by closing a position 3 times through PnLTracker
         pnl = PnLTracker(tmp_db, paper_config)
 
-        for _ in range(3):
+        for _i in range(3):
             pos_id = _insert_position(
                 tmp_db,
                 direction="long",
