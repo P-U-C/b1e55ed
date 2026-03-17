@@ -28,7 +28,7 @@ from engine.core.database import Database
 from engine.core.events import EventType, SignalAcceptedPayload
 from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
-from engine.execution.paper import PaperBroker
+from engine.execution.paper import PaperBroker, PaperConfig
 from engine.execution.position_sizer import CorrelationAwareSizer, PositionSizer, RiskLimits
 from engine.execution.preflight import Preflight
 
@@ -58,7 +58,10 @@ class OMS:
         self.db = db
         self.preflight = preflight
         self.sizer = sizer
-        self.paper = paper_broker or PaperBroker(db)
+        _paper_cfg = PaperConfig(
+            max_positions_per_symbol=int(config.execution.paper_max_positions_per_symbol),
+        )
+        self.paper = paper_broker or PaperBroker(db, config=_paper_cfg)
         self.policy = policy
 
     def submit(

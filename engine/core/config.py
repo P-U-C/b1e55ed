@@ -141,7 +141,19 @@ class ExecutionConfig(BaseModel):
     paper_start_balance: float = 10000.0
     confirmation_threshold_usd: float = 500.0
     paper_min_days: int = 14
-    paper_ignore_consecutive_loss_gate: bool = True  # Paper mode: suppress kill-switch escalation on loss streaks
+
+    # Paper-mode throughput settings
+    paper_max_positions_per_symbol: int = 2
+    """Maximum concurrent open positions per symbol in paper mode.
+    Default: 2 (allows conviction-flip / new entries while one is open).
+    Set to 1 to restore legacy behaviour."""
+
+    paper_max_hold_hours: int = 72
+    """Auto-close paper positions older than this many hours. 0 = disabled. Default: 72h."""
+
+    paper_ignore_consecutive_loss_gate: bool = True
+    """Bypass the KS-1 consecutive-loss kill-switch escalation in paper mode.
+    Keeps kill-switch at SAFE so repeated paper losses don't freeze paper trading. Default: True."""
 
     # Bundle-aware execution policy defaults (safe by default).
     allowed_bundle_asset_classes: list[str] = Field(default_factory=lambda: ["crypto"])

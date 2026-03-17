@@ -210,6 +210,8 @@ class TestOMSDeduplication:
         from engine.execution.oms import OMS, default_sizer_from_config
 
         cfg = Config()
+        # Explicitly set max to 1 so second submission is still rejected (dedup test)
+        cfg.execution.paper_max_positions_per_symbol = 1
         _db = Database(db_path=tmp_path / "oms_test.db")
 
         # Use a permissive preflight that always approves
