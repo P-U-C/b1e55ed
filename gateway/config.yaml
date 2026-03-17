@@ -1,20 +1,25 @@
 # b1e55ed Gateway Configuration
-# See gateway/README.md for field descriptions.
+# The gateway is a lightweight proxy that controls external access to the b1e55ed API.
+# See gateway/README.md for full documentation.
 
-b1e55ed_url: "http://localhost:5050"
-b1e55ed_token: ""
-port: 7338
+b1e55ed_url: "http://localhost:5050"  # URL of the b1e55ed API server
+b1e55ed_token: ""                      # API token for the b1e55ed instance (matches api.auth_token)
+port: 7338                             # Port the gateway listens on
 
+# User accounts — each user gets an API key and a role.
+# Roles control what endpoints each user can access.
+# Available roles: analyst (read-only) | pm (read + signal submission) | risk (read + risk ops) | admin (full access)
+# ⚠️ Change all default keys before deploying!
 users:
   - api_key: "analyst-key-change-me"
     name: "analyst"
-    role: "analyst"
+    role: "analyst"   # Read-only access
   - api_key: "pm-key-change-me"
     name: "pm"
-    role: "pm"
+    role: "pm"        # Read + submit signals
   - api_key: "risk-key-change-me"
     name: "risk"
-    role: "risk"
+    role: "risk"      # Read + risk management operations
   - api_key: "admin-key-change-me"
     name: "admin"
-    role: "admin"
+    role: "admin"     # Full access — treat like a root password
