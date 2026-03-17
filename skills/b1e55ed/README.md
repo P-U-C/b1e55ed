@@ -15,7 +15,31 @@ Institutional-grade crypto research and analysis skills for [DeerFlow](https://g
 
 ## Current MCP API
 
-b1e55ed exposes three MCP tools (port 7337, started via `b1e55ed start`):
+b1e55ed ships two MCP interfaces:
+
+### 1. REST JSON-RPC endpoint — `POST /mcp` (recommended for DeerFlow)
+
+The primary MCP interface. Available when the API server is running (`b1e55ed start`, port 8000 by default). Implements JSON-RPC 2.0 with full tool suite:
+
+| Tool | Description |
+|------|-------------|
+| `get_regime_status` | Current regime, kill switch level, last cycle timestamp, trend indicator |
+| `get_top_signals` | Recent signals with domain/symbol/signal_class filter and cursor pagination |
+| `get_regime_history` | Regime change history for last N days with stability indicator |
+| `get_open_positions` | All currently open positions from the OMS |
+| `submit_research_signal` | Validate and emit a `signal.research.v1` event (requires `operator_node_id`) |
+| `get_signals_bulk_export` | Bulk historical signal export for backtest use (up to 1000/call) |
+| `get_signal_attribution` | Attribution metadata for a signal by event ID |
+| `b1e55ed_provenance_check` | Chain-verified producer lineage before acting on a signal |
+| `get_brain_status` | Brain status: regime, kill switch level, last cycle info |
+| `get_recent_signals` | Recent brain signals from the event store (domain-filterable) |
+| `emit_producer_signal` | Inject a signal into the ingestion bus on behalf of a registered producer |
+
+Call `tools/list` to enumerate live tools with full schemas.
+
+### 2. FastMCP standalone server — port 7337 (producer registry)
+
+A lightweight producer registry server started alongside the API. Exposes 3 tools over SSE transport:
 
 | Tool | Description |
 |------|-------------|
@@ -24,8 +48,6 @@ b1e55ed exposes three MCP tools (port 7337, started via `b1e55ed start`):
 | `get_signal_history(producer_name, limit=10)` | Returns signal history for a producer |
 
 **Producer names** (use as `producer_name`): `regime_detector`, `onchain_scanner`, `social_intel`, `curator`, and others — call `list_producers()` to enumerate.
-
-> **Note:** Higher-level tools (`get_regime_status`, `get_top_signals`, `submit_research_signal`) are planned for a future MCP extension. Until then, the skills in this pack use `list_producers` + `get_latest_signal` to compose equivalent functionality.
 
 ## Installation
 
@@ -59,12 +81,10 @@ Add the b1e55ed MCP server to DeerFlow's `extensions_config.json`:
   "extensions": {
     "b1e55ed": {
       "type": "mcp",
-      "transport": "stdio",
-      "command": "python",
-      "args": ["-m", "b1e55ed.mcp.server"],
-      "env": {
-        "B1E55ED_API_URL": "http://localhost:8000",
-        "B1E55ED_OPERATOR_NODE_ID": "<your-forge-node-id>"
+      "transport": "http",
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "X-API-Key": "<your-b1e55ed-api-token>"
       },
       "tools": [
         "get_regime_status",
@@ -74,12 +94,17 @@ Add the b1e55ed MCP server to DeerFlow's `extensions_config.json`:
         "submit_research_signal",
         "get_signals_bulk_export",
         "get_signal_attribution",
-        "b1e55ed_provenance_check"
+        "b1e55ed_provenance_check",
+        "get_brain_status",
+        "get_recent_signals",
+        "emit_producer_signal"
       ]
     }
   }
 }
 ```
+
+The API token is in your `config/b1e55ed.yaml` under `api.auth_token`, or set via `B1E55ED_API_TOKEN` env var.
 
 ## Finding Your Operator Node ID
 
