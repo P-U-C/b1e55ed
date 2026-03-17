@@ -2109,20 +2109,8 @@ def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
     from engine.execution.position_monitor import monitor_positions
 
-    repo_root = ctx.repo_root
-    db = Database(_resolve_db_path(repo_root))
-    config = None
-    try:
-        from engine.core.config import Config
-
-        config = Config.load(repo_root)
-    except Exception:
-        try:
-            from engine.core.config import Config
-
-            config = Config()
-        except Exception:
-            pass
+    db = Database(_resolve_db_path(ctx.repo_root))
+    config = _load_config(ctx)
 
     result: dict = {"evaluated": 0, "closed_stop": 0, "closed_target": 0, "closed_time_stop": 0, "errors": 0}
     try:
