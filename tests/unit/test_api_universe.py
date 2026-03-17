@@ -75,7 +75,8 @@ async def test_universe_bundle_crud_and_active_resolution(temp_dir: Path, test_c
         active_after_add = await ac.get("/api/v1/universe/active", headers=headers)
         assert active_after_add.status_code == 200
         active_js = active_after_add.json()
-        assert active_js["symbols"] == ["SOL", "BTC", "SPY"]
+        # Bundle symbols come first; explicit symbols (BTC already in bundle, ETH is new) supplement.
+        assert active_js["symbols"] == ["SOL", "BTC", "SPY", "ETH"]
         assert active_js["fallback_to_symbols"] is False
         assert active_js["asset_class_symbols"]["crypto"] == ["SOL", "BTC"]
         assert active_js["asset_class_symbols"]["tradfi"] == ["SPY"]
@@ -92,7 +93,8 @@ async def test_universe_bundle_crud_and_active_resolution(temp_dir: Path, test_c
 
         active_after_disable = await ac.get("/api/v1/universe/active", headers=headers)
         assert active_after_disable.status_code == 200
-        assert active_after_disable.json()["symbols"] == ["SPY"]
+        # Only tradfi bundle is enabled; explicit ["BTC","ETH"] now supplement it.
+        assert active_after_disable.json()["symbols"] == ["SPY", "BTC", "ETH"]
 
         delete_tradfi = await ac.delete(f"/api/v1/universe/bundles/{b2['id']}", headers=headers)
         assert delete_tradfi.status_code == 200
@@ -156,7 +158,8 @@ async def test_universe_pack_catalog_and_pack_based_bundle_creation(temp_dir: Pa
         active = await ac.get("/api/v1/universe/active", headers=headers)
         assert active.status_code == 200
         active_js = active.json()
-        assert active_js["symbols"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
+        # Pack bundle symbols come first; explicit ["BTC","ETH"] are appended as supplements.
+        assert active_js["symbols"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR", "BTC", "ETH"]
         assert "vol" in active_js["tags"]
         assert active_js["tag_symbols"]["vol"] == ["AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "NFLX", "AMD", "COIN", "MSTR", "PLTR"]
 

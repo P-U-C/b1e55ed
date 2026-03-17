@@ -83,7 +83,9 @@ def test_universe_active_symbols_prefers_enabled_bundles() -> None:
         }
     )
 
-    assert cfg.universe.active_symbols() == ["SOL", "BTC"]
+    # Bundle symbols come first (SOL, BTC); explicit symbols supplement — BTC is already
+    # present (deduped) so only ETH is appended.  DOGE is excluded (disabled bundle).
+    assert cfg.universe.active_symbols() == ["SOL", "BTC", "ETH"]
 
 
 def test_universe_execution_metadata_for_symbol() -> None:

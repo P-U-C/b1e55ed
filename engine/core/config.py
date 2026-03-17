@@ -278,8 +278,47 @@ class UniverseBundle(BaseModel):
         return out
 
 
+def get_scoring_symbols(universe_config: UniverseConfig) -> list[str]:
+    """Derive the set of symbols the brain should score.
+
+    Priority / merge order:
+    1. Enabled bundle symbols come first (union of all enabled bundles, deduped,
+       order preserved).
+    2. Explicit ``universe.symbols`` supplements — any symbols not already in
+       the bundle union are appended after.
+
+    Key behaviours:
+
+    * If ``universe.symbols`` is empty/absent, bundles drive everything.
+    * If ``universe.symbols`` is non-empty and no bundles are configured, the
+      explicit list is used as-is (backward-compatible).
+    * Disabled bundle symbols are never included.
+    * Deduplication is order-preserving (first occurrence wins).
+    """
+    normalize = UniverseConfig.normalize_symbols
+    explicit = normalize(list(universe_config.symbols or []))
+
+    raw_bundle: list[str] = []
+    for bundle in universe_config.bundles or []:
+        if bundle.enabled:
+            raw_bundle.extend(bundle.symbols or [])
+    bundle_syms = normalize(raw_bundle)
+
+    # Bundles first, explicit supplements appended — deduplicated, order preserved
+    seen: set[str] = set()
+    result: list[str] = []
+    for s in bundle_syms + explicit:
+        if s not in seen:
+            seen.add(s)
+            result.append(s)
+    return result
+
+
 class UniverseConfig(BaseModel):
-    symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "SUI", "HYPE"])
+    # Optional: explicit symbol list.  If empty (default), the scoring universe
+    # is automatically derived from enabled bundle symbols.  If set, these
+    # symbols *supplement* (not replace) enabled bundle symbols.
+    symbols: list[str] = Field(default_factory=list)
     max_size: int = 100
     max_symbols: int = 0  # 0 = process all active symbols; set >0 to cap for performance
     bundles: list[UniverseBundle] = Field(default_factory=list)
@@ -317,12 +356,17 @@ class UniverseConfig(BaseModel):
         return [b for b in self.bundles if b.enabled]
 
     def active_symbols(self) -> list[str]:
+        """Return the deduplicated, capped symbol list the brain and producers use.
+
+        Uses :func:`get_scoring_symbols` to merge enabled bundle symbols with
+        any explicit ``universe.symbols`` supplement, then appends optional
+        TradFi symbols and applies ``max_size``.
+        """
         max_size = int(self.max_size or 0)
         if max_size <= 0:
             max_size = 1
 
-        bundle_symbols = self.normalize_symbols([s for b in self.enabled_bundles() for s in b.symbols])
-        base = bundle_symbols if bundle_symbols else self.normalize_symbols(self.symbols)
+        base = get_scoring_symbols(self)
 
         # Merge optional TradFi symbols (appended after core symbols, deduped)
         if self.tradfi_symbols:
