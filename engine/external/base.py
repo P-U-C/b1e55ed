@@ -24,7 +24,7 @@ from engine.external.confidence import normalize_confidence
 from engine.external.connector_http import HttpConnector
 from engine.external.models import ExternalObservation, RawExternalRecord
 from engine.external.policy import AdapterPolicy
-from engine.external.spec import AdapterSpec, load_spec
+from engine.external.spec import AdapterSpec, load_spec, load_spec_inline
 from engine.producers.base import BaseProducer
 
 _DIRECTION_MAP: dict[str, str] = {
@@ -51,6 +51,9 @@ class BaseExternalProducer(BaseProducer):
     #: Subclasses override with the path to their YAML spec.
     SPEC_PATH: str = ""
 
+    #: Alternative to SPEC_PATH — provide spec as an inline dict (works in binary installs)
+    SPEC_INLINE: dict | None = None
+
     # Lazily initialised.
     _spec: AdapterSpec | None = None
     _connector: HttpConnector | None = None
@@ -58,7 +61,10 @@ class BaseExternalProducer(BaseProducer):
 
     def _get_spec(self) -> AdapterSpec:
         if self._spec is None:
-            self._spec = load_spec(self.SPEC_PATH)
+            if self.SPEC_INLINE is not None:
+                self._spec = load_spec_inline(self.SPEC_INLINE)
+            else:
+                self._spec = load_spec(self.SPEC_PATH)
         return self._spec
 
     def _get_connector(self) -> HttpConnector:
