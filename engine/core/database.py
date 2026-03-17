@@ -954,11 +954,37 @@ class Database:
             if dedupe_key is not None:
                 self.conn.execute(
                     """
-                    INSERT INTO event_dedup (dedupe_key, event_id, payload_hash, created_at)
+                    INSERT OR IGNORE INTO event_dedup (dedupe_key, event_id, payload_hash, created_at)
                     VALUES (?, ?, ?, datetime('now'))
                     """,
                     (dedupe_key, eid, p_hash),
                 )
+                # Guard against race condition: another writer (e.g. `brain` fast-path)
+                # may have inserted this dedupe_key between our early-check above and
+                # the INSERT OR IGNORE.  If so, the IGNORE fired and the dedup row
+                # belongs to a different event_id — undo our events row and return the
+                # pre-existing event so the caller treats this as a successful no-op.
+                dedup_row = self.conn.execute(
+                    "SELECT event_id FROM event_dedup WHERE dedupe_key = ?",
+                    (dedupe_key,),
+                ).fetchone()
+                if dedup_row is not None and str(dedup_row[0]) != eid:
+                    import logging as _log
+
+                    _log.getLogger("b1e55ed.database").debug(
+                        "dedupe collision on concurrent insert — returning existing event: %s",
+                        dedupe_key,
+                    )
+                    # Roll back the orphaned events row we just inserted.
+                    # _last_hash is still `prev` at this point (not yet updated to h).
+                    self.conn.execute("DELETE FROM events WHERE id = ?", (eid,))
+                    existing_race = self.conn.execute(
+                        "SELECT * FROM events WHERE id = ?",
+                        (str(dedup_row[0]),),
+                    ).fetchone()
+                    if existing_race is None:
+                        raise EventStoreError("dedup index points to missing event after race resolution")
+                    return self._row_to_event(existing_race)
         except sqlite3.IntegrityError as e:
             raise EventStoreError(str(e)) from e
 
