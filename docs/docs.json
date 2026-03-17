@@ -47,7 +47,8 @@
           "introduction",
           "agents",
           "quickstart",
-          "how-it-works"
+          "how-it-works",
+          "getting-started"
         ]
       },
       {
@@ -55,9 +56,12 @@
         "pages": [
           "setup/standalone-install",
           "setup/agent-install",
+          "setup/oracle",
           "setup/telegram",
           "setup/tailscale",
-          "setup/oracle"
+          "deployment",
+          "operator-standalone",
+          "operator-agent"
         ]
       },
       {
@@ -78,13 +82,29 @@
           "operations/daily",
           "operations/cli-reference",
           "operations/config-reference",
-          "operations/troubleshooting"
+          "operations/troubleshooting",
+          "signal-benchmarking-ops-guide",
+          "identity",
+          "authority-model",
+          "security"
+        ]
+      },
+      {
+        "group": "Features",
+        "pages": [
+          "curator",
+          "learning-loop",
+          "backtest"
         ]
       },
       {
         "group": "Integrations",
         "pages": [
-          "deerflow"
+          "deerflow",
+          "mcp",
+          "agent-interfaces",
+          "eas-integration",
+          "openclaw-integration"
         ]
       },
       {
@@ -103,12 +123,16 @@
         "pages": [
           "contributing/how-to-contribute",
           "contributing/contributor-registration",
-          "contributing/karma-attribution"
+          "contributing/karma-attribution",
+          "developers",
+          "contributors"
         ]
       },
       {
-        "group": "Whitepapers",
+        "group": "Reference",
         "pages": [
+          "architecture",
+          "crypto-primitives",
           "whitepaper-technical",
           "whitepaper-summary",
           "whitepaper-onepager"

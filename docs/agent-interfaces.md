@@ -1,3 +1,8 @@
+---
+title: "Agent Interfaces"
+description: "SSE event stream, MCP server, and signal attribution for AI agents."
+---
+
 # Agent Interfaces
 
 b1e55ed exposes three real-time interfaces for AI agents:

@@ -13,7 +13,7 @@ A ⇒ B     A heavily references B
 
 ```text
 README.md
-  → docs/how-it-works.md
+  → docs/how-it-works.mdx
   → docs/getting-started.md
   → docs/configuration.md
   → docs/cli-reference.md
@@ -36,14 +36,16 @@ README.md
 
 ## Core docs
 
-### `docs/how-it-works.md`
+### `docs/how-it-works.mdx`
 
 ```text
-how-it-works.md
+how-it-works.mdx
   → getting-started.md
   → architecture.md
   → learning-loop.md
   → oracle.md
+  → api/overview.mdx
+  → producers/overview.mdx
 ```
 
 ### `docs/getting-started.md`
@@ -514,14 +516,15 @@ These files are design references and sprint plans, not operator-facing guides.
 The Mintlify documentation site lives in `docs/` and is defined by `docs/docs.json`.
 All pages below are registered in the nav and deployed to `docs.b1e55ed.permanentupperclass.com`.
 
-### Top-level
+### Getting Started
 
 ```text
-docs/docs.json              ← nav/config (registers all MDX pages)
+docs/docs.json              ← nav/config (registers all nav pages)
 docs/introduction.mdx       → quickstart.mdx, api/overview.mdx
 docs/agents.mdx             → setup/agent-install.mdx
 docs/quickstart.mdx         → setup/standalone-install.mdx, setup/agent-install.mdx, operations/cli-reference.mdx, how-it-works.mdx
-docs/how-it-works.mdx       → api/overview.mdx, producers/overview.mdx
+docs/how-it-works.mdx       → getting-started.md, architecture.md, learning-loop.md, oracle.md, api/overview.mdx, producers/overview.mdx
+docs/getting-started.md     → configuration.md, cli-reference.md, api-reference.md, contributors.md, eas-integration.md, architecture.md
 docs/llms.txt               (machine-readable LLM discovery index — not a navigable page)
 ```
 
@@ -533,15 +536,40 @@ docs/setup/agent-install.mdx       → operator-agent.md
 docs/setup/oracle.mdx              → oracle.md
 docs/setup/telegram.mdx
 docs/setup/tailscale.mdx
+docs/deployment.md                 → configuration.md, security.md
+docs/operator-standalone.md        → getting-started.md, configuration.md, cli-reference.md
+docs/operator-agent.md             → operator-standalone.md, openclaw-integration.md
 ```
 
 ### Operations
 
 ```text
-docs/operations/cli-reference.mdx   → cli-reference.md
-docs/operations/config-reference.mdx → configuration.md
+docs/operations/cli-reference.mdx   (canonical CLI reference — authoritative)
+docs/operations/config-reference.mdx (canonical config reference — authoritative)
 docs/operations/daily.mdx
 docs/operations/troubleshooting.mdx
+docs/signal-benchmarking-ops-guide.md (standalone — oracle builders, signal evaluation)
+docs/identity.md                    (standalone — key hierarchy and recovery)
+docs/authority-model.md             (standalone — single-writer event store rules)
+docs/security.md                    → configuration.md, crypto-primitives.md, deployment.md
+```
+
+### Features
+
+```text
+docs/curator.md        (standalone — operator signal ingestion pipeline)
+docs/learning-loop.md  → ROADMAP.md, producer-intelligence.md
+docs/backtest.md       (standalone — walk-forward, Kelly, regime-conditioned results)
+```
+
+### Integrations
+
+```text
+docs/deerflow.md       (standalone — DeerFlow research agent integration)
+docs/mcp.md            → producers.md, api-reference.md, configuration.md
+docs/agent-interfaces.md (standalone — SSE, MCP, signal attribution)
+docs/eas-integration.md  → contributors.md
+docs/openclaw-integration.md (standalone — OpenClaw operator layer)
 ```
 
 ### API
@@ -573,6 +601,18 @@ docs/producers/reference.mdx         → all producers/* pages, tutorial-agent-p
 docs/contributing/contributor-registration.mdx → contributors.md
 docs/contributing/karma-attribution.mdx        → KARMA-SPEC.md
 docs/contributing/how-to-contribute.mdx
+docs/developers.md  (standalone — extending and contributing)
+docs/contributors.md → eas-integration.md, api-reference.md, cli-reference.md
+```
+
+### Reference
+
+```text
+docs/architecture.md   → api-reference.md, authority-model.md, contributors.md, eas-integration.md, producer-intelligence.md
+docs/crypto-primitives.md (standalone — hash functions, key generation, chain verification)
+docs/whitepaper-technical.md (standalone)
+docs/whitepaper-summary.md (standalone)
+docs/whitepaper-onepager.md (standalone)
 ```
 
 ## Operator guides (docs/)

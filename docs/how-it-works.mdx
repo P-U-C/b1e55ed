@@ -3,7 +3,9 @@ title: "How It Works"
 description: "A mental model: brain → producers → synthesis → conviction → action."
 ---
 
-b1e55ed is easiest to understand as an **event-sourced brain** with pluggable producers and an operator-facing workflow.
+b1e55ed is a sovereign trading intelligence system. You run it. You own the keys. You own the data. It learns from every signal it processes and every trade it makes — then uses that knowledge to get sharper over time.
+
+The design philosophy is simple: most trading systems execute instructions. b1e55ed builds a model of what works, refines it continuously, and attributes every outcome back to the source that called it.
 
 ## The data flow
 
@@ -35,7 +37,7 @@ A **producer** is anything that emits signals:
 - an agent calling the API
 - a connector / scraper / rules engine
 
-Producers should be cheap to add and safe to run. They don’t “control” the brain — they **submit** events.
+Producers should be cheap to add and safe to run. They don't "control" the brain — they **submit** events.
 
 ### 3) Synthesis
 
@@ -47,7 +49,7 @@ Synthesis is the layer that turns raw signals into something you can act on:
 
 ### 4) Conviction
 
-Conviction is the system’s representation of *how strongly we believe something* right now.
+Conviction is the system's representation of *how strongly we believe something* right now.
 
 It can be:
 
@@ -64,15 +66,50 @@ Actions are what you do with the output:
 - execution adapters (manual or automated)
 
 <Note>
-b1e55ed is intentionally modular here: you can keep it “analysis-only” or plug in execution as your risk tolerance allows.
+b1e55ed is intentionally modular here: you can keep it "analysis-only" or plug in execution as your risk tolerance allows.
 </Note>
+
+---
+
+## The Flywheel
+
+The system compounds. This is not a metaphor.
+
+```
+Signal → Synthesis → Trade → Outcome → Attribution → Weight Update
+   ↑                                                        ↓
+   └─────────────────── Better predictions ←───────────────┘
+```
+
+When a trade closes, the outcome is traced back to the signals that caused it. Each contributing producer's karma score updates — profits flow in, losses flow out. The Brain recalibrates weights based on who was right.
+
+The next cycle runs with better weights. The cycle after that, better still.
+
+Six months in, the system's understanding of which sources are actually predictive — not in theory, but in your market, in your regime — is something no static model can replicate.
+
+---
+
+## What It's Built For
+
+**Build an accurate picture of edge.** Not generic backtests — a live, continuously updated model of what signals have actually produced returns in real conditions.
+
+**Eliminate noise at the source.** Producers who don't perform lose influence automatically. No manual tuning required after setup.
+
+**Make attribution permanent.** Every signal is tied to a producer. Every outcome is tied to the signals that drove it. The hash chain means these links can't be rewritten.
+
+**Operate without dependency.** No cloud services required. No vendor lock-in. The system runs on your hardware, your keys generate your identity, and the data lives in your database.
+
+**Regime awareness.** A signal that works in a trending bull market is often noise in choppy consolidation. The Brain conditions its synthesis on the current regime.
+
+**Survivability.** The kill switch is unconditional. If drawdown exceeds configured thresholds, trading stops — regardless of what signals are saying.
+
+---
 
 ## Where to go deeper
 
-- Internal architecture docs: `docs/architecture.md`, `docs/authority-model.md`, `docs/learning-loop.md`
-- API surface: **[API Overview](/api/overview)**
-- Producers: **[Producer Overview](/producers/overview)**
-
-<Info>
-The repo also includes an older/longer explanation at `docs/how-it-works.md`.
-</Info>
+- **[Getting Started](/getting-started)** — install and first run
+- **[Architecture](/architecture)** — technical design and component overview
+- **[Learning Loop](/learning-loop)** — how compound scoring works in detail
+- **[Oracle](/oracle)** — public provenance verification
+- **[API Overview](/api/overview)** — REST surface
+- **[Producer Overview](/producers/overview)** — configuring signal sources

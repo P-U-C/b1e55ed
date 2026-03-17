@@ -1,3 +1,8 @@
+---
+title: "Developer Guide"
+description: "How to extend, contribute to, and build on b1e55ed."
+---
+
 # Developer Guide
 
 How to extend and contribute to b1e55ed.

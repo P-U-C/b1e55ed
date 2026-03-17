@@ -1,3 +1,8 @@
+---
+title: "Getting Started"
+description: "Install b1e55ed and run your first brain cycle."
+---
+
 # Getting Started
 
 b1e55ed is a CLI-first trading intelligence engine built around append-only events.

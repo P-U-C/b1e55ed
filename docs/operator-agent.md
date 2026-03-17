@@ -1,3 +1,8 @@
+---
+title: "Agent Operator Guide"
+description: "Full stack with OpenClaw — AI assistant, Telegram alerts, and heartbeats."
+---
+
 # Agent Operator Guide (OpenClaw)
 
 This guide is for operators who want the **full stack**:

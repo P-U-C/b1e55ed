@@ -1,3 +1,8 @@
+---
+title: "Authority Model"
+description: "Single-writer event store, concurrency rules, and write authority."
+---
+
 # Authority Model
 
 > Single-writer event store with explicit concurrency rules.

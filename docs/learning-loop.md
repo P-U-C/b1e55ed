@@ -1,3 +1,8 @@
+---
+title: "Learning Loop"
+description: "How b1e55ed compounds — karma, weight updates, and regime conditioning."
+---
+
 # Learning Loop
 
 > Compound learning is the moat.

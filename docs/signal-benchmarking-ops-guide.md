@@ -1,3 +1,8 @@
+---
+title: "Signal Benchmarking Guide"
+description: "Operational guide for oracle builders and signal performance evaluation."
+---
+
 # Signal Benchmarking Operations Guide for Oracle Builders
 
 *From the b1e55ed project — a continuous crypto signal aggregation and paper trading system. Everything here is from operational experience, not theory.*

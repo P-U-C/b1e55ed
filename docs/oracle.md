@@ -1,3 +1,8 @@
+---
+title: "Oracle"
+description: "Public producer provenance endpoint — no auth required."
+---
+
 # Oracle
 
 The oracle is a read-only, publicly accessible projection layer over the event store.

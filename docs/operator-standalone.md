@@ -1,3 +1,8 @@
+---
+title: "Standalone Operator Guide"
+description: "Run b1e55ed without AI dependency — CLI-first, data engine only."
+---
+
 # Standalone Operator Guide (No AI)
 
 This guide is for operators who want **the b1e55ed data + signal engine only**.
