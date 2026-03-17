@@ -59,7 +59,7 @@ See: [contributors.md](contributors.md) for contributor registration.
 
 Curator signals enter the brain synthesis as the `curator` domain. Default weight: 0.25 (configurable).
 
-See: [configuration.md](configuration.md) → `weights.curator`
+See: [operations/config-reference.mdx](operations/config-reference.mdx) → `weights.curator`
 
 ## Conviction scale
 

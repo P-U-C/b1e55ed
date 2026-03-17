@@ -340,6 +340,6 @@ gzip ./backups/backup-$DATE.db
 ## Next Steps
 
 - [Getting Started](docs/getting-started.md) - Detailed setup
-- [Configuration](docs/configuration.md) - Customize settings
-- [API Reference](docs/api-reference.md) - REST endpoints
+- [Configuration](docs/operations/config-reference.mdx) - Customize settings
+- [API Reference](docs/api/overview.mdx) - REST endpoints
 - [Deployment](docs/deployment.md) - Production hosting
