@@ -187,7 +187,7 @@ These are the commands you'll use daily.
 | `b1e55ed positions` | Lists open positions with best-effort PnL |
 | `b1e55ed contributors` | View/manage contributor reputation + provenance |
 
-Tip: everything supports `--help`. For the full list, see [CLI reference](cli-reference.md).
+Tip: everything supports `--help`. For the full list, see [CLI reference](operations/cli-reference.mdx).
 
 ---
 
@@ -205,7 +205,7 @@ b1e55ed loads this on startup and uses it to define:
 
 ### Key fields to know
 
-(Exact keys are fully documented in [Configuration](configuration.md); below is the operator-focused subset.)
+(Exact keys are fully documented in [Configuration](operations/config-reference.mdx); below is the operator-focused subset.)
 
 | Area | What to look for | Why it matters |
 |---|---|---|

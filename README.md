@@ -139,8 +139,8 @@ Full documentation: **[docs.b1e55ed.permanentupperclass.com](https://docs.b1e55e
 | [Standalone Operator Guide](docs/operator-standalone.md) | Data engine only — no AI dependency |
 | [Agent Operator Guide](docs/operator-agent.md) | Full stack with OpenClaw |
 | [Deployment](docs/deployment.md) | Production setup |
-| [Configuration](docs/configuration.md) | All config keys |
-| [CLI reference](docs/cli-reference.md) | Full command reference |
+| [Configuration](docs/operations/config-reference.mdx) | All config keys |
+| [CLI reference](docs/operations/cli-reference.mdx) | Full command reference |
 | [Security](docs/security.md) | Key management, kill switch |
 | [Identity & Keys](docs/identity.md) | Key hierarchy and recovery |
 
@@ -168,7 +168,7 @@ Full documentation: **[docs.b1e55ed.permanentupperclass.com](https://docs.b1e55e
 
 | Guide | |
 |-------|-|
-| [API reference](docs/api-reference.md) | REST endpoints |
+| [API reference](docs/api/overview.mdx) | REST endpoints |
 | [Contributors](docs/contributors.md) | Attribution, karma, attestations |
 | [Developers](docs/developers.md) | Contributing and extending |
 

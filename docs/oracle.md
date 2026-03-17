@@ -102,9 +102,9 @@ See: [agent-interfaces.md](agent-interfaces.md) for full MCP server documentatio
 
 ## Karma scoring
 
-The oracle draws on karma scores described in `docs/KARMA-SPEC.md`.
+The oracle draws on karma scores described in `docs/internal/internal/KARMA-SPEC.md`.
 
-Scores are NOT returned by the provenance endpoint — the endpoint returns facts. Karma calibration, update rules, and failure modes are specified in KARMA-SPEC.md.
+Scores are NOT returned by the provenance endpoint — the endpoint returns facts. Karma calibration, update rules, and failure modes are specified in internal/KARMA-SPEC.md.
 
 ## Query logging
 
@@ -118,4 +118,4 @@ Raw producer IDs are never logged. This data is demand intelligence — it never
 
 ## Reproducibility
 
-`docs/SEED_MANIFEST.md` documents the initial seed dataset and how to verify scores are reproducible.
+`docs/internal/SEED_MANIFEST.md` documents the initial seed dataset and how to verify scores are reproducible.

@@ -153,5 +153,5 @@ mcp:
 
 Related docs:
 - [agent-interfaces.md](agent-interfaces.md)
-- [api-reference.md](api-reference.md)
-- [configuration.md](configuration.md)
+- [api/overview.mdx](api/overview.mdx)
+- [operations/config-reference.mdx](operations/config-reference.mdx)

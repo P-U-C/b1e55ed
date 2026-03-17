@@ -364,6 +364,6 @@ Before going live:
 
 ## Next Steps
 
-- [Configuration](configuration.md) - Production config options
-- [API Reference](api-reference.md) - Monitoring endpoints
+- [Configuration](operations/config-reference.mdx) - Production config options
+- [API Reference](api/overview.mdx) - Monitoring endpoints
 - [Getting Started](getting-started.md) - Initial setup

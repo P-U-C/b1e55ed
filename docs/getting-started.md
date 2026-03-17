@@ -184,9 +184,9 @@ b1e55ed report --cockpit-summary  # 7-day summary
 
 ## Next steps
 
-- [Configuration](configuration.md)
-- [CLI reference](cli-reference.md)
-- [API reference](api-reference.md)
+- [Configuration](operations/config-reference.mdx)
+- [CLI reference](operations/cli-reference.mdx)
+- [API reference](api/overview.mdx)
 - [Architecture](architecture.md)
 - [Agent interfaces](agent-interfaces.md)
 - [Oracle](oracle.md)
