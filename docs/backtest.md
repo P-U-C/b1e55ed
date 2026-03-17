@@ -1,3 +1,8 @@
+---
+title: "Backtest Engine"
+description: "Walk-forward validation, grid sweep, and regime-conditioned backtesting."
+---
+
 # Backtest Engine
 
 b1e55ed includes a walk-forward backtesting engine for strategy validation.

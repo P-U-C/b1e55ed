@@ -134,6 +134,10 @@ See [SPI Producer Guide](/spi/README) for full documentation.
 
 ## Full documentation
 
+- [How It Works](/how-it-works): Mental model — brain, producers, flywheel, objectives
+- [Getting Started](/getting-started): Install and first run
+- [Architecture](/architecture): System design, event flow, component overview
+- [Learning Loop](/learning-loop): Compound scoring, karma, weight updates
 - [API Overview](/api/overview): Authentication, base URL, errors
 - [Signals API](/api/signals): Submit and query signals
 - [Brain API](/api/brain): Regime, cycle control
@@ -146,6 +150,47 @@ See [SPI Producer Guide](/spi/README) for full documentation.
 - [Standalone Install](/setup/standalone-install): Run locally
 - [Oracle Setup](/setup/oracle): Expose a public oracle
 - [Agent Install](/setup/agent-install): Full stack with OpenClaw
+- [Standalone Operator Guide](/operator-standalone): Full guide — CLI, producers, monitoring
+- [Agent Operator Guide](/operator-agent): Full guide — OpenClaw, Telegram, heartbeats
+- [Deployment](/deployment): Production deployment, Docker, TLS
+- [Security](/security): Key management, kill switch, threat model
+- [Identity & Keys](/identity): Key hierarchy, forge, recovery
+
+## Operations
+
+- [CLI Reference](/operations/cli-reference): Full command reference
+- [Config Reference](/operations/config-reference): All configuration keys and env vars
+- [Daily Operations](/operations/daily): Day-to-day workflow
+- [Troubleshooting](/operations/troubleshooting): Common issues and fixes
+- [Signal Benchmarking Guide](/signal-benchmarking-ops-guide): Oracle builders, signal evaluation
+- [Authority Model](/authority-model): Single-writer event store rules
+
+## Features
+
+- [Curator Pipeline](/curator): Submit operator intelligence as structured signals
+- [Learning Loop](/learning-loop): Compound karma, weight updates, regime conditioning
+- [Backtest Engine](/backtest): Walk-forward validation, grid sweep, Kelly sizing
+
+## Integrations
+
+- [DeerFlow Integration](/deerflow): Research agent integration
+- [MCP Integration](/mcp): JSON-RPC 2.0 tools for AI agents
+- [Agent Interfaces](/agent-interfaces): SSE stream, MCP, signal attribution
+- [EAS Integration](/eas-integration): Ethereum Attestation Service
+- [OpenClaw Integration](/openclaw-integration): Operator layer
+
+## Contributing
+
+- [How to Contribute](/contributing/how-to-contribute): Contribution workflow
+- [Contributor Registration](/contributing/contributor-registration): Register for karma attribution
+- [Karma Attribution](/contributing/karma-attribution): How karma is scored
+- [Developer Guide](/developers): Extending and building on b1e55ed
+- [Contributors](/contributors): Attribution units, karma, attestations
+
+## Reference
+
+- [Architecture](/architecture): Full system design
+- [Cryptographic Primitives](/crypto-primitives): Hash functions, key generation, chain verification
 
 ## Optional: extended content
 

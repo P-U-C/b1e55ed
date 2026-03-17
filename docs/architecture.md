@@ -1,3 +1,8 @@
+---
+title: "Architecture"
+description: "System design, event flow, and component overview for b1e55ed."
+---
+
 # Architecture Overview
 
 b1e55ed is an event-sourced signal engine. Producers emit events. The brain reads events and emits events. Execution reads events and emits events.

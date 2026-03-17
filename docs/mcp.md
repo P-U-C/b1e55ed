@@ -1,3 +1,8 @@
+---
+title: "MCP Integration"
+description: "Connect AI agents to b1e55ed via JSON-RPC 2.0 over HTTP."
+---
+
 # MCP Integration
 
 b1e55ed exposes MCP over **JSON-RPC 2.0 via HTTP**.

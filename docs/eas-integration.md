@@ -1,3 +1,8 @@
+---
+title: "EAS Integration"
+description: "Optional Ethereum Attestation Service integration for contributor registration."
+---
+
 # EAS Integration (Ethereum Attestation Service)
 
 b1e55ed can optionally create **Ethereum Attestation Service (EAS)** attestations when registering contributors.

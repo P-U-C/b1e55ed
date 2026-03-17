@@ -1,3 +1,8 @@
+---
+title: "Curator Pipeline"
+description: "Submit operator intelligence as structured signals to the brain."
+---
+
 # Curator Pipeline
 
 The curator pipeline is how human intelligence enters b1e55ed.
