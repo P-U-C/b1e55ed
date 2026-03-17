@@ -8,8 +8,11 @@ brain:
   cycle_interval_seconds: 1800  # How often the brain runs a full synthesis cycle (seconds). Default: 30 min.
 
 universe:
-  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]  # Assets the brain monitors and trades
-  bundles: []   # Optional asset bundles (groups) — leave empty to use symbols list only
+  # symbols: []  # Optional: explicit override/supplement. If empty (default), the scoring
+  #              # universe is automatically derived from enabled bundle symbols.
+  #              # If set, these symbols supplement (not replace) enabled bundle symbols.
+  #              # Example: symbols: ["BTC", "ETH", "SOL"]
+  bundles: []   # Optional asset bundles (groups) — symbols in enabled bundles are auto-scored
   max_size: 100  # Maximum number of symbols tracked at once
 
 execution:
