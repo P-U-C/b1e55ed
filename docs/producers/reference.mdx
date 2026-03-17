@@ -1,20 +1,66 @@
 ---
 title: "Producer Reference"
-description: "Reference links for producer interfaces, configuration, and examples."
+description: "Index of all producer-related documentation, CLI commands, and extended reading."
 ---
 
-This page links to the best current producer reference material in the repo.
+## Producer Documentation
 
-## Key docs
+| Page | Description |
+|------|-------------|
+| [Overview](./overview) | What producers are, domains, weights, and the core producer catalog |
+| [Symbol Packs](./symbol-packs) | Configuring per-producer symbol sets |
+| [Tuning Guide](./tuning-guide) | Adjusting domain weights and producer knobs |
+| [External Producers (SPI)](./external-producers) | Integrating as an external signal producer |
+| [SPI Interface Spec](./spi-interface) | Formal contract: signal schema, scoring, idempotency |
+| [SPI Adapter Spec](./spi-adapter) | Pull-mode adapter YAML format for operator-side integrations |
 
-- `docs/tutorial-agent-producer.md` — building / wiring an agent producer
-- `docs/agent-interfaces.md` — how agents talk to the system
-- `docs/configuration.md` — configuration layout and knobs
+---
 
-<Info>
-These pages are still evolving; this Mintlify section will become the canonical producer reference over time.
-</Info>
+## Extended Reading
 
-## Full Reference
+These files live in the repo but are not yet part of the Mintlify nav:
 
-For the complete producer reference including per-producer tuning knobs and sample configs, see [producers.md](../producers.md).
+| File | Description |
+|------|-------------|
+| [`docs/tutorial-agent-producer.md`](../tutorial-agent-producer) | Step-by-step guide to building a custom agent producer |
+| [`docs/producer-intelligence.md`](../producer-intelligence) | Intelligence layer — how producer signals feed the synthesis engine |
+
+---
+
+## CLI Reference
+
+### Core producer commands
+
+```bash
+# List all registered producers and their health status
+b1e55ed producers list
+
+# List producers as JSON (for scripting)
+b1e55ed producers list --json | jq
+```
+
+### SPI management commands
+
+```bash
+# Register a new external producer
+b1e55ed spi register --producer-id yourname --name "Your Name"
+
+# Check producer status and karma
+b1e55ed spi status --producer-id yourname
+
+# Promote a producer from shadow → active (operator only)
+b1e55ed spi promote --producer-id yourname
+
+# Test an API key (verify it's valid without submitting a signal)
+b1e55ed spi test-key --producer-id yourname
+```
+
+### Related commands
+
+```bash
+# Full system status (includes producer health)
+b1e55ed status
+
+# Brain synthesis output (shows domain contributions)
+b1e55ed brain --full
+```

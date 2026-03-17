@@ -558,10 +558,13 @@ docs/api/karma.mdx          → KARMA-SPEC.md
 ### Producers
 
 ```text
-docs/producers/overview.mdx    → producers.md
-docs/producers/reference.mdx   → producers.md
+docs/producers/overview.mdx          → producers.md
 docs/producers/symbol-packs.mdx
-docs/producers/tuning-guide.mdx → configuration.md
+docs/producers/tuning-guide.mdx      → configuration.md
+docs/producers/external-producers.mdx → docs/producers/spi-interface.mdx, docs/producers/spi-adapter.mdx
+docs/producers/spi-interface.mdx     (standalone — formal SPI protocol contract)
+docs/producers/spi-adapter.mdx       → docs/producers/external-producers.mdx
+docs/producers/reference.mdx         → all producers/* pages, tutorial-agent-producer.md, producer-intelligence.md
 ```
 
 ### Contributing
@@ -726,18 +729,40 @@ docs/signal-benchmarking-ops-guide.md (standalone — operational guide for orac
 ## SPI External Producer Guide
 
 ```text
-docs/spi/README.md
-  depends on: docs/spi/interface-spec.md, docs/spi/adapter-spec.md
+docs/producers/external-producers.mdx
+  depends on: docs/producers/spi-interface.mdx, docs/producers/spi-adapter.mdx
 ```
 
 ## SPI Interface Specification
 
 ```text
-docs/spi/interface-spec.md (standalone — formal SPI protocol contract)
+docs/producers/spi-interface.mdx (standalone — formal SPI protocol contract)
 ```
 
 ## SPI Adapter Spec
 
 ```text
-docs/spi/adapter-spec.md (standalone — YAML adapter spec reference)
+docs/producers/spi-adapter.mdx
+  → docs/producers/external-producers.mdx  (back-reference for native mode)
 ```
+
+## Tutorial: Agent Producer
+
+```text
+docs/tutorial-agent-producer.md (standalone — step-by-step guide to building a custom agent producer)
+```
+
+**Referenced by:**
+- docs/producers/reference.mdx
+
+## Producer Intelligence
+
+```text
+docs/producer-intelligence.md (standalone — intelligence layer, signal synthesis)
+```
+
+**Referenced by:**
+- docs/producers/reference.mdx
+- docs/architecture.md
+- docs/learning-loop.md
+- docs/producers.md

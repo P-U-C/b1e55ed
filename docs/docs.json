@@ -66,15 +66,10 @@
           "producers/overview",
           "producers/symbol-packs",
           "producers/tuning-guide",
+          "producers/external-producers",
+          "producers/spi-interface",
+          "producers/spi-adapter",
           "producers/reference"
-        ]
-      },
-      {
-        "group": "Signal Producers",
-        "pages": [
-          "spi/README",
-          "spi/interface-spec",
-          "spi/adapter-spec"
         ]
       },
       {
