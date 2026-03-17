@@ -23,7 +23,7 @@ def _make_app(tmp_path: Path):
     return app
 
 
-@pytest.mark.xfail(reason="pre-existing: contributor_signals.accepted not set by brain/run", strict=False)
+
 def test_contributor_register_submit_signal_and_attribution(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("B1E55ED_DEV_MODE", "1")
