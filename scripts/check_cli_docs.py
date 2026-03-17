@@ -12,7 +12,7 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 CLI_FILE = REPO / "engine" / "cli" / "main.py"
-CLI_REF = REPO / "docs" / "cli-reference.md"
+CLI_REF = REPO / "docs" / "operations" / "cli-reference.mdx"
 
 
 def extract_cli_commands(path: Path) -> set[str]:
@@ -44,7 +44,7 @@ def extract_documented_commands(path: Path) -> set[str]:
     """Extract command names from ### `b1e55ed <command>` headings in cli-reference.md."""
     text = path.read_text()
     documented: set[str] = set()
-    for match in re.finditer(r"^### `b1e55ed ([^`]+)`", text, re.MULTILINE):
+    for match in re.finditer(r"^\s*### `b1e55ed ([^`]+)`", text, re.MULTILINE):
         # First token after 'b1e55ed' is the top-level command
         cmd = match.group(1).strip().split()[0]
         documented.add(cmd)
