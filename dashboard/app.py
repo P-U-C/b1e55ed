@@ -465,10 +465,24 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
             pnl_pct = (pnl_usd / _notional * 100.0) if _notional > 0 else 0.0
         else:
             if direction in {"short", "sell"}:
-                pnl_pct = ((entry - current) / entry * 100.0) if entry > 0 else 0.0
+                # Short: profit when price falls. entry > current → positive pnl.
+                raw_pct = ((entry - current) / entry * 100.0) if entry > 0 else 0.0
             else:
-                pnl_pct = ((current - entry) / entry * 100.0) if entry > 0 else 0.0
+                # Long: profit when price rises. current > entry → positive pnl.
+                raw_pct = ((current - entry) / entry * 100.0) if entry > 0 else 0.0
+            pnl_pct = round(raw_pct, 4)
             pnl_usd = (pnl_pct / 100.0) * notional_for_pnl if notional_for_pnl > 0 else 0.0
+            logger.debug(
+                "pnl_calc",
+                extra={
+                    "asset": asset,
+                    "direction": direction,
+                    "entry": entry,
+                    "current": current,
+                    "pnl_pct": pnl_pct,
+                    "pnl_usd": pnl_usd,
+                },
+            )
 
         near_stop = False
         if entry > 0 and stop > 0 and current > 0:
