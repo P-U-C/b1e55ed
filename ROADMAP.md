@@ -6,72 +6,128 @@ Version progression from beta to production-ready release.
 
 ## Version Gates
 
-### v1.0.0-beta.1
-**Status:** Feature-complete, untested with real capital
+### v1.0.0-beta.1 ✅ SHIPPED — 2026-02-10
+**Status:** Initial release
 
-**What's included:**
-- ✅ Core Brain engine (6-phase: collection → quality → synthesis → regime → conviction → decision)
-- ✅ 13 signal producers across 6 domains (technical, on-chain, TradFi, social, events, curator)
-- ✅ Strategy framework (10 strategies, 96K+ combo sweep, walk-forward validation)
-- ✅ REST API (12 endpoints, bearer auth, rate limiting)
-- ✅ Web dashboard (HTMX + Jinja2, neural mesh background, CRT aesthetic)
+**What shipped:**
+- ✅ Append-only event store with hash chain
+- ✅ Brain synthesis engine (6-phase: collection → quality → synthesis → regime → conviction → decision)
+- ✅ REST API and web dashboard (HTMX + Jinja2, CRT aesthetic)
+- ✅ Basic CLI
 - ✅ OMS integration (Hyperliquid paper/live, preflight checks)
-- ✅ Historical data (5+ years BTC/ETH/SOL/SUI/HYPE + funding + Fear & Greed)
 - ✅ Kill switch (5 levels, auto-escalate, operator-only de-escalate)
-- ✅ Learning loop (domain weight auto-adjustment with bounded adaptation)
-- ✅ Karma engine (optional 0.5% profit-sharing on realized gains)
-- ✅ Curator pipeline (`/signal` command, auto-detection, dual-write JSONL + brain.db)
-- ✅ Social intelligence (8 sources, 3-layer filter, temporal engine, contrarian signals)
-- ✅ Security hardening (event hash chain, Ed25519 identity, encrypted keystore, DCG)
-- ✅ 150+ tests (strict CI: lint, types, smoke, security, build)
-- ✅ Documentation (12 docs, 196KB — getting started, config, API, deployment, security, architecture, developer guide, OpenClaw integration)
-- ✅ Sample packs (socials, TradFi, on-chain templates)
-- ✅ Docker deployment (compose + automated install script)
-- ✅ Hero image + brand vocabulary enforcement
-
-**What's not in this release:**
-- ⬜ OpenClaw skill package (operator layer integration)
-- ⬜ Real capital validation (all testing is paper/backtest)
-- ⬜ Agent discovery (MCP/OpenAPI for agent-to-agent integration)
-- ⬜ Multi-agent coordination
+- ✅ Historical data (5+ years BTC/ETH/SOL/SUI/HYPE + funding + Fear & Greed)
+- ✅ Docker deployment
+- ✅ 150+ tests
 
 ---
 
-### v1.0.0-beta.4 — Operator Layer
-**Gate:** Agents and humans can install and operate b1e55ed through conversation
+### v1.0.0-beta.2 ✅ SHIPPED — 2026-02-19
+**Status:** Operator layer foundation
 
-**Sprint status:** O3 ✅ complete, O4 ✅ complete
-
-**Requirements:**
-
-1. **OpenClaw Skill Package**
-   - [ ] `SKILL.md` — agent instructions for operating b1e55ed
-   - [ ] Cron templates (brain cycle, monitoring sweep, daily summaries)
-   - [ ] Heartbeat checks (position alerts, system health)
-   - [ ] `/signal` chat handler (chat → curator pipeline)
-   - [ ] Alert routing (engine events → chat notifications)
-   - [ ] One-command install via ClawHub
-
-2. **Agent-First Interface**
-   - [ ] OpenAPI spec published at `/docs` (auto-generated, human + machine readable)
-   - [ ] Structured error responses with error codes
-   - [ ] Webhook subscriptions for events (agent push notifications)
-   - [ ] Producer registration API (agents can add signal sources at runtime)
-
-3. **Discoverability**
-   - [ ] ClawHub listing (searchable, installable)
-   - [ ] MCP server for agent discovery (optional)
-   - [ ] `CONTRIBUTING.md` — how to add producers, strategies, and sample packs
-   - [ ] Example: agent-as-producer tutorial
-
-4. **Integration Testing**
-   - [ ] End-to-end: chat → curator → brain → alert → chat
-   - [ ] Multi-agent: 2+ agents curating simultaneously
-   - [ ] Graceful degradation: operator layer down, engine continues
+**What shipped:**
+- ✅ OpenClaw integration spec (operator layer)
+- ✅ Karma treasury and settlement engine
+- ✅ EAS off-chain attestations
+- ✅ Kill switch multi-level gating (L0–L4)
+- ✅ Regime detection and conviction scoring
+- ✅ Paper trading mode
+- ✅ Contributor registry and scoring
 
 ---
 
-### v1.0.0-rc.1 — Validation
+### v1.0.0-beta.3 ✅ SHIPPED — 2026-02-25
+**Status:** 226 commits. 583 tests. Full CI green.
+
+**What shipped:**
+- ✅ Security hardening: Argon2id KDF, AES-256-GCM, unified Ed25519/secp256k1 identity, rate limiting, kill-switch auth isolation
+- ✅ Role-based permissions (operator, agent, tester, curator) + authority model (single-writer enforcement)
+- ✅ Karma settlement governance: multi-step workflow, threshold controls, settlement history
+- ✅ Producer hardening: response size caps, JSON schema guard, quarantine/auto-recovery
+- ✅ Signal quality: anti-gaming scoring, anti-spam rate limiting, asset-aware normalization
+- ✅ Social intelligence pipeline: Farcaster, Reddit, TikTok, Google Trends, Fear & Greed, Polymarket
+- ✅ TradFi data: FRED, Yahoo Finance, SEC EDGAR (Form 4/13F/8-K), OpenInsider
+- ✅ Feature store with frozen snapshots and data quality monitoring
+- ✅ Backtest engine: 10 strategies, 96K+ parameter sweep, walk-forward validation, FDR correction
+- ✅ Agent interfaces: SSE event stream, MCP server (6 tools, JSON-RPC 2.0), signal attribution, producer feedback, trace sessions
+- ✅ Oracle provenance layer: public endpoint, chain verification, attribution windows
+- ✅ CLI decomposition into `engine/cli/` package
+- ✅ Code dependency graph (174 modules, 7 layers, CI validation)
+
+---
+
+### v1.0.0-beta.4 ✅ SHIPPED — 2026-02-25
+**Status:** Customer readiness — 8-reviewer audit (Stripe, Coinbase, Cloudflare, Palantir). 583 tests.
+
+**What shipped:**
+- ✅ Security: config secret redaction, rate-limiter TOCTOU fixed (atomic upsert), global exception handler, request ID middleware
+- ✅ Karma data model: double-spend prevention (UNIQUE constraint), contributor attribution in hash, `profitable` field wired, crash recovery sweep
+- ✅ Attribution integrity: real `chain_verified`, accepted audit events (`SIGNAL_ACCEPTED_V1`), deterministic score replay, signal visibility endpoint
+- ✅ All list endpoints paginated; SSE stream OOM fixed (cursor pagination); real health endpoint (DB + brain cycle age + kill switch); Prometheus `/metrics`
+- ✅ `install.sh` curl-pipeable one-liner; `b1e55ed wizard` 5-step interactive onboarding
+- ✅ KARMA-SPEC.md rewritten (5-factor composite: hit_rate 35%, calibration 20%, volume 20%, consistency 15%, recency 10%)
+- ✅ Identity recovery: `b1e55ed identity restore`, Ed25519 key derivable from Ethereum key via HKDF
+
+---
+
+### v1.0.0-beta.5 ✅ SHIPPED — 2026-02-26
+**Status:** macOS onboarding, Rust forge binary, zero-credential contributor registration. 589 tests.
+
+**What shipped:**
+- ✅ macOS install fixed (Python via uv bootstrap, eth-account in default deps)
+- ✅ Forge binary auto-download (universal macOS arm64+x86_64, Linux x86_64) from latest release
+- ✅ `install.sh` supports `BRANCH` env var
+- ✅ Wizard UX: symbol packs menu, GitHub token prominence, real version in banner, health check step
+- ✅ Oracle relay for contributor registration (no GitHub token required for new operators)
+- ✅ `POST /api/v1/oracle/contributors/register` public endpoint
+- ✅ `b1e55ed uninstall` CLI command + `uninstall.sh`
+- ✅ No direct pushes to main (CI workflows now create PRs)
+
+---
+
+### v1.0.0-beta.6 ✅ SHIPPED — 2026-02-27
+**Status:** macOS install fixes and stability hardening. 589 tests.
+
+**What shipped:**
+- ✅ Branch install syntax fixed (`BRANCH=develop curl ... | bash` scoping)
+- ✅ uv git cache: `--refresh` flag on install to prevent stale package versions
+- ✅ Dashboard identity gate: fixed `_repo_root()` to use `B1E55ED_REPO_ROOT` env or `Path.cwd()` instead of uv tool install dir
+- ✅ EAS enabled by default (`EASConfig.enabled = True`)
+- ✅ Forge timing display corrected (Intel Macs: 30s–2min, not "~2 seconds")
+- ✅ `GET /` API root info page (was 404)
+- ✅ Branch guard CI: blocks PRs to `main` from branches other than `develop` or `release/*`
+
+---
+
+### v1.0.0-beta.7 ✅ SHIPPED — 2026-02-28
+**Status:** Two explicit deployment modes, full documentation site live.
+
+**What shipped:**
+- ✅ `b1e55ed setup standalone` / `b1e55ed setup connected` — two explicit operator deployment modes with guided setup
+- ✅ Mintlify documentation site at `docs.b1e55ed.permanentupperclass.com` — quickstart, operator guides, producer config, oracle, API reference, agent interfaces
+- ✅ `docs/llms.txt` machine-readable discovery index; MCP contextual integration (Cursor, VS Code, Claude)
+- ✅ `setup-standalone.sh` and `setup-connected.sh` (renamed from `setup-agent.sh`)
+- ✅ Oracle URL updated to `oracle.b1e55ed.permanentupperclass.com`
+- ✅ EAS and API root route fixes; `repo_root` resolved correctly when installed as uv tool
+- ✅ Single-source versioning via `bump-version.sh`; eliminates version drift
+- ✅ Dashboard 500 on fresh install fixed; contributor registration wizard shows real errors
+- ✅ SEO across all four PUC domains (canonical URLs, Open Graph, JSON-LD, sitemaps)
+
+---
+
+### v1.0.0-beta.8 — In Flight
+**Status:** SPI lifecycle/CLI, dashboard fixes, full doc pass, config annotations
+
+**In progress:**
+- 🔄 SPI producer lifecycle: `b1e55ed producer` CLI commands (register, list, status, quarantine/release)
+- 🔄 Dashboard fixes: P&L display, live data SSE wiring, cockpit refinements
+- 🔄 Full documentation pass: all pages reviewed against current codebase
+- 🔄 Config YAML inline annotations across all config files
+- 🔄 Flywheel sprints (S0–S7): signal contract schema, attribution layer, karma wiring, smart TradFi producer, benchmark producers, kill switch conditions, cockpit dashboard, auto-paper-trade
+
+---
+
+### v1.0.0-rc.1 — Validation Gate
 **Gate:** 30 days paper trading with positive expected value
 
 **Requirements:**
@@ -147,20 +203,22 @@ Version progression from beta to production-ready release.
 
 ---
 
-## Release Schedule (Tentative)
+## Release Schedule
 
-| Version | Target | Gate |
-|---------|--------|------|
-| **v1.0.0-beta.1** | 2026-02-19 | Feature-complete |
-| **v1.0.0-beta.3** | 2026-02-25 | Backtest engine, agent interfaces, oracle, docs ← **NOW** |
-| **v1.0.0-beta.4** | 2026-03-05 | Operator layer (OpenClaw skill) |
-| **v1.0.0-rc.1** | 2026-04-05 | 30-day paper validation |
-| **v1.0.0** | 2026-04-19 | First profitable trade |
+| Version | Date | Status |
+|---------|------|--------|
+| **v1.0.0-beta.1** | 2026-02-10 | ✅ SHIPPED |
+| **v1.0.0-beta.2** | 2026-02-19 | ✅ SHIPPED |
+| **v1.0.0-beta.3** | 2026-02-25 | ✅ SHIPPED |
+| **v1.0.0-beta.4** | 2026-02-25 | ✅ SHIPPED |
+| **v1.0.0-beta.5** | 2026-02-26 | ✅ SHIPPED |
+| **v1.0.0-beta.6** | 2026-02-27 | ✅ SHIPPED |
+| **v1.0.0-beta.7** | 2026-02-28 | ✅ SHIPPED |
+| **v1.0.0-beta.8** | TBD | 🔄 In flight |
+| **v1.0.0-rc.1** | TBD | ⬜ 30-day paper validation |
+| **v1.0.0** | TBD | ⬜ First profitable trade |
 
-Dates are targets, not commitments. Gates are mandatory.
-
-> **Note**: The Operator Layer sprint was previously labelled v1.0.0-beta.2 in early planning docs.
-> It has been renumbered to v1.0.0-beta.4 to restore chronological order (beta.1 → beta.3 → beta.4 → rc.1).
+Gates are mandatory. Dates are targets.
 
 ---
 
@@ -176,4 +234,4 @@ Not when the code is perfect. When it works — and when others can use it.
 
 ---
 
-*Last updated: 2026-02-19*
+*Last updated: 2026-03-17*

@@ -5,16 +5,17 @@
       "schedule": {"kind": "every", "everyMs": 300000},
       "payload": {
         "kind": "systemEvent",
-        "text": "Run b1e55ed brain cycle: `cd /path/to/b1e55ed && uv run b1e55ed brain --json`"
+        "text": "Run b1e55ed brain cycle: `b1e55ed brain --json`"
       },
-      "sessionTarget": "main"
+      "sessionTarget": "main",
+      "_note": "Only enable this cron if running in OpenClaw connected mode WITHOUT the b1e55ed daemon (b1e55ed start). The daemon already runs the brain every 5 minutes — enabling both causes double-fire. Use this as a standalone heartbeat supplement only."
     },
     {
       "name": "b1e55ed Health Check",
       "schedule": {"kind": "every", "everyMs": 3600000},
       "payload": {
         "kind": "systemEvent",
-        "text": "Check b1e55ed health: `cd /path/to/b1e55ed && uv run b1e55ed health --json`"
+        "text": "Check b1e55ed health: `b1e55ed health --json`"
       },
       "sessionTarget": "main"
     },
@@ -23,7 +24,7 @@
       "schedule": {"kind": "every", "everyMs": 300000},
       "payload": {
         "kind": "systemEvent",
-        "text": "Check positions: `cd /path/to/b1e55ed && uv run b1e55ed positions --json`"
+        "text": "Check positions: `b1e55ed positions --json`"
       },
       "sessionTarget": "main"
     }
