@@ -6,9 +6,9 @@ Treats the configured endpoint as a simple HTTP poller that returns a list of
 "events" / catalysts per symbol, then emits
 :class:`~engine.core.events.EventType.SIGNAL_EVENTS_V1`.
 
-No reliable free API exists yet — requires B1E55ED_EVENTS_URL.
-When unconfigured, the producer reports OK with zero events (not DEGRADED).
-Potential sources: CoinGecko Pro, custom RSS-to-JSON proxy, self-hosted aggregator.
+Data sources (tried in order):
+1. Custom endpoint (B1E55ED_EVENTS_URL) — any URL that returns event/catalyst data
+2. CryptoPanic free API (no auth) — public news with vote-based sentiment scoring
 
 Easter egg:
 - News is noise; catalysts are structure.
@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
+import logging
 from typing import Any
 
 import httpx
@@ -59,9 +60,7 @@ class MarketEventsProducer(BaseProducer):
             "required": False,
             "description": (
                 "Custom HTTP endpoint for market event/catalyst data. "
-                "No reliable free API exists yet — options include: "
-                "CoinGecko Pro events feed, custom RSS-to-JSON proxy, "
-                "or a self-hosted aggregator. "
+                "Without this, CryptoPanic free API is used for directional news sentiment. "
                 "Expected response: [{symbol, catalysts, headline_sentiment, impact_score}]"
             ),
         },
@@ -71,11 +70,74 @@ class MarketEventsProducer(BaseProducer):
         """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_EVENTS_URL") or os.getenv("EVENTS_URL")
 
+    def _collect_cryptopanic(self) -> list[dict[str, Any]]:
+        """Free fallback: CryptoPanic public news API (no auth required).
+
+        Fetches recent news per symbol, computes a sentiment score from
+        bullish/bearish vote counts, and returns one row per symbol.
+        Rate-limit friendly: one request per symbol, results deduplicated
+        by payload hash (30-min window via producer schedule).
+        """
+        _log = logging.getLogger(__name__)
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        results: list[dict[str, Any]] = []
+
+        for sym in symbols:
+            try:
+                resp = httpx.get(
+                    "https://cryptopanic.com/api/free/v1/posts/",
+                    params={"currencies": sym, "kind": "news", "public": "true"},
+                    headers={"User-Agent": "b1e55ed/1.0"},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                posts = data.get("results", [])
+                if not posts:
+                    continue
+
+                catalysts: list[str] = []
+                sentiment_scores: list[float] = []
+
+                for post in posts[:10]:  # cap at 10 posts per symbol
+                    title = post.get("title", "").strip()
+                    if title:
+                        catalysts.append(title)
+
+                    votes = post.get("votes", {})
+                    bullish = int(votes.get("positive", 0) or 0)
+                    bearish = int(votes.get("negative", 0) or 0)
+                    total = bullish + bearish
+                    score = (bullish - bearish) / max(total, 1)
+                    sentiment_scores.append(score)
+
+                if not sentiment_scores:
+                    continue
+
+                avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+                impact = min(abs(avg_sentiment), 1.0)
+
+                results.append(
+                    {
+                        "symbol": sym,
+                        "headline_sentiment": avg_sentiment,
+                        "impact_score": impact,
+                        "event_count": len(catalysts),
+                        "catalysts": catalysts[:5],  # top 5 headlines
+                        "data_source": "cryptopanic_free",
+                    }
+                )
+
+            except Exception as e:  # noqa: BLE001
+                _log.warning("cryptopanic_failed: %s %s", sym, e)
+
+        return results
+
     def collect(self) -> list[dict[str, Any]]:
         url = self._custom_endpoint()
         if not url:
-            self.ctx.logger.info("market-events requires B1E55ED_EVENTS_URL — no free source available")
-            return []
+            return self._collect_cryptopanic()
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
@@ -138,12 +200,7 @@ class MarketEventsProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                if not self._custom_endpoint():
-                    # No source configured — this is expected, not degraded
-                    health = ProducerHealth.OK
-                    errors.append("no_source_configured")
-                else:
-                    health = ProducerHealth.DEGRADED
+                health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
         except httpx.HTTPStatusError as e:

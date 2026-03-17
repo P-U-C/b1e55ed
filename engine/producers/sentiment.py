@@ -6,6 +6,10 @@ Fetches market sentiment metrics (fear/greed style indices, 7d change, and
 optionally coarse CT sentiment) from a configured HTTP endpoint and emits
 :class:`~engine.core.events.EventType.SIGNAL_SENTIMENT_V1`.
 
+Data sources (tried in order):
+1. Custom endpoint (B1E55ED_SENTIMENT_URL) — any URL that returns sentiment data
+2. Alternative.me Fear & Greed Index (free, no auth) — directional signal only
+
 The endpoint is configured via env and unit tests mock the injected
 ``context.client``.
 
@@ -27,6 +31,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
+import logging
 from typing import Any
 
 import httpx
@@ -56,11 +61,61 @@ class MarketSentimentProducer(BaseProducer):
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_SENTIMENT_URL") or os.getenv("SENTIMENT_URL")
 
+    def _collect_free(self) -> list[dict[str, Any]]:
+        """Free fallback: Alternative.me Fear & Greed Index (current + 7d trend).
+
+        Fetches the last 7 days of F&G values and returns one row per symbol
+        in the configured universe, all sharing the same score. Reddit is
+        intentionally excluded — it is already covered by social-intel producers
+        and including it here would double-count that signal.
+        """
+        _log = logging.getLogger(__name__)
+        try:
+            resp = httpx.get(
+                "https://api.alternative.me/fng/?limit=7",
+                headers={"User-Agent": "b1e55ed/1.0"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+
+            data = payload.get("data", [])
+            if not data:
+                return []
+
+            # data[0] is the most recent entry
+            current_value = float(data[0].get("value", 50))
+            current_label: str = data[0].get("value_classification", "Neutral")
+
+            # 7d change: most recent vs oldest in the window
+            if len(data) >= 2:
+                oldest_value = float(data[-1].get("value", current_value))
+                change_7d = current_value - oldest_value
+            else:
+                change_7d = 0.0
+
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            results: list[dict[str, Any]] = []
+            for sym in symbols:
+                results.append(
+                    {
+                        "symbol": sym,
+                        "fear_greed": current_value,
+                        "fear_greed_change_7d": change_7d,
+                        "ct_sentiment": current_label.lower(),
+                        "data_source": "alternative_me_free",
+                    }
+                )
+            return results
+
+        except Exception as e:  # noqa: BLE001
+            _log.warning("alternative_me_fng_failed: %s", e)
+            return []
+
     def collect(self) -> list[dict[str, Any]]:
         url = self._endpoint()
         if not url:
-            self.ctx.logger.warning("sentiment_endpoint_missing")
-            return []
+            return self._collect_free()
 
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
@@ -142,25 +197,15 @@ class MarketSentimentProducer(BaseProducer):
     def run(self) -> ProducerResult:
         """Run with producer isolation: never raise.
 
-        When no endpoint is configured, return OK with a note — not an error.
+        When no custom endpoint is configured, falls back to the free
+        Alternative.me Fear & Greed Index. Only returns DEGRADED if that
+        free source also fails (e.g. network outage).
         """
 
         start = time.perf_counter()
         errors: list[str] = []
         published = 0
         health: ProducerHealth = ProducerHealth.OK
-
-        # Graceful skip when no endpoint is configured
-        if not self._endpoint():
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return ProducerResult(
-                events_published=0,
-                errors=["no_source_configured: set SENTIMENT_URL or B1E55ED_SENTIMENT_URL"],
-                duration_ms=duration_ms,
-                timestamp=datetime.now(tz=UTC),
-                staleness_ms=None,
-                health=ProducerHealth.OK,
-            )
 
         try:
             raw = self.collect()

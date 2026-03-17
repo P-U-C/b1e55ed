@@ -73,6 +73,12 @@ def test_etf_flows_producer_publishes_events(monkeypatch, tmp_path) -> None:
 def test_etf_flows_producer_handles_401(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("B1E55ED_ETF_FLOWS_URL", "https://example.test/etf")
 
+    # Block the Yahoo Finance free fallback so this stays a unit test
+    def _no_network(*args: object, **kwargs: object) -> None:
+        raise httpx.ConnectError("mocked — no network in unit tests")
+
+    monkeypatch.setattr(httpx, "get", _no_network)
+
     req = httpx.Request("POST", "https://example.test/etf")
     resp = httpx.Response(401, json={"error": "unauthorized"}, request=req)
     exc = httpx.HTTPStatusError("unauthorized", request=req, response=resp)
@@ -88,6 +94,5 @@ def test_etf_flows_producer_handles_401(monkeypatch, tmp_path) -> None:
 
     pr = ETFFlowsProducer(ctx).run()
     assert pr.events_published == 0
-    # Custom endpoint fails → falls through to Coinglass (no key) → graceful skip
-    # The producer logs the failure but does not hard-fail
+    # Custom endpoint fails → Coinglass (no key) → Yahoo (mocked out) → graceful skip
     assert pr.health in (ProducerHealth.OK, ProducerHealth.DEGRADED)
