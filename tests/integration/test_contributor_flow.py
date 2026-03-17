@@ -18,7 +18,9 @@ def _make_app(tmp_path: Path):
     app.state.db = Database(tmp_path / "brain.db")
     # Inject a clean config with no auth_token so tests don't require a Bearer header.
     # This prevents user.yaml's real auth_token from leaking into integration tests.
-    app.state.config = Config(api=ApiConfig(auth_token=""))
+    from engine.core.config import UniverseConfig
+
+    app.state.config = Config(api=ApiConfig(auth_token=""), universe=UniverseConfig(symbols=["BTC", "ETH", "SOL"]))
     return app
 
 
