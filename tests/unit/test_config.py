@@ -122,3 +122,32 @@ def test_universe_execution_metadata_for_symbol() -> None:
     assert meta["venues"] == ["binance", "global"]
     assert meta["tags"] == ["core", "growth", "paper-only"]
     assert meta["execution_mode_hints"] == ["paper_only"]
+
+
+# ---------------------------------------------------------------------------
+# BrainConfig — auto_paper_trade_min_magnitude
+# ---------------------------------------------------------------------------
+
+
+def test_brain_auto_paper_trade_min_magnitude_default() -> None:
+    """Default value must be 5.0 (production-safe)."""
+    from engine.core.config import BrainConfig
+
+    cfg = BrainConfig()
+    assert cfg.auto_paper_trade_min_magnitude == 5.0
+
+
+def test_brain_auto_paper_trade_min_magnitude_readable_from_dict() -> None:
+    """Value must survive a round-trip through dict construction."""
+    from engine.core.config import BrainConfig
+
+    cfg = BrainConfig(**{"auto_paper_trade_min_magnitude": 2.5})
+    assert cfg.auto_paper_trade_min_magnitude == 2.5
+
+
+def test_brain_auto_paper_trade_min_magnitude_top_level_config() -> None:
+    """BrainConfig is reachable via top-level Config."""
+    from engine.core.config import Config
+
+    cfg = Config()
+    assert cfg.brain.auto_paper_trade_min_magnitude == 5.0

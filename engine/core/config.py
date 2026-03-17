@@ -118,11 +118,22 @@ class RiskConfig(BaseModel):
 class BrainConfig(BaseModel):
     cycle_interval_seconds: int = 1800
     auto_paper_trade: bool = True
+    """Enable automatic paper trading when a conviction meets the confidence and magnitude
+    thresholds.  Set to ``False`` to require manual confirmation for every trade."""
+
     # Lower default than 0.65 so paper mode can execute in moderate-conviction regimes.
     auto_paper_trade_min_confidence: float = 0.35
-    # Minimum magnitude required to open a paper trade (0–10 scale). Signals below this
-    # lack sufficient conviction and are skipped entirely.
+    """Minimum confidence score (0–1) required to open a paper trade.
+    Lower values allow trades on less-certain signals.  Default: 0.35."""
+
     auto_paper_trade_min_magnitude: float = 5.0
+    """Minimum conviction magnitude (0–10 scale) required to open a paper trade.
+
+    Lower values increase trade frequency but reduce signal quality.
+
+    WARNING: Values below 3.0 will trade on weak signals and are only appropriate
+    for testing.  Default: 5.0 (production-safe).
+    Recommended testing range: 2.5–4.0."""
 
 
 class ExecutionConfig(BaseModel):
