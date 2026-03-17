@@ -43,18 +43,18 @@ TARGET_SIZE_USD = 500.0
 EV_MIN_THRESHOLD = 0.03
 
 WATCHLIST_SLUGS = [
-    # Fed rate decisions
-    "will-the-fed-cut-rates-in-may-2026",
-    "will-the-fed-cut-rates-in-june-2026",
-    "will-the-fed-cut-rates-in-july-2026",
-    # BTC targets
-    "will-bitcoin-reach-100000-in-2026",
-    "will-btc-be-above-100000-on-december-31-2026",
-    "will-bitcoin-hit-150000-in-2026",
-    # ETH targets
-    "will-ethereum-reach-5000-in-2026",
-    # Broad market
-    "will-the-sp500-hit-7000-in-2026",
+    # BTC targets (high volume, active)
+    "will-bitcoin-hit-150k-by-september-30",
+    "will-bitcoin-hit-150k-by-december-31",
+    "will-bitcoin-hit-150k-by-march-31-2026",
+    "microstrategy-sell-any-bitcoin-in-2025",
+    "microstrategy-sells-any-bitcoin-by-december-31-2026",
+    # Crypto regulatory
+    "trump-eliminates-capital-gains-tax-on-crypto-in-2025",
+    "trump-eliminates-capital-gains-tax-on-crypto-before-2027",
+    # ETH ecosystem
+    "megaeth-market-cap-fdv-6b-one-day-after-launch-365-559-334-815-776-488-224-766",
+    "megaeth-market-cap-fdv-2b-one-day-after-launch-738-867-649-272-765-733",
 ]
 
 

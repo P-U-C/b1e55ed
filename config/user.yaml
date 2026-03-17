@@ -1,17 +1,28 @@
-# User config — your personal overrides on top of the defaults and preset.
-# Only include fields you want to change. Everything else inherits from default.yaml + preset.
-# Never commit secrets here — use environment variables instead.
+# User config — personal overrides on top of defaults and preset.
 
 api:
-  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"  # API auth token. Generate with: openssl rand -base64 32
+  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
 
 daemon:
-  brain_interval_seconds: 900       # Override: run brain every 15 min (default: 5 min)
-  brain_full_interval_seconds: 21600  # Override: full cycle every 6 hours (unchanged)
-  resolver_interval_seconds: 3600   # Override: resolve signals every 60 min (default: 30 min)
+  brain_interval_seconds: 300
+  brain_full_interval_seconds: 21600
+  resolver_interval_seconds: 1800
 
-# Example: to enable auto paper trading with a lower magnitude threshold for testing:
-# brain:
-#   auto_paper_trade: true
-#   auto_paper_trade_min_confidence: 0.35
-#   auto_paper_trade_min_magnitude: 3.0  # ⚠️ Testing only — raise to 5.0 before live trading
+brain:
+  auto_paper_trade: true
+  auto_paper_trade_min_confidence: 0.35
+  auto_paper_trade_min_magnitude: 2.0
+
+universe:
+  symbols:
+    - BTC
+    - ETH
+    - SOL
+    - SUI
+    - HYPE
+
+execution:
+  paper_ignore_consecutive_loss_gate: true
+
+kill_switch:
+  l3_crisis_threshold: 5
