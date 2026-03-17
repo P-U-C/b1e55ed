@@ -176,9 +176,25 @@ Defines which symbols b1e55ed collects/scores.
 
 ```yaml
 universe:
-  symbols: ["BTC", "ETH", "SOL", "SUI", "HYPE"]
+  # symbols: []  # Optional — see auto-derivation note below
+  bundles: []
   max_size: 100
 ```
+
+### Scoring universe auto-derivation
+
+The brain's scoring universe is **automatically derived** from your enabled bundle symbols. You do **not** need to maintain a separate `universe.symbols` list when bundles are configured.
+
+| Scenario | Effective scoring universe |
+|---|---|
+| Bundles configured, `symbols` empty | Union of all enabled bundle symbols |
+| Bundles configured, `symbols` set | Bundle symbols **+** explicit symbols (deduplicated) |
+| No bundles, `symbols` set | Explicit symbols only (backward-compatible) |
+| Both empty | No symbols scored (brain idles) |
+
+`universe.symbols` is an optional **supplement**, not a replacement. If you set it, those symbols are appended to the bundle-derived universe (deduplicating any overlaps). This is useful for scoring symbols you want to monitor but haven't placed into a bundle yet.
+
+Disabled bundles are never included.
 
 Env (examples):
 
@@ -188,7 +204,7 @@ export B1E55ED_UNIVERSE__MAX_SIZE="100"
 ```
 
 <Note>
-If you’re unsure what to trade, start with a tight universe (`BTC, ETH, SOL`) and widen later.
+If you’re unsure what to trade, configure a bundle with your core symbols and leave `universe.symbols` empty. The brain will automatically score everything in the enabled bundle.
 </Note>
 
 ---
