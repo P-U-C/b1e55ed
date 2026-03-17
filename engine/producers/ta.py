@@ -254,14 +254,37 @@ class TechnicalAnalysisProducer(BaseProducer):
     # For crypto-like tokens (HYPE) still no feed; for TradFi equities/ETFs
     # (SPY, QQQ, GLD, TLT, IWM, USO) TradFiFeed (yfinance primary, Twelve Data
     # backup) is used automatically — no API key required for yfinance.
+    # Individual equities are fetched via Yahoo Finance candles as a fallback.
     #
     # To add TradFi symbols to the universe, include them in your config:
     #   universe.tradfi_symbols: [SPY, QQQ, GLD, TLT]
     # They will be routed to TradFiFeed for TA calculation automatically.
-    _BINANCE_MISSING: set[str] = {"HYPE", "SPY", "QQQ", "IWM", "GLD", "TLT", "USO"}
+    _BINANCE_MISSING: set[str] = {
+        "HYPE",
+        # Macro ETFs (served by TradFiFeed)
+        "SPY",
+        "QQQ",
+        "IWM",
+        "GLD",
+        "TLT",
+        "USO",
+        # Individual equities (served by Yahoo Finance candles)
+        "AAPL",
+        "TSLA",
+        "NVDA",
+        "AMZN",
+        "GOOGL",
+        "META",
+        "MSFT",
+        "NFLX",
+        "AMD",
+        "COIN",
+        "MSTR",
+        "PLTR",
+    }
 
-    # Subset of _BINANCE_MISSING that TradFiFeed can serve (stock/ETF tickers).
-    # Anything NOT in this set is silently skipped (no Binance, no TradFi feed).
+    # Subset of _BINANCE_MISSING that TradFiFeed can serve (ETF tickers).
+    # Other _BINANCE_MISSING symbols fall through to Yahoo Finance candles.
     _TRADFI_SYMBOLS: set[str] = {"SPY", "QQQ", "IWM", "GLD", "TLT", "USO"}
 
     @staticmethod
@@ -339,6 +362,30 @@ class TechnicalAnalysisProducer(BaseProducer):
             "data_source": data_source,
         }
 
+    @staticmethod
+    def _fetch_yahoo_candles(sym: str, interval: str = "1h", limit: int = 200) -> list[float]:
+        """Fetch hourly close prices from Yahoo Finance for a given ticker.
+
+        Uses the public v8 chart API — no auth required.  Returns at most
+        *limit* closes.  Returns ``[]`` on any error (graceful degradation).
+        """
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+            resp = httpx.get(
+                url,
+                params={"interval": interval, "range": "30d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            result = data["chart"]["result"][0]
+            raw_closes: list = result["indicators"]["quote"][0]["close"]
+            closes = [float(c) for c in raw_closes if c is not None]
+            return closes[-limit:]
+        except Exception:  # noqa: BLE001
+            return []
+
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Klines + TradFiFeed for TradFi). Always available."""
         # Use active_symbols() so tradfi_symbols configured via universe.tradfi_symbols
@@ -352,26 +399,41 @@ class TechnicalAnalysisProducer(BaseProducer):
 
         for sym in _syms:
             if sym in self._BINANCE_MISSING:
-                # Route TradFi equities/ETFs through TradFiFeed
-                if sym not in self._TRADFI_SYMBOLS:
-                    # No feed available (e.g. HYPE) — skip silently
-                    continue
-                try:
-                    if tradfi_feed is None:
-                        tradfi_feed = TradFiFeed()
-                    candles = tradfi_feed.get_ohlcv(sym, interval="1h", bars=200)
-                    if not candles:
-                        self.ctx.logger.warning("ta_tradfi_empty symbol=%s", sym)
-                        continue
-                    closes = [c["close"] for c in candles]
-                    highs = [c["high"] for c in candles]
-                    lows = [c["low"] for c in candles]
-                    volumes = [c["volume"] for c in candles]
-                    row = self._compute_ta_from_candles(sym, closes, highs, lows, volumes, "tradfi_feed")
-                    if row:
-                        results.append(row)
-                except Exception as e:  # noqa: BLE001
-                    self.ctx.logger.warning("ta_tradfi_failed symbol=%s error=%s", sym, e)
+                got_data = False
+                # Route known TradFi ETFs through TradFiFeed first.
+                if sym in self._TRADFI_SYMBOLS:
+                    try:
+                        if tradfi_feed is None:
+                            tradfi_feed = TradFiFeed()
+                        candles = tradfi_feed.get_ohlcv(sym, interval="1h", bars=200)
+                        if candles:
+                            closes = [c["close"] for c in candles]
+                            highs = [c["high"] for c in candles]
+                            lows = [c["low"] for c in candles]
+                            volumes = [c["volume"] for c in candles]
+                            row = self._compute_ta_from_candles(sym, closes, highs, lows, volumes, "tradfi_feed")
+                            if row:
+                                results.append(row)
+                                got_data = True
+                        else:
+                            self.ctx.logger.warning("ta_tradfi_empty symbol=%s", sym)
+                    except Exception as e:  # noqa: BLE001
+                        self.ctx.logger.warning("ta_tradfi_failed symbol=%s error=%s", sym, e)
+                # Fall back to Yahoo Finance for individual equities or when TradFiFeed failed.
+                if not got_data:
+                    yahoo_closes = self._fetch_yahoo_candles(sym)
+                    if len(yahoo_closes) >= 20:
+                        row = self._compute_ta_from_candles(
+                            sym,
+                            yahoo_closes,
+                            yahoo_closes,
+                            yahoo_closes,
+                            [1.0] * len(yahoo_closes),
+                            "yahoo_finance",
+                        )
+                        if row:
+                            self.ctx.logger.info("ta_yahoo_symbol symbol=%s", sym)
+                            results.append(row)
                 continue
 
             try:

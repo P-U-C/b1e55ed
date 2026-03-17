@@ -11,6 +11,8 @@ from abc import abstractmethod
 from datetime import datetime
 from typing import Any
 
+import httpx
+
 try:
     from datetime import UTC  # py311+
 except ImportError:  # pragma: no cover
@@ -224,6 +226,13 @@ class BaseExternalProducer(BaseProducer):
 
         try:
             raw = self._fetch_raw()
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            # Endpoint temporarily unreachable — not a counted failure.
+            self.ctx.logger.info(
+                "no_source_available",
+                extra={"producer": self.name, "error": str(exc)},
+            )
+            raise
         except Exception as exc:  # noqa: BLE001
             self.ctx.logger.warning(
                 "external_adapter.fetch_failed",
@@ -282,6 +291,10 @@ class BaseExternalProducer(BaseProducer):
             published = len(emitted)
             if published == 0:
                 health = ProducerHealth.DEGRADED
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout):
+            # Endpoint unreachable — transient unavailability, not a counted failure.
+            # health stays OK, published stays 0.
+            pass
         except Exception as exc:  # noqa: BLE001
             errors.append(str(exc))
             health = ProducerHealth.ERROR
