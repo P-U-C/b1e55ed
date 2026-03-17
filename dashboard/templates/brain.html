@@ -140,7 +140,10 @@
   <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s, refresh from:body" hx-swap="innerHTML">
     <div class="panel-header">
       <span class="panel-title">Positions</span>
-      <span class="panel-age">{{ positions_age | default('—') }}</span>
+      <span style="display:flex; align-items:center; gap:0.75rem;">
+        {% if positions %}<span style="font-size:0.7rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</span>{% endif %}
+        <span class="panel-age">{{ positions_age | default('—') }}</span>
+      </span>
     </div>
 
     {% if positions %}
@@ -148,7 +151,7 @@
       <div style="margin-bottom: 0.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:baseline;">
           <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
-          <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-weight:400;">
+          <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }} data-live" style="font-weight:400;">
             {{ '%+.1f' | format(p.pnl_pct) }}%
           </span>
         </div>
@@ -166,7 +169,7 @@
         </div>
       </div>
       {% endfor %}
-      <div style="font-size:0.75rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</div>
+
     {% else %}
       {% set message = "No open positions" %}
       {% set status = "Brain decisions will appear here" %}

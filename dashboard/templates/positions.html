@@ -5,9 +5,14 @@
 
 <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem;">
   <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Positions</h1>
-  <div style="display:flex; gap:0.5rem;">
-    <button class="btn {% if view == 'open' %}active{% endif %}" onclick="location.href='/positions?view=open'" style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open</button>
-    <button class="btn {% if view == 'closed' %}active{% endif %}" onclick="location.href='/positions?view=closed'" style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed</button>
+  <div style="display:flex; align-items:center; gap:0.75rem;">
+    {% if positions %}
+    <span style="font-size:0.75rem; color:var(--text-dim); font-family:var(--mono);">{{ positions | length }} {{ view }}</span>
+    {% endif %}
+    <div style="display:flex; gap:0.5rem;">
+      <button class="btn {% if view == 'open' %}active{% endif %}" onclick="location.href='/positions?view=open'" style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open</button>
+      <button class="btn {% if view == 'closed' %}active{% endif %}" onclick="location.href='/positions?view=closed'" style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed</button>
+    </div>
   </div>
 </div>
 
