@@ -27,7 +27,41 @@ class PostFiatSignalsProducer(BaseExternalProducer):
     domain = "tradfi"
     schedule = "* * * * *"  # poll every minute; controlled by poll_interval_sec in spec
 
-    SPEC_PATH = "engine/external/specs/post_fiat_signals.yaml"
+    SPEC_PATH = ""  # not used — see SPEC_INLINE
+    SPEC_INLINE = {
+        "name": "post-fiat-signals",
+        "version": "1.0.0",
+        "domain": "tradfi",
+        "base_url": "${POST_FIAT_SIGNALS_URL:-http://84.32.34.46:8080}",
+        "poll_interval_sec": 60,
+        "min_confidence": 0.55,
+        "stale_threshold_sec": 300,
+        "health_endpoint": {
+            "path": "/health",
+            "method": "GET",
+            "timeout_sec": 5,
+        },
+        "signals_endpoint": {
+            "path": "/signals/filtered",
+            "method": "GET",
+            "params": {"filter": "ACTIONABLE"},
+            "timeout_sec": 10,
+        },
+        "items_path": "signals",
+        "field_mapping": {
+            "symbol": "ticker",
+            "direction": "action",
+            "confidence": "confidence",
+            "horizon_hours": "168",
+            "observed_at": "timestamp",
+            "regime": "regime",
+            "signal_type": "signal_type",
+            "hit_rate": "hit_rate",
+            "avg_return": "avg_return",
+            "is_stale": "is_stale",
+            "source_assertion": "action",
+        },
+    }
 
     def normalize(self, raw: RawExternalRecord) -> list[ExternalObservation]:  # type: ignore[override]
         """Parse post-fiat-signals response into ExternalObservations.

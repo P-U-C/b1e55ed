@@ -61,6 +61,25 @@ def _expand_env(value: str) -> str:
     return re.sub(r"\$\{([^}]+)\}", _replace, value)
 
 
+def _resolve_env_vars(data: Any) -> Any:
+    """Recursively expand ``${VAR}`` and ``${VAR:-default}`` in string values."""
+    if isinstance(data, dict):
+        return {k: _resolve_env_vars(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_resolve_env_vars(item) for item in data]
+    if isinstance(data, str):
+
+        def _replace(match: re.Match[str]) -> str:
+            expr = match.group(1)
+            if ":-" in expr:
+                var, default = expr.split(":-", 1)
+                return os.getenv(var, default)
+            return os.getenv(expr, match.group(0))
+
+        return re.sub(r"\$\{([^}]+)\}", _replace, data)
+    return data
+
+
 def _parse_endpoint(data: dict[str, Any] | None) -> EndpointSpec | None:
     if data is None:
         return None
@@ -119,6 +138,36 @@ def load_spec(path: str | Path) -> AdapterSpec:
         version=str(data["version"]),
         domain=data["domain"],
         base_url=base_url,
+        signals_endpoint=signals_endpoint,
+        health_endpoint=health_endpoint,
+        field_mapping=field_mapping,
+        min_confidence=float(data.get("min_confidence", 0.55)),
+        stale_threshold_sec=int(data.get("stale_threshold_sec", 300)),
+        poll_interval_sec=int(data.get("poll_interval_sec", 60)),
+        items_path=str(data.get("items_path", "")),
+    )
+
+
+def load_spec_inline(data: dict) -> AdapterSpec:
+    """Load an AdapterSpec from an inline dict (no file I/O — works in binary installs)."""
+    # Resolve env vars in string values (same as load_spec does).
+    data = _resolve_env_vars(data)
+
+    signals_ep_data = data.get("signals_endpoint")
+    if signals_ep_data is None:
+        raise ValueError("spec missing required 'signals_endpoint'")
+
+    signals_endpoint = _parse_endpoint(signals_ep_data)
+    assert signals_endpoint is not None  # noqa: S101
+
+    health_endpoint = _parse_endpoint(data.get("health_endpoint"))
+    field_mapping = _parse_field_mapping(data["field_mapping"])
+
+    return AdapterSpec(
+        name=data["name"],
+        version=str(data["version"]),
+        domain=data["domain"],
+        base_url=str(data["base_url"]),
         signals_endpoint=signals_endpoint,
         health_endpoint=health_endpoint,
         field_mapping=field_mapping,
