@@ -24,9 +24,7 @@ import pytest
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.execution.pnl import PnLTracker
-from engine.execution.position_monitor import (
-    monitor_positions,
-)
+from engine.execution.position_monitor import monitor_positions
 
 # ---------------------------------------------------------------------------
 # Fixtures
