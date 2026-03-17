@@ -151,7 +151,7 @@
       <div style="margin-bottom: 0.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:baseline;">
           <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
-          <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }} data-live" style="font-weight:400;">
+          <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }}" style="font-weight:400;">
             {{ '%+.1f' | format(p.pnl_pct) }}%
           </span>
         </div>

@@ -5,7 +5,7 @@
     <span class="badge" style="margin-left:0.5rem; border-color:rgba(245,158,11,0.35); color:var(--amber);">⚠ conviction conflict</span>
     {% endif %}
   </span>
-  <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }} data-live" style="font-size:0.85rem; font-weight:400;">
+  <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }}" style="font-size:0.85rem; font-weight:400;">
     {{ '%+.1f' | format(p.pnl_pct) }}%
   </span>
 </div>
@@ -29,7 +29,7 @@
   </div>
   <div>
     <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">P&L</span><br>
-    <span class="{{ 'text-bull' if p.pnl_usd > 0 else ('text-bear' if p.pnl_usd < 0 else 'text-dim') }} data-live">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+    <span class="{{ 'text-bull' if p.pnl_usd > 0 else ('text-bear' if p.pnl_usd < 0 else 'text-dim') }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
   </div>
 </div>
 
