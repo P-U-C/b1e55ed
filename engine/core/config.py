@@ -141,7 +141,6 @@ class ExecutionConfig(BaseModel):
     paper_start_balance: float = 10000.0
     confirmation_threshold_usd: float = 500.0
     paper_min_days: int = 14
-
     # Paper-mode throughput settings
     paper_max_positions_per_symbol: int = 2
     """Maximum concurrent open positions per symbol in paper mode.

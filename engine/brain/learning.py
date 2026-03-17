@@ -484,6 +484,59 @@ class LearningLoop:
                     (float(attr.realized_pnl), utc_now().isoformat(), int(attr.conviction_id)),
                 )
 
+        # Backfill karma flywheel for any closed positions that were missed during
+        # pnl.close_position() (e.g. identity load failure, crash between DB write and
+        # karma call). Idempotent: KarmaEngine uses dedupe_key to prevent double-emission.
+        try:
+            _missed = self.db.fetchall(
+                """
+                SELECT p.id AS position_id, p.realized_pnl AS realized_pnl
+                FROM positions p
+                WHERE p.status = 'closed'
+                  AND p.conviction_id IS NOT NULL
+                  AND p.realized_pnl IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM events e
+                      WHERE e.type = ?
+                        AND json_extract(e.payload, '$.trade_id') = p.id
+                  )
+                ORDER BY p.closed_at ASC
+                """,
+                (EventType.ATTRIBUTION_OUTCOME_V1.value,),
+            )
+
+            if _missed:
+                import logging as _logging
+
+                from engine.execution.karma import KarmaEngine
+                from engine.security.identity import ensure_identity, generate_node_identity
+
+                try:
+                    _identity = ensure_identity().identity
+                except Exception:
+                    _identity = generate_node_identity()
+
+                _karma = KarmaEngine(config=self.config, db=self.db, identity=_identity)
+                for _mk in _missed:
+                    try:
+                        _karma.attribute_outcome(
+                            trade_id=str(_mk["position_id"]),
+                            realized_pnl_usd=float(_mk["realized_pnl"]),
+                        )
+                    except Exception:
+                        _logging.getLogger("b1e55ed.learning").warning(
+                            "learning backfill: karma attribution failed for position %s",
+                            _mk["position_id"],
+                            exc_info=True,
+                        )
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger("b1e55ed.learning").warning(
+                "learning backfill: karma flywheel sweep failed",
+                exc_info=True,
+            )
+
         weight_adj = self.adjust_domain_weights()
         producer_scores = self.score_producers()
         corpus_fb = self.update_corpus()
