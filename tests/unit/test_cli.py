@@ -26,6 +26,10 @@ def _scaffold_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None
     shutil.copy2(src_root / "config" / "default.yaml", repo_root / "config" / "default.yaml")
     shutil.copytree(src_root / "config" / "presets", repo_root / "config" / "presets")
 
+    # Provide explicit symbols so signal extraction has a stable universe.
+    # (default.yaml now derives symbols from enabled bundles; tests need a fixed list)
+    (repo_root / "config" / "user.yaml").write_text("universe:\n  symbols: [BTC, ETH, SOL, SUI, HYPE]\n")
+
     # Marker so _repo_root_from_cwd detects this as a dev checkout
     (repo_root / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
 
