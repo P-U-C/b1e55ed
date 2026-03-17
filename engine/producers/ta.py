@@ -363,6 +363,8 @@ class TechnicalAnalysisProducer(BaseProducer):
         }
 
     @staticmethod
+    # Chesterton's Fence: Yahoo Finance has served free market data since 1996.
+    # Before you call it legacy, ask why it still answers the call when every premium feed goes dark.
     def _fetch_yahoo_candles(sym: str, interval: str = "1h", limit: int = 200) -> list[float]:
         """Fetch hourly close prices from Yahoo Finance for a given ticker.
 

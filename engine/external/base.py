@@ -2,6 +2,9 @@
 
 Provides the fetch → normalize → policy-filter → emit pipeline for
 any external signal source wired via an adapter spec.
+
+Type I error: treating a ConnectTimeout as a producer failure is a false positive.
+The producer is healthy. The endpoint blinked. The system must know the difference.
 """
 
 from __future__ import annotations

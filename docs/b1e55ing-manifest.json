@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "eggs": [
+    {
+      "id": "egg_ca3af7d9",
+      "file": "engine/producers/ta.py",
+      "anchor": "def _fetch_yahoo_candles(sym: str, interval: str = \"1h\", limit: int = 200) -> list[float]:",
+      "tradition": "chesterton-fence",
+      "content": "# Chesterton's Fence: Yahoo Finance has served free market data since 1996.\n# Before you call it legacy, ask why it still answers the call when every premium feed goes dark.",
+      "placement": "before_function",
+      "pr_number": 450,
+      "applied_at": "2026-03-17T23:35:15Z"
+    },
+    {
+      "id": "egg_5e1c0b99",
+      "file": "engine/external/base.py",
+      "anchor": "Provides the fetch",
+      "tradition": "type-i-error",
+      "content": "Type I error: treating a ConnectTimeout as a producer failure is a false positive.\nThe producer is healthy. The endpoint blinked. The system must know the difference.",
+      "placement": "module_docstring",
+      "pr_number": 450,
+      "applied_at": "2026-03-17T23:35:15Z"
+    }
+  ]
+}
