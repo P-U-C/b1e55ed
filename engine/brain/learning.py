@@ -75,7 +75,7 @@ class LearningLoop:
     # 1) Outcome attribution
     # ---------------------------------------------------------------------
 
-    def attribute_outcome(self, position_id: str, realized_pnl: float) -> OutcomeAttribution:
+    def attribute_outcome(self, position_id: str, realized_pnl: float) -> OutcomeAttribution | None:
         row = self.db.fetchone(
             "SELECT * FROM positions WHERE id = ?",
             (str(position_id),),
@@ -85,7 +85,15 @@ class LearningLoop:
 
         conviction_id = row["conviction_id"]
         if conviction_id is None:
-            raise ValueError(f"Position {position_id} missing conviction_id")
+            # No conviction_id — position was opened outside the brain cycle (e.g. manual/test).
+            # Log and skip attribution rather than crashing; this is a soft gap not a hard error.
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "Position %s has no conviction_id — attribution skipped (ATTRIBUTION_GAP_V1)",
+                position_id,
+            )
+            return None
 
         opened_at = _parse_iso(row["opened_at"]) or utc_now()
         closed_at = _parse_iso(row["closed_at"]) or utc_now()
@@ -476,6 +484,8 @@ class LearningLoop:
 
         for r in rows:
             attr = self.attribute_outcome(str(r["position_id"]), float(r["realized_pnl"]))
+            if attr is None:
+                continue  # No conviction_id — gap already logged in attribute_outcome
             attributions.append(attr)
             # Write outcome back to conviction_scores.
             with self.db._lock, self.db.conn:
