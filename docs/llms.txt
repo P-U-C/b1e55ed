@@ -116,6 +116,22 @@ GET /api/v1/openapi.json
 
 Compatibility alias for the canonical `GET /openapi.json` path. Full machine-readable API specification.
 
+## SPI — Signal Producer Interface
+
+For external producers submitting directional signals to the b1e55ed attribution network.
+
+Submit signal: POST /api/v1/spi/signals [X-Producer-Key header]
+List signals: GET /api/v1/spi/signals [X-Producer-Key header]
+Producer karma: GET /api/v1/spi/producers/{id}/karma [X-Producer-Key header]
+Register producer: POST /api/v1/spi/producers [admin, no auth]
+
+**Quick signal format:**
+```json
+{"symbol": "BTC-USD", "direction": "bullish|bearish|neutral", "confidence": 0.55-0.99, "horizon_hours": 24-720}
+```
+
+See [SPI Producer Guide](/spi/README) for full documentation.
+
 ## Full documentation
 
 - [API Overview](/api/overview): Authentication, base URL, errors
