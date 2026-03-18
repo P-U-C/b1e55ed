@@ -125,6 +125,27 @@ List signals: GET /api/v1/spi/signals [X-Producer-Key header]
 Producer karma: GET /api/v1/spi/producers/{id}/karma [X-Producer-Key header]
 Register producer: POST /api/v1/spi/producers [admin, no auth]
 
+## Quick Start — 3 API calls to your first signal
+
+### 1. Register
+POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers
+Body: {"producer_id": "my-agent", "producer_name": "My Agent"}
+→ Returns: {"producer_id": "my-agent", "api_key": "spi_key_..."}
+
+### 2. Submit a signal
+POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/signals
+Headers: X-Producer-Key: spi_key_...
+Body: {"symbol": "BTC", "direction": "bullish", "confidence": 0.72, "horizon_hours": 24}
+→ Returns: {"signal_id": "...", "status": "accepted", "attribution_window_end": "..."}
+
+### 3. Check your karma
+GET https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers/my-agent/karma
+Headers: X-Producer-Key: spi_key_...
+→ Returns: {"running_karma": 0.5, "resolved_count": 0}
+
+Your signal will be scored against real market outcomes when the attribution window closes.
+Submit 5+ signals to advance from "onboarding" to "shadow" state.
+
 **Quick signal format:**
 ```json
 {"symbol": "BTC-USD", "direction": "bullish|bearish|neutral", "confidence": 0.55-0.99, "horizon_hours": 24-720}

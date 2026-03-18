@@ -106,6 +106,7 @@ def get_agent_manifest(
 def build_system_manifest(api_base: str = "") -> dict:
     """Build the system-level /.well-known/agent-registration.json manifest."""
     oracle_base = "https://oracle.b1e55ed.permanentupperclass.com"
+    api_base = api_base.rstrip("/") if api_base else oracle_base
     return {
         "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
         "name": "b1e55ed",
@@ -135,7 +136,17 @@ def build_system_manifest(api_base: str = "") -> dict:
         ],
         "supportedTrust": ["reputation", "validation"],
         "synthesis_participant": True,
-        "synthesis_registration": f"POST {oracle_base}/api/v1/oracle/contributors/register",
+        "synthesis_registration": f"POST {oracle_base}/api/v1/spi/producers",
+        "producer_registration": {
+            "endpoint": f"{api_base}/api/v1/spi/producers",
+            "method": "POST",
+            "body": {
+                "producer_id": "<your-agent-name>",
+                "producer_name": "<display name>",
+            },
+            "returns": {"producer_id": "string", "api_key": "string"},
+            "note": "Use the api_key as X-Producer-Key header for signal submission",
+        },
         "links": {
             "docs": "https://docs.b1e55ed.permanentupperclass.com",
             "github": "https://github.com/P-U-C/b1e55ed",
