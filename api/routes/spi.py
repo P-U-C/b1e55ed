@@ -28,13 +28,22 @@ router = APIRouter(prefix="/spi", tags=["spi"])
 # ---------------------------------------------------------------------------
 
 
+def _ensure_forge_identity_columns(db: Database) -> None:
+    """Add forge identity columns to spi_producers if they don't exist yet."""
+    _ensure_tables(db)  # always ensure base tables first
+    with contextlib.suppress(Exception):  # column may already exist
+        db.execute("ALTER TABLE spi_producers ADD COLUMN forged_address TEXT DEFAULT NULL")
+    with contextlib.suppress(Exception):  # column may already exist
+        db.execute("ALTER TABLE spi_producers ADD COLUMN forged_at TEXT DEFAULT NULL")
+
+
 def _ensure_key_column(db: Database) -> None:
     """Add api_key_hash column to spi_producers if it doesn't exist yet.
 
     Called once per connection (guarded by the existing WeakSet in admission).
     Uses a bare try/except because SQLite has no ALTER TABLE … ADD IF NOT EXISTS.
     """
-    _ensure_tables(db)  # always ensure base tables first
+    _ensure_forge_identity_columns(db)
     with contextlib.suppress(Exception):  # column may already exist
         db.execute("ALTER TABLE spi_producers ADD COLUMN api_key_hash TEXT")
 
