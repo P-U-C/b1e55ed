@@ -11,11 +11,20 @@ Signal = P_true_estimate - executable_price > EV_MIN_THRESHOLD
 APIs (no auth required):
   Gamma: https://gamma-api.polymarket.com  — market metadata, prices
   CLOB:  https://clob.polymarket.com       — order book depth for VWAP
+
+p_true estimation methods (in priority order):
+  1. gbm              — GBM log-normal probability for crypto price-target markets
+  2. near_resolution  — linear trend extrapolation for markets closing within 48h
+  3. spread_anomaly   — fat spread on a liquid market signals informed momentum
+  4. momentum         — raw 24h delta adjustment
+  5. market_price     — fallback (EV ≈ 0, rarely passes threshold)
 """
 
 from __future__ import annotations
 
 import json
+import math
+import re
 import time
 from datetime import datetime
 
@@ -57,6 +66,23 @@ WATCHLIST_SLUGS = [
     "megaeth-market-cap-fdv-2b-one-day-after-launch-738-867-649-272-765-733",
 ]
 
+# Crypto asset symbol mapping (lowercase hint → canonical symbol)
+_CRYPTO_SYMBOLS: dict[str, str] = {
+    "btc": "BTC",
+    "bitcoin": "BTC",
+    "eth": "ETH",
+    "ethereum": "ETH",
+    "sol": "SOL",
+    "solana": "SOL",
+    "bnb": "BNB",
+    "avax": "AVAX",
+}
+
+
+def _norm_cdf(x: float) -> float:
+    """Standard normal CDF — implemented via math.erfc (no scipy required)."""
+    return 0.5 * math.erfc(-x / math.sqrt(2))
+
 
 def compute_vwap(asks: list[tuple[float, float]], target_usd: float) -> float | None:
     """Compute VWAP fill price for a BUY order of target_usd notional.
@@ -96,6 +122,9 @@ def _confidence(liquidity_usd: float, ev: float, p_true_method: str) -> float:
     liq_score = {"thin": 0.0, "low": 0.2, "high": 0.4}[liquidity_tier(liquidity_usd)]
     ev_score = min(0.3, ev * 3)
     method_score = {
+        "gbm": 0.4,
+        "near_resolution": 0.25,
+        "spread_anomaly": 0.15,
         "cross_platform_discrepancy": 0.3,
         "base_rate": 0.15,
         "momentum": 0.1,
@@ -116,7 +145,7 @@ class PolymarketProducer(BaseProducer):
 
     _FED_HINTS = ("fed", "rate", "cut")
     _CRYPTO_HINTS = ("bitcoin", "btc", "ethereum", "eth")
-    _CRYPTO_TARGET_HINTS = ("reach", "above", "over", "target")
+    _CRYPTO_TARGET_HINTS = ("reach", "above", "over", "target", "hit")
     _GEOPOLITICAL_HINTS = ("war", "attack", "invasion", "missile", "nuclear", "escalat")
     _REGULATORY_HINTS = ("sec", "cftc", "regulator", "ban", "approval", "etf")
 
@@ -304,11 +333,144 @@ class PolymarketProducer(BaseProducer):
 
         return 0.0
 
-    def _estimate_p_true(self, *, mid_price: float, probability_delta_24h: float) -> tuple[float, str]:
+    def _parse_crypto_target(self, text: str) -> tuple[str, float] | None:
+        """Return (symbol, target_price) parsed from market question text, or None.
+
+        Requires either a '$' prefix (e.g. "$90k", "$100,000") or a 'k'/'K' suffix
+        (e.g. "150k", "90K") to avoid mistaking years and IDs for prices.
+        """
+        text = text.lower()
+        symbol: str | None = None
+        for hint, sym in _CRYPTO_SYMBOLS.items():
+            if hint in text:
+                symbol = sym
+                break
+        if symbol is None:
+            return None
+
+        # Try dollar-prefixed first: $X, $X,000, $Xk, $X.5k
+        dollar_match = re.search(r"\$([\d,]+\.?\d*)\s*([kK]?)", text)
+        if dollar_match:
+            raw = dollar_match.group(1).replace(",", "")
+            suffix = dollar_match.group(2)
+            multiplier = 1000 if suffix.lower() == "k" else 1
+            try:
+                price = float(raw) * multiplier
+                if price > 0:
+                    return (symbol, price)
+            except ValueError:
+                pass
+
+        # Try k/K suffixed (no dollar): 150k, 90K — but NOT bare numbers like 2026
+        k_match = re.search(r"\b([\d,]+\.?\d*)\s*[kK]\b", text)
+        if k_match:
+            raw = k_match.group(1).replace(",", "")
+            try:
+                price = float(raw) * 1000
+                if price > 0:
+                    return (symbol, price)
+            except ValueError:
+                pass
+
+        return None
+
+    def _fetch_spot_price(self, symbol: str, *, client: httpx.Client) -> float | None:
+        """Fetch current spot price from Binance public API with per-run caching."""
+        if symbol in self._binance_price_cache:
+            return self._binance_price_cache[symbol]
+        try:
+            resp = client.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbol": f"{symbol}USDT"},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            price = float(resp.json()["price"])
+            self._binance_price_cache[symbol] = price
+            return price
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _gbm_p_true(
+        self,
+        spot: float,
+        strike: float,
+        days_to_expiry: float,
+        annual_vol: float = 0.80,
+    ) -> float | None:
+        """Log-normal probability P(S_T > K) using GBM (risk-neutral, mu=0).
+
+        d2 = [ln(S/K) - 0.5 * sigma^2 * t] / (sigma * sqrt(t))
+        P(S_T > K) = N(d2)
+        """
+        if days_to_expiry <= 0 or spot <= 0 or strike <= 0:
+            return None
+        t = days_to_expiry / 365.0
+        sigma = annual_vol
+        d2 = (math.log(spot / strike) - 0.5 * sigma**2 * t) / (sigma * math.sqrt(t))
+        return _norm_cdf(d2)
+
+    def _estimate_p_true(
+        self,
+        *,
+        market: dict[str, Any],
+        mid_price: float,
+        best_bid: float,
+        best_ask: float,
+        probability_delta_24h: float,
+        liquidity_usd: float,
+        resolves_at_str: str | None,
+        client: httpx.Client,
+    ) -> tuple[float, str]:
+        """Estimate true probability using independent methods in priority order.
+
+        Returns (p_true_estimate, method_name).
+        """
+        now = datetime.now(tz=UTC)
+
+        # ── Method 1: GBM ────────────────────────────────────────────────────────
+        # For crypto price-target markets (e.g. "Will BTC hit $150k by Dec 31?")
+        # Uses Binance spot + log-normal distribution — fully independent of market price.
+        text = self._text_blob(market)
+        if self._is_crypto_target_market(text):
+            crypto_target = self._parse_crypto_target(text)
+            if crypto_target is not None:
+                symbol, strike = crypto_target
+                resolves_at = self._parse_iso8601(resolves_at_str)
+                if resolves_at is not None:
+                    days_to_expiry = (resolves_at - now).total_seconds() / 86_400.0
+                    spot = self._fetch_spot_price(symbol, client=client)
+                    if spot is not None:
+                        prob = self._gbm_p_true(spot, strike, days_to_expiry)
+                        if prob is not None:
+                            return self._clamp_probability(prob), "gbm"
+
+        # ── Method 2: Near-resolution ─────────────────────────────────────────────
+        # Within 48 h of resolution, momentum becomes more informative.
+        if resolves_at_str is not None:
+            resolves_at = self._parse_iso8601(resolves_at_str)
+            if resolves_at is not None:
+                hours_remaining = (resolves_at - now).total_seconds() / 3600.0
+                if hours_remaining <= 48.0 and 0.08 < mid_price < 0.92 and abs(probability_delta_24h) >= 0.05:
+                    urgency = max(0.0, 1.0 - hours_remaining / 48.0)
+                    p_true = mid_price + probability_delta_24h * urgency * 0.7
+                    return self._clamp_probability(p_true), "near_resolution"
+
+        # ── Method 3: Spread anomaly ──────────────────────────────────────────────
+        # Fat spread on a liquid market often signals market-maker withdrawal.
+        spread = best_ask - best_bid
+        if spread > 0.05 and liquidity_usd > 100_000:
+            boost = probability_delta_24h * 0.4
+            if boost > 0:
+                p_true = self._clamp_probability(mid_price + boost)
+                return p_true, "spread_anomaly"
+
+        # ── Method 4: Momentum ────────────────────────────────────────────────────
         if abs(probability_delta_24h) >= 0.08:
             shifted = self._clamp_probability(mid_price + (0.5 * probability_delta_24h))
             return shifted, "momentum"
 
+        # ── Method 5: market_price fallback ──────────────────────────────────────
         return self._clamp_probability(mid_price), "market_price"
 
     def _primary_token_id(self, market: dict[str, Any]) -> str | None:
@@ -390,7 +552,20 @@ class PolymarketProducer(BaseProducer):
             default=0.0,
         )
 
-        p_true_estimate, p_true_method = self._estimate_p_true(mid_price=mid_price, probability_delta_24h=probability_delta_24h)
+        # Compute liquidity up front — needed by _estimate_p_true (spread anomaly)
+        liquidity_usd = self._to_float(market.get("liquidity") or market.get("liquidityClob"), default=0.0)
+        resolves_at_str = self._resolves_at(market)
+
+        p_true_estimate, p_true_method = self._estimate_p_true(
+            market=market,
+            mid_price=mid_price,
+            best_bid=best_bid,
+            best_ask=best_ask,
+            probability_delta_24h=probability_delta_24h,
+            liquidity_usd=liquidity_usd,
+            resolves_at_str=resolves_at_str,
+            client=client,
+        )
         executable_price, executable_note = self._executable_price(market, best_ask=best_ask, client=client)
 
         ev = p_true_estimate - executable_price
@@ -407,11 +582,9 @@ class PolymarketProducer(BaseProducer):
         ev_return_rate = ev / executable_price if executable_price > 0 else 0.0
         spread_cost = executable_price - mid_price
 
-        liquidity_usd = self._to_float(market.get("liquidity") or market.get("liquidityClob"), default=0.0)
         volume_24h_usd = self._to_float(market.get("volume24hr") or market.get("volume24hrClob"), default=0.0)
 
         signal = self._derive_signal(market, probability, probability_delta_24h)
-        resolves_at = self._resolves_at(market)
         category = self._category_from_market(market)
 
         reason = (
@@ -434,7 +607,7 @@ class PolymarketProducer(BaseProducer):
             "probability_delta_24h": probability_delta_24h,
             "volume_24h_usd": volume_24h_usd,
             "liquidity_usd": liquidity_usd,
-            "resolves_at": resolves_at,
+            "resolves_at": resolves_at_str,
             "signal": signal,
             "confidence": _confidence(liquidity_usd, ev, p_true_method),
             "reason": reason,
@@ -451,6 +624,8 @@ class PolymarketProducer(BaseProducer):
         )
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
+        self._binance_price_cache: dict[str, float] = {}  # reset per normalize() call
+
         if not raw:
             return []
 
