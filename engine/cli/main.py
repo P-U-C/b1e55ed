@@ -430,6 +430,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve = sub.add_parser("resolve-outcomes", help="Resolve elapsed FORECAST_V1 events into FORECAST_OUTCOME_V1")
     p_resolve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    p_resolve_spi = sub.add_parser("resolve-spi", help="Resolve expired SPI signals against market outcomes")
+    p_resolve_spi.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     # -- monitor-positions --
     p_mon = sub.add_parser(
         "monitor-positions",
@@ -2100,10 +2103,71 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
         resolved = 0
         skipped = 0
 
+    # --- SPI signal resolution (Phase 1B) ---
+    spi_resolved = 0
+    spi_expired = 0
+    try:
+        from engine.spi.resolution import resolve_expired_signals
+
+        outcomes = resolve_expired_signals(db)
+        for outcome in outcomes:
+            if outcome.status == "resolved":
+                spi_resolved += 1
+            elif outcome.status == "expired":
+                spi_expired += 1
+    except Exception:
+        # Never fail this command; SPI resolver is also best-effort.
+        pass
+
     if bool(getattr(args, "json", False)):
-        print(_json_dumps({"resolved": resolved, "skipped_missing_price": skipped}))
+        print(
+            _json_dumps(
+                {
+                    "resolved": resolved,
+                    "skipped_missing_price": skipped,
+                    "spi_resolved": spi_resolved,
+                    "spi_expired": spi_expired,
+                }
+            )
+        )
     else:
-        print(f"resolved {resolved} forecasts, skipped {skipped} (missing price data)")
+        parts = [f"resolved {resolved} forecasts"]
+        if skipped:
+            parts.append(f"skipped {skipped} (missing price data)")
+        if spi_resolved or spi_expired:
+            parts.append(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
+        print(", ".join(parts))
+    return 0
+
+
+def _cmd_resolve_spi(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Resolve expired SPI signals against market outcomes. Exit code 0."""
+
+    from engine.core.database import Database
+    from engine.spi.resolution import resolve_expired_signals
+
+    db = Database(_resolve_db_path(ctx.repo_root))
+
+    spi_resolved = 0
+    spi_expired = 0
+    try:
+        outcomes = resolve_expired_signals(db)
+        for outcome in outcomes:
+            if outcome.status == "resolved":
+                spi_resolved += 1
+            elif outcome.status == "expired":
+                spi_expired += 1
+    except Exception as exc:
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps({"error": str(exc)}))
+        else:
+            print(f"SPI resolution failed: {exc}")
+        return 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"spi_resolved": spi_resolved, "spi_expired": spi_expired}))
+    else:
+        print(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
     return 0
 
 
@@ -4045,6 +4109,7 @@ def main(argv: list[str] | None = None) -> int:
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "resolve-outcomes": _cmd_resolve_outcomes,
+        "resolve-spi": _cmd_resolve_spi,
         "monitor-positions": _cmd_monitor_positions,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
