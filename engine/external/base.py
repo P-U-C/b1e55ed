@@ -2,6 +2,9 @@
 
 Provides the fetch → normalize → policy-filter → emit pipeline for
 any external signal source wired via an adapter spec.
+
+Type I error: treating a ConnectTimeout as a producer failure is a false positive.
+The producer is healthy. The endpoint blinked. The system must know the difference.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ import time
 from abc import abstractmethod
 from datetime import datetime
 from typing import Any
+
+import httpx
 
 try:
     from datetime import UTC  # py311+
@@ -224,6 +229,13 @@ class BaseExternalProducer(BaseProducer):
 
         try:
             raw = self._fetch_raw()
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            # Endpoint temporarily unreachable — not a counted failure.
+            self.ctx.logger.info(
+                "no_source_available",
+                extra={"producer": self.name, "error": str(exc)},
+            )
+            raise
         except Exception as exc:  # noqa: BLE001
             self.ctx.logger.warning(
                 "external_adapter.fetch_failed",
@@ -282,6 +294,10 @@ class BaseExternalProducer(BaseProducer):
             published = len(emitted)
             if published == 0:
                 health = ProducerHealth.DEGRADED
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout):
+            # Endpoint unreachable — transient unavailability, not a counted failure.
+            # health stays OK, published stays 0.
+            pass
         except Exception as exc:  # noqa: BLE001
             errors.append(str(exc))
             health = ProducerHealth.ERROR
