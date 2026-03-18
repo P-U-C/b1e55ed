@@ -24,7 +24,7 @@ _KS_LEVEL_NAMES = {0: "SAFE", 1: "CAUTION", 2: "DEFENSIVE", 3: "LOCKDOWN", 4: "E
 
 
 def _get_top_call(db: Database) -> dict[str, Any] | None:
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT symbol, direction, confidence, magnitude, timeframe, pcs_score, cts_score, ts FROM conviction_scores ORDER BY ts DESC, confidence DESC LIMIT 1"
     ).fetchone()
     if row is None:
@@ -42,23 +42,36 @@ def _get_top_call(db: Database) -> dict[str, Any] | None:
 
 def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list[dict[str, Any]]:
     cutoff = (datetime.now(tz=UTC) - timedelta(minutes=30)).isoformat()
-    rows = db.conn.execute(
+    rows = db.execute(
         "SELECT payload FROM events WHERE type = ? AND ts >= ? ORDER BY ts DESC",
-        ("attribution.signal_accepted.v1", cutoff),
+        # Plato's cave upgrade: read the fire (forecasts), not the shadows (accepted signals).
+        ("forecast.v1", cutoff),
     ).fetchall()
 
     seen: dict[str, dict[str, Any]] = {}
     for r in rows:
         p = json.loads(r[0]) if isinstance(r[0], str) else r[0]
-        pid = p.get("producer_id", "unknown")
+
+        action = p.get("action", "no_forecast")
+        abstention = p.get("abstention_reason")
+
+        # Skip abstention rows (action=no_forecast + abstention_reason set)
+        if action == "no_forecast" and abstention is not None:
+            continue
+
+        # Extract producer id: strip @version suffix from source
+        source = p.get("source", "unknown")
+        # A monk signs name@monastery. The monastery changes; the hand does not.
+        pid = source.split("@")[0] if "@" in source else source
         if pid in seen:
             continue
-        direction = p.get("direction", "neutral")
+
+        direction = "neutral" if action == "no_forecast" else action
         confidence = float(p.get("confidence", 0.0))
-        domain = p.get("domain", "unknown")
+        domain = p.get("asset", "unknown")
 
         # Lookup karma
-        karma_row = db.conn.execute("SELECT karma_score FROM producer_karma WHERE producer_id = ?", (pid,)).fetchone()
+        karma_row = db.fetchone("SELECT karma_score FROM producer_karma WHERE producer_id = ?", (pid,))
         karma_score = float(karma_row[0]) if karma_row else 1.0
 
         agrees = top_call is not None and direction == top_call.get("direction")
@@ -78,7 +91,7 @@ def _get_producer_signals(db: Database, top_call: dict[str, Any] | None) -> list
 
 
 def _get_benchmarks(db: Database) -> list[dict[str, Any]]:
-    rows = db.conn.execute(
+    rows = db.execute(
         "SELECT producer_id, karma_score, win_count, loss_count, total_trades FROM producer_karma WHERE producer_id LIKE 'benchmark.%'"
     ).fetchall()
     out = []
@@ -100,7 +113,7 @@ def _get_benchmarks(db: Database) -> list[dict[str, Any]]:
 
 def _get_system_status(db: Database) -> dict[str, Any]:
     # Kill switch level
-    ks_row = db.conn.execute(
+    ks_row = db.execute(
         "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
     ).fetchone()
@@ -111,7 +124,7 @@ def _get_system_status(db: Database) -> dict[str, Any]:
     ks_name = _KS_LEVEL_NAMES.get(ks_level, "SAFE")
 
     # Consecutive losses
-    loss_rows = db.conn.execute("SELECT realized_pnl FROM positions WHERE status = 'closed' ORDER BY closed_at DESC LIMIT 10").fetchall()
+    loss_rows = db.fetchall("SELECT realized_pnl FROM positions WHERE status = 'closed' ORDER BY closed_at DESC LIMIT 10")
     consecutive_losses = 0
     for lr in loss_rows:
         if lr[0] is not None and float(lr[0]) < 0:
@@ -120,13 +133,13 @@ def _get_system_status(db: Database) -> dict[str, Any]:
             break
 
     # Open positions
-    open_rows = db.conn.execute("SELECT asset, direction, entry_price, size_notional FROM positions WHERE status = 'open'").fetchall()
+    open_rows = db.fetchall("SELECT asset, direction, entry_price, size_notional FROM positions WHERE status = 'open'")
     open_positions = [{"symbol": r[0], "direction": r[1], "entry": r[2], "unrealized_pnl": 0.0} for r in open_rows]
 
     open_risk_pct = 0.0
 
     # Last cycle
-    cycle_row = db.conn.execute(
+    cycle_row = db.execute(
         "SELECT ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.conviction.v1",),
     ).fetchone()
@@ -153,4 +166,5 @@ def cockpit_state(db: Database = Depends(get_db)) -> dict[str, Any]:
         "producer_signals": producer_signals,
         "benchmarks": benchmarks,
         "system": system,
+        "conviction": top_call.get("pcs_score") if top_call else None,
     }

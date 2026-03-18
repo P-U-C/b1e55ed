@@ -5,7 +5,12 @@ import json
 import pytest
 
 
-def test_identity_show_with_no_identity(tmp_path, capsys) -> None:
+def test_identity_show_with_no_identity(tmp_path, monkeypatch, capsys) -> None:
+    # Isolate from production identity by redirecting HOME to a clean temp dir.
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+
     from engine.cli import CliContext, _identity_show
 
     ctx = CliContext(repo_root=tmp_path)
@@ -27,9 +32,20 @@ def test_identity_forge_json_arg_parsing() -> None:
     assert bool(args.json) is True
 
 
-def test_identity_file_read_write(tmp_path, capsys) -> None:
+def test_no_recursive_nesting_like_directories_of_babel(tmp_path, monkeypatch) -> None:
+    """Borges imagined infinite nested rooms. We had two."""
+    from engine.cli import CliContext, _identity_dir
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    ctx = CliContext(repo_root=tmp_path / ".b1e55ed")
+    result = _identity_dir(ctx)
+    assert ".b1e55ed/.b1e55ed" not in str(result)
+
+
+def test_identity_file_read_write(tmp_path, capsys, monkeypatch) -> None:
     from engine.cli import CliContext, _identity_show
 
+    monkeypatch.setenv("HOME", str(tmp_path))
     ctx = CliContext(repo_root=tmp_path)
     ident_dir = tmp_path / ".b1e55ed"
     ident_dir.mkdir(parents=True, exist_ok=True)

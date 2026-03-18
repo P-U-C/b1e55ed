@@ -1,0 +1,34 @@
+name: post-fiat-signals
+version: "1.0.0"
+domain: tradfi
+base_url: "${POST_FIAT_SIGNALS_URL}"
+poll_interval_sec: 60
+min_confidence: 0.55
+stale_threshold_sec: 300
+
+health_endpoint:
+  path: /health
+  method: GET
+  timeout_sec: 5
+
+signals_endpoint:
+  path: /signals/filtered
+  method: GET
+  params:
+    filter: ACTIONABLE
+  timeout_sec: 10
+
+items_path: "signals"  # response.signals is the array
+
+field_mapping:
+  symbol: "ticker"
+  direction: "action"       # "BUY"→bullish, "SELL"→bearish, "HOLD"→neutral
+  confidence: "confidence"
+  horizon_hours: "168"      # literal — post-fiat uses weekly horizon
+  observed_at: "timestamp"
+  regime: "regime"
+  signal_type: "signal_type"
+  hit_rate: "hit_rate"
+  avg_return: "avg_return"
+  is_stale: "is_stale"
+  source_assertion: "action"

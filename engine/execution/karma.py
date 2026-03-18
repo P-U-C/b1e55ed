@@ -155,8 +155,8 @@ class KarmaEngine:
             }
             sig_b64 = _sign_payload(self._identity, payload)
 
-            with self._db.conn:
-                cursor = self._db.conn.execute(
+            with self._db._lock, self._db.conn:
+                cursor = self._db.execute(
                     """
                     INSERT OR IGNORE INTO karma_intents (
                         id, trade_id, contributor_id, realized_pnl_usd, karma_percentage,
@@ -228,17 +228,17 @@ class KarmaEngine:
             pnl = float(realized_pnl_usd)
 
             # 1. Query SIGNAL_ACCEPTED_V1 events for this trade
-            rows = self._db.conn.execute(
+            rows = self._db.fetchall(
                 "SELECT id, payload FROM events WHERE type = ? AND payload LIKE ?",
                 (str(EventType.SIGNAL_ACCEPTED_V1), f'%"trade_id":"{trade_id}"%'),
-            ).fetchall()
+            )
 
             # Also try alternate JSON formatting (spaces after colon)
             if not rows:
-                rows = self._db.conn.execute(
+                rows = self._db.fetchall(
                     "SELECT id, payload FROM events WHERE type = ? AND payload LIKE ?",
                     (str(EventType.SIGNAL_ACCEPTED_V1), f'%"trade_id": "{trade_id}"%'),
-                ).fetchall()
+                )
 
             if not rows:
                 _log.warning("attribute_outcome: no SIGNAL_ACCEPTED_V1 events for trade_id=%s", trade_id)
@@ -271,11 +271,11 @@ class KarmaEngine:
 
                 # 4. EMA update
                 karma_delta = 0.0
-                with self._db.conn:
-                    existing = self._db.conn.execute(
+                with self._db._lock, self._db.conn:
+                    existing = self._db.fetchone(
                         "SELECT karma_score, win_count, loss_count, total_trades FROM producer_karma WHERE producer_id = ?",
                         (producer_id,),
-                    ).fetchone()
+                    )
 
                     if existing:
                         old_karma = float(existing[0])
@@ -302,7 +302,7 @@ class KarmaEngine:
                     else:
                         new_karma = old_karma
 
-                    self._db.conn.execute(
+                    self._db.execute(
                         """INSERT INTO producer_karma (producer_id, karma_score, win_count, loss_count, total_trades, last_updated)
                            VALUES (?, ?, ?, ?, ?, ?)
                            ON CONFLICT(producer_id) DO UPDATE SET
@@ -313,6 +313,33 @@ class KarmaEngine:
                              last_updated = excluded.last_updated""",
                         (producer_id, new_karma, win_count, loss_count, total_trades, now_iso),
                     )
+
+                # Emit KARMA_UPDATE_V1 — event-sourced audit trail for every karma mutation.
+                # This allows auditors to reconstruct karma history from events alone.
+                try:
+                    from engine.core.events import KarmaUpdatePayload
+
+                    update_reason = "trade_win" if outcome > 0 else ("trade_loss" if outcome < 0 else "settlement")
+                    _karma_update_payload = KarmaUpdatePayload(
+                        producer_id=producer_id,
+                        producer_name=producer_id,
+                        karma_delta=karma_delta,
+                        karma_score_after=new_karma,
+                        win_count_after=win_count,
+                        loss_count_after=loss_count,
+                        trade_id=str(trade_id),
+                        realized_pnl=pnl,
+                        update_reason=update_reason,
+                    )
+                    self._db.append_event(
+                        event_type=EventType.KARMA_UPDATE_V1,
+                        payload=_karma_update_payload.model_dump(mode="json"),
+                        source="karma.attribution",
+                        contributor_id=producer_id,
+                    )
+                except Exception:
+                    # Never break attribution for karma event emission failure.
+                    pass
 
                 producers.append(
                     {
@@ -367,7 +394,7 @@ class KarmaEngine:
             return {}
 
     def get_pending_intents(self, *, limit: int = 500, offset: int = 0) -> list[KarmaIntent]:
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             """
             SELECT id, trade_id, realized_pnl_usd, karma_percentage, karma_amount_usd,
                    node_id, signature, created_at
@@ -377,7 +404,7 @@ class KarmaEngine:
             LIMIT ? OFFSET ?
             """,
             (limit, offset),
-        ).fetchall()
+        )
         out: list[KarmaIntent] = []
         for r in rows:
             out.append(
@@ -417,14 +444,14 @@ class KarmaEngine:
 
             # Load intents
             q_marks = ",".join(["?"] * len(intent_ids))
-            rows = self._db.conn.execute(
+            rows = self._db.fetchall(
                 f"""
                 SELECT id, karma_amount_usd
                 FROM karma_intents
                 WHERE id IN ({q_marks}) AND settled = 0
                 """,
                 tuple(intent_ids),
-            ).fetchall()
+            )
 
             if not rows:
                 return None
@@ -448,8 +475,8 @@ class KarmaEngine:
             }
             sig_b64 = _sign_payload(self._identity, receipt_payload)
 
-            with self._db.conn:
-                self._db.conn.execute(
+            with self._db._lock, self._db.conn:
+                self._db.execute(
                     """
                     INSERT INTO karma_settlements (
                         id, intent_ids, total_usd, destination_wallet, tx_hash, status, signature, created_at
@@ -465,7 +492,7 @@ class KarmaEngine:
                         sig_b64,
                     ),
                 )
-                self._db.conn.execute(
+                self._db.execute(
                     f"""UPDATE karma_intents SET settled = 1, batch_id = ? WHERE id IN ({q_marks})""",
                     (receipt_id, *settled_ids),
                 )
@@ -513,13 +540,13 @@ class KarmaEngine:
             return None
 
     def get_receipts(self) -> list[KarmaReceipt]:
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             """
             SELECT id, intent_ids, total_usd, destination_wallet, tx_hash, status, signature, created_at
             FROM karma_settlements
             ORDER BY created_at DESC
             """
-        ).fetchall()
+        )
 
         out: list[KarmaReceipt] = []
         for r in rows:

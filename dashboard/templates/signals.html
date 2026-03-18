@@ -3,13 +3,113 @@
 
 {% block content %}
 
-<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.5rem; flex-wrap:wrap; gap:0.5rem;">
   <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Signals</h1>
   <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
     {% for d in domains %}
-    <a href="/signals?domain={{ d.id }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}">{{ d.label }}</a>
+    <a href="/signals?domain={{ d.id }}{{ domain_filter_suffix }}" class="badge badge-{{ d.id }}" style="padding:4px 10px; {% if active_domain == d.id %}outline:1px solid var(--border-active);{% endif %}"
+       title="{{ {'ta':'Technical analysis — RSI, MACD, trend detection','tradfi':'TradFi plumbing — basis trades, funding rates, OI','onchain':'On-chain data — whale flows, accumulation patterns','social':'Social sentiment — CT pulse, narrative tracking','sentiment':'Aggregated sentiment scores from multiple sources','events':'Market events — listings, unlocks, regulatory','aci':'Autonomous crypto intelligence signals','research':'Deep research artifacts and analysis'}.get(d.id, '') }}">{{ d.label }}</a>
     {% endfor %}
-    <a href="/signals" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
+    <a href="/signals{{ all_filter_query }}" class="badge" style="padding:4px 10px; color:var(--text-dim); {% if not active_domain %}outline:1px solid var(--border-active);{% endif %}">All</a>
+  </div>
+</div>
+
+<form method="get" class="panel" style="margin-bottom:1rem; padding:0.75rem; display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto auto; gap:0.5rem; align-items:end;">
+  {% if active_domain %}
+  <input type="hidden" name="domain" value="{{ active_domain }}">
+  {% endif %}
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Bundle</div>
+    <select class="btn" name="bundle" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All bundles</option>
+      {% for b in bundle_options %}
+      <option value="{{ b.id }}" {% if active_bundle == b.id %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Asset class</div>
+    <select class="btn" name="asset_class" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All classes</option>
+      {% for c in asset_class_options %}
+      <option value="{{ c }}" {% if active_asset_class == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Venue</div>
+    <select class="btn" name="venue" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All venues</option>
+      {% for v in venue_options %}
+      <option value="{{ v }}" {% if active_venue == v %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    <div class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Tag</div>
+    <select class="btn" name="tag" style="width:100%; text-align:left; padding:6px 10px;">
+      <option value="">All tags</option>
+      {% for t in tag_options %}
+      <option value="{{ t }}" {% if active_tag == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <button class="btn" type="submit" style="font-size:0.72rem; padding:6px 10px;">Apply</button>
+  <a class="btn" href="/signals{% if active_domain %}?domain={{ active_domain }}{% endif %}" style="font-size:0.72rem; padding:6px 10px; text-decoration:none; color:var(--text-dim);">Reset</a>
+</form>
+
+<!-- Signal explainer -->
+<div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1rem; line-height:1.5;">
+  Signals are events emitted by producers. Each signal has a type (e.g., SIGNAL_TA_V1), a source producer, and a payload with domain-specific data.
+</div>
+
+<!-- Score legend -->
+<div style="display:flex; gap:1rem; align-items:center; font-size:0.7rem; color:var(--text-dim); margin-bottom:1rem; flex-wrap:wrap;">
+  <span style="font-weight:500; color:var(--text);">Score (0–10):</span>
+  <span><span class="text-dim">0</span> = strong sell</span>
+  <span><span class="text-dim">5</span> = neutral</span>
+  <span><span class="text-dim">10</span> = strong buy</span>
+  <span style="color:var(--text-faint);">Derived from producer-specific metrics.</span>
+</div>
+
+<!-- Signal Beeswarm Timeline -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header" style="align-items:flex-start; gap:0.75rem;">
+    <div>
+      <span class="panel-title">Signal Timeline</span>
+      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.15rem;">{{ timeline_window_label or 'Last 24h UTC' }}</div>
+    </div>
+    <span class="panel-age {{ 'text-warn' if signal_feed_stale else 'cursor-blink' }}">last signal {{ latest_signal_age }}</span>
+  </div>
+  <div id="beeswarm-container">
+    {% if signals %}
+    <!-- Beeswarm data injected via JS below -->
+    <div id="beeswarm-timeline" style="width:100%; overflow-x:auto; position:relative;">
+      <svg id="beeswarm-svg" width="100%" height="180" style="min-width:600px;"></svg>
+    </div>
+    <!-- Detail expand row -->
+    <div id="beeswarm-detail" style="display:none; margin-top:0.5rem; padding:0.75rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-raised); font-size:0.8rem;">
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+      {{ signals | length }} signals{% if active_domain %} ({{ active_domain }}){% endif %} · click dot for details
+      {% if signal_feed_stale %} · <span class="text-warn">feed stale</span>{% endif %}
+    </div>
+    {% else %}
+    {% set message = "No signals yet" %}
+    {% set status = "Waiting for first producer cycle" %}
+    {% set action_text = "Go to Producers" %}
+    {% set action_url = "/producers" %}
+    {% include "partials/empty_state.html" %}
+    <div style="margin-top:0.75rem; text-align:center; font-size:0.75rem; color:var(--text-dim);">
+      Run the brain to generate signals:
+      <code style="background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:3px; margin-left:0.25rem;">b1e55ed brain</code>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -19,54 +119,265 @@
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title"><span class="badge badge-{{ group.domain }}">{{ group.domain }}</span></span>
-      <span class="panel-age">{{ group.age | default('—') }}</span>
+      <span style="display:flex; align-items:center; gap:0.5rem;">
+        {% if group.symbol_count is defined %}
+        <span class="panel-age" title="{{ group.symbol_list }}">{{ group.symbol_count }} symbol{{ 's' if group.symbol_count != 1 else '' }}</span>
+        {% endif %}
+        <span class="panel-age">{{ group.age | default('—') }}</span>
+      </span>
     </div>
     {% if group.signals %}
       {% for s in group.signals %}
       <div style="display:flex; align-items:center; gap:0.75rem; padding:4px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
+        {% if s.asset != '—' and s.asset not in s.desc %}
         <span style="width:3rem; font-weight:400; color:var(--text-bright);">{{ s.asset }}</span>
+        {% endif %}
         <span style="flex:1; color:var(--text);">{{ s.desc }}</span>
-        <span class="data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}" style="font-weight:400;">
-          {{ s.direction }}{{ '%.0f' | format(s.score) }}
+        <span class="data-live {{ 'text-bull' if s.direction == '+' else ('text-bear' if s.direction == '-' else 'text-dim') }}" style="font-weight:500; font-family:var(--mono);"
+              title="Score: {{ '%.1f' | format(s.score) }} | Direction: {{ s.direction | replace('+','long') | replace('-','short') | replace('=','neutral') }}">
+          {{ '▲' if s.direction == '+' else ('▼' if s.direction == '-' else '–') }} {{ '%.1f' | format(s.score) }}
         </span>
       </div>
       {% endfor %}
     {% else %}
-      <div class="empty-state">No recent signals from this domain.</div>
+      {% set message = "No recent signals from this domain" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
   {% endfor %}
 </div>
 
-<!-- Signal history -->
-<div class="panel">
-  <div class="panel-header">
-    <span class="panel-title">Signal History</span>
-    <span class="panel-age cursor-blink">live</span>
-  </div>
-  <div id="signal-history" class="data-dense"
-       hx-get="/partials/signal-history{% if active_domain %}?domain={{ active_domain }}{% endif %}"
-       hx-trigger="every 30s"
-       hx-swap="innerHTML">
-    {% if signals %}
-      {% for s in signals %}
-      <div class="signal-row">
-        <span class="signal-ts">{{ s.ts }}</span>
-        <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
-        <span class="signal-asset">{{ s.asset }}</span>
-        <span class="signal-desc">{{ s.desc }}</span>
-        <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
-          {{ s.direction }}{{ '%.0f' | format(s.score) }}
-        </span>
-      </div>
-      {% endfor %}
-      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
-        showing {{ signals | length }} of {{ total_signals | default('?') }} signals{% if active_domain %} ({{ active_domain }}){% endif %}
-      </div>
-    {% else %}
-      <div class="empty-state">No signals yet. Waiting for first producer cycle.</div>
-    {% endif %}
-  </div>
-</div>
+{% endblock %}
 
+{% block scripts %}
+<script>
+// Signals view should self-refresh so operators don't need manual reload.
+(function() {
+  var refreshMs = 30000;
+  setInterval(function() {
+    var active = document.activeElement;
+    var tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    htmx.trigger(document.body, 'refresh');
+  }, refreshMs);
+})();
+</script>
+
+<script>
+(function() {
+  // Domain color map
+  var DOMAIN_COLORS = {
+    ta:        '#3B82F6',
+    tradfi:    '#8B5CF6',
+    onchain:   '#F59E0B',
+    social:    '#EC4899',
+    sentiment: '#14B8A6',
+    events:    '#EF4444',
+    aci:       '#6366F1',
+    research:  '#10B981',
+    unknown:   '#6B7280'
+  };
+
+  // Parse signal data from the rendered page (safe server-side JSON serialization)
+  {% set signal_data = [] %}
+  {% for s in signals %}{% set _ = signal_data.append({'ts': s.ts or s.ts_iso, 'ts_ms': s.ts_ms, 'ts_hm': s.ts_hm, 'ts_label': s.ts_hm, 'domain': s.domain, 'asset': s.asset, 'desc': s.desc, 'score': s.score|default(0), 'direction': s.direction}) %}{% endfor %}
+  var signals = {{ signal_data | tojson }};
+
+  if (!signals.length) return;
+
+  var svg = document.getElementById('beeswarm-svg');
+  if (!svg) return;
+
+  var container = document.getElementById('beeswarm-timeline');
+  var W = Math.max(container.offsetWidth, 600);
+  var H = 180;
+  var PAD_L = 50, PAD_R = 20, PAD_T = 20, PAD_B = 30;
+  var plotW = W - PAD_L - PAD_R;
+  var plotH = H - PAD_T - PAD_B;
+  var midY = PAD_T + plotH / 2;
+
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.style.width = '100%';
+  svg.style.height = H + 'px';
+
+  // Time axis: last 24h
+  var now = Date.now();
+  var t24h = now - 24 * 60 * 60 * 1000;
+
+  function parseSignalTs(s) {
+    if (typeof s.ts_ms === 'number' && isFinite(s.ts_ms) && s.ts_ms > 0) {
+      return s.ts_ms;
+    }
+
+    var raw = s.ts;
+    if (raw === null || raw === undefined) return null;
+
+    if (typeof raw === 'number' && isFinite(raw)) {
+      return Math.abs(raw) < 1e11 ? raw * 1000 : raw;
+    }
+
+    var txt = String(raw).trim();
+    if (!txt) return null;
+
+    if (/^-?\d+(\.\d+)?$/.test(txt)) {
+      var numeric = Number(txt);
+      if (isFinite(numeric)) {
+        return Math.abs(numeric) < 1e11 ? numeric * 1000 : numeric;
+      }
+    }
+
+    var normalized = txt.replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(normalized)) {
+      normalized += 'Z';
+    }
+
+    var parsed = Date.parse(normalized);
+    if (!isNaN(parsed)) return parsed;
+
+    parsed = Date.parse(txt);
+    return isNaN(parsed) ? null : parsed;
+  }
+
+  // Parse timestamps
+  signals.forEach(function(s) {
+    s._time = parseSignalTs(s);
+  });
+
+  // Filter to last 24h & sort; exclude signals with no parseable timestamp
+  signals = signals.filter(function(s) { return s._time !== null && s._time >= t24h; });
+  signals.sort(function(a, b) { return a._time - b._time; });
+
+  // X position
+  signals.forEach(function(s) {
+    s._x = PAD_L + ((s._time - t24h) / (now - t24h)) * plotW;
+    s._r = Math.max(4, Math.min(12, 3 + (s.score || 1)));
+  });
+
+  // Beeswarm: spread vertically to avoid overlap
+  signals.forEach(function(s, i) {
+    s._y = midY;
+  });
+  // Simple collision avoidance
+  for (var pass = 0; pass < 5; pass++) {
+    for (var i = 0; i < signals.length; i++) {
+      for (var j = i + 1; j < signals.length; j++) {
+        var dx = signals[j]._x - signals[i]._x;
+        var dy = signals[j]._y - signals[i]._y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var minD = signals[i]._r + signals[j]._r + 2;
+        if (dist < minD && dist > 0) {
+          var push = (minD - dist) / 2;
+          var ny = dy / dist;
+          signals[i]._y -= push * (ny || 0.5);
+          signals[j]._y += push * (ny || 0.5);
+        }
+      }
+    }
+  }
+  // Clamp Y
+  signals.forEach(function(s) {
+    s._y = Math.max(PAD_T + s._r, Math.min(H - PAD_B - s._r, s._y));
+  });
+
+  // Draw axis
+  var axisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  axisLine.setAttribute('x1', PAD_L);
+  axisLine.setAttribute('y1', H - PAD_B);
+  axisLine.setAttribute('x2', W - PAD_R);
+  axisLine.setAttribute('y2', H - PAD_B);
+  axisLine.setAttribute('stroke', 'rgba(255,255,255,0.08)');
+  axisLine.setAttribute('stroke-width', '1');
+  svg.appendChild(axisLine);
+
+  // Time labels (every 4h)
+  for (var h = 0; h <= 24; h += 4) {
+    var t = t24h + h * 3600000;
+    var x = PAD_L + (h / 24) * plotW;
+    var tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    tick.setAttribute('x1', x);
+    tick.setAttribute('y1', H - PAD_B);
+    tick.setAttribute('x2', x);
+    tick.setAttribute('y2', H - PAD_B + 4);
+    tick.setAttribute('stroke', 'rgba(255,255,255,0.12)');
+    svg.appendChild(tick);
+
+    var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    var d = new Date(t);
+    label.textContent = (h === 24 ? 'now' : d.getUTCHours().toString().padStart(2, '0') + ':00');
+    label.setAttribute('x', x);
+    label.setAttribute('y', H - PAD_B + 16);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('fill', 'rgba(255,255,255,0.25)');
+    label.setAttribute('font-family', 'var(--mono)');
+    label.setAttribute('font-size', '9');
+    svg.appendChild(label);
+  }
+
+  // Draw dots
+  var detailDiv = document.getElementById('beeswarm-detail');
+  signals.forEach(function(s, idx) {
+    var color = DOMAIN_COLORS[s.domain] || DOMAIN_COLORS.unknown;
+    var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', s._x);
+    circle.setAttribute('cy', s._y);
+    circle.setAttribute('r', s._r);
+    circle.setAttribute('fill', color);
+    circle.setAttribute('fill-opacity', '0.7');
+    circle.setAttribute('stroke', color);
+    circle.setAttribute('stroke-width', '1');
+    circle.setAttribute('stroke-opacity', '0.9');
+    circle.style.cursor = 'pointer';
+    circle.style.transition = 'fill-opacity 0.15s, r 0.15s';
+
+    circle.addEventListener('mouseenter', function() {
+      circle.setAttribute('fill-opacity', '1');
+      circle.setAttribute('r', s._r + 2);
+    });
+    circle.addEventListener('mouseleave', function() {
+      circle.setAttribute('fill-opacity', '0.7');
+      circle.setAttribute('r', s._r);
+    });
+    circle.addEventListener('click', function() {
+      var dir = s.direction || '—';
+      var scoreClass = s.score >= 7 ? 'text-bull' : (s.score >= 4 ? 'text-warn' : 'text-dim');
+      detailDiv.innerHTML =
+        '<div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">' +
+          '<span class="badge badge-' + s.domain + '">' + s.domain + '</span>' +
+          '<span style="color:var(--text-bright); font-weight:500;">' + s.asset + '</span>' +
+          '<span class="' + scoreClass + '" style="font-weight:500;">' + (dir==='+' ? '▲' : dir==='-' ? '▼' : '–') + ' ' + (Math.round(s.score * 10) / 10).toFixed(1) + '</span>' +
+          '<span style="color:var(--text-dim); font-size:0.75rem;">' + (s.ts_label || s.ts) + '</span>' +
+        '</div>' +
+        '<div style="margin-top:0.35rem; color:var(--text); font-size:0.8rem;">' + s.desc + '</div>';
+      detailDiv.style.display = 'block';
+      detailDiv.style.borderLeftColor = color;
+      detailDiv.style.borderLeft = '3px solid ' + color;
+    });
+    svg.appendChild(circle);
+  });
+
+  // Legend
+  var legendY = 12;
+  var legendX = PAD_L;
+  Object.keys(DOMAIN_COLORS).forEach(function(d) {
+    if (d === 'unknown') return;
+    var has = signals.some(function(s) { return s.domain === d; });
+    if (!has) return;
+    var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', legendX);
+    dot.setAttribute('cy', legendY);
+    dot.setAttribute('r', '4');
+    dot.setAttribute('fill', DOMAIN_COLORS[d]);
+    svg.appendChild(dot);
+    var lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    lbl.textContent = d;
+    lbl.setAttribute('x', legendX + 8);
+    lbl.setAttribute('y', legendY + 3);
+    lbl.setAttribute('fill', 'rgba(255,255,255,0.35)');
+    lbl.setAttribute('font-family', 'var(--mono)');
+    lbl.setAttribute('font-size', '9');
+    svg.appendChild(lbl);
+    legendX += d.length * 6 + 22;
+  });
+})();
+</script>
 {% endblock %}

@@ -39,6 +39,9 @@ class PaperConfig:
     fee_rate: float = 0.0006
     platform: str = "paper"
     venue: str = "paper"
+    max_positions_per_symbol: int = 1
+    """Maximum concurrent open positions per symbol. Default 1 (legacy). OMS overrides to
+    execution.paper_max_positions_per_symbol from config when constructing PaperBroker."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,11 +71,18 @@ class PaperBroker:
         return float(mid) * (1.0 - slip)
 
     def _existing_open_position(self, symbol: str) -> dict[str, Any] | None:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT * FROM positions WHERE asset = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
             (symbol,),
-        ).fetchone()
+        )
         return None if row is None else dict(row)
+
+    def _count_open_positions(self, symbol: str) -> int:
+        row = self.db.fetchone(
+            "SELECT COUNT(*) FROM positions WHERE asset = ? AND status = 'open'",
+            (symbol,),
+        )
+        return int(row[0]) if row else 0
 
     def execute_market(
         self,
@@ -86,6 +96,10 @@ class PaperBroker:
         take_profit: float | None = None,
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
+        conviction_id: int | None = None,
+        regime_at_entry: str | None = None,
+        pcs_at_entry: float | None = None,
+        cts_at_entry: float | None = None,
     ) -> PaperFill:
         sym = str(symbol).upper().strip()
         dirn = str(direction).lower().strip()
@@ -112,10 +126,10 @@ class PaperBroker:
         if idem is None:
             idem = str(uuid.uuid4())
 
-        existing = self.db.conn.execute(
+        existing = self.db.fetchone(
             "SELECT id, position_id, fill_price, fill_size, status FROM orders WHERE idempotency_key = ?",
             (idem,),
-        ).fetchone()
+        )
         if existing is not None:
             # Already executed.
             oid = str(existing[0])
@@ -132,17 +146,27 @@ class PaperBroker:
                 realized_pnl_usd=None,
             )
 
+        # Deduplication: reject if open positions for this symbol exceed the limit.
+        # In paper mode paper_max_positions_per_symbol (default 2) allows a second
+        # position to open while one is still live — useful for conviction-flip entries.
+        # Legacy behaviour (single position per symbol) is max_positions_per_symbol=1.
+        open_count = self._count_open_positions(sym)
+        max_pos = int(self.cfg.max_positions_per_symbol)
+        if open_count >= max_pos:
+            raise ValueError(f"duplicate_open_position: {sym} already has {open_count} open position(s) (limit={max_pos})")
+
         order_id = str(uuid.uuid4())
         position_id = str(uuid.uuid4())
 
         # For Sprint 2A we open a new position per intent. Closing is done via PnLTracker.
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 """
                 INSERT INTO positions (
                   id, platform, asset, direction, entry_price, size_notional, leverage,
-                  stop_loss, take_profit, opened_at, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+                  stop_loss, take_profit, opened_at, status, conviction_id,
+                  regime_at_entry, pcs_at_entry, cts_at_entry
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
                 """,
                 (
                     position_id,
@@ -155,9 +179,13 @@ class PaperBroker:
                     float(stop_loss) if stop_loss is not None else None,
                     float(take_profit) if take_profit is not None else None,
                     now,
+                    int(conviction_id) if conviction_id is not None else None,
+                    str(regime_at_entry) if regime_at_entry is not None else None,
+                    float(pcs_at_entry) if pcs_at_entry is not None else None,
+                    float(cts_at_entry) if cts_at_entry is not None else None,
                 ),
             )
-            self.db.conn.execute(
+            self.db.execute(
                 """
                 INSERT INTO orders (
                   id, position_id, venue, type, side, symbol, size, price,

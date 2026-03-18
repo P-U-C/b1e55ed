@@ -19,6 +19,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from engine.core.bundle_packs import bundle_template_from_pack
+from engine.core.paths import b1e55ed_dir, logs_dir
+
 if TYPE_CHECKING:
     from engine.cli.main import CliContext
 
@@ -99,6 +102,44 @@ def _section(title: str) -> None:
     print(bold(f"  {title}"))
     print(bold(cyan(f"{'─' * 44}")))
     print()
+
+
+# The Key of Solomon was written so its invocations would outlast their author.
+# chmod 600: owner-only. Some keys are not meant to be shared.
+def _persist_env_file(lines: list[str]) -> None:
+    """Write env vars to ~/.b1e55ed/env (systemd EnvironmentFile format).
+
+    Also appends ``source ~/.b1e55ed/env`` to ~/.bashrc when missing so
+    interactive shells pick up the variables too.
+    """
+    try:
+        env_dir = b1e55ed_dir()
+        env_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir().mkdir(parents=True, exist_ok=True)
+
+        env_file = env_dir / "env"
+        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
+
+        # Append source line to ~/.bashrc so interactive shells pick it up
+        bashrc = Path.home() / ".bashrc"
+        source_line = "source ~/.b1e55ed/env"
+        if bashrc.exists():
+            content = bashrc.read_text(encoding="utf-8")
+            if source_line not in content:
+                with bashrc.open("a", encoding="utf-8") as f:
+                    f.write(f"\n# b1e55ed environment\n{source_line}\n")
+
+        print(f"  {_ok(f'Persisted to {env_file}:')}")
+        for line in lines:
+            if "MASTER_PASSWORD" in line:
+                key, _ = line.split("=", 1)
+                print(f"    {dim(f'{key}=***')}")
+            else:
+                print(f"    {dim(line)}")
+        print(f"  {dim('File permissions: 600 (owner-only)')}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not persist env file: {e}")
 
 
 # ── Symbol packs ─────────────────────────────────────────────────────────────
@@ -248,6 +289,108 @@ _SYMBOL_PACKS: dict[str, dict] = {
     },
 }
 
+_STARTER_BUNDLE_PACKS: dict[str, dict[str, str]] = {
+    "1": {"id": "crypto-core", "name": "Crypto core (existing behavior)"},
+    "2": {"id": "tradfi-infra", "name": "TradFi infra"},
+    "3": {"id": "hl-tradfi-perps", "name": "Hyperliquid TradFi-perps"},
+    "4": {"id": "mixed-market", "name": "Mixed market (direct + proxy)"},
+}
+
+
+def _normalize_symbols(symbols: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in symbols:
+        sym = str(raw or "").strip().upper()
+        if not sym or sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+    return out
+
+
+def _starter_bundles_for_choice(choice: str, crypto_symbols: list[str]) -> list[dict[str, object]]:
+    selected = _STARTER_BUNDLE_PACKS.get(choice, _STARTER_BUNDLE_PACKS["1"])
+    pack_id = str(selected.get("id") or "crypto-core")
+
+    if pack_id == "crypto-core":
+        template = bundle_template_from_pack(
+            "crypto-core",
+            source="wizard",
+            enabled=True,
+            symbols=_normalize_symbols(crypto_symbols),
+        )
+        return [template] if isinstance(template, dict) else []
+
+    template = bundle_template_from_pack(pack_id, source="wizard", enabled=True)
+    if isinstance(template, dict):
+        return [template]
+
+    fallback = bundle_template_from_pack(
+        "crypto-core",
+        source="wizard",
+        enabled=True,
+        symbols=_normalize_symbols(crypto_symbols),
+    )
+    return [fallback] if isinstance(fallback, dict) else []
+
+
+def _active_symbols_from_bundles(default_symbols: list[str], bundles: list[dict[str, object]]) -> list[str]:
+    enabled_bundle_symbols: list[str] = []
+    for bundle in bundles:
+        if not bool(bundle.get("enabled", True)):
+            continue
+        syms = bundle.get("symbols")
+        if isinstance(syms, list):
+            enabled_bundle_symbols.extend([str(s) for s in syms])
+
+    active = _normalize_symbols(enabled_bundle_symbols)
+    if active:
+        return active
+    return _normalize_symbols(default_symbols)
+
+
+def _bundles_yaml_block(bundles: list[dict[str, object]]) -> str:
+    if not bundles:
+        return "    []"
+
+    lines: list[str] = []
+    for bundle in bundles:
+        bundle_id = str(bundle.get("id") or "").strip() or "bundle"
+        name = str(bundle.get("name") or bundle_id).replace('"', "'")
+
+        raw_symbols = bundle.get("symbols")
+        symbol_values = raw_symbols if isinstance(raw_symbols, list) else []
+        symbols = _normalize_symbols([str(s) for s in symbol_values if str(s).strip()])
+
+        raw_tags = bundle.get("tags")
+        tag_values = raw_tags if isinstance(raw_tags, list) else []
+        tags = [str(t).strip().lower() for t in tag_values if str(t).strip()]
+
+        asset_class = str(bundle.get("asset_class") or "crypto").strip() or "crypto"
+        venue = str(bundle.get("venue") or "global").strip() or "global"
+        enabled = bool(bundle.get("enabled", True))
+        source = str(bundle.get("source") or "wizard").strip() or "wizard"
+
+        symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
+        tags_yaml = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+
+        lines.extend(
+            [
+                f'    - id: "{bundle_id}"',
+                f'      name: "{name}"',
+                f"      symbols: {symbols_yaml}",
+                f"      tags: {tags_yaml}",
+                f'      asset_class: "{asset_class}"',
+                f'      venue: "{venue}"',
+                f"      enabled: {'true' if enabled else 'false'}",
+                f'      source: "{source}"',
+            ]
+        )
+
+    return "\n".join(lines)
+
+
 # ── Step helpers ──────────────────────────────────────────────────────────────
 
 
@@ -312,6 +455,15 @@ def _step1_environment(repo_root: Path) -> bool:
     else:
         print(f"  {yellow('⚠')} config/ not found at {config_dir}")
 
+    # Create ~/.b1e55ed/ directories
+    try:
+        _bd = b1e55ed_dir()
+        _bd.mkdir(parents=True, exist_ok=True)
+        logs_dir().mkdir(parents=True, exist_ok=True)
+        print(f"  {_ok('~/.b1e55ed/ directory ready')}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  {yellow('⚠')} Could not create ~/.b1e55ed/: {e}")
+
     print()
     if all_ok:
         print(f"  {green(bold('[1/5] Environment OK'))}")
@@ -321,75 +473,103 @@ def _step1_environment(repo_root: Path) -> bool:
 
 
 def _step2_password() -> None:
-    """Password setup step."""
+    """Password setup step.
+
+    Persists either B1E55ED_MASTER_PASSWORD or B1E55ED_DEV_MODE=1 to
+    ``~/.b1e55ed/env`` so that both interactive shells (via ``source``)
+    and systemd (via ``EnvironmentFile``) pick up the value.
+    """
     _section("[2/5] Master password")
     print("  Your identity and keys are encrypted at rest with a master password.")
     print("  Set " + bold("B1E55ED_MASTER_PASSWORD") + " in your shell profile, or enter it each time.")
     print()
 
+    env_lines: list[str] = []
+
     existing = os.environ.get("B1E55ED_MASTER_PASSWORD", "")
     if existing:
         print(f"  {_ok('B1E55ED_MASTER_PASSWORD already set in environment')}")
-        return
-
-    try:
-        import getpass
-
-        password = getpass.getpass("  Enter master password (or press Enter to skip encryption): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping password setup.')}")
-        return
-
-    if not password:
-        print(f"  {dim('Skipping encryption.')}")
-        return
-
-    try:
-        import getpass
-
-        confirm = getpass.getpass("  Confirm password: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping password setup.')}")
-        return
-
-    if password != confirm:
-        print(f"  {red('Passwords do not match — skipping.')}")
-        return
-
-    print(f"  {_ok('Passwords match')}")
-
-    try:
-        save = _ask_yn("  Save B1E55ED_MASTER_PASSWORD to shell profile?", default=True)
-    except (EOFError, KeyboardInterrupt):
-        print()
-        print(f"  {dim('Skipping shell profile update.')}")
-        return
-
-    if save:
-        export_line = f'export B1E55ED_MASTER_PASSWORD="{password}"'
-        saved_to: list[str] = []
-
-        for rc in [Path.home() / ".bashrc", Path.home() / ".zshrc"]:
-            if rc.exists():
-                existing_content = rc.read_text(encoding="utf-8")
-                if "B1E55ED_MASTER_PASSWORD" not in existing_content:
-                    try:
-                        with rc.open("a", encoding="utf-8") as f:
-                            f.write(f"\n# b1e55ed master password\n{export_line}\n")
-                        saved_to.append(str(rc))
-                    except Exception as e:  # noqa: BLE001
-                        print(f"  {yellow('⚠')} Could not write to {rc}: {e}")
-
-        if saved_to:
-            print(f"  {_ok('Saved to: ' + ', '.join(saved_to))}")
-            print(f"  {dim('Reload your shell or run: source ~/.bashrc')}")
-        else:
-            print(f"  {yellow('⚠')} No shell rc files found to update. Set manually:")
-            print(f"    {export_line}")
+        env_lines.append(f"B1E55ED_MASTER_PASSWORD={existing}")
     else:
-        print(f"  {dim('Password not saved — set B1E55ED_MASTER_PASSWORD manually when needed.')}")
+        try:
+            import getpass
+
+            password = getpass.getpass("  Enter master password (or press Enter to skip encryption): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+            env_lines.append("B1E55ED_DEV_MODE=1")
+            os.environ["B1E55ED_DEV_MODE"] = "1"
+            password = ""
+
+        if password:
+            try:
+                import getpass
+
+                confirm = getpass.getpass("  Confirm password: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                print(f"  {dim('Skipping password setup — setting DEV_MODE.')}")
+                env_lines.append("B1E55ED_DEV_MODE=1")
+                os.environ["B1E55ED_DEV_MODE"] = "1"
+                confirm = ""
+                password = ""
+
+            if password and password != confirm:
+                print(f"  {red('Passwords do not match — setting DEV_MODE instead.')}")
+                env_lines.append("B1E55ED_DEV_MODE=1")
+                os.environ["B1E55ED_DEV_MODE"] = "1"
+            elif password:
+                print(f"  {_ok('Passwords match')}")
+                env_lines.append(f"B1E55ED_MASTER_PASSWORD={password}")
+                os.environ["B1E55ED_MASTER_PASSWORD"] = password
+        elif not env_lines:
+            print(f"  {dim('Skipping encryption — setting DEV_MODE.')}")
+            env_lines.append("B1E55ED_DEV_MODE=1")
+            os.environ["B1E55ED_DEV_MODE"] = "1"
+
+    # Prompt for optional data API keys
+    print()
+    print("  " + bold("Data API keys") + " (optional — needed for on-chain and financial producers):")
+    print()
+
+    nansen_key = os.environ.get("B1E55ED_NANSEN_API_KEY", "") or os.environ.get("NANSEN_API_KEY", "")
+    if nansen_key:
+        print(f"  {_ok('Nansen API key found in environment')}")
+        env_lines.append(f"NANSEN_API_KEY={nansen_key}")
+    else:
+        print(f"  {dim('Nansen — https://app.nansen.ai/settings/api — Read-only access')}")
+        print(f"  {dim('Used by: on-chain smart money producers. Skippable (on-chain signals disabled).')}")
+        try:
+            nansen_key = _ask("  Nansen API key [Enter to skip]", default="")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            nansen_key = ""
+        if nansen_key:
+            env_lines.append(f"NANSEN_API_KEY={nansen_key}")
+            print(f"  {_ok('Nansen key configured')}")
+        else:
+            print(f"  {dim('Skipping — add later via ~/.b1e55ed/env')}")
+
+    fd_key = os.environ.get("B1E55ED_FD_API_KEY", "") or os.environ.get("FINANCIAL_DATASETS_API_KEY", "")
+    if fd_key:
+        print(f"  {_ok('Financial Datasets API key found in environment')}")
+        env_lines.append(f"FINANCIAL_DATASETS_API_KEY={fd_key}")
+    else:
+        print(f"  {dim('Financial Datasets — https://financialdatasets.ai/settings — Read-only access')}")
+        print(f"  {dim('Used by: TradFi producers (earnings, SEC filings). Skippable (TradFi signals disabled).')}")
+        try:
+            fd_key = _ask("  Financial Datasets API key [Enter to skip]", default="")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            fd_key = ""
+        if fd_key:
+            env_lines.append(f"FINANCIAL_DATASETS_API_KEY={fd_key}")
+            print(f"  {_ok('Financial Datasets key configured')}")
+        else:
+            print(f"  {dim('Skipping — add later via ~/.b1e55ed/env')}")
+
+    _persist_env_file(env_lines)
 
 
 def _check_rust_grinder() -> str | None:
@@ -465,11 +645,13 @@ def _auto_download_forge() -> str | None:
         return None
 
 
+# Identity is not configured. It becomes through action.
+# Beauvoir: one is not born, but rather becomes.
 def _step3_identity(repo_root: Path) -> None:
     """Identity forge/restore step."""
     _section("[3/5] Identity")
 
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    identity_path = Path.home() / ".b1e55ed" / "identity.json"
 
     if identity_path.exists():
         try:
@@ -479,6 +661,7 @@ def _step3_identity(repo_root: Path) -> None:
             address = data.get("address", "???")
             node_id = data.get("node_id", "???")
             print(f"  {_ok(f'Identity found: {address} ({node_id})')}")
+            print(f"  {dim('Re-running wizard will not re-forge your identity.')}")
             return
         except Exception:  # noqa: BLE001
             print(f"  {yellow('⚠')} Existing identity file could not be read — will offer to forge.")
@@ -506,8 +689,16 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {dim('Running: b1e55ed identity forge')}")
             print()
             try:
+                import shutil as _shutil
+
+                # Shannon: information is the resolution of uncertainty.
+                # which(b1e55ed) resolves whether we are in production or dev.
+                # The forge that can find itself is already running correctly.
+                _b1e55ed = _shutil.which("b1e55ed")
+                _forge_cmd: list[str] = [_b1e55ed, "identity", "forge"] if _b1e55ed is not None else [sys.executable, "-m", "engine.cli", "identity", "forge"]
+
                 proc = subprocess.run(
-                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    _forge_cmd,
                     cwd=str(repo_root),
                     check=False,
                 )
@@ -533,8 +724,13 @@ def _step3_identity(repo_root: Path) -> None:
             print(f"  {dim('Running: b1e55ed identity forge')}")
             print()
             try:
+                import shutil as _shutil
+
+                _b1e55ed = _shutil.which("b1e55ed")
+                _forge_cmd = [_b1e55ed, "identity", "forge"] if _b1e55ed is not None else [sys.executable, "-m", "engine.cli", "identity", "forge"]
+
                 proc = subprocess.run(
-                    [sys.executable, "-m", "engine.cli", "identity", "forge"],
+                    _forge_cmd,
                     cwd=str(repo_root),
                     check=False,
                 )
@@ -619,6 +815,28 @@ def _step4_configuration(repo_root: Path) -> None:
         symbols = _SYMBOL_PACKS[pack_choice]["symbols"]
         print(f"  {_ok(f'Pack selected: {len(symbols)} symbols')}")
 
+    symbols = _normalize_symbols(symbols)
+
+    print()
+    print("  " + bold("Starter bundle pack") + " — choose your initial runtime universe:")
+    for key, starter_pack in _STARTER_BUNDLE_PACKS.items():
+        print(f"  {bold(key)}) {starter_pack['name']}")
+    print()
+
+    try:
+        starter_choice = _ask("  Starter pack", default="1")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        starter_choice = "1"
+    if starter_choice not in _STARTER_BUNDLE_PACKS:
+        starter_choice = "1"
+
+    starter_bundles = _starter_bundles_for_choice(starter_choice, symbols)
+    active_symbols = _active_symbols_from_bundles(symbols, starter_bundles)
+    starter_label = str(_STARTER_BUNDLE_PACKS[starter_choice]["name"])
+
+    print(f"  {_ok(f'Starter pack selected: {starter_label} ({len(active_symbols)} active symbols)')}")
+
     # Determine if GitHub App auth is pre-configured (baked-in app_id)
     try:
         from engine.config.github_app_defaults import (
@@ -673,7 +891,8 @@ def _step4_configuration(repo_root: Path) -> None:
                 print(f"  {_ok('Token configured')}")
 
     # Build config YAML
-    symbols_yaml = "[" + ", ".join(f'"{s}"' for s in symbols) + "]"
+    symbols_yaml = "[" + ", ".join(f'"{s}"' for s in active_symbols) + "]"
+    bundles_yaml = _bundles_yaml_block(starter_bundles)
     github_token_value = github_token if github_token else ""
 
     if app_auth_baked_in:
@@ -701,6 +920,33 @@ def _step4_configuration(repo_root: Path) -> None:
     labels: ["b1e55ed-attestation"]
 """
 
+    # Daemon interval configuration
+    print()
+    print("  " + bold("Daemon intervals") + " — how often each subsystem runs:")
+    print()
+    print(f"  {dim('Press Enter to accept defaults (recommended).')}")
+    print()
+
+    try:
+        brain_interval = _ask("  Brain fast cycle (seconds)", default="300")
+        brain_interval = int(brain_interval) if brain_interval.isdigit() else 300
+    except (EOFError, KeyboardInterrupt, ValueError):
+        brain_interval = 300
+
+    try:
+        brain_full_interval = _ask("  Brain full cycle (seconds)", default="21600")
+        brain_full_interval = int(brain_full_interval) if brain_full_interval.isdigit() else 21600
+    except (EOFError, KeyboardInterrupt, ValueError):
+        brain_full_interval = 21600
+
+    try:
+        resolver_interval = _ask("  Outcome resolver (seconds)", default="1800")
+        resolver_interval = int(resolver_interval) if resolver_interval.isdigit() else 1800
+    except (EOFError, KeyboardInterrupt, ValueError):
+        resolver_interval = 1800
+
+    print(f"  {_ok(f'brain={brain_interval}s, brain-full={brain_full_interval}s, resolver={resolver_interval}s')}")
+
     config_content = f"""# Generated by `b1e55ed wizard`
 preset: balanced
 
@@ -709,6 +955,8 @@ brain:
 
 universe:
   symbols: {symbols_yaml}
+  bundles:
+{bundles_yaml}
   max_size: 100
 
 execution:
@@ -728,6 +976,11 @@ dashboard:
   port: 5051
   auth_token: ""
 
+daemon:
+  brain_interval_seconds: {brain_interval}
+  brain_full_interval_seconds: {brain_full_interval}
+  resolver_interval_seconds: {resolver_interval}
+
 {github_publish_block}"""
 
     try:
@@ -744,6 +997,8 @@ dashboard:
 _ORACLE_URL = "https://oracle.b1e55ed.permanentupperclass.com"
 
 
+# RFC 7231 §6.5.9 defines 409 as "conflict with the current state of the target resource."
+# Translation: you are already here.  The ledger does not need a second entry.
 def _step_register_contributor(repo_root: Path) -> None:
     """Auto-register new contributor via the oracle (no credentials needed on user machine)."""
     import json as _json
@@ -752,7 +1007,7 @@ def _step_register_contributor(repo_root: Path) -> None:
 
     _section("[4b] Contributor registration")
 
-    identity_path = repo_root / ".b1e55ed" / "identity.json"
+    identity_path = Path.home() / ".b1e55ed" / "identity.json"
     if not identity_path.exists():
         print(f"  {dim('No identity — skipping registration.')}")
         return
@@ -768,12 +1023,22 @@ def _step_register_contributor(repo_root: Path) -> None:
     if not node_id:
         return
 
+    # Dwork & Naor, 1992: proof of work prevents repeated submissions.
+    # A simpler proof: the file that says you already submitted.
+    # Fast path: contributor_id already written into identity.json means we registered before.
+    # This survives DB wipes and oracle restarts — the ledger entry is permanent.
+    if data.get("contributor_id"):
+        print(f"  {_ok('Already registered (skipping)')}")
+        return
+
     print(f"  Registering: {dim(node_id)}")
     print()
 
     # Try oracle first — it holds the GitHub App key, creates the issue server-side
+    # Oracle is the source of truth: 409 = already registered, no side-effect needed.
     issue_url: str | None = None
     registered = False
+    already_registered = False
     oracle_err: Exception | None = None
     local_err: Exception | None = None
 
@@ -789,20 +1054,35 @@ def _step_register_contributor(repo_root: Path) -> None:
             result = _json.loads(resp.read())
             issue_url = result.get("issue_url")
             registered = True
+            # Persist contributor_id into identity.json so future wizard runs skip this step
+            try:
+                _id_data = _json.loads(identity_path.read_text(encoding="utf-8"))
+                _id_data["contributor_id"] = result.get("contributor_id")
+                identity_path.write_text(_json.dumps(_id_data, indent=2), encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass  # non-fatal — worst case wizard re-runs step next time
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            registered = True  # already registered — fine
+            already_registered = True  # oracle confirms: already registered
+            registered = True
         else:
             oracle_err = e
     except Exception as e:  # noqa: BLE001
         oracle_err = e  # oracle unreachable — fall through to local
 
-    # Always register locally too (idempotent) — use Python API directly
+    # Short-circuit: oracle confirmed already registered — nothing more to do
+    # The oracle does not forget. Neither does the chain.
+    if already_registered:
+        print(f"  {_ok('Already registered (skipping)')}")
+        return
+
+    # Register locally too (idempotent)
     try:
         from engine.core.contributors import ContributorRegistry as _Registry
         from engine.core.database import Database as _Database
+        from engine.core.paths import get_db_path as _get_db_path
 
-        _db_path = repo_root / "data" / "brain.db"
+        _db_path = _get_db_path()
         _db_path.parent.mkdir(parents=True, exist_ok=True)
         _reg = _Registry(_Database(str(_db_path)))
         _reg.register(
@@ -812,7 +1092,7 @@ def _step_register_contributor(repo_root: Path) -> None:
         )
         registered = True
     except ValueError:
-        registered = True  # already registered — idempotent
+        registered = True  # already registered locally — idempotent
     except Exception as e:  # noqa: BLE001
         local_err = e  # local DB unavailable — oracle registration is enough
 
@@ -826,6 +1106,147 @@ def _step_register_contributor(repo_root: Path) -> None:
             print(f"  {dim('Oracle error:')} {oracle_err!r}")
         if local_err is not None:
             print(f"  {dim('Local error:')}  {local_err!r}")
+
+
+def _step_systemd(repo_root: Path) -> None:  # noqa: ARG001
+    """Offer to install b1e55ed as a systemd service (Linux only)."""
+    import platform
+    import shutil
+
+    # Only Linux — skip silently on macOS/Windows
+    if platform.system() != "Linux":
+        return
+
+    _section("[4c] System service")
+
+    # Check prerequisites
+    if not shutil.which("systemctl"):
+        print(f"  {yellow('⚠')} systemctl not found — skipping systemd setup.")
+        return
+    if not shutil.which("sudo"):
+        print(f"  {yellow('⚠')} sudo not found — skipping systemd setup.")
+        return
+
+    service_path = Path("/etc/systemd/system/b1e55ed.service")
+    if service_path.exists():
+        print(f"  {_ok('Already installed (skipping)')}")
+        return
+
+    try:
+        install = _ask_yn("  Install b1e55ed as a systemd service (auto-start on boot)?", default=False)
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(f"  {dim('Skipping systemd setup.')}")
+        return
+
+    if not install:
+        print(f"  {dim('Skipping.')}")
+        return
+
+    import getpass
+
+    _current_user = getpass.getuser()
+    _home = str(Path.home())
+
+    unit_content = f"""\
+[Unit]
+Description=b1e55ed trading intelligence
+After=network.target
+
+[Service]
+Type=simple
+User={_current_user}
+WorkingDirectory={_home}
+EnvironmentFile=-{_home}/.b1e55ed/env
+ExecStart={_home}/.local/bin/b1e55ed daemon
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+    try:
+        subprocess.run(
+            ["sudo", "tee", "/etc/systemd/system/b1e55ed.service"],
+            input=unit_content.encode(),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"  {_fail('Could not write service file')}")
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        if stderr:
+            print(f"  {dim(f'Error: {stderr}')}")
+        return
+    except Exception as e:  # noqa: BLE001
+        print(f"  {_fail(f'Could not write service file: {e}')}")
+        return
+
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "daemon-reload"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "systemctl", "enable", "b1e55ed"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "systemctl", "start", "b1e55ed"],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  {_ok('systemd service installed, enabled, and started')}")
+        print(f"  {dim('Manage with: sudo systemctl [status|stop|restart] b1e55ed')}")
+    except subprocess.CalledProcessError as e:
+        print(f"  {yellow('⚠')} Service installed but could not start automatically.")
+        print(f"  {dim('Try: sudo systemctl start b1e55ed')}")
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        if stderr:
+            print(f"  {dim(f'Error: {stderr}')}")
+
+
+def _step_brain_cron(repo_root: Path) -> None:  # noqa: ARG001
+    """Legacy brain cron step — superseded by ``b1e55ed daemon``.
+
+    If an old brain cron exists, offer to remove it since the unified
+    daemon supervisor now handles brain scheduling.
+    """
+    # Check if a legacy brain cron exists and offer to clean it up
+    try:
+        result = subprocess.run(
+            ["crontab", "-l"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "b1e55ed brain" in (result.stdout or ""):
+            print()
+            print(f"  {yellow('⚠')} Legacy brain cron detected.")
+            print(f"  {dim('The daemon supervisor now handles brain scheduling — cron is no longer needed.')}")
+            try:
+                remove = _ask_yn("  Remove legacy brain cron entry?", default=True)
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+
+            if remove:
+                # Filter out the b1e55ed brain line
+                lines = [line for line in (result.stdout or "").splitlines() if "b1e55ed brain" not in line]
+                new_crontab = "\n".join(lines) + "\n" if lines else ""
+                subprocess.run(
+                    ["bash", "-c", f'echo "{new_crontab}" | crontab -'],
+                    check=True,
+                    capture_output=True,
+                )
+                print(f"  {_ok('Legacy brain cron removed')}")
+    except Exception:  # noqa: BLE001
+        pass  # No crontab available — nothing to clean up
 
 
 def _step5_test_run(repo_root: Path) -> None:
@@ -874,10 +1295,11 @@ def _completion() -> None:
     print("  " + green("══════════════════════════════════════"))
     print("  " + bold(green("  Setup complete. ✓")))
     print()
-    print(f"  {bold('Start the brain:')}     b1e55ed brain")
+    print(f"  {bold('Start everything:')}    b1e55ed daemon")
+    print(f"  {bold('Check daemon status:')} b1e55ed daemon --status")
+    print(f"  {bold('Run brain once:')}      b1e55ed brain")
     print(f'  {bold("Submit a signal:")}     b1e55ed signal "BTC looking strong" --direction bullish')
     print(f"  {bold('Check your status:')}   b1e55ed contributors score --id <your-id>")
-    print(f"  {bold('Start the API:')}       b1e55ed api")
     print()
     print(f"  {bold('Docs:')} https://github.com/P-U-C/b1e55ed/tree/main/docs")
     print("  " + green("══════════════════════════════════════"))
@@ -887,6 +1309,7 @@ def _completion() -> None:
 # ── Public entrypoint ─────────────────────────────────────────────────────────
 
 
+# A wizard that repeats steps the initiate has already passed is not wise — it is forgetful.
 def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG001
     """Run the interactive b1e55ed setup wizard."""
     repo_root = ctx.repo_root
@@ -903,6 +1326,8 @@ def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:  # noqa: ARG00
         lambda: _step3_identity(repo_root),
         lambda: _step4_configuration(repo_root),
         lambda: _step_register_contributor(repo_root),
+        lambda: _step_systemd(repo_root),
+        lambda: _step_brain_cron(repo_root),
         lambda: _step5_test_run(repo_root),
     ]
 

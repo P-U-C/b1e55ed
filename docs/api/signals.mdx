@@ -53,6 +53,7 @@ Submit a **curator signal** with contributor attribution.
 - Resolves the contributor by `node_id`
 - Writes the signal event
 - Records attribution in `contributor_signals`
+- If `source` is omitted/blank, stored event `source` defaults to contributor `node_id` (canonical identity)
 
 ### Request body
 
@@ -111,6 +112,7 @@ Errors:
 ## `GET /signals/{signal_id}/attribution`
 
 Returns attribution data for a specific signal (contributor, source, and outcome when settled).
+When contributor linkage exists, `producer_id` is normalized to contributor `node_id`.
 
 ```bash
 curl -s \

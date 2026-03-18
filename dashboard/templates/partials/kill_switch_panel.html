@@ -29,8 +29,11 @@
   {% for i in range(5) %}
   <button class="btn {{ 'btn-danger' if i >= 3 else '' }}" style="padding:6px 12px; font-size:0.65rem;{% if i == kill_switch_level %} border-color:var(--text-bright); color:var(--text-bright);{% endif %}"
           hx-post="/api/kill-switch?level={{ i }}"
-          hx-confirm="Set kill switch to level {{ i }}?">
+          hx-confirm="Set kill switch to level {{ i }}?"
+          hx-target="#kill-switch-action-result"
+          hx-swap="innerHTML">
     L{{ i }}
   </button>
   {% endfor %}
 </div>
+<div id="kill-switch-action-result" style="font-size:0.75rem; margin-top:0.5rem;"></div>

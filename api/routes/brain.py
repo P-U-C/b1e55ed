@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from api.auth import AuthDep
 from api.deps import get_config, get_db, get_kill_switch
@@ -37,7 +37,7 @@ def status(
     # Last regime change
     regime = None
     regime_at = None
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.regime_change.v1",),
     ).fetchone()
@@ -47,7 +47,7 @@ def status(
         regime_at = _parse_dt(str(row[1]))
 
     # Last kill switch change
-    ks_row = db.conn.execute(
+    ks_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("system.kill_switch.v1",),
     ).fetchone()
@@ -59,7 +59,7 @@ def status(
         ks_at = _parse_dt(str(ks_row[1]))
 
     # Last cycle marker
-    cycle_row = db.conn.execute(
+    cycle_row = db.execute(
         "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
         ("brain.cycle.v1",),
     ).fetchone()
@@ -98,7 +98,31 @@ def run_cycle(
     # Create orchestrator with persisted identity (same as CLI for consistent audit trail)
     identity_handle = ensure_identity()
     orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)
-    res = orch.run_cycle(symbols=list(config.universe.symbols))
+
+    # Inject OMS for auto-paper-trade
+    try:
+        if getattr(config.execution, "mode", "paper") == "paper":
+            from engine.brain.kill_switch import KillSwitch
+            from engine.execution.oms import OMS, default_sizer_from_config
+            from engine.execution.preflight import Preflight, default_policy_from_risk
+
+            policy = default_policy_from_risk(
+                max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                max_position_size_pct=float(config.risk.max_position_pct),
+                max_leverage_default=float(config.risk.max_leverage),
+            )
+            preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+            orch._oms = OMS(
+                config=config,
+                db=db,
+                preflight=preflight,
+                sizer=default_sizer_from_config(config),
+                policy=policy,
+            )
+    except Exception:
+        pass
+
+    res = orch.run_cycle(symbols=list(config.universe.active_symbols()))
 
     kill_level = None
     try:
@@ -119,3 +143,132 @@ def run_cycle(
         regime=regime,
         kill_switch_level=kill_level,
     )
+
+
+@router.post("/cycle", response_model=CycleResult)
+def trigger_cycle(
+    config: Config = Depends(get_config),
+    db: Database = Depends(get_db),
+    ks: KillSwitch = Depends(get_kill_switch),
+) -> CycleResult:
+    """Trigger a brain cycle on-demand (debugging / manual override).
+
+    Identical to POST /brain/run but at a more intuitive path.
+    """
+    if int(ks.level) > 0:
+        raise B1e55edError(
+            code="kill_switch.active",
+            message="Kill switch is active",
+            status=423,
+            level=int(ks.level),
+        )
+
+    identity_handle = ensure_identity()
+    orch = BrainOrchestrator(config=config, db=db, identity=identity_handle.identity)
+
+    # Inject OMS for auto-paper-trade
+    try:
+        if getattr(config.execution, "mode", "paper") == "paper":
+            from engine.brain.kill_switch import KillSwitch
+            from engine.execution.oms import OMS, default_sizer_from_config
+            from engine.execution.preflight import Preflight, default_policy_from_risk
+
+            policy = default_policy_from_risk(
+                max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                max_position_size_pct=float(config.risk.max_position_pct),
+                max_leverage_default=float(config.risk.max_leverage),
+            )
+            preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+            orch._oms = OMS(
+                config=config,
+                db=db,
+                preflight=preflight,
+                sizer=default_sizer_from_config(config),
+                policy=policy,
+            )
+    except Exception:
+        pass
+
+    res = orch.run_cycle(symbols=list(config.universe.active_symbols()))
+
+    kill_level = None
+    try:
+        kill_level = int(orch.kill_switch.level)
+    except Exception:
+        kill_level = None
+
+    regime = None
+    try:
+        regime = str(res.regime.state.regime)
+    except Exception:
+        regime = None
+
+    return CycleResult(
+        cycle_id=res.cycle_id,
+        ts=res.ts,
+        intents=res.intents,
+        regime=regime,
+        kill_switch_level=kill_level,
+    )
+
+
+@router.get("/convictions")
+def get_convictions(request: Request, db: Database = Depends(get_db), limit: int = 20) -> list[dict]:
+    """Latest conviction scores for active universe symbols (max 48h old)."""
+    # Only return symbols in the active universe — prevents stale wizard symbols polluting the view
+    active: list[str] = []
+    try:
+        cfg = getattr(getattr(request, "app", None), "state", None)
+        if cfg:
+            cfg = getattr(cfg, "config", None)
+        if cfg:
+            active = [s.upper() for s in cfg.universe.active_symbols()]
+    except Exception:
+        pass
+
+    if active:
+        placeholders = ",".join("?" * len(active))
+        rows = db.execute(
+            f"""
+            SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
+            FROM conviction_scores
+            WHERE symbol IN ({placeholders})
+              AND (symbol, ts) IN (
+                SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
+              )
+              AND ts >= datetime('now', '-48 hours')
+            ORDER BY confidence DESC, magnitude DESC
+            LIMIT ?
+            """,
+            (*active, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """
+            SELECT symbol, direction, confidence, magnitude, timeframe, regime, pcs_score, cts_score, ts
+            FROM conviction_scores
+            WHERE (symbol, ts) IN (
+                SELECT symbol, MAX(ts) FROM conviction_scores GROUP BY symbol
+            )
+              AND ts >= datetime('now', '-48 hours')
+            ORDER BY confidence DESC, magnitude DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        result.append(
+            {
+                "symbol": r[0],
+                "direction": r[1],
+                "confidence": float(r[2]) if r[2] is not None else 0.0,
+                "magnitude": float(r[3]) if r[3] is not None else 0.0,
+                "timeframe": r[4],
+                "regime": r[5],
+                "pcs_score": float(r[6]) if r[6] is not None else None,
+                "cts_score": float(r[7]) if r[7] is not None else None,
+                "ts": r[8],
+            }
+        )
+    return result

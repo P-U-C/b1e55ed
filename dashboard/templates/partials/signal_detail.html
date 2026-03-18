@@ -1,0 +1,20 @@
+<div class="signal-drawer-content">
+  <div class="signal-drawer-field">
+    <span class="signal-drawer-label">PRODUCER</span>
+    <span>{{ signal.get('producer_id', '—') }}</span>
+  </div>
+  <div class="signal-drawer-field">
+    <span class="signal-drawer-label">ASSET</span>
+    <span>{{ signal.get('asset', signal.get('symbol', '—')) }}</span>
+  </div>
+  <div class="signal-drawer-field">
+    <span class="signal-drawer-label">CONFIDENCE</span>
+    <span>{{ "%.3f"|format(signal.get('confidence', 0) | float) }}</span>
+  </div>
+  <div class="signal-drawer-field">
+    <span class="signal-drawer-label">RECENT</span>
+    <span>
+    {% for s in similar[:3] %}{{ s.get('ts','')[:16] }}{% if not loop.last %} / {% endif %}{% else %}—{% endfor %}
+    </span>
+  </div>
+</div>

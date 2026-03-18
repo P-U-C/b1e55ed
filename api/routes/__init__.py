@@ -3,8 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes import (
+    agents,
+    artifacts,
     benchmarks,
     brain,
+    capabilities,
+    chain,
     cockpit,
     config,
     contributors,
@@ -15,13 +19,18 @@ from api.routes import (
     mcp,
     metrics,
     oracle,
+    outcomes,
     positions,
     producers,
     producers_feedback,
     regime,
     signals,
     signals_validate,
+    social,
+    spi,
+    spi_admin,
     trace,
+    universe,
 )
 
 
@@ -41,13 +50,29 @@ def get_api_router() -> APIRouter:
     router.include_router(regime.router, tags=["regime"])
     router.include_router(producers.router, tags=["producers"])
     router.include_router(producers_feedback.router, tags=["producers"])
+    router.include_router(capabilities.router, tags=["capabilities"])
     router.include_router(contributors.router, tags=["contributors"])
     router.include_router(config.router, tags=["config"])
+    router.include_router(universe.router, tags=["universe"])
     router.include_router(karma.router, tags=["karma"])
+    router.include_router(social.router, tags=["social"])
     router.include_router(trace.router, tags=["trace"])
+    router.include_router(spi.router, tags=["spi"])
+    router.include_router(spi_admin.router, tags=["spi-admin"])
+
+    # ERC-8004 chain registration status
+    router.include_router(chain.router, tags=["chain"])
+
+    # ERC-8004 agent manifests
+    router.include_router(agents.router, tags=["agents"])
+
+    # ERC-8004 E2: outcome provenance endpoint (fileURI target)
+    router.include_router(outcomes.router, tags=["outcomes"])
 
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])
     router.include_router(mcp.router, tags=["mcp"])
+    router.include_router(artifacts.router, tags=["artifacts"])
+    router.include_router(agents.router, tags=["agents"])
 
     return router

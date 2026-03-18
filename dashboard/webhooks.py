@@ -26,14 +26,18 @@ def _repo_root() -> Path:
     override = os.environ.get("B1E55ED_REPO_ROOT")
     if override:
         return Path(override)
-    return Path.cwd()
+    from engine.core.paths import b1e55ed_dir
+
+    return b1e55ed_dir()
 
 
 def _db_path() -> Path:
     override = os.getenv("B1E55ED_DB_PATH")
     if override:
         return Path(override)
-    return _repo_root() / "data" / "brain.db"
+    from engine.core.paths import get_db_path
+
+    return get_db_path()
 
 
 def _connect_db() -> sqlite3.Connection | None:
@@ -122,8 +126,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "webhooks.html",
-            {
+            request=request,
+            name="webhooks.html",
+            context={
                 "request": request,
                 "active_page": "webhooks",
                 "kill_switch_level": 0,

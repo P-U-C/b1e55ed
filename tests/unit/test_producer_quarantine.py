@@ -26,15 +26,22 @@ def test_producer_auto_quarantine_after_failures(tmp_path, monkeypatch):
 
     from engine.cli import main
 
+    # Isolate HOME so _resolve_db_path uses tmp dir
+    home_dir = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home_dir))
+
     # Arrange repo layout for CLI
-    (tmp_path / "data").mkdir()
     (tmp_path / "config").mkdir()
     # Copy default config from repo is heavy; use defaults via Config() by letting CLI fall back to repo defaults.
     # Easiest: create minimal config/default.yaml in tmp_path.
     (tmp_path / "config" / "default.yaml").write_text("api: {auth_token: 'x'}\nuniverse: {symbols: ['BTC']}\n", encoding="utf-8")
+    # Marker so _repo_root_from_cwd detects this as a dev checkout
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
 
-    # Seed DB
-    _ = Database(tmp_path / "data" / "brain.db")
+    # Seed DB at new default path
+    data_dir = home_dir / ".b1e55ed" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    _ = Database(data_dir / "brain.db")
 
     # Monkeypatch discovery/list_producers to only include our failing producer
     import engine.producers.registry as reg
@@ -51,7 +58,7 @@ def test_producer_auto_quarantine_after_failures(tmp_path, monkeypatch):
     for _i in range(5):
         _ = main(["brain", "--json"])  # should not raise
 
-    db = Database(tmp_path / "data" / "brain.db")
+    db = Database(data_dir / "brain.db")
     row = db.conn.execute(
         "SELECT consecutive_failures, quarantined_until, quarantined_reason FROM producer_health WHERE name = ?",
         ("fail-prod",),

@@ -353,6 +353,14 @@ See `docs/security.md` for enforcement details.
 
 ---
 
+---
+
+---
+
+---
+
+---
+
 ## Undocumented (auto-detected)
 
 > Modules detected by CI but not yet assigned to a layer. Move each entry to the correct layer section and add a description.
@@ -362,6 +370,7 @@ api/routes/metrics.py
 engine/brain/calibration_curves.py
 engine/brain/conviction_state.py
 engine/brain/hierarchy.py
+engine/cli/commands/daemon.py
 engine/cli/commands/wizard.py
 engine/core/forecast.py
 engine/core/llm_critic.py

@@ -13,11 +13,8 @@ A ⇒ B     A heavily references B
 
 ```text
 README.md
-  → docs/how-it-works.md
+  → docs/how-it-works.mdx
   → docs/getting-started.md
-  → docs/configuration.md
-  → docs/cli-reference.md
-  → docs/api-reference.md
   → docs/mcp.md
   → docs/contributors.md
   → docs/architecture.md
@@ -31,46 +28,26 @@ README.md
   → docs/deployment.md
   → docs/openclaw-integration.md
   → docs/learning-loop.md
-  → ROADMAP.md
 ```
 
 ## Core docs
 
-### `docs/how-it-works.md`
+### `docs/how-it-works.mdx`
 
 ```text
-how-it-works.md
+how-it-works.mdx
   → getting-started.md
   → architecture.md
   → learning-loop.md
   → oracle.md
+  → api/overview.mdx
+  → producers/overview.mdx
 ```
 
 ### `docs/getting-started.md`
 
 ```text
 getting-started.md
-  → configuration.md
-  → cli-reference.md
-  → api-reference.md
-  → contributors.md
-  → eas-integration.md
-  → architecture.md
-```
-
-### `docs/cli-reference.md`
-
-```text
-cli-reference.md
-  → contributors.md
-  → eas-integration.md
-```
-
-### `docs/api-reference.md`
-
-```text
-api-reference.md
-  → configuration.md
   → contributors.md
   → eas-integration.md
   → architecture.md
@@ -80,9 +57,7 @@ api-reference.md
 
 ```text
 mcp.md
-  → producers.md
-  → api-reference.md
-  → configuration.md
+  (no outgoing references to removed files — see api/ and producers/ sections)
 ```
 
 ### `docs/contributors.md`
@@ -90,22 +65,12 @@ mcp.md
 ```text
 contributors.md
   → eas-integration.md
-  → api-reference.md
-  → cli-reference.md
-```
-
-### `docs/configuration.md`
-
-```text
-configuration.md
-  → eas-integration.md
 ```
 
 ### `docs/architecture.md`
 
 ```text
 architecture.md
-  → api-reference.md
   → authority-model.md
   → contributors.md
   → eas-integration.md
@@ -124,7 +89,6 @@ eas-integration.md
 
 ```text
 security.md
-  → configuration.md
   → crypto-primitives.md
   → deployment.md
 ```
@@ -133,7 +97,6 @@ security.md
 
 ```text
 deployment.md
-  → configuration.md
   → security.md
 ```
 
@@ -183,7 +146,6 @@ producer-intelligence.md
 ```
 
 **Referenced by:**
-- docs/producers.md
 - docs/learning-loop.md
 - docs/architecture.md
 
@@ -194,12 +156,10 @@ producer-intelligence.md
 **References:**
 ```
 learning-loop.md
-  └→ ROADMAP.md               (Karma system design)
   └→ producer-intelligence.md  (P4 intelligence layer)
 ```
 
 **Referenced by:**
-- (Future: developers.md, ROADMAP.md)
 
 ---
 
@@ -228,7 +188,6 @@ samples/README.md
 ```
 socials/README.md
   ├→ developers.md            (Producer guide)
-  ├→ configuration.md         (API key config)
   └→ ../README.md             (Pack overview)
 ```
 
@@ -279,7 +238,6 @@ onchain/README.md
 DOCKER.md
   ├→ deployment.md            (Production setup)
   ├→ getting-started.md       (Quick start)
-  ├→ configuration.md         (Environment variables)
   └→ security.md              (Master password, TLS)
 ```
 
@@ -291,15 +249,12 @@ DOCKER.md
 
 ## Roadmap
 
-### `ROADMAP.md`
 
 **References:**
 ```
-ROADMAP.md
   ├→ architecture.md          (System components)
   ├→ developers.md            (Extension points to implement)
-  ├→ security.md              (Security gates)
-  └→ configuration.md         (Config requirements)
+  └→ security.md              (Security gates)
 ```
 
 **Referenced by:**
@@ -317,7 +272,7 @@ Entry Points (no dependencies)
 Tier 1: Getting Started
   ├─ getting-started.md
   ├─ DOCKER.md
-  └─ configuration.md
+  └─ deployment.md
 
 Tier 2: Architecture & Development
   ├─ architecture.md
@@ -328,8 +283,7 @@ Tier 2: Architecture & Development
 
 Tier 3: Operations
   ├─ deployment.md
-  ├─ security.md
-  └─ api-reference.md
+  └─ security.md
 
 Tier 4: Extensions
   ├─ samples/README.md
@@ -338,7 +292,6 @@ Tier 4: Extensions
   └─ samples/onchain/README.md
 
 Tier 5: Roadmap
-  └─ ROADMAP.md
 ```
 
 ---
@@ -355,7 +308,7 @@ find docs samples -name "*.md" -type f > /tmp/all_docs.txt
 # Grep for references in all docs
 for doc in $(cat /tmp/all_docs.txt); do
   basename=$(basename "$doc")
-  if ! grep -r "$basename" docs samples README.md DOCKER.md ROADMAP.md --include="*.md" | grep -v "^$doc:"; then
+  if ! grep -r "$basename" docs samples README.md DOCKER.md --include="*.md" | grep -v "^$doc:"; then
     echo "ORPHANED: $doc"
   fi
 done
@@ -375,9 +328,8 @@ done
 # (Manual review recommended)
 
 # Example cycle detection:
-docs/getting-started.md → docs/configuration.md
-docs/configuration.md → docs/deployment.md
-docs/deployment.md → docs/getting-started.md  # CYCLE!
+docs/getting-started.md → docs/architecture.md
+docs/deployment.md → docs/getting-started.md  # no cycle — one-way
 ```
 
 **Current cycles:** None detected (all references are hierarchical)
@@ -411,9 +363,7 @@ done
 **Required docs (all exist):**
 - ✅ `README.md`
 - ✅ `docs/getting-started.md`
-- ✅ `docs/configuration.md`
 - ✅ `docs/deployment.md`
-- ✅ `docs/api-reference.md`
 - ✅ `docs/mcp.md`
 - ✅ `docs/architecture.md`
 - ✅ `docs/developers.md`
@@ -421,7 +371,6 @@ done
 - ✅ `docs/dependencies-code.md`
 - ✅ `docs/dependencies-docs.md`
 - ✅ `DOCKER.md`
-- ✅ `ROADMAP.md`
 - ✅ `samples/README.md`
 - ✅ `samples/socials/README.md`
 - ✅ `samples/tradfi/README.md`
@@ -481,17 +430,16 @@ scripts/validate_doc_deps.sh
 | Document | Purpose |
 |----------|---------|
 | [eas-integration.md](eas-integration.md) | Ethereum Attestation Service setup and usage |
-| [FORGE_SPEC.md](FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
+| [internal/FORGE_SPEC.md](internal/FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
 | [identity.md](identity.md) | Identity key management, derivation, and recovery |
 | [tutorial-agent-producer.md](tutorial-agent-producer.md) | Building an agent producer for b1e55ed |
 | [agent-interfaces.md](agent-interfaces.md) | SSE, MCP, signal attribution, oracle |
 | [oracle.md](oracle.md) | Producer provenance endpoint (public, no auth) |
 | [curator.md](curator.md) | Curator pipeline — operator signal ingestion |
 | [backtest.md](backtest.md) | Backtest engine — walk-forward, sweep, Kelly |
-| [EASTER_EGG_REFERENCE.md](EASTER_EGG_REFERENCE.md) | Cultural reference library for codebase easter eggs |
-
-| [KARMA-SPEC.md](KARMA-SPEC.md) | Karma score specification — inputs, update rule, calibration, failure modes |
-| [SEED_MANIFEST.md](SEED_MANIFEST.md) | Reproducibility proof — cryptographic seed data manifest |
+| [internal/EASTER_EGG_REFERENCE.md](internal/EASTER_EGG_REFERENCE.md) | Cultural reference library for codebase easter eggs |
+| [internal/KARMA-SPEC.md](internal/KARMA-SPEC.md) | Karma score specification — inputs, update rule, calibration, failure modes |
+| [internal/SEED_MANIFEST.md](internal/SEED_MANIFEST.md) | Reproducibility proof — cryptographic seed data manifest |
 
 ### Internal Documentation
 
@@ -501,9 +449,16 @@ These files are design references and sprint plans, not operator-facing guides.
 |----------|---------|
 | [internal/DASHBOARD_DESIGN_SPEC.md](internal/DASHBOARD_DESIGN_SPEC.md) | Dashboard design spec |
 | [internal/OPERATOR_SPRINT_PLAN.md](internal/OPERATOR_SPRINT_PLAN.md) | Operator layer sprint plan (O1-O4) |
-| [MCP_SPRINT_PLAN.md](MCP_SPRINT_PLAN.md) | MCP sprint implementation plan (S1-S5) |
+| [internal/MCP_SPRINT_PLAN.md](internal/MCP_SPRINT_PLAN.md) | MCP sprint implementation plan (S1-S5) |
+| [internal/DEERFLOW_PLAN.md](internal/DEERFLOW_PLAN.md) | DeerFlow integration plan |
+| [internal/FLYWHEEL_SPEC.md](internal/FLYWHEEL_SPEC.md) | Flywheel spec — attribution, karma, and signal loop |
+| [internal/EASTER_EGG_REFERENCE.md](internal/EASTER_EGG_REFERENCE.md) | Cultural reference library for codebase easter eggs |
+| [internal/KARMA-SPEC.md](internal/KARMA-SPEC.md) | Karma score specification |
+| [internal/SEED_MANIFEST.md](internal/SEED_MANIFEST.md) | Reproducibility proof — cryptographic seed data manifest |
+| [internal/FORGE_SPEC.md](internal/FORGE_SPEC.md) | The Forge — identity derivation ritual spec |
+| [internal/b1e55ing-manifest.json](internal/b1e55ing-manifest.json) | b1e55ing manifest |
 
-*Last updated: 2026-03-01*
+*Last updated: 2026-03-17*
 
 ---
 
@@ -512,14 +467,15 @@ These files are design references and sprint plans, not operator-facing guides.
 The Mintlify documentation site lives in `docs/` and is defined by `docs/docs.json`.
 All pages below are registered in the nav and deployed to `docs.b1e55ed.permanentupperclass.com`.
 
-### Top-level
+### Getting Started
 
 ```text
-docs/docs.json              ← nav/config (registers all MDX pages)
+docs/docs.json              ← nav/config (registers all nav pages)
 docs/introduction.mdx       → quickstart.mdx, api/overview.mdx
 docs/agents.mdx             → setup/agent-install.mdx
 docs/quickstart.mdx         → setup/standalone-install.mdx, setup/agent-install.mdx, operations/cli-reference.mdx, how-it-works.mdx
-docs/how-it-works.mdx       → api/overview.mdx, producers/overview.mdx
+docs/how-it-works.mdx       → getting-started.md, architecture.md, learning-loop.md, oracle.md, api/overview.mdx, producers/overview.mdx
+docs/getting-started.md     → contributors.md, eas-integration.md, architecture.md
 docs/llms.txt               (machine-readable LLM discovery index — not a navigable page)
 ```
 
@@ -531,51 +487,90 @@ docs/setup/agent-install.mdx       → operator-agent.md
 docs/setup/oracle.mdx              → oracle.md
 docs/setup/telegram.mdx
 docs/setup/tailscale.mdx
+docs/deployment.md                 → security.md
+docs/operator-standalone.md        → getting-started.md
+docs/operator-agent.md             → operator-standalone.md, openclaw-integration.md
 ```
 
 ### Operations
 
 ```text
-docs/operations/cli-reference.mdx   → cli-reference.md
-docs/operations/config-reference.mdx → configuration.md
+docs/operations/cli-reference.mdx   (canonical CLI reference — authoritative)
+docs/operations/config-reference.mdx (canonical config reference — authoritative)
 docs/operations/daily.mdx
 docs/operations/troubleshooting.mdx
+docs/signal-benchmarking-ops-guide.md (standalone — oracle builders, signal evaluation)
+docs/identity.md                    (standalone — key hierarchy and recovery)
+docs/authority-model.md             (standalone — single-writer event store rules)
+docs/security.md                    → crypto-primitives.md, deployment.md
+```
+
+### Features
+
+```text
+docs/curator.md        (standalone — operator signal ingestion pipeline)
+docs/learning-loop.md  → producer-intelligence.md
+docs/backtest.md       (standalone — walk-forward, Kelly, regime-conditioned results)
+```
+
+### Integrations
+
+```text
+docs/deerflow.md       (standalone — DeerFlow research agent integration)
+docs/mcp.md            (standalone — MCP integration reference)
+docs/agent-interfaces.md (standalone — SSE, MCP, signal attribution)
+docs/eas-integration.md  → contributors.md
+docs/openclaw-integration.md (standalone — OpenClaw operator layer)
 ```
 
 ### API
 
 ```text
-docs/api/overview.mdx       → api-reference.md
-docs/api/signals.mdx        → api-reference.md
+docs/api/overview.mdx       (standalone — API overview)
+docs/api/signals.mdx        (standalone — signals API)
 docs/api/contributors.mdx   → contributors.md
-docs/api/brain.mdx          → api-reference.md
-docs/api/positions.mdx      → api-reference.md
-docs/api/karma.mdx          → KARMA-SPEC.md
+docs/api/brain.mdx          (standalone — brain API)
+docs/api/positions.mdx      (standalone — positions API)
+docs/api/karma.mdx          → internal/KARMA-SPEC.md
 ```
 
 ### Producers
 
 ```text
-docs/producers/overview.mdx    → producers.md
-docs/producers/reference.mdx   → producers.md
+docs/producers/overview.mdx          (canonical — producers overview)
 docs/producers/symbol-packs.mdx
-docs/producers/tuning-guide.mdx → configuration.md
+docs/producers/tuning-guide.mdx
+docs/producers/external-producers.mdx → docs/producers/spi-interface.mdx, docs/producers/spi-adapter.mdx
+docs/producers/spi-interface.mdx     (standalone — formal SPI protocol contract)
+docs/producers/spi-adapter.mdx       → docs/producers/external-producers.mdx
+docs/producers/reference.mdx         → all producers/* pages, tutorial-agent-producer.md, producer-intelligence.md
 ```
 
 ### Contributing
 
 ```text
 docs/contributing/contributor-registration.mdx → contributors.md
-docs/contributing/karma-attribution.mdx        → KARMA-SPEC.md
+docs/contributing/karma-attribution.mdx        → internal/KARMA-SPEC.md
 docs/contributing/how-to-contribute.mdx
+docs/developers.md  (standalone — extending and contributing)
+docs/contributors.md → eas-integration.md
+```
+
+### Reference
+
+```text
+docs/architecture.md   → authority-model.md, contributors.md, eas-integration.md, producer-intelligence.md
+docs/crypto-primitives.md (standalone — hash functions, key generation, chain verification)
+docs/whitepaper-technical.md (standalone)
+docs/whitepaper-summary.md (standalone)
+docs/whitepaper-onepager.md (standalone)
 ```
 
 ## Operator guides (docs/)
 
 ```text
-docs/operator-standalone.md → getting-started.md, configuration.md, cli-reference.md
+docs/operator-standalone.md → getting-started.md
 docs/operator-agent.md      → operator-standalone.md, openclaw-integration.md
-docs/producers.md           → configuration.md, api-reference.md, mcp.md, producers/overview.mdx, producer-intelligence.md
 ```
 
 ## CLI setup command modules
@@ -670,7 +665,7 @@ engine/producers/polymarket.py
 ## Flywheel
 
 ```text
-docs/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
+docs/internal/FLYWHEEL_SPEC.md → docs/architecture.md, CHANGELOG.md
 ```
 
 ## Interpreter seam
@@ -682,3 +677,92 @@ engine/core/interpreter.py
   → engine/core/events.py (ForecastPayload, AbstentionReason)
   → engine/core/forecast.py (abstain)
 ```
+
+## Whitepapers
+
+```text
+docs/whitepaper-technical.md (standalone — no internal deps)
+docs/whitepaper-summary.md (standalone — no internal deps)
+docs/whitepaper-onepager.md (standalone — no internal deps)
+```
+
+## DeerFlow Research Trigger
+
+```text
+engine/producers/deerflow_research_trigger.py
+  → engine/core/events.py (ResearchSignalPayload, SignalClass)
+  → engine/core/database.py (Database)
+  → engine/producers/deerflow_research.py (DeerflowResearchProducer)
+  → engine/artifacts/store.py (ArtifactStore)
+```
+
+## DeerFlow Integration Plan
+
+```text
+docs/internal/DEERFLOW_PLAN.md (standalone — integration plan, no internal deps)
+```
+
+## DeerFlow Operator Guide
+
+```text
+docs/deerflow.md (standalone — setup, tool reference, troubleshooting)
+  → gateway/README.md
+  → integrations/deerflow/extensions_config.json
+```
+
+## Signal Benchmarking Operations Guide
+
+```text
+docs/signal-benchmarking-ops-guide.md (standalone — operational guide for oracle builders)
+```
+
+## SPI External Producer Guide
+
+```text
+docs/producers/external-producers.mdx
+  depends on: docs/producers/spi-interface.mdx, docs/producers/spi-adapter.mdx
+```
+
+## SPI Interface Specification
+
+```text
+docs/producers/spi-interface.mdx (standalone — formal SPI protocol contract)
+```
+
+## SPI Adapter Spec
+
+```text
+docs/producers/spi-adapter.mdx
+  → docs/producers/external-producers.mdx  (back-reference for native mode)
+```
+
+## Tutorial: Agent Producer
+
+```text
+docs/tutorial-agent-producer.md (standalone — step-by-step guide to building a custom agent producer)
+```
+
+**Referenced by:**
+- docs/producers/reference.mdx
+
+## Producer Intelligence
+
+```text
+docs/producer-intelligence.md (standalone — intelligence layer, signal synthesis)
+```
+
+**Referenced by:**
+- docs/producers/reference.mdx
+- docs/architecture.md
+- docs/learning-loop.md
+
+## ERC-8004 / Synthesis architecture plans (docs/architecture/)
+```text
+docs/architecture/ERC8004_PLAN.md (standalone — on-chain integration plan, no internal deps)
+docs/architecture/X402_PLAN.md (standalone — x402 payment roadmap, no internal deps)
+docs/architecture/SYNTHESIS_APPLICATION.md (standalone — Synthesis hackathon submission draft, no internal deps)
+```
+
+## Legacy configuration reference
+
+docs/configuration.md → docs/operations/config-reference.mdx (superseded by, but kept for backward compat)

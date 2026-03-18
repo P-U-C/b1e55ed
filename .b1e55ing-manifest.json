@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "eggs": [
+    {
+      "file": "engine/security/identity.py",
+      "anchor": "def _password() -> str:",
+      "tradition": "codd-null-distinction",
+      "content": "# Codd, 1979: the relational model distinguishes \"applicable but missing\"\n# from \"inapplicable.\" Python's None vs \"\" is the same argument, forty-five\n# years later. An empty password is a deliberate choice. A missing password\n# is an error. Confusing the two locked out every new operator.",
+      "placement": "before_function",
+      "pr_number": 307,
+      "applied_at": "2026-03-06T06:25:40Z",
+      "id": "egg_70fc2368"
+    },
+    {
+      "file": "tests/unit/test_unified_identity.py",
+      "anchor": "def test_password_empty_string_accepted(monkeypatch: pytest.MonkeyPatch) -> None:",
+      "tradition": "unix-heritage",
+      "content": "# Unix V6 /etc/passwd: an empty second field meant no password required.\n# Fifty years of security evolution later, the same class of bug: treating\n# empty as absent. Thompson and Ritchie would sigh.",
+      "placement": "before_function",
+      "pr_number": 307,
+      "applied_at": "2026-03-06T06:25:40Z",
+      "id": "egg_356869a9"
+    }
+  ]
+}

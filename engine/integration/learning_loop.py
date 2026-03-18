@@ -50,10 +50,10 @@ class LearningLoopIntegration:
         self.loop = LearningLoop(db=db, config=config)
 
     def _last_run_ts(self, cycle_type: CycleType) -> datetime | None:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT ts FROM learning_weights WHERE cycle_type = ? ORDER BY ts DESC LIMIT 1",
             (str(cycle_type),),
-        ).fetchone()
+        )
         if row is None:
             return None
         try:
@@ -81,11 +81,11 @@ class LearningLoopIntegration:
         wa = result.weight_adjustment
         # Persist domain weight changes to DB history.
         if wa.applied and wa.new_weights != wa.previous_weights:
-            with self.db.conn:
+            with self.db._lock, self.db.conn:
                 for domain, old_w in wa.previous_weights.items():
                     new_w = float(wa.new_weights.get(domain, old_w))
                     delta = float(new_w - float(old_w))
-                    self.db.conn.execute(
+                    self.db.execute(
                         """
                         INSERT INTO learning_weights (cycle_type, domain, old_weight, new_weight, delta, reason, ts)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -115,11 +115,11 @@ class LearningLoopIntegration:
         # Weekly: only propose/compute weight adjustment.
         wa = self.loop.adjust_domain_weights()
         if wa.applied and wa.new_weights != wa.previous_weights:
-            with self.db.conn:
+            with self.db._lock, self.db.conn:
                 for domain, old_w in wa.previous_weights.items():
                     new_w = float(wa.new_weights.get(domain, old_w))
                     delta = float(new_w - float(old_w))
-                    self.db.conn.execute(
+                    self.db.execute(
                         """
                         INSERT INTO learning_weights (cycle_type, domain, old_weight, new_weight, delta, reason, ts)
                         VALUES (?, ?, ?, ?, ?, ?, ?)

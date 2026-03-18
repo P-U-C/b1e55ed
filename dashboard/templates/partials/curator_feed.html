@@ -1,7 +1,7 @@
 {% if curator_signals %}
   {% for c in curator_signals %}
   <div class="signal-row">
-    <span class="signal-ts">{{ c.ts }}</span>
+    <span class="signal-ts" title="{{ c.ts | fmt_iso }}">{{ c.ts | timeago }}</span>
     <span style="width:2.5rem; font-size:0.65rem; color:{{ 'var(--green)' if c.source == 'zoz' else 'var(--text-dim)' }};">{{ c.source }}</span>
     <span class="signal-asset">{{ c.asset }}</span>
     <span class="signal-desc">{{ c.desc }}</span>

@@ -1,6 +1,6 @@
 [project]
 name = "b1e55ed"
-version = "1.0.0-beta.8"
+version = "1.0.0rc1"
 description = "Sovereign AI trading intelligence with compound learning"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,6 +16,9 @@ dependencies = [
     "cryptography>=42.0",
     "pyyaml>=6.0",
     "fastapi>=0.109",
+    "python-multipart>=0.0.9",
+    "yfinance>=0.2",
+    "twelvedata>=1.2",
     "uvicorn>=0.29",
     "jinja2>=3.1",
     "argon2-cffi>=25.1.0",
@@ -27,11 +30,15 @@ eas = [
     "eth-abi>=5.1",
     "eth-typing>=3.5",
 ]
+oracle = [
+    "web3>=6.0",
+]
 
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
+    "python-multipart>=0.0.9",
     "ruff>=0.3",
     "mypy>=1.8",
     "types-PyYAML>=6.0",
@@ -48,6 +55,11 @@ exchange = [
 ]
 mcp = [
     "mcp[cli]>=1.0",
+]
+tradfi = [
+    # TradFi price feeds for TA producer (yfinance primary, twelvedata backup)
+    "yfinance>=0.2",
+    "twelvedata>=1.2",
 ]
 
 [project.scripts]
@@ -84,6 +96,17 @@ module = [
     "eth_utils.*",
     "Crypto.*",
     "sha3",
+    "web3",
+    "web3.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "yfinance",
+    "yfinance.*",
+    "twelvedata",
+    "twelvedata.*",
 ]
 ignore_missing_imports = true
 

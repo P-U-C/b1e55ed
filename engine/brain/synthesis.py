@@ -360,7 +360,7 @@ class VectorSynthesis:
             # producer_karma has producer_id (which maps to source/producer_id in SIGNAL_ACCEPTED_V1)
             # We need to map producer_id -> domain. Query the latest SIGNAL_ACCEPTED_V1 events
             # to build producer -> domain mapping, then average karma per domain.
-            rows = self.db.conn.execute("SELECT producer_id, karma_score FROM producer_karma").fetchall()
+            rows = self.db.fetchall("SELECT producer_id, karma_score FROM producer_karma")
             if not rows:
                 return {}
 
@@ -389,10 +389,10 @@ class VectorSynthesis:
         import json as _json
 
         try:
-            rows = self.db.conn.execute(
+            rows = self.db.fetchall(
                 "SELECT payload FROM events WHERE type = ? ORDER BY ts DESC LIMIT 500",
                 (str(EventType.SIGNAL_ACCEPTED_V1),),
-            ).fetchall()
+            )
             mapping: dict[str, str] = {}
             for row in rows:
                 payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
@@ -463,14 +463,31 @@ class VectorSynthesis:
             if s is not None:
                 domain_scores[dom] = float(s)
 
-        weighted_score = 0.0
-        for dom, s in domain_scores.items():
-            weighted_score += float(weights_used.get(dom, 0.0)) * float(s)
+        if not domain_scores:
+            # No usable domain evidence this cycle: stay neutral instead of
+            # defaulting bearish via an implicit zero score.
+            weights_effective = {dom: 0.0 for dom in weights_used}
+            weighted_score = 0.5
+        else:
+            active_weight_total = sum(float(weights_used.get(dom, 0.0)) for dom in domain_scores)
+
+            if active_weight_total > 0.0:
+                # Re-normalize to domains that actually produced a score.
+                # Missing domains should be "no evidence", not an implicit short.
+                weights_effective = {dom: (float(w) / active_weight_total if dom in domain_scores else 0.0) for dom, w in weights_used.items()}
+                weighted_score = 0.0
+                for dom, s in domain_scores.items():
+                    weighted_score += float(weights_effective.get(dom, 0.0)) * float(s)
+            else:
+                # All scored domains were quality-gated to zero weight.
+                # Respect the gate and remain neutral.
+                weights_effective = {dom: 0.0 for dom in weights_used}
+                weighted_score = 0.5
 
         return SynthesisResult(
             snapshot=snapshot,
             domain_scores=domain_scores,
-            weights_used=weights_used,
+            weights_used=weights_effective,
             weighted_score=_clamp01(weighted_score),
             hierarchy_factors=(dict(hier_result.multipliers) if hier_result is not None else {}),
         )

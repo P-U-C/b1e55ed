@@ -62,6 +62,11 @@ def _extract_asset(payload: dict) -> str | None:
     return None
 
 
+def _canonical_signal_source(source: str | None, contributor_node_id: str) -> str:
+    normalized = str(source).strip() if source is not None else ""
+    return normalized or contributor_node_id
+
+
 @router.post("/submit", response_model=SignalSubmitResponse)
 def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> SignalSubmitResponse:
     if not str(req.event_type).startswith("signal."):
@@ -97,13 +102,13 @@ def submit_signal(req: SignalSubmitRequest, db: Database = Depends(get_db)) -> S
     ev = db.append_event(
         event_type=req.event_type,
         payload=req.payload,
-        source=req.source,
+        source=_canonical_signal_source(req.source, contributor.node_id),
         contributor_id=contributor.id,
         ts=ts,
     )
 
     with db.conn:
-        db.conn.execute(
+        db.execute(
             """
             INSERT INTO contributor_signals (contributor_id, event_id, signal_direction, signal_score, signal_asset)
             VALUES (?, ?, ?, ?, ?)
@@ -155,7 +160,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     import json as _json
 
     # Look up the signal event
-    row = db.conn.execute(
+    row = db.execute(
         "SELECT id, type, ts, source, contributor_id, payload FROM events WHERE id = ?",
         (signal_id,),
     ).fetchone()
@@ -166,17 +171,22 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     payload: dict = _json.loads(str(row["payload"])) if row["payload"] else {}
 
     # Resolve producer / contributor info
-    producer_id: str | None = row["source"]
+    producer_id: str | None = str(row["source"]) if row["source"] is not None else None
     domain: str | None = None
     contributor_id: str | None = row["contributor_id"]
 
     if contributor_id is not None:
-        contrib_row = db.conn.execute(
-            "SELECT name, metadata FROM contributors WHERE id = ?",
+        contrib_row = db.execute(
+            "SELECT node_id, name FROM contributors WHERE id = ?",
             (contributor_id,),
         ).fetchone()
-        if contrib_row is not None and not producer_id:
-            producer_id = str(contrib_row["name"])
+        if contrib_row is not None:
+            contributor_node_id = str(contrib_row["node_id"]) if contrib_row["node_id"] is not None else None
+            contributor_name = str(contrib_row["name"]) if contrib_row["name"] is not None else None
+            if contributor_node_id:
+                producer_id = contributor_node_id
+            elif not producer_id and contributor_name:
+                producer_id = contributor_name
 
     # Derive domain from event type  (signal.<domain>.*)
     event_type_str: str = str(row["type"])
@@ -199,7 +209,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
     emitted_at: str | None = str(row["ts"]) if row["ts"] else None
 
     # --- Linked trades via contributor_signals join → positions ---
-    cs_row = db.conn.execute(
+    cs_row = db.execute(
         "SELECT id FROM contributor_signals WHERE event_id = ? LIMIT 1",
         (signal_id,),
     ).fetchone()
@@ -211,7 +221,7 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
         # Look for any closed positions that might have been opened around the same signal time
         # The OMS doesn't directly link signals to positions, so we do a best-effort lookup:
         # find positions opened after this signal's ts and closed (realized_pnl not null).
-        pos_rows = db.conn.execute(
+        pos_rows = db.execute(
             """
             SELECT id, realized_pnl, closed_at FROM positions
             WHERE status = 'closed' AND realized_pnl IS NOT NULL
@@ -241,33 +251,89 @@ def get_signal_attribution(signal_id: str, db: Database = Depends(get_db)) -> Si
 @router.get("", response_model=PaginatedResponse[SignalResponse])
 def list_signals(
     db: Database = Depends(get_db),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     domain: str | None = Query(None, description="Filter by domain (ta/onchain/tradfi/social/etc)"),
+    hours: int = Query(24, ge=1, le=168, description="Time window in hours (default 24)"),
+    timeline: bool = Query(False, description="Return top-N per hourly bucket for timeline display"),
+    top_n: int = Query(10, ge=1, le=50, description="Max signals per hourly bucket (timeline mode only)"),
 ) -> PaginatedResponse[SignalResponse]:
+    import json
+    from collections import defaultdict
+
     like = "signal.%"
     if domain:
         like = f"signal.{domain}.%"
 
-    total_row = db.conn.execute(
-        "SELECT COUNT(1) FROM events WHERE type LIKE ?",
-        (like,),
+    hours_param = f"-{hours} hours"
+
+    if timeline:
+        # Fetch all signals in the time window (no limit), then bucket by hour
+        rows = db.execute(
+            """
+            SELECT id, type, ts, source, payload,
+                   strftime('%Y-%m-%d %H', datetime(substr(ts,1,19))) as hour_bucket
+            FROM events
+            WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)
+            ORDER BY ts DESC
+            """,
+            (like, hours_param),
+        ).fetchall()
+
+        def score_key(r: object) -> float:
+            try:
+                p = json.loads(str(r[4])) if r[4] is not None else {}  # type: ignore[index]
+                s = float(p.get("score", p.get("conviction", 5)) or 5)
+                return -abs(s - 5)  # negate for descending sort (most decisive first)
+            except Exception:
+                return 0.0
+
+        buckets: dict = defaultdict(list)
+        for r in rows:
+            buckets[r[5]].append(r)
+
+        sampled = []
+        for bucket_rows in buckets.values():
+            bucket_rows.sort(key=score_key)
+            sampled.extend(bucket_rows[:top_n])
+
+        # Sort final result by ts descending
+        sampled.sort(key=lambda r: r[2], reverse=True)
+
+        items: list[SignalResponse] = []
+        for r in sampled:
+            items.append(
+                SignalResponse(
+                    id=str(r[0]),
+                    type=str(r[1]),
+                    ts=_parse_dt(str(r[2])),
+                    source=str(r[3]) if r[3] is not None else None,
+                    payload=json.loads(str(r[4])) if r[4] is not None else {},
+                )
+            )
+
+        total = len(items)
+        return PaginatedResponse(items=items, limit=limit, offset=offset, total=total)
+
+    # --- Standard (non-timeline) mode ---
+    total_row = db.execute(
+        "SELECT COUNT(1) FROM events WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)",
+        (like, hours_param),
     ).fetchone()
     total = int(total_row[0]) if total_row is not None else 0
 
-    rows = db.conn.execute(
+    rows = db.execute(
         """
         SELECT id, type, ts, source, payload
         FROM events
-        WHERE type LIKE ?
+        WHERE type LIKE ? AND datetime(substr(ts,1,19)) >= datetime('now', ?)
         ORDER BY ts DESC
         LIMIT ? OFFSET ?
         """,
-        (like, limit, offset),
+        (like, hours_param, limit, offset),
     ).fetchall()
 
-    items: list[SignalResponse] = []
-    import json
+    items = []
 
     for r in rows:
         items.append(

@@ -95,7 +95,7 @@ class Preflight:
             config = self.kill_switch.config
             portfolio_value = float(config.risk.portfolio_value_usd)
             max_risk_pct = float(config.risk.max_open_risk_pct)
-            rows = self.db.conn.execute("SELECT size_notional, leverage FROM positions WHERE status = 'open'").fetchall()
+            rows = self.db.fetchall("SELECT size_notional, leverage FROM positions WHERE status = 'open'")
             total_risk = sum(float(r[0]) * float(r[1]) for r in rows)
             risk_pct = total_risk / portfolio_value if portfolio_value > 0 else 0.0
             details["open_risk_pct"] = risk_pct

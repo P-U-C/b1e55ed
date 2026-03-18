@@ -20,7 +20,7 @@
       <div class="text-dim mono">{{ identity.node_id }}</div>
 
       <div><span class="text-dim">Forged at</span></div>
-      <div class="text-dim">{{ identity.forged_at }}</div>
+      <div class="text-dim" title="{{ identity.forged_at | fmt_iso }}">{{ identity.forged_at | timeago }}</div>
 
       <div><span class="text-dim">Candidates evaluated</span></div>
       <div class="text-dim">{{ identity.candidates_evaluated if identity.candidates_evaluated is not none else '—' }}</div>

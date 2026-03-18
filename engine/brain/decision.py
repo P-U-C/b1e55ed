@@ -56,16 +56,23 @@ class DefaultDecisionPolicy:
         # Direction from PCS around 50.
         direction = "long" if ctx.pcs >= 55.0 else "short" if ctx.pcs <= 45.0 else "long"
 
-        # Sizing tiers.
-        if ctx.pcs >= 90.0:
+        # Sizing tiers — use effective conviction so shorts are reachable.
+        # For short trades, invert PCS: PCS=10 (strong short) → effective=90.
+        # For long trades, use PCS directly: PCS=90 (strong long) → effective=90.
+        if direction == "short":
+            effective_pcs = 100.0 - ctx.pcs
+        else:
+            effective_pcs = ctx.pcs
+
+        if effective_pcs >= 90.0:
             size_pct = 0.10
             leverage = min(2.0, self.config.risk.max_leverage)
             rationale = "approval_required: high conviction over consensus"
-        elif ctx.pcs >= 75.0:
+        elif effective_pcs >= 75.0:
             size_pct = 0.05
             leverage = min(2.0, self.config.risk.max_leverage)
             rationale = "enter: strong conviction"
-        elif ctx.pcs >= 60.0:
+        elif effective_pcs >= 60.0:
             size_pct = 0.02
             leverage = 1.0
             rationale = "enter: moderate conviction"

@@ -1,3 +1,8 @@
+---
+title: "Identity & Keys"
+description: "Two-layer key hierarchy, identity forge, and key recovery."
+---
+
 # Identity — Key Management and Recovery
 
 b1e55ed uses a two-layer key hierarchy:

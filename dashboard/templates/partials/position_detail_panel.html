@@ -1,6 +1,11 @@
 <div class="panel-header">
-  <span class="panel-title">{{ p.id }} · {{ p.symbol }} · {{ p.direction | upper }}</span>
-  <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-size:0.85rem; font-weight:400;">
+  <span class="panel-title">
+    {{ p.id }} · {{ p.symbol }} · <span class="{{ 'text-bull' if p.direction in ['long','buy'] else ('text-bear' if p.direction in ['short','sell'] else 'text-dim') }}">{{ p.direction | upper }}</span>
+    {% if p.conviction_conflict %}
+    <span class="badge" style="margin-left:0.5rem; border-color:rgba(245,158,11,0.35); color:var(--amber);">⚠ conviction conflict</span>
+    {% endif %}
+  </span>
+  <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }}" style="font-size:0.85rem; font-weight:400;">
     {{ '%+.1f' | format(p.pnl_pct) }}%
   </span>
 </div>
@@ -24,22 +29,37 @@
   </div>
   <div>
     <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">P&L</span><br>
-    <span class="{{ 'text-bull' if p.pnl_usd >= 0 else 'text-bear' }} data-live">${{ '%+.0f' | format(p.pnl_usd) }}</span>
+    <span class="{{ 'text-bull' if p.pnl_usd > 0 else ('text-bear' if p.pnl_usd < 0 else 'text-dim') }}">${{ '%+.0f' | format(p.pnl_usd) }}</span>
   </div>
 </div>
 
 <div style="margin-bottom:1rem; padding:0.75rem 0;">
-  {% set range = p.target - p.stop %}
-  {% set pos_pct = ((p.current - p.stop) / range * 100) | int if range > 0 else 50 %}
+  {% set low = [p.stop, p.target] | min %}
+  {% set high = [p.stop, p.target] | max %}
+  {% set range = high - low %}
+  {% set pos_pct = ((p.current - low) / range * 100) | int if range > 0 else 50 %}
+  {% set pos_pct = [0, [100, pos_pct] | min] | max %}
   <div style="position:relative; height:4px; background:var(--border);">
+    {% if p.stop <= p.target %}
     <div style="position:absolute; left:0; top:-2px; width:8px; height:8px; background:var(--red); border-radius:1px;" title="Stop ${{ '%.2f' | format(p.stop) }}"></div>
-    <div style="position:absolute; left:{{ pos_pct }}%; top:-4px; width:3px; height:12px; background:var(--green); transform:translateX(-50%);" title="Current ${{ '%.2f' | format(p.current) }}"></div>
     <div style="position:absolute; right:0; top:-2px; width:8px; height:8px; background:var(--green); border-radius:1px;" title="Target ${{ '%.2f' | format(p.target) }}"></div>
+    {% else %}
+    <div style="position:absolute; right:0; top:-2px; width:8px; height:8px; background:var(--red); border-radius:1px;" title="Stop ${{ '%.2f' | format(p.stop) }}"></div>
+    <div style="position:absolute; left:0; top:-2px; width:8px; height:8px; background:var(--green); border-radius:1px;" title="Target ${{ '%.2f' | format(p.target) }}"></div>
+    {% endif %}
+    <div style="position:absolute; left:{{ pos_pct }}%; top:-4px; width:3px; height:12px; background:var(--green); transform:translateX(-50%);" title="Current ${{ '%.2f' | format(p.current) }}"></div>
   </div>
   <div style="display:flex; justify-content:space-between; margin-top:0.375rem; font-size:0.65rem; color:var(--text-dim);">
+    {% if p.stop <= p.target %}
     <span>${{ '%.2f' | format(p.stop) }} stop</span>
-    <span class="data-live">${{ '%.2f' | format(p.current) }} now</span>
     <span>${{ '%.2f' | format(p.target) }} target</span>
+    {% else %}
+    <span>${{ '%.2f' | format(p.target) }} target</span>
+    <span>${{ '%.2f' | format(p.stop) }} stop</span>
+    {% endif %}
+  </div>
+  <div style="margin-top:0.2rem; font-size:0.65rem; color:var(--text-dim); text-align:center;">
+    <span class="data-live">Now: ${{ '%.2f' | format(p.current) }}</span>
   </div>
 </div>
 
@@ -47,13 +67,22 @@
   <div>Leverage: <span class="{{ 'text-warn' if p.leverage_warning else 'text-bright' }}">{{ p.leverage }}x</span>{% if p.leverage_warning %} <span class="text-warn">(exceeds max)</span>{% endif %}</div>
   <div>Opened: {{ p.opened | default('—') }}</div>
   <div>Conviction at entry: {{ p.conviction_entry | default('—') }}</div>
-  <div>Current conviction: {{ p.conviction_current | default('—') }}</div>
+  <div>Current conviction: {{ p.conviction_current | default('—') }}{% if p.conviction_conflict %} <span style="color:var(--amber);">⚠ opposes position</span>{% endif %}</div>
   <div>Regime at entry: {{ p.regime_entry | default('—') }}</div>
   <div>Held: {{ p.held | default('—') }}</div>
+  {% if p.risk_levels_autocorrected %}
+  <div style="grid-column:1 / -1; color:var(--amber);">⚠ stop/target auto-corrected for display (legacy short risk values were inverted)</div>
+  {% endif %}
 </div>
 
+{% if p.status != 'closed' %}
 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
   <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-stop" hx-confirm="Adjust stop loss?">Adjust Stop</button>
   <button class="btn" hx-post="/api/positions/{{ p.id }}/adjust-target" hx-confirm="Adjust target?">Adjust Target</button>
-  <button class="btn btn-danger" hx-post="/api/positions/{{ p.id }}/close" hx-confirm="Close position {{ p.id }}?">Close Position</button>
+  <button class="btn btn-danger"
+          hx-post="/api/positions/{{ p.id }}/close"
+          hx-confirm="Close position {{ p.id }}?"
+          hx-target="#pos-panel-{{ p.id }}"
+          hx-swap="outerHTML">Close Position</button>
 </div>
+{% endif %}

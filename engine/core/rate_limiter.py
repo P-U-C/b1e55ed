@@ -72,12 +72,12 @@ class ApiRateLimiter:
         now = int(_time())
         window_start = now - (now % self.window_seconds)
 
-        with self._db.conn:
+        with self._db._lock, self._db.conn:
             # Atomic upsert: insert the first request for this window, or
             # increment the counter if the row already exists.  This collapses
             # the race window to zero — no two concurrent callers can both see
             # a missing row and both attempt an INSERT.
-            self._db.conn.execute(
+            self._db.execute(
                 """
                 INSERT INTO api_rate_limits (key, window_start, window_seconds, count, updated_at)
                 VALUES (?, ?, ?, 1, datetime('now'))
@@ -88,13 +88,13 @@ class ApiRateLimiter:
                 (key, window_start, self.window_seconds),
             )
 
-            row = self._db.conn.execute(
+            row = self._db.fetchone(
                 """
                 SELECT count FROM api_rate_limits
                 WHERE key = ? AND window_start = ? AND window_seconds = ?
                 """,
                 (key, window_start, self.window_seconds),
-            ).fetchone()
+            )
 
         count = int(row[0] or 1) if row else 1
         if count > self.max_requests:
@@ -164,20 +164,20 @@ class SignalRateLimiter:
         return RateLimitResult(allowed=True)
 
     def _count_since(self, contributor_id: str, since_iso: str) -> int:
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             "SELECT COUNT(1) FROM contributor_signals WHERE contributor_id = ? AND created_at >= ?",
             (contributor_id, since_iso),
-        ).fetchone()
+        )
         return int(row[0]) if row else 0
 
     def _count_duplicates(self, contributor_id: str, asset: str, direction: str, since_iso: str) -> int:
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             """
             SELECT COUNT(1) FROM contributor_signals
             WHERE contributor_id = ? AND signal_asset = ? AND signal_direction = ? AND created_at >= ?
             """,
             (contributor_id, asset, direction, since_iso),
-        ).fetchone()
+        )
         return int(row[0]) if row else 0
 
     def get_usage(self, contributor_id: str) -> dict:

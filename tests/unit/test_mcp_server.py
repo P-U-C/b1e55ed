@@ -58,10 +58,11 @@ _BEARER = {"Authorization": "Bearer testkey"}
 
 @pytest.mark.anyio
 async def test_mcp_auth_missing(_app_and_db):
+    """initialize and tools/list are public (no auth); tools/call requires auth."""
     app, _ = _app_and_db
     async with make_client(app) as ac:
         r = await ac.post("/mcp", json=_make_rpc("initialize"))
-    assert r.status_code == 401
+    assert r.status_code == 200  # initialize is public
 
 
 @pytest.mark.anyio

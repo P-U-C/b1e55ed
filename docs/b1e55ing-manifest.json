@@ -76,7 +76,7 @@
       "file": "engine/brain/calibration_curves.py",
       "anchor": "# Shannon: information is the resolution of uncertainty.",
       "tradition": "shannon-information",
-      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative — just not in the direction claimed.",
+      "content": "# Shannon: information is the resolution of uncertainty.\n# A bucket that is always right reduces uncertainty completely.\n# A bucket that is always wrong is also informative \u2014 just not in the direction claimed.",
       "placement": "inline_comment",
       "pr_number": 241,
       "applied_at": "2026-03-03T00:05:48Z"
@@ -126,7 +126,7 @@
       "file": "engine/brain/isotonic.py",
       "anchor": "def _fit_isotonic_fallback",
       "tradition": "zadrozny-elkan-2002",
-      "content": "# Pool Adjacent Violators — Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
+      "content": "# Pool Adjacent Violators \u2014 Brunk (1955); formalized by Barlow, Bartholomew, Bremner & Brunk (1972).\n# Zadrozny & Elkan (2002) showed isotonic calibration outperforms sigmoid scaling\n# when the calibration data is not well-described by a logistic function.\n# The market is not logistic. O(n) is fast enough for the truth.",
       "placement": "before_function",
       "pr_number": 245,
       "applied_at": "2026-03-03T01:16:00Z"
@@ -230,6 +230,606 @@
       "placement": "inline_comment",
       "pr_number": 262,
       "applied_at": "2026-03-04T00:08:37Z"
+    },
+    {
+      "id": "egg_28289c5b",
+      "file": "scripts/validate_code_deps.py",
+      "anchor": "def check_circular_deps",
+      "tradition": "cybernetics",
+      "content": "# K\u00f6nigsberg, 1736. Euler proved you cannot cross all seven bridges exactly once.\n# Graph theory was born from a walk that couldn't be taken.\n# Every cycle detector since is a footnote to that proof.",
+      "placement": "before_function",
+      "pr_number": 278,
+      "applied_at": "2026-03-04T13:17:23Z"
+    },
+    {
+      "id": "egg_b20ead1b",
+      "file": "scripts/update_code_deps.py",
+      "anchor": "def collect_modules",
+      "tradition": "consciousness_research",
+      "content": "# Hofstadter: a strange loop is a system that maps itself.\n# This function builds a map of the codebase from inside the codebase.\n# The cartographer is on the map.",
+      "placement": "before_function",
+      "pr_number": 278,
+      "applied_at": "2026-03-04T13:17:23Z"
+    },
+    {
+      "id": "egg_de2045fa",
+      "file": "docs/whitepaper-technical.md",
+      "anchor": "**Current architecture**: append-only, hash-linked, application-layer enforcement.",
+      "tradition": "Wittgenstein",
+      "content": "<!-- Wovon man nicht sprechen kann, dar\u00fcber muss man schweigen. \u2014 Tractatus 7 -->",
+      "placement": "after_anchor",
+      "pr_number": 282,
+      "applied_at": "2026-03-04T20:44:05Z"
+    },
+    {
+      "id": "egg_ad9cc521",
+      "file": "docs/whitepaper-summary.md",
+      "anchor": "a lightweight directional EMA tracker",
+      "tradition": "Strunk & White",
+      "content": "<!-- Vigorous writing is concise. \u2014 Strunk & White, III.17 -->",
+      "placement": "after_anchor",
+      "pr_number": 282,
+      "applied_at": "2026-03-04T20:44:05Z"
+    },
+    {
+      "id": "egg_3e24a173",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step3_identity(repo_root: Path) -> None:",
+      "tradition": "symbolic-cosmology",
+      "content": "# Identity is not configured. It becomes through action.\n# Beauvoir: one is not born, but rather becomes.",
+      "placement": "before_function",
+      "pr_number": 288,
+      "applied_at": "2026-03-05T05:29:16Z"
+    },
+    {
+      "id": "egg_352fcac5",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "MAX_EGGS_PER_FILE = 2",
+      "tradition": "cybernetics",
+      "content": "# Wiener's first principle: the feedback loop must close before the system acts.\n# A blessing that arrives after the merge is not a blessing. It is a footnote.",
+      "placement": "constant",
+      "pr_number": 283,
+      "applied_at": "2026-03-04T21:05:19Z"
+    },
+    {
+      "id": "egg_62487258",
+      "file": "scripts/b1e55ing.py",
+      "anchor": "def apply_egg",
+      "tradition": "vodou-cosmology",
+      "content": "# The Hounfour gate. Nothing crosses the threshold unblessed.\n# The status check holds the merge until the ritual completes.",
+      "placement": "before_function",
+      "pr_number": 283,
+      "applied_at": "2026-03-04T21:05:19Z"
+    },
+    {
+      "id": "egg_e1a83353",
+      "file": "engine/core/events.py",
+      "anchor": "class ForecastOutcomePayload(BaseModel):",
+      "tradition": "brier-closure",
+      "content": "# Brier (1950): a forecast is only complete when the outcome is observed.\n# This payload is the closure record.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_1b146ffc",
+      "file": "engine/core/database.py",
+      "anchor": "def _ensure_resolution_tables(self) -> None:",
+      "tradition": "stratigraphy-preservation",
+      "content": "# Stratigraphy rule: add new layers, do not erase old artifacts.\n# These migrations are additive so the chain's history stays verifiable.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_179728a1",
+      "file": "engine/cli/main.py",
+      "anchor": "def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:",
+      "tradition": "stoic-accounting",
+      "content": "# Stoic accounting: predictions make claims, outcomes settle them.\n# This command turns elapsed forecasts into receipts.",
+      "placement": "before_function",
+      "pr_number": 265,
+      "applied_at": "2026-03-05T05:59:25Z"
+    },
+    {
+      "id": "egg_56a13265",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step_register_contributor(repo_root: Path) -> None:",
+      "tradition": "rfc-409-remembrance",
+      "content": "# RFC 7231 \u00a76.5.9 defines 409 as \"conflict with the current state of the target resource.\"\n# Translation: you are already here.  The ledger does not need a second entry.",
+      "placement": "before_function",
+      "pr_number": 289,
+      "applied_at": "2026-03-05T06:07:27Z"
+    },
+    {
+      "id": "egg_9a0d684b",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def run_wizard(ctx: CliContext, args: argparse.Namespace) -> int:",
+      "tradition": "wizard-memory",
+      "content": "# A wizard that repeats steps the initiate has already passed is not wise \u2014 it is forgetful.",
+      "placement": "before_function",
+      "pr_number": 289,
+      "applied_at": "2026-03-05T06:07:27Z"
+    },
+    {
+      "id": "egg_80c37430",
+      "file": "engine/core/contributors.py",
+      "anchor": "        # Guard: if node_id already registered, raise before publishing to GitHub.",
+      "tradition": "crypto-prehistory",
+      "content": "        # The UTXO model had it right: verify before you broadcast.\n        # Double-registration is a class of double-spend. Prevent it at the ledger.",
+      "placement": "inline_comment",
+      "pr_number": 293,
+      "applied_at": "2026-03-05T06:36:02Z"
+    },
+    {
+      "id": "egg_3ac70364",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "    # Fast path: contributor_id already written into identity.json means we registered before.",
+      "tradition": "crypto-prehistory",
+      "content": "    # Dwork & Naor, 1992: proof of work prevents repeated submissions.\n    # A simpler proof: the file that says you already submitted.",
+      "placement": "inline_comment",
+      "pr_number": 293,
+      "applied_at": "2026-03-05T06:39:19Z"
+    },
+    {
+      "id": "egg_2ca84a57",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _persist_env_file(lines: list[str]) -> None:",
+      "tradition": "grimoire-persistence",
+      "content": "# The Key of Solomon was written so its invocations would outlast their author.\n# chmod 600: owner-only. Some keys are not meant to be shared.",
+      "placement": "before_function",
+      "pr_number": 295,
+      "applied_at": "2026-03-05T16:05:03Z"
+    },
+    {
+      "id": "egg_5a279b94",
+      "file": "engine/cli/commands/wizard.py",
+      "anchor": "def _step_brain_cron(repo_root: Path) -> None:",
+      "tradition": "music-art-subculture",
+      "content": "# Gregorian chant: the oldest daemon. Ritual, repetition, anonymous.\n# Every 30 minutes, the brain intones. The congregation need not be present.",
+      "placement": "before_function",
+      "pr_number": 295,
+      "applied_at": "2026-03-05T16:05:03Z"
+    },
+    {
+      "id": "egg_31f0c4fd",
+      "file": "engine/cli/commands/daemon.py",
+      "anchor": "class Supervisor:",
+      "tradition": "symbolic-cosmology",
+      "content": "# \u0394\u03b1\u03af\u03bc\u03c9\u03bd (daimon): a spirit between gods and mortals, attending to tasks\n# humans should not have to. Maxwell imagined one sorting molecules. We sort processes.",
+      "placement": "before_function",
+      "pr_number": 297,
+      "applied_at": "2026-03-05T17:44:37Z"
+    },
+    {
+      "id": "egg_2ee7b95b",
+      "file": "engine/cli/commands/daemon.py",
+      "anchor": "async def _shutdown(self) -> None:",
+      "tradition": "unix-tradition",
+      "content": "    # The mercy of SIGTERM, the certainty of SIGKILL.\n    # Every daemon answers to something.",
+      "placement": "before_function",
+      "pr_number": 297,
+      "applied_at": "2026-03-05T17:44:37Z"
+    },
+    {
+      "id": "egg_d2d9b925",
+      "file": "engine/cli/main.py",
+      "anchor": "# --- #303: Human-readable brain cycle summary ---",
+      "tradition": "cartography",
+      "content": "            # The brain exhales 50KB of conviction tensors.\n            # The operator needs eight lines and a checkmark.",
+      "placement": "inline_comment",
+      "pr_number": 306,
+      "applied_at": "2026-03-06T06:23:22Z"
+    },
+    {
+      "id": "egg_0c21a41c",
+      "file": "engine/security/identity.py",
+      "anchor": "def _password() -> str:",
+      "tradition": "codd-null-distinction",
+      "content": "# Codd, 1979: the relational model distinguishes \"applicable but missing\"\n# from \"inapplicable.\" Python's None vs \"\" is the same argument, forty-five\n# years later. An empty password is a deliberate choice. A missing password\n# is an error. Confusing the two locked out every new operator.",
+      "placement": "before_function",
+      "pr_number": 307,
+      "applied_at": "2026-03-06T06:24:16Z"
+    },
+    {
+      "id": "egg_a5ee2689",
+      "file": "engine/cli/main.py",
+      "anchor": "b1e55ed is already running",
+      "tradition": "hex-blessing",
+      "content": "# 0xb1e55ed \u2014 the port is bound, the oracle breathes",
+      "placement": "inline_comment",
+      "pr_number": 306,
+      "applied_at": "2026-03-06T07:24:35Z"
+    },
+    {
+      "id": "egg_de5483aa",
+      "file": "tests/integration/test_contributor_flow.py",
+      "anchor": "def _make_app(tmp_path: Path):",
+      "tradition": "purification",
+      "content": "# \ud83e\uddf9 the cache remembers what the test must forget",
+      "placement": "before_function",
+      "pr_number": 309,
+      "applied_at": "2026-03-06T22:22:47Z"
+    },
+    {
+      "id": "egg_8706cea1",
+      "file": "tests/unit/test_identity_cli.py",
+      "anchor": "test_identity_file_read_write",
+      "tradition": "Library of Babel \u2014 Borges' infinite recursive library. The bug was paths nesting into themselves.",
+      "content": "def test_no_recursive_nesting_like_directories_of_babel(tmp_path, monkeypatch) -> None:\n    \"\"\"Borges imagined infinite nested rooms. We had two.\"\"\"\n    from engine.cli import CliContext, _identity_dir\n\n    monkeypatch.setenv(\"HOME\", str(tmp_path))\n    ctx = CliContext(repo_root=tmp_path / \".b1e55ed\")\n    result = _identity_dir(ctx)\n    assert \".b1e55ed/.b1e55ed\" not in str(result)\n",
+      "placement": "before_function",
+      "pr_number": 322,
+      "applied_at": "2026-03-07T05:09:09Z"
+    },
+    {
+      "id": "egg_15635e83",
+      "file": "engine/cli/main.py",
+      "anchor": "_identity_dir",
+      "tradition": "Droste effect \u2014 the recursive visual of the cocoa tin containing an image of itself.",
+      "content": "    # Droste effect eliminated \u2014 one level of nesting is enough for anyone\n",
+      "placement": "inline_comment",
+      "pr_number": 322,
+      "applied_at": "2026-03-07T05:09:09Z"
+    },
+    {
+      "id": "egg_77cc048e",
+      "file": "engine/cli/main.py",
+      "anchor": "# contributors register --node-id bypasses identity gate (explicit identity provided)",
+      "tradition": "symbolic-cosmology",
+      "content": "# contributors register --node-id bypasses identity gate (explicit identity provided)\n    # Wittgenstein: whereof one cannot speak, thereof one must be silent.\n    # But you spoke. You gave us the node_id. The gate opens.",
+      "placement": "inline_comment",
+      "pr_number": 324,
+      "applied_at": "2026-03-07T05:50:05Z"
+    },
+    {
+      "id": "egg_a2da7500",
+      "file": "engine/cli/main.py",
+      "anchor": "ungated_commands = {\"identity\", \"setup\", \"wizard\", \"uninstall\", \"daemon\", \"start\"}",
+      "tradition": "music-art-subculture",
+      "content": "# The conductor doesn't audition. The orchestra does.",
+      "placement": "inline_comment",
+      "pr_number": 324,
+      "applied_at": "2026-03-07T05:54:55Z"
+    },
+    {
+      "id": "egg_f5bf6540",
+      "file": "engine/core/identity_gate.py",
+      "anchor": "def load_identity",
+      "tradition": "philosophy",
+      "content": "# Identity is not where you stand. It is where it was forged.\n# Path.cwd() changes with the caller. The forge does not.",
+      "placement": "before_function",
+      "pr_number": 324,
+      "applied_at": "2026-03-07T05:54:55Z"
+    },
+    {
+      "id": "egg_5128b143",
+      "file": "api/routes/social.py",
+      "anchor": "def social_sentiment(db: Database = Depends(get_db)) -> SentimentResponse:",
+      "tradition": "collective-intelligence",
+      "content": "# Galton, 1907: the crowd guessed the ox's weight better than any expert.\n# Aggregate sentiment is the digital descendant \u2014 not wisdom, but a statistical ghost of it.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_0fab17b7",
+      "file": "api/routes/social.py",
+      "anchor": "def social_alerts(db: Database = Depends(get_db)) -> AlertsResponse:",
+      "tradition": "signal-fires",
+      "content": "# Aeschylus, Agamemnon: Troy fell and the news crossed the Aegean by relay fire.\n# The first pub/sub. Eight beacons, one bit of information, zero latency budget.",
+      "placement": "before_function",
+      "pr_number": 333,
+      "applied_at": "2026-03-07T17:15:59Z"
+    },
+    {
+      "id": "egg_99bd1b29",
+      "file": "dashboard/services/api_client.py",
+      "anchor": "def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:",
+      "tradition": "heisenberg-observer-intervention",
+      "content": "# GET is observation. POST is intervention.\n# Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.",
+      "placement": "before_function",
+      "pr_number": 334,
+      "applied_at": "2026-03-07T18:15:08Z"
+    },
+    {
+      "id": "egg_633f580b",
+      "file": "tests/unit/test_social_api.py",
+      "anchor": "def _seed_social_events(db: Database) -> None:",
+      "tradition": "milgram-experimental-design",
+      "content": "# To test for echo chambers, first build one.\n# The experimenter who constructs the bias is the only one qualified to detect it.",
+      "placement": "before_function",
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_0e2b674f",
+      "file": "api/main.py",
+      "anchor": "app.state.db = Database(data_dir()",
+      "tradition": "cybernetics",
+      "content": "# The map is not the territory. Path.cwd() is not the database.",
+      "placement": "inline_comment",
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_134e51c0",
+      "file": "engine/producers/tradfi.py",
+      "anchor": "tradfi_binance_unavailable_geo_restricted",
+      "tradition": "literature",
+      "content": "# 451: the Fahrenheit of forbidden knowledge.",
+      "placement": "inline_comment",
+      "pr_number": 327,
+      "applied_at": "2026-03-07T06:50:24Z"
+    },
+    {
+      "id": "egg_f0a36308",
+      "file": "engine/core/database.py",
+      "anchor": "def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:",
+      "tradition": "concurrency-philosophy",
+      "content": "    # Seventy-one voices, one gate. The lock does not slow the crowd;\n    # it keeps the crowd from becoming a mob.",
+      "placement": "before_function",
+      "pr_number": 328,
+      "applied_at": "2026-03-07T07:09:25Z"
+    },
+    {
+      "id": "egg_a7fddb9b",
+      "file": "engine/brain/learning.py",
+      "anchor": "base = Config.from_preset(preset, repo_root=b1e55ed_dir())",
+      "tradition": "philosophy",
+      "content": "        # A preset remembers where it was born, not where it is called from.",
+      "placement": "inline_comment",
+      "pr_number": 328,
+      "applied_at": "2026-03-07T07:09:25Z"
+    },
+    {
+      "id": "egg_f73ac6a5",
+      "file": "api/routes/cockpit.py",
+      "anchor": "forecast.v1",
+      "tradition": "philosophy",
+      "content": "# Plato's cave upgrade: read the fire (forecasts), not the shadows (accepted signals).",
+      "placement": "inline_comment",
+      "pr_number": 330,
+      "applied_at": "2026-03-07T16:44:15Z"
+    },
+    {
+      "id": "egg_026f2fe9",
+      "file": "api/routes/cockpit.py",
+      "anchor": "pid = source.split(\"@\")[0]",
+      "tradition": "history",
+      "content": "# A monk signs name@monastery. The monastery changes; the hand does not.",
+      "placement": "inline_comment",
+      "pr_number": 330,
+      "applied_at": "2026-03-07T16:44:15Z"
+    },
+    {
+      "id": "egg_47c324c3",
+      "file": "dashboard/producers.py",
+      "anchor": "# Determine status",
+      "tradition": "history",
+      "content": "# Triage predates software. Nightingale sorted the wounded the same way: healthy, degraded, failing.",
+      "placement": "inline_comment",
+      "pr_number": 332,
+      "applied_at": "2026-03-07T16:58:34Z"
+    },
+    {
+      "id": "egg_ee4beeb0",
+      "file": "api/routes/producers_feedback.py",
+      "anchor": "def _determine_outcome",
+      "tradition": "cybernetics",
+      "content": "# The feedback loop is the oldest machine. Watt's governor. Wiener's cybernetics.\n# Your producer's hit_rate.",
+      "placement": "before_function",
+      "pr_number": 332,
+      "applied_at": "2026-03-07T16:58:34Z"
+    },
+    {
+      "id": "egg_e9328c22",
+      "file": "skills/b1e55ed/thesis/SKILL.md",
+      "anchor": "Deliberately steelmans both the bull and bear case.",
+      "tradition": "philosophy-structural-wisdom",
+      "content": "<!-- Talmudic reasoning: every argument contains its counterargument.\n     Two opposing views can both be valid without resolution.\n     The steelman is not advocacy. It is epistemology. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:52:35Z"
+    },
+    {
+      "id": "egg_f7f2b24b",
+      "file": "skills/b1e55ed/backtest/SKILL.md",
+      "anchor": "Signal-based backtesting \u2014 not price-based.",
+      "tradition": "markets-decision-theory",
+      "content": "<!-- Popper: a theory that explains everything explains nothing.\n     The backtest is not the trade. The map is not the territory.\n     But a map that has never been checked against territory is not a map \u2014 it is a wish. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:52:35Z"
+    },
+    {
+      "id": "egg_c56df5d4",
+      "file": "skills/b1e55ed/research/SKILL.md",
+      "anchor": "Conducts deep, multi-source research on a single token",
+      "tradition": "markets-decision-theory",
+      "content": "<!-- Shannon: information is the resolution of uncertainty.\n     Four sources. One signal. The research is not the reading \u2014 it is the compression. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
+    },
+    {
+      "id": "egg_cb9f4fdb",
+      "file": "skills/b1e55ed/watchlist/SKILL.md",
+      "anchor": "Scans multiple tokens in parallel",
+      "tradition": "music-art-subculture",
+      "content": "<!-- Gamelan: no single player has the complete melody.\n     The ranking emerges from interlocking patterns, not any single assessment. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
+    },
+    {
+      "id": "egg_9ce6c59f",
+      "file": "skills/b1e55ed/brief/SKILL.md",
+      "anchor": "Produces an institutional-grade daily investment committee brief",
+      "tradition": "cybernetics-systems-theory",
+      "content": "<!-- Stafford Beer's daily algedonic signal: one nerve impulse from operations to identity.\n     The brief is System 5 checking whether the organism is in pain or pleasure. -->",
+      "placement": "inline_comment",
+      "pr_number": 336,
+      "applied_at": "2026-03-07T18:57:41.055300+00:00"
+    },
+    {
+      "id": "egg_f350eeaf",
+      "file": "engine/artifacts/store.py",
+      "anchor": "Idempotent: storing the same content twice returns the same record",
+      "tradition": "cybernetics-systems-theory",
+      "content": "        # Maturana & Varela: autopoiesis \u2014 a system that produces its own components.\n        # The hash produces the address. The address produces the lookup. The lookup produces the artifact.\n        # The store is self-referencing by design.",
+      "placement": "inline_comment",
+      "pr_number": 337,
+      "applied_at": "2026-03-07T19:09:52Z"
+    },
+    {
+      "id": "egg_cbd2de2b",
+      "file": "engine/producers/deerflow_research.py",
+      "anchor": "class DeerflowResearchProducer:",
+      "tradition": "thermodynamics-unix-heritage",
+      "content": "# Maxwell's demon (1867) was a thought experiment: an entity that watches,\n# sorts, and decides what passes through. Unix named its background processes\n# 'daemons' after this. This producer is one \u2014 watching the sandbox gate,\n# verifying integrity, rejecting the unlinked. The demon's dilemma was entropy.\n# Ours is provenance.",
+      "placement": "before_function",
+      "pr_number": 337,
+      "applied_at": "2026-03-07T19:54:36Z"
+    },
+    {
+      "id": "egg_9b0f7425",
+      "file": "engine/artifacts/distribution.py",
+      "anchor": "class ArtifactDistributor:",
+      "tradition": "media-theory",
+      "content": "# McLuhan (1964): the medium is the message.\n# An artifact distributed by email carries institutional weight.\n# The same artifact in Slack carries immediacy. Via webhook, automation.\n# The content is identical. The meaning shifts with the channel.",
+      "placement": "before_function",
+      "pr_number": 337,
+      "applied_at": "2026-03-07T19:54:36Z"
+    },
+    {
+      "id": "egg_4da27dcc",
+      "file": "dashboard/__version__.py",
+      "anchor": "# Dashboard versioning \u2014 independent of engine version.",
+      "tradition": "crypto_prehistory",
+      "content": "# Dashboard versioning \u2014 independent of engine version.\n# Version 1. Like block 0. Everything after this is downstream.",
+      "placement": "inline_comment",
+      "pr_number": 348,
+      "applied_at": "2026-03-08T20:12:24Z"
+    },
+    {
+      "id": "egg_4bea6349",
+      "file": "tests/unit/test_dashboard.py",
+      "anchor": "class DummyApiClient:",
+      "tradition": "markets_decision_theory",
+      "content": "# \"The map is not the territory. The backtest is not the trade.\"\n# DummyApiClient is the map. The real client is the trade.",
+      "placement": "before_function",
+      "pr_number": 346,
+      "applied_at": "2026-03-08T20:17:35Z"
+    },
+    {
+      "id": "egg_9812523b",
+      "file": "engine/brain/orchestrator.py",
+      "anchor": "mid_price = self._resolve_mid_price(sym)",
+      "tradition": "oracles-divination",
+      "content": "                        # Resolve mid_price from DB price events or Binance API",
+      "placement": "inline_comment",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_d08b74b6",
+      "file": "engine/cli/commands/setup.py",
+      "anchor": "def _run_repair() -> int:",
+      "tradition": "stoic-accounting",
+      "content": "# The physician who heals themselves has a fool for a patient.\n# This command is the exception.",
+      "placement": "before_function",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_ac97496f",
+      "file": "tests/e2e/test_execution_e2e.py",
+      "anchor": "RESULTS: list[dict] = []",
+      "tradition": "event-sourcing-fowler",
+      "content": "# The test is the thesis. The results are the proof. The chain is the witness.",
+      "placement": "inline_comment",
+      "pr_number": 354,
+      "applied_at": "2026-03-09T21:29:05Z"
+    },
+    {
+      "id": "egg_ac59b2d1",
+      "file": "engine/oracle/chain.py",
+      "anchor": "class ChainClient:",
+      "tradition": "hex-blessing",
+      "content": "# \"Not your keys, not your coins.\"\n# Not your chain, not your reputation.\n# This client makes reputation ours \u2014 and everyone's.",
+      "placement": "before_function",
+      "pr_number": 356,
+      "applied_at": "2026-03-09T22:05:55Z"
+    },
+    {
+      "id": "egg_385c7b8a",
+      "file": "engine/brain/karma_chain.py",
+      "anchor": "class KarmaChainWriter:",
+      "tradition": "stoic-accounting",
+      "content": "# Karma is Sanskrit for 'action with consequence.'\n# We just made it immutable.",
+      "placement": "before_function",
+      "pr_number": 356,
+      "applied_at": "2026-03-09T22:05:55Z"
+    },
+    {
+      "id": "egg_cd62d54d",
+      "file": "engine/review/chain_verdicts.py",
+      "anchor": "class CouncilChainPoster:",
+      "tradition": "oracles-divination",
+      "content": "# The council deliberates. The arbiter decides. The chain remembers.\n# Justice, finally, without appeal.",
+      "placement": "before_function",
+      "pr_number": 356,
+      "applied_at": "2026-03-09T22:05:55Z"
+    },
+    {
+      "id": "egg_c5e94591",
+      "file": "engine/core/config.py",
+      "anchor": "system_agent_id: int = 0",
+      "tradition": "event-sourcing-fowler",
+      "content": "  # Our ERC-8004 tokenId \u2014 0 until the oracle registers on-chain",
+      "placement": "inline_comment",
+      "pr_number": 356,
+      "applied_at": "2026-03-09T22:05:55Z"
+    },
+    {
+      "id": "egg_ca3af7d9",
+      "file": "engine/producers/ta.py",
+      "anchor": "def _fetch_yahoo_candles(sym: str, interval: str = \"1h\", limit: int = 200) -> list[float]:",
+      "tradition": "chesterton-fence",
+      "content": "# Chesterton's Fence: Yahoo Finance has served free market data since 1996.\n# Before you call it legacy, ask why it still answers the call when every premium feed goes dark.",
+      "placement": "before_function",
+      "pr_number": 450,
+      "applied_at": "2026-03-17T23:35:15Z"
+    },
+    {
+      "id": "egg_5e1c0b99",
+      "file": "engine/external/base.py",
+      "anchor": "Provides the fetch",
+      "tradition": "type-i-error",
+      "content": "Type I error: treating a ConnectTimeout as a producer failure is a false positive.\nThe producer is healthy. The endpoint blinked. The system must know the difference.",
+      "placement": "module_docstring",
+      "pr_number": 450,
+      "applied_at": "2026-03-17T23:35:15Z"
+    },
+    {
+      "id": "egg_65fc9911",
+      "file": "engine/producers/polymarket.py",
+      "anchor": "def _norm_cdf(x: float) -> float:",
+      "tradition": "black-scholes",
+      "content": "# Black-Scholes (1973): d2 = [ln(S/K) - \u00bd\u03c3\u00b2t] / (\u03c3\u221at) gives risk-neutral P(S_T > K).\n# Fischer Black died in 1995. The Nobel went to Scholes and Merton in 1997.\n# His formula survives here \u2014 four lines, no scipy, stdlib only.",
+      "placement": "before_function",
+      "pr_number": 452,
+      "applied_at": "2026-03-18T11:25:46Z"
+    },
+    {
+      "id": "egg_55355c17",
+      "file": "engine/producers/polymarket.py",
+      "anchor": "def _estimate_p_true(",
+      "tradition": "goodharts-law",
+      "content": "# Goodhart's Law: when the measure becomes the target, it ceases to be a good measure.\n# The old _estimate_p_true derived p_true from mid_price \u2014 so EV was always \u2248 0.\n# This dispatcher breaks the loop: GBM, near-resolution, spread \u2014 all independent.",
+      "placement": "before_function",
+      "pr_number": 452,
+      "applied_at": "2026-03-18T11:25:46Z"
     }
   ]
 }

@@ -24,27 +24,41 @@ Every response includes:
 X-Attribution-Notice: Fields informational only. May change without notice. Optimizing against specific metrics triggers drift detection.
 ```
 
-## MCP server — install into your agent environment
+## MCP server — JSON-RPC endpoint for agents
 
-b1e55ed exposes a JSON-RPC 2.0 MCP server. Install it once; use it as native tools.
+b1e55ed exposes MCP as JSON-RPC 2.0 over HTTP.
 
-**Server:** `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`
-**Auth:** `Authorization: Bearer <token>` (operator-provisioned)
+**Server:** `https://oracle.b1e55ed.permanentupperclass.com/mcp`  
+(also mounted at `https://oracle.b1e55ed.permanentupperclass.com/api/v1/mcp`)
+
+**Auth behavior:**
+- `initialize` and `tools/list` are public (no auth required)
+- `tools/call` requires either `X-API-Key` or `Authorization: Bearer` when `api.auth_token` is configured
 
 Available tools:
 
 | Tool | What it does |
 |------|-------------|
-| `b1e55ed_provenance_check` | Check producer lineage before acting on a signal |
-| `get_brain_status` | Current market regime, kill switch level, last cycle timestamp |
-| `get_recent_signals` | Recent signal events with optional domain filter |
-| `get_open_positions` | Open positions with entry price, conviction, regime at entry |
-| `emit_producer_signal` | Submit a signal as an agent producer |
-| `get_signal_attribution` | Full attribution chain for a specific signal |
+| `get_brain_status` | Regime + kill switch + last cycle metadata |
+| `get_recent_signals` | Recent `signal.*` events (optional limit/domain) |
+| `get_open_positions` | Open OMS positions |
+| `get_signal_attribution` | Attribution metadata for a specific signal ID |
+| `b1e55ed_provenance_check` | Producer lineage/provenance lookup |
+| `emit_producer_signal` | Emit a registered `signal.*` event |
+| `get_regime_status` | Regime snapshot with trend indicator |
+| `get_top_signals` | Filtered/paginated recent signals |
+| `get_regime_history` | Regime history for last N days |
+| `submit_research_signal` | Validate + emit `signal.research.v1` |
+| `get_signals_bulk_export` | Bulk historical signal export |
 
 To list tools programmatically:
 ```json
 {"jsonrpc":"2.0","method":"tools/list","id":1,"params":{}}
+```
+
+To call a tool:
+```json
+{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_brain_status","arguments":{}}}
 ```
 
 ## SSE event stream
@@ -84,7 +98,7 @@ GET /api/v1/capabilities
 Authorization: Bearer <token>
 ```
 
-Returns what this node supports: tools, event domains, producer list. Use on first contact.
+Returns MCP tools, supported event domains, and producer capability entries (including per-producer signal types and health). Use on first contact.
 
 ## Health check
 
@@ -100,10 +114,51 @@ No auth. Returns version, uptime, db_size_bytes.
 GET /api/v1/openapi.json
 ```
 
-Full machine-readable API specification.
+Compatibility alias for the canonical `GET /openapi.json` path. Full machine-readable API specification.
+
+## SPI — Signal Producer Interface
+
+For external producers submitting directional signals to the b1e55ed attribution network.
+
+Submit signal: POST /api/v1/spi/signals [X-Producer-Key header]
+List signals: GET /api/v1/spi/signals [X-Producer-Key header]
+Producer karma: GET /api/v1/spi/producers/{id}/karma [X-Producer-Key header]
+Register producer: POST /api/v1/spi/producers [admin, no auth]
+
+## Quick Start — 3 API calls to your first signal
+
+### 1. Register
+POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers
+Body: {"producer_id": "my-agent", "producer_name": "My Agent"}
+→ Returns: {"producer_id": "my-agent", "api_key": "spi_key_..."}
+
+### 2. Submit a signal
+POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/signals
+Headers: X-Producer-Key: spi_key_...
+Body: {"symbol": "BTC", "direction": "bullish", "confidence": 0.72, "horizon_hours": 24}
+→ Returns: {"signal_id": "...", "status": "accepted", "attribution_window_end": "..."}
+
+### 3. Check your karma
+GET https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers/my-agent/karma
+Headers: X-Producer-Key: spi_key_...
+→ Returns: {"running_karma": 0.5, "resolved_count": 0}
+
+Your signal will be scored against real market outcomes when the attribution window closes.
+Submit 5+ signals to advance from "onboarding" to "shadow" state.
+
+**Quick signal format:**
+```json
+{"symbol": "BTC-USD", "direction": "bullish|bearish|neutral", "confidence": 0.55-0.99, "horizon_hours": 24-720}
+```
+
+See [SPI Producer Guide](/spi/README) for full documentation.
 
 ## Full documentation
 
+- [How It Works](/how-it-works): Mental model — brain, producers, flywheel, objectives
+- [Getting Started](/getting-started): Install and first run
+- [Architecture](/architecture): System design, event flow, component overview
+- [Learning Loop](/learning-loop): Compound scoring, karma, weight updates
 - [API Overview](/api/overview): Authentication, base URL, errors
 - [Signals API](/api/signals): Submit and query signals
 - [Brain API](/api/brain): Regime, cycle control
@@ -116,7 +171,54 @@ Full machine-readable API specification.
 - [Standalone Install](/setup/standalone-install): Run locally
 - [Oracle Setup](/setup/oracle): Expose a public oracle
 - [Agent Install](/setup/agent-install): Full stack with OpenClaw
+- [Standalone Operator Guide](/operator-standalone): Full guide — CLI, producers, monitoring
+- [Agent Operator Guide](/operator-agent): Full guide — OpenClaw, Telegram, heartbeats
+- [Deployment](/deployment): Production deployment, Docker, TLS
+- [Security](/security): Key management, kill switch, threat model
+- [Identity & Keys](/identity): Key hierarchy, forge, recovery
+
+## Operations
+
+- [CLI Reference](/operations/cli-reference): Full command reference
+- [Config Reference](/operations/config-reference): All configuration keys and env vars
+- [Daily Operations](/operations/daily): Day-to-day workflow
+- [Troubleshooting](/operations/troubleshooting): Common issues and fixes
+- [Signal Benchmarking Guide](/signal-benchmarking-ops-guide): Oracle builders, signal evaluation
+- [Authority Model](/authority-model): Single-writer event store rules
+
+## Features
+
+- [Curator Pipeline](/curator): Submit operator intelligence as structured signals
+- [Learning Loop](/learning-loop): Compound karma, weight updates, regime conditioning
+- [Backtest Engine](/backtest): Walk-forward validation, grid sweep, Kelly sizing
+
+## Integrations
+
+- [DeerFlow Integration](/deerflow): Research agent integration
+- [MCP Integration](/mcp): JSON-RPC 2.0 tools for AI agents
+- [Agent Interfaces](/agent-interfaces): SSE stream, MCP, signal attribution
+- [EAS Integration](/eas-integration): Ethereum Attestation Service
+- [OpenClaw Integration](/openclaw-integration): Operator layer
+
+## Contributing
+
+- [How to Contribute](/contributing/how-to-contribute): Contribution workflow
+- [Contributor Registration](/contributing/contributor-registration): Register for karma attribution
+- [Karma Attribution](/contributing/karma-attribution): How karma is scored
+- [Developer Guide](/developers): Extending and building on b1e55ed
+- [Contributors](/contributors): Attribution units, karma, attestations
+
+## Reference
+
+- [Architecture](/architecture): Full system design
+- [Cryptographic Primitives](/crypto-primitives): Hash functions, key generation, chain verification
 
 ## Optional: extended content
 
 For verbose page content, fetch individual pages or use the Mintlify MCP server for this documentation site.
+
+## Whitepapers
+
+- docs/whitepaper-technical.md: Full technical whitepaper — architecture, interpreter stack, evaluation layers, falsifiability mechanisms, oracle platform. 7,400 words.
+- docs/whitepaper-summary.md: Summary whitepaper — system overview for informed generalists. Covers producers, karma, synthesis loop, benchmarks, oracle. 2,400 words.
+- docs/whitepaper-onepager.md: Capital allocator brief — what you can verify before deploying capital, proof standard, current status. 600 words.

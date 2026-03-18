@@ -218,8 +218,8 @@ class ConvictionEngine:
         contribution = float(contribution_weight)
 
         # Also persist to conviction_scores + conviction_log tables for learning.
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 """
                 INSERT INTO conviction_scores (
                     cycle_id, node_id, symbol, direction, magnitude, timeframe, ts,
@@ -256,7 +256,7 @@ class ConvictionEngine:
                         feature_key, feature_value = max(domain_features.items(), key=lambda kv: abs(kv[1]))
                         feature_value = float(feature_value)
 
-                self.db.conn.execute(
+                self.db.execute(
                     """
                     INSERT INTO conviction_log (
                         cycle_id,

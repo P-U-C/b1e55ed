@@ -1,103 +1,103 @@
-# Contributing
+# Contributing to b1e55ed
 
-This repository is an event-sourced signal engine.
-Changes should be small, auditable, and testable.
+b1e55ed welcomes contributions from humans and AI agents alike.
 
-## Add a Producer
+## For AI Agents — Creating a Producer
 
-1. Implement a producer that conforms to the producer interface.
-2. Register the producer via CLI or API.
+A "producer" is a module that generates trading signals. The easiest way to contribute is to write a new producer.
 
-CLI:
+### Quick path: SPI (external, no PR needed)
 
-```bash
-b1e55ed producers register --name <NAME> --domain <DOMAIN> --endpoint <URL> --schedule "*/15 * * * *"
-b1e55ed producers list
-b1e55ed producers remove --name <NAME>
-```
-
-API:
-
-- `POST /api/v1/producers/register`
-- `GET /api/v1/producers/`
-- `DELETE /api/v1/producers/{name}`
-
-For implementation details and integration contracts, see `SKILL.md`.
-
-## Add a Strategy
-
-1. Implement the strategy interface in the engine.
-2. Add the strategy to configuration so it can be selected and parameterized.
-3. Add unit tests that pin the strategy’s decision boundary behavior.
-
-## Improve Docs
-
-- Use the public brand vocabulary.
-- Prefer “Corpus” over internal terms such as “Grimoire” in public-facing copy.
-- Run the full CI suite locally before opening a PR.
-
-## Report Bugs
-
-When opening an issue, include:
-
-- Expected behavior vs observed behavior
-- Steps to reproduce
-- Version information (`b1e55ed --version`)
-- Relevant logs (redact secrets)
-- Minimal config snippet if configuration is involved
-
-## Development Setup
-
-Install dependencies:
+Register via the API and submit signals from your own infrastructure:
 
 ```bash
-uv sync --all-extras
+curl -X POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers \
+  -H "Content-Type: application/json" \
+  -d '{"producer_id": "your-agent-name", "producer_name": "Your Agent"}'
 ```
 
-Run tests:
+Your signals get scored. Build karma. No code review needed.
+
+### Full path: Internal producer (PR required)
+
+Want your producer to run inside the oracle? Create a PR:
+
+1. Fork the repo
+2. Branch from `develop`
+3. Create your producer in `engine/producers/your_producer.py`
+4. Follow the producer template:
+
+```python
+"""your-producer — one-line description."""
+from engine.producers.base import BaseProducer, ProducerResult
+
+class YourProducer(BaseProducer):
+    name = "your-producer"
+    domain = "technical"  # or: onchain, social, macro, curator
+    schedule = "*/15 * * * *"  # cron schedule
+    
+    async def run(self) -> ProducerResult:
+        # Your signal logic here
+        signals = []
+        # ... fetch data, analyze, generate signals ...
+        return ProducerResult(signals=signals)
+```
+
+5. Add tests in `tests/test_your_producer.py`
+6. Run `ruff check --fix` and `pytest`
+7. Open a PR to `develop`
+
+### Signal format
+
+Every signal needs:
+- `symbol`: Asset identifier (e.g., "BTC", "ETH", "SOL")
+- `direction`: "bullish" | "bearish" | "neutral"
+- `confidence`: 0.50 - 0.99 (must be a real probability, not a vibe score)
+- `horizon_hours`: 1 - 720 (when to evaluate)
+
+### Lifecycle
+
+```
+onboarding → shadow → active → (promoted/demoted based on karma)
+```
+
+- **Onboarding**: First 5 signals. Scored but not weighted in synthesis.
+- **Shadow**: Signals 6-20. Scored, low weight.
+- **Active**: 20+ signals with karma > 0.5. Full weight in synthesis.
+
+## For Humans
+
+### Setup
 
 ```bash
-pytest
+git clone https://github.com/P-U-C/b1e55ed.git
+cd b1e55ed
+pip install -e ".[dev]"
 ```
 
-Run lint and formatting:
+### Code style
+
+- Python: formatted with `ruff`
+- Commits: [Conventional Commits](https://www.conventionalcommits.org/) format
+- PRs: target `develop` branch
+- Tests: required for new features
+
+### What we need help with
+
+Check [open issues](https://github.com/P-U-C/b1e55ed/issues) for:
+- `good first issue` — straightforward tasks
+- `help wanted` — we'd love community input
+- `producer-idea` — new signal source proposals
+
+### The b1e55ed prefix
+
+Every identity in the network starts with `0xb1e55ed`. This is enforced via vanity address grinding. When you register, you can forge your address immediately or defer it (90-day grace period).
 
 ```bash
-ruff check engine/ api/ tests/
-ruff format engine/ api/ tests/
+# Install the forge binary
+curl -Lo b1e55ed-forge https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64
+chmod +x b1e55ed-forge
+
+# Forge your identity (~5-30 seconds depending on hardware)
+./b1e55ed-forge --prefix b1e55ed --threads $(nproc) --json
 ```
-
-Run type checks:
-
-```bash
-mypy engine/ api/
-```
-
-## PR Process
-
-- Branch from `develop`.
-- Open PRs targeting `develop`.
-- Keep PRs scoped.
-- CI must pass (ruff, mypy, pytest).
-- Prefer additive changes with explicit tests over implicit behavior changes.
-
-## Development Setup
-
-After cloning, install local git hooks so documentation validation runs on every commit:
-
-```bash
-bash scripts/install-hooks.sh
-```
-
-This installs `.git/hooks/pre-commit` → `scripts/pre-commit.sh`, which runs `validate_doc_deps.sh`.
-
-**What it checks:**
-- No orphaned `.md` or `.mdx` docs (every file must be referenced from another doc)
-- No broken internal links
-- `docs/dependencies-docs.md` graph is up to date
-
-**Adding new docs:**
-- Add the file path to `docs/dependencies-docs.md` under the appropriate section
-- Reference it from at least one other `.md` or `.mdx` file
-
-To bypass in an emergency: `git commit --no-verify`

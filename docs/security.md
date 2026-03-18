@@ -1,3 +1,8 @@
+---
+title: "Security"
+description: "Key management, kill switch, threat model, and security architecture."
+---
+
 # Security Architecture
 
 b1e55ed security model: minimize trust, maximize auditability.

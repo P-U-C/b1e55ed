@@ -1,3 +1,8 @@
+---
+title: "Standalone Operator Guide"
+description: "Run b1e55ed without AI dependency — CLI-first, data engine only."
+---
+
 # Standalone Operator Guide (No AI)
 
 This guide is for operators who want **the b1e55ed data + signal engine only**.
@@ -14,7 +19,7 @@ This guide is for operators who want **the b1e55ed data + signal engine only**.
 - **REST API** (`/api/v1`) for health, producers, oracle, etc.
 - **Dashboard** (optional, but useful): local web UI
 - **CLI control plane**: setup, brain cycles, health checks, positions, contributors
-- **Systemd-ready**: run API + brain loop as services
+- **Systemd-ready**: single `b1e55ed daemon` process manages everything
 
 **No AI required.** If you later want an agent layer (Telegram alerts, natural-language ops), see: [Agent Operator Guide (OpenClaw)](operator-agent.md).
 
@@ -102,8 +107,8 @@ The wizard is the recommended first command after install. It walks you through 
 
 You will see `0xb1e55ed` in banners and identity output.
 
-- It’s the system’s **blessed hex prefix** and a human-visible marker that you’re interacting with the correct toolchain.
-- It also shows up in identity / provenance contexts so operators can spot “wrong box / wrong env” mistakes.
+- It's the system's **blessed hex prefix** and a human-visible marker that you're interacting with the correct toolchain.
+- It also shows up in identity / provenance contexts so operators can spot "wrong box / wrong env" mistakes.
 
 ### How long does identity forge take?
 
@@ -111,13 +116,13 @@ The forge step is CPU-bound. Rough ballpark:
 
 | Hardware | Typical forge time |
 |---|---:|
-| 2 vCPU shared VPS | 30–120 seconds |
-| 4 vCPU VPS | 15–60 seconds |
-| Modern laptop CPU | 5–30 seconds |
+| 2 vCPU shared VPS | 30-120 seconds |
+| 4 vCPU VPS | 15-60 seconds |
+| Modern laptop CPU | 5-30 seconds |
 
-If it’s taking longer, let it run. (You can also re-run identity operations later via `b1e55ed identity --help`.)
+If it's taking longer, let it run. (You can also re-run identity operations later via `b1e55ed identity --help`.)
 
-⚠️ **Common failure point #2: forge feels “stuck”**
+⚠️ **Common failure point #2: forge feels "stuck"**
 
 What to do:
 
@@ -168,21 +173,21 @@ b1e55ed brain --full
 
 ## Core CLI commands
 
-These are the commands you’ll use daily.
+These are the commands you'll use daily.
 
 | Command | What it does |
 |---|---|
 | `b1e55ed wizard` | First-run interactive setup (identity, config, producers, first run, API) |
 | `b1e55ed start` | Starts API + dashboard together (ports 5050/5051 by default) |
 | `b1e55ed brain` | Runs one brain cycle (add `--full` for slower producers) |
-| `b1e55ed scan` | **Not a top-level command in current releases.** Use `b1e55ed alerts` (recent alerts) + dashboard views to “scan” system state. |
+| `b1e55ed scan` | **Not a top-level command in current releases.** Use `b1e55ed alerts` (recent alerts) + dashboard views to "scan" system state. |
 | `b1e55ed health` | Cron-safe health check (useful for monitoring) |
 | `b1e55ed status` | Human-readable system status summary |
 | `b1e55ed signal` | Inject operator intel (curator signal) |
 | `b1e55ed positions` | Lists open positions with best-effort PnL |
 | `b1e55ed contributors` | View/manage contributor reputation + provenance |
 
-Tip: everything supports `--help`. For the full list, see [CLI reference](cli-reference.md).
+Tip: everything supports `--help`. For the full list, see [CLI reference](operations/cli-reference.mdx).
 
 ---
 
@@ -200,7 +205,7 @@ b1e55ed loads this on startup and uses it to define:
 
 ### Key fields to know
 
-(Exact keys are fully documented in [Configuration](configuration.md); below is the operator-focused subset.)
+(Exact keys are fully documented in [Configuration](operations/config-reference.mdx); below is the operator-focused subset.)
 
 | Area | What to look for | Why it matters |
 |---|---|---|
@@ -272,7 +277,7 @@ If that errors, fix the line it reports and re-run.
 
 ## Producer reference (13 core producers)
 
-b1e55ed uses “producers” to collect different kinds of signals.
+b1e55ed uses "producers" to collect different kinds of signals.
 
 This table is designed for operators deciding what to enable first.
 
@@ -288,7 +293,7 @@ This table is designed for operators deciding what to enable first.
 | `tradfi-basis` | tradfi | TradFi basis / funding proxies | If you trade BTC/ETH and care about leverage crowding | Medium |
 | `etf-flows` | tradfi | ETF flow signals (where applicable) | If you care about US market structure flows | Medium |
 | `market-sentiment` | social | Sentiment signal from supported sources | If you want risk-on/off overlay | Medium |
-| `social-intel` | social | Social narrative / intel ingestion | When you want discretionary “what’s being talked about” | Medium |
+| `social-intel` | social | Social narrative / intel ingestion | When you want discretionary "what's being talked about" | Medium |
 | `curator-intel` | curator | Operator-injected signals (manual intel) | Always if humans provide inputs | Low |
 | `ai-consensus` | curator | AI consensus synthesis (requires AI access) | **Standalone operators usually leave this off** | High (external AI) |
 
@@ -301,70 +306,69 @@ Notes:
 
 ## Running as a service (systemd)
 
-Below are **copy/paste** unit files that run:
+`b1e55ed daemon` manages all subsystems in a single process - API, dashboard, brain cycles, and outcome resolution.
 
-- `b1e55ed-api.service`: API server (port 5050)
-- `b1e55ed-brain.service`: a simple loop that runs `b1e55ed brain` every 5 minutes
-
-Assumptions:
-
-- You installed as the `b1e55ed` user (recommended)
-- `b1e55ed` is available at `/home/b1e55ed/.local/bin/b1e55ed`
-
-### 1) API service
+**One unit, zero crontab entries.**
 
 ```bash
-sudo tee /etc/systemd/system/b1e55ed-api.service >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/b1e55ed.service >/dev/null <<EOF
 [Unit]
-Description=b1e55ed API
+Description=b1e55ed trading intelligence
 After=network.target
 
 [Service]
 Type=simple
-User=b1e55ed
-WorkingDirectory=/home/b1e55ed
-Environment=PATH=/home/b1e55ed/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/b1e55ed/.local/bin/b1e55ed api --host 127.0.0.1 --port 5050
-Restart=always
-RestartSec=5
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+EnvironmentFile=-/home/ubuntu/.b1e55ed/env
+ExecStart=/home/ubuntu/.local/bin/b1e55ed daemon
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
-```
 
-### 2) Brain loop service
-
-```bash
-sudo tee /etc/systemd/system/b1e55ed-brain.service >/dev/null <<'EOF'
-[Unit]
-Description=b1e55ed brain loop (runs every 5 minutes)
-After=network.target b1e55ed-api.service
-
-[Service]
-Type=simple
-User=b1e55ed
-WorkingDirectory=/home/b1e55ed
-Environment=PATH=/home/b1e55ed/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# Run one cycle every 300s. Keep it boring and observable.
-ExecStart=/bin/bash -lc 'while true; do /home/b1e55ed/.local/bin/b1e55ed brain --full; sleep 300; done'
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-### 3) Enable + start
-
-```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now b1e55ed-api.service b1e55ed-brain.service
+sudo systemctl enable --now b1e55ed.service
+sudo systemctl status b1e55ed.service
+```
 
-systemctl status b1e55ed-api.service --no-pager
-systemctl status b1e55ed-brain.service --no-pager
+> **Note:** Replace `ubuntu` with your actual username if different.
+
+### What the daemon runs
+
+| Subsystem | Schedule |
+|-----------|----------|
+| `b1e55ed api` | Always-on (restarts on failure) |
+| `b1e55ed dashboard` | Always-on (restarts on failure) |
+| `b1e55ed brain` | Every 5 minutes |
+| `b1e55ed brain --full` | Every 6 hours |
+| `b1e55ed resolve-outcomes` | Every 30 minutes |
+
+Brain cycles wait for the API to be healthy before starting.
+
+### Logs
+
+Per-process rotating logs in `~/.b1e55ed/logs/`:
+
+```bash
+tail -f ~/.b1e55ed/logs/brain.log
+tail -f ~/.b1e55ed/logs/api.log
+journalctl -u b1e55ed -f
+```
+
+### Tuning intervals
+
+Override defaults in `config/user.yaml`:
+
+```yaml
+daemon:
+  brain_interval_seconds: 300       # default: 5 min
+  brain_full_interval_seconds: 21600 # default: 6h
+  resolver_interval_seconds: 1800   # default: 30 min
 ```
 
 ---
@@ -393,14 +397,14 @@ Full oracle docs: [docs/oracle.md](oracle.md).
 
 ## Troubleshooting
 
-### API won’t start / port in use
+### API won't start / port in use
 
 ```bash
 # See what is using 5050/5051
 sudo ss -ltnp | grep -E ':(5050|5051)\b' || true
 
-# If you changed ports, update your systemd unit and restart
-sudo systemctl restart b1e55ed-api.service
+# If you changed ports, restart the daemon
+sudo systemctl restart b1e55ed.service
 ```
 
 ### Brain runs but no events / everything looks empty
@@ -419,8 +423,9 @@ b1e55ed health
 ### Service logs
 
 ```bash
-journalctl -u b1e55ed-api.service -n 200 --no-pager
-journalctl -u b1e55ed-brain.service -n 200 --no-pager
+journalctl -u b1e55ed -n 200 --no-pager
+tail -f ~/.b1e55ed/logs/api.log
+tail -f ~/.b1e55ed/logs/brain.log
 ```
 
 ### Factory reset (last resort)

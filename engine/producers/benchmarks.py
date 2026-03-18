@@ -69,10 +69,10 @@ class BenchmarkMomentumProducer(BaseProducer):
 
     def _get_prices_from_db(self, symbol: str) -> list[float]:
         try:
-            rows = self.ctx.db.conn.execute(
+            rows = self.ctx.db.fetchall(
                 "SELECT payload FROM events WHERE type = ? AND json_extract(payload, '$.symbol') = ? ORDER BY ts DESC LIMIT 20",
                 (str(EventType.SIGNAL_PRICE_WS_V1), symbol),
-            ).fetchall()
+            )
             prices: list[float] = []
             for r in rows:
                 p = json.loads(r[0]) if isinstance(r[0], str) else r[0]
@@ -156,10 +156,10 @@ class BenchmarkEqualWeightProducer(BaseProducer):
         )
         for symbol in BENCHMARK_SYMBOLS:
             try:
-                rows = self.ctx.db.conn.execute(
+                rows = self.ctx.db.fetchall(
                     "SELECT payload FROM events WHERE ts >= ? AND type IN (?, ?, ?, ?, ?) AND json_extract(payload, '$.symbol') = ?",
                     (cutoff, *signal_types, symbol),
-                ).fetchall()
+                )
             except Exception:
                 continue
 
@@ -225,10 +225,10 @@ class BenchmarkDiscretionaryProducer(BaseProducer):
     def collect(self) -> list[dict[str, Any]]:
         now = datetime.now(tz=UTC).isoformat()
         try:
-            rows = self.ctx.db.conn.execute(
+            rows = self.ctx.db.fetchall(
                 "SELECT symbol, direction, confidence, reasoning FROM discretionary_signals WHERE expires_at IS NULL OR expires_at > ?",
                 (now,),
-            ).fetchall()
+            )
         except Exception:
             return []
         return [{"symbol": r[0], "direction": r[1], "confidence": r[2], "reasoning": r[3]} for r in rows]

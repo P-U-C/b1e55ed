@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,10 +31,18 @@ class Contributor:
 
 
 class ContributorRegistry:
-    def __init__(self, db: Database, *, eas_client: object | None = None, github_publisher: object | None = None):
+    def __init__(
+        self,
+        db: Database,
+        *,
+        eas_client: object | None = None,
+        github_publisher: object | None = None,
+        chain_client: object | None = None,
+    ):
         self._db = db
         self._eas = eas_client
         self._gh_publisher = github_publisher
+        self._chain_client = chain_client
 
     @staticmethod
     def _row_to_contributor(row: sqlite3.Row) -> Contributor:
@@ -98,6 +108,15 @@ class ContributorRegistry:
             except Exception:
                 pass
 
+        # The UTXO model had it right: verify before you broadcast.
+        # Double-registration is a class of double-spend. Prevent it at the ledger.
+        # Guard: if node_id already registered, raise before publishing to GitHub.
+        # The publisher fires before the INSERT, so without this check a new GH issue
+        # is created on every re-registration attempt — even though the INSERT will fail.
+        _existing_row = self._db.fetchone("SELECT id FROM contributors WHERE node_id = ?", (node_id,))
+        if _existing_row is not None:
+            raise ValueError("contributor.duplicate_node")
+
         # Best-effort GitHub publish — always fires, fail-open (never blocks registration)
         if self._gh_publisher is not None:
             try:
@@ -131,8 +150,8 @@ class ContributorRegistry:
                 pass
 
         try:
-            with self._db.conn:
-                self._db.conn.execute(
+            with self._db._lock, self._db.conn:
+                self._db.execute(
                     """
                     INSERT INTO contributors (id, node_id, name, role, metadata, registered_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -141,6 +160,39 @@ class ContributorRegistry:
                 )
         except sqlite3.IntegrityError as e:
             raise ValueError("contributor.duplicate_node") from e
+
+        # ERC-8004 fire-and-forget: mint on-chain identity NFT after DB write.
+        # Runs in a background thread — wait_for_transaction_receipt blocks up to 120s
+        # and must never hold up the HTTP handler that called register().
+        if self._chain_client is not None:
+            _chain_client = self._chain_client
+            _db = self._db
+            _public_base_url: str = getattr(_chain_client, "_public_base_url", "") or ""
+            _manifest_url = (
+                f"{_public_base_url}/api/v1/agents/{node_id}/manifest" if _public_base_url else f"/api/v1/agents/{node_id}/manifest"
+                # NOTE: relative URLs are non-resolvable on-chain; set onchain.public_base_url in config
+                # to ensure a fully-qualified agentURI is minted.
+            )
+            _log = logging.getLogger("b1e55ed.contributors")
+
+            def _mint_onchain() -> None:  # noqa: WPS430
+                try:
+                    agent_id = _chain_client.register_producer(_manifest_url)  # type: ignore[attr-defined]
+                    if agent_id is not None:
+                        with _db.conn:
+                            _db.conn.execute(
+                                "UPDATE contributors SET agent_id = ? WHERE id = ?",
+                                (agent_id, contributor_id),
+                            )
+                        _log.info("ERC-8004 chain registration succeeded for %s — agentId=%d", node_id, agent_id)
+                except Exception:
+                    _log.warning(
+                        "ERC-8004 chain registration failed for %s — continuing without on-chain identity",
+                        node_id,
+                        exc_info=True,
+                    )
+
+            threading.Thread(target=_mint_onchain, daemon=True, name=f"erc8004-mint-{node_id[:8]}").start()
 
         return Contributor(
             id=contributor_id,
@@ -152,27 +204,27 @@ class ContributorRegistry:
         )
 
     def get(self, contributor_id: str) -> Contributor | None:
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             "SELECT id, node_id, name, role, registered_at, metadata FROM contributors WHERE id = ?",
             (contributor_id,),
-        ).fetchone()
+        )
         if row is None:
             return None
         return self._row_to_contributor(row)
 
     def get_by_node(self, node_id: str) -> Contributor | None:
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             "SELECT id, node_id, name, role, registered_at, metadata FROM contributors WHERE node_id = ?",
             (node_id,),
-        ).fetchone()
+        )
         if row is None:
             return None
         return self._row_to_contributor(row)
 
     def list_all(self) -> list[Contributor]:
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             "SELECT id, node_id, name, role, registered_at, metadata FROM contributors ORDER BY registered_at ASC",
-        ).fetchall()
+        )
         return [self._row_to_contributor(r) for r in rows]
 
     def update(self, contributor_id: str, *, name: str | None = None, metadata: dict | None = None) -> Contributor | None:
@@ -184,8 +236,8 @@ class ContributorRegistry:
         new_meta = metadata if metadata is not None else existing.metadata
         now = datetime.now(tz=UTC).isoformat()
 
-        with self._db.conn:
-            self._db.conn.execute(
+        with self._db._lock, self._db.conn:
+            self._db.execute(
                 """
                 UPDATE contributors
                 SET name = ?, metadata = ?, updated_at = ?
@@ -198,6 +250,6 @@ class ContributorRegistry:
         return updated
 
     def deregister(self, contributor_id: str) -> bool:
-        with self._db.conn:
-            cur = self._db.conn.execute("DELETE FROM contributors WHERE id = ?", (contributor_id,))
+        with self._db._lock, self._db.conn:
+            cur = self._db.execute("DELETE FROM contributors WHERE id = ?", (contributor_id,))
         return cur.rowcount > 0

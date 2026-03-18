@@ -37,10 +37,10 @@ def write_outcome_for_closed_position(
     db: Database,
     config: Config,
     position_id: str,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Compute and persist outcome attribution for a closed position."""
 
-    row = db.conn.execute("SELECT * FROM positions WHERE id = ?", (str(position_id),)).fetchone()
+    row = db.fetchone("SELECT * FROM positions WHERE id = ?", (str(position_id),))
     if row is None:
         raise ValueError(f"Unknown position_id: {position_id}")
 
@@ -53,10 +53,12 @@ def write_outcome_for_closed_position(
 
     loop = LearningLoop(db=db, config=config)
     attribution = loop.attribute_outcome(position_id=str(position_id), realized_pnl=float(realized_pnl))
+    if attribution is None:
+        return None  # No conviction_id — attribution gap already logged
 
     # Write outcome back to conviction score.
-    with db.conn:
-        db.conn.execute(
+    with db._lock, db.conn:
+        db.execute(
             "UPDATE conviction_scores SET outcome = ?, outcome_ts = ? WHERE id = ?",
             (float(attribution.realized_pnl), utc_now().isoformat(), int(attribution.conviction_id)),
         )

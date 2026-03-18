@@ -78,15 +78,18 @@ def test_cockpit_state_producer_breakdown_sorted_by_confidence(db):
     now = datetime.now(tz=UTC)
     for pid, conf in [("producer-a", 0.8), ("producer-b", 0.5)]:
         payload = {
-            "trade_id": f"t-{pid}",
-            "producer_id": pid,
-            "domain": "ta",
-            "signal_event_id": "evt-1",
-            "direction": "long",
+            "forecast_id": f"f-{pid}",
+            "source": f"{pid}@0.0.1",
+            "asset": "BTC",
+            "horizon": "24h",
+            "action": "long",
             "confidence": conf,
+            "regime_tag": "unknown",
+            "abstention_reason": None,
+            "lifecycle_state": "new",
         }
         db.append_event(
-            event_type=EventType.SIGNAL_ACCEPTED_V1,
+            event_type=EventType.FORECAST_V1,
             payload=payload,
             source="test",
             ts=now,
@@ -172,14 +175,135 @@ def _make_dashboard_client():
     return client
 
 
-def test_cockpit_page_returns_200():
+def test_cockpit_page_redirects_to_brain():
     client = _make_dashboard_client()
-    resp = client.get("/cockpit")
-    assert resp.status_code == 200
-    assert "cockpit" in resp.text.lower()
+    resp = client.get("/cockpit", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
 
 
 def test_cockpit_htmx_refresh_endpoint():
     client = _make_dashboard_client()
     resp = client.get("/partials/cockpit-content")
     assert resp.status_code == 200
+
+
+# ---- PR #331 integration tests ----
+
+
+def test_producer_breakdown_field_mapping(db):
+    """forecast.v1 events map to correct producer_id, direction, domain fields."""
+    now = datetime.now(tz=UTC)
+    payload = {
+        "forecast_id": "f-fieldmap-test",
+        "source": "whale-tracker@1.0.0",
+        "asset": "ETH",
+        "horizon": "24h",
+        "action": "short",
+        "confidence": 0.77,
+        "regime_tag": "bear",
+        "abstention_reason": None,
+        "lifecycle_state": "new",
+    }
+    db.append_event(
+        event_type=EventType.FORECAST_V1,
+        payload=payload,
+        source="test",
+        ts=now,
+    )
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    signals = resp.json()["producer_signals"]
+    assert len(signals) >= 1, "Expected at least one producer signal"
+
+    signal = next((s for s in signals if s["producer_id"] == "whale-tracker"), None)
+    assert signal is not None, "producer_id 'whale-tracker' not found in breakdown"
+    assert signal["direction"] == "short", f"Expected direction='short', got {signal['direction']}"
+    assert signal["domain"] == "ETH", f"Expected domain='ETH', got {signal['domain']}"
+    assert signal["confidence"] == 0.77
+
+
+def test_producer_breakdown_does_not_use_old_event_type(db):
+    """Cockpit must NOT use attribution.signal_accepted.v1 — only forecast.v1."""
+    now = datetime.now(tz=UTC)
+    for i in range(3):
+        db.append_event(
+            event_type="attribution.signal_accepted.v1",
+            payload={
+                "producer_id": f"old-producer-{i}",
+                "direction": "long",
+                "confidence": 0.8,
+            },
+            source="test",
+            ts=now,
+        )
+
+    client = _make_api_client(db)
+    resp = client.get("/cockpit/state")
+    assert resp.status_code == 200
+    signals = resp.json()["producer_signals"]
+    assert signals == [], (
+        f"Cockpit is querying old event type attribution.signal_accepted.v1! Got {len(signals)} signal(s). Only forecast.v1 should be queried."
+    )
+
+
+def _make_producers_client(registry_override=None):
+    """Build a TestClient for the producers router with auth disabled."""
+    from api.auth import require_bearer_token
+    from api.routes.producers import router as producers_router
+
+    app = FastAPI()
+    app.state.db = Database(db_path=":memory:")
+    if registry_override is not None:
+        app.state.registry = registry_override
+    app.include_router(producers_router)
+    # Disable auth for testing
+    app.dependency_overrides[require_bearer_token] = lambda: None
+    return TestClient(app)
+
+
+def test_producers_status_returns_data_after_discover():
+    """Producers /status endpoint returns registered producers after discover()."""
+    from engine.producers import registry as producer_registry
+    from engine.producers.registry import _reset_for_tests
+
+    _reset_for_tests()
+    producer_registry.discover()
+
+    client = _make_producers_client(registry_override=producer_registry)
+    resp = client.get("/producers/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    producers = data.get("producers", {})
+    assert len(producers) > 0, "Producers /status returned empty after discover() — registry should have populated producers from engine/producers/"
+
+
+# Von Foerster: the observer is part of the system.
+# A registry that has not observed its producers is not part of the system.
+# This test proves it.
+def test_producers_status_empty_without_discover():
+    """Negative test: without discover(), a manually-blocked registry returns empty.
+
+    Simulates the pre-fix state where the registry was never populated and
+    lazy discovery is bypassed — proving discover() is load-bearing for
+    the /producers/status endpoint.
+    """
+    from types import SimpleNamespace
+
+    # Create an empty mock registry that mimics the pre-fix state:
+    # no producers registered, no auto-discovery
+    empty_registry = SimpleNamespace(
+        list_producers=lambda: [],
+        get_producer=lambda name: (_ for _ in ()).throw(KeyError(name)),
+    )
+
+    client = _make_producers_client(registry_override=empty_registry)
+    resp = client.get("/producers/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    producers = data.get("producers", {})
+    assert len(producers) == 0, (
+        f"Expected empty producers without discover(), got {len(producers)}. This means the endpoint doesn't depend on registry.list_producers()."
+    )

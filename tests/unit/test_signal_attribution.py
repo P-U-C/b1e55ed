@@ -133,18 +133,27 @@ class TestSignalAcceptedEmission:
         result = oms.submit(intent, mid_price=50000.0, equity_usd=10000.0)
         assert result.status == "filled"
 
-        # Check SIGNAL_ACCEPTED_V1 was emitted
+        # Check SIGNAL_ACCEPTED_V1 was emitted (real attribution — not a gap event)
         accepted_events = db.get_events(event_type=EventType.SIGNAL_ACCEPTED_V1)
         assert len(accepted_events) >= 1
 
         payload = accepted_events[0].payload
-        assert payload["trade_id"] == result.order_id
+        assert payload["trade_id"] == str(result.position_id)
         assert payload["signal_event_id"] == ev.id
         assert payload["direction"] == "long"
         assert payload["domain"] == "technical"
         assert payload["producer_id"] == "test.ta_producer"
 
-    def test_no_signal_accepted_when_no_source_events(self, db, config):
+    def test_signal_accepted_emitted_as_fallback_when_no_source_events(self, db, config):
+        """ATTRIBUTION_GAP_V1 must be emitted when no source events exist.
+
+        Previously the OMS had a guard ``if not intent.source_event_ids: return`` that
+        silently skipped emission when source_event_ids was empty (which was always the
+        case after the orchestrator stopped forwarding them).  The fix removes that guard
+        and instead queries the DB for recent signal events; when none are found a
+        gap event with producer_id='unknown' is emitted so the flywheel is never
+        silently skipped.
+        """
         oms = _make_oms(db, config)
 
         intent = TradeIntent(
@@ -160,6 +169,11 @@ class TestSignalAcceptedEmission:
         result = oms.submit(intent, mid_price=50000.0, equity_usd=10000.0)
         assert result.status == "filled"
 
-        # No SIGNAL_ACCEPTED_V1 should be emitted
-        accepted_events = db.get_events(event_type=EventType.SIGNAL_ACCEPTED_V1)
-        assert len(accepted_events) == 0
+        # ATTRIBUTION_GAP_V1 must be emitted when source_event_ids is empty
+        gap_events = db.get_events(event_type=EventType.ATTRIBUTION_GAP_V1)
+        assert len(gap_events) == 1, f"Expected 1 ATTRIBUTION_GAP_V1, got {len(gap_events)}"
+        payload = gap_events[0].payload
+        assert payload["producer_id"] == "unknown"
+        assert payload["domain"] == "unknown"
+        assert payload["signal_event_id"] == ""
+        assert payload["trade_id"] == str(result.position_id)

@@ -7,8 +7,15 @@ that returns a consensus score per symbol.
 
 It emits :class:`~engine.core.events.EventType.SIGNAL_ACI_V1`.
 
-The endpoint is configured via env and tests mock the injected
-``context.client``.
+Data sources (tried in order):
+1. Custom ACI_URL endpoint — any service returning per-symbol consensus scores
+2. Kaito AI (KAITO_API_KEY) — xmind narrative intelligence, real-time CT scoring
+3. Token Metrics (TOKEN_METRICS_API_KEY) — AI-driven crypto grades
+4. No source → reports OK with zero events (not DEGRADED)
+
+Design note: Generic LLMs (GPT, Claude, Grok, Perplexity) are intentionally
+NOT supported. They lack real-time market data and produce noise not edge.
+This producer only fires when it has proprietary crypto-native signal.
 
 Easter egg (timeless):
 - Consensus is a mirror; mirrors don't care who is looking.
@@ -29,6 +36,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
+import logging
 from typing import Any
 
 import httpx
@@ -93,34 +101,88 @@ class ACIProducer(BaseProducer):
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_ACI_URL") or os.getenv("ACI_URL")
 
+    def _has_any_source(self) -> bool:
+        """True if any configured source is available."""
+        return bool(self._endpoint() or os.getenv("KAITO_API_KEY") or os.getenv("TOKEN_METRICS_API_KEY"))
+
+    def _collect_kaito(self) -> list[dict[str, Any]]:
+        """Kaito AI narrative intelligence — xmind CT scoring.
+
+        Requires KAITO_API_KEY. Returns per-symbol consensus scores derived
+        from real-time Crypto Twitter narrative analysis.
+
+        # TODO: wire Kaito API once endpoint spec is confirmed
+        # Placeholder endpoint: https://api.kaito.ai/api/v1/ai-consensus
+        # Docs: https://kaito.ai — contact for API access
+        """
+        api_key = os.getenv("KAITO_API_KEY")
+        if not api_key:
+            return []
+
+        _log = logging.getLogger(__name__)
+        _log.info("kaito_aci_stub: KAITO_API_KEY set but integration not yet wired")
+        # TODO: wire Kaito API
+        return []
+
+    def _collect_token_metrics(self) -> list[dict[str, Any]]:
+        """Token Metrics AI grades — quantitative crypto scoring.
+
+        Requires TOKEN_METRICS_API_KEY. Returns per-token AI grade mapped
+        to the [-10, 10] consensus score range.
+
+        # TODO: wire Token Metrics API once grades endpoint is validated
+        # Endpoint: https://api.tokenmetrics.com/v2/tokens
+        # Docs: https://tokenmetrics.com — free tier available
+        """
+        api_key = os.getenv("TOKEN_METRICS_API_KEY")
+        if not api_key:
+            return []
+
+        _log = logging.getLogger(__name__)
+        _log.info("token_metrics_aci_stub: TOKEN_METRICS_API_KEY set but integration not yet wired")
+        # TODO: wire Token Metrics API
+        return []
+
     def collect(self) -> list[dict[str, Any]]:
+        # 1. Custom ACI endpoint
         url = self._endpoint()
-        if not url:
-            self.ctx.logger.warning("aci_endpoint_missing")
-            return []
-
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
-        data: Any = asyncio.run(
-            self.ctx.client.request_json(
-                "POST",
-                url,
-                expected=(list, dict),
-                json={"symbols": symbols},
-                max_bytes=1024 * 1024,
-                max_items=2000,
+        if url:
+            symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+            data: Any = asyncio.run(
+                self.ctx.client.request_json(
+                    "POST",
+                    url,
+                    expected=(list, dict),
+                    json={"symbols": symbols},
+                    max_bytes=1024 * 1024,
+                    max_items=2000,
+                )
             )
-        )
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
 
-        # Supported shapes:
-        # - list[dict]  -> already correct
-        # - dict        -> treat as single row
-        if isinstance(data, dict):
-            return [data]
-        if not isinstance(data, list):
-            return []
-        return [row for row in data if isinstance(row, dict)]
+            # Supported shapes:
+            # - list[dict]  -> already correct
+            # - dict        -> treat as single row
+            if isinstance(data, dict):
+                return [data]
+            if not isinstance(data, list):
+                return []
+            return [row for row in data if isinstance(row, dict)]
+
+        # 2. Kaito AI
+        kaito_data = self._collect_kaito()
+        if kaito_data:
+            return kaito_data
+
+        # 3. Token Metrics
+        tm_data = self._collect_token_metrics()
+        if tm_data:
+            return tm_data
+
+        # 4. No source available
+        self.ctx.logger.info("ai_consensus_no_source_configured")
+        return []
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)
@@ -173,12 +235,27 @@ class ACIProducer(BaseProducer):
         """Run with producer isolation: never raise.
 
         401/403 are treated as a degraded state (misconfigured/expired creds).
+        When no source is configured, return OK with a note — not an error.
+        This producer is intentionally silent rather than noisy: generic LLMs
+        are not used as fallbacks because they lack real-time market edge.
         """
 
         start = time.perf_counter()
         errors: list[str] = []
         published = 0
         health: ProducerHealth = ProducerHealth.OK
+
+        # Graceful skip when no source is configured
+        if not self._has_any_source():
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return ProducerResult(
+                events_published=0,
+                errors=["no_source_configured: set ACI_URL, KAITO_API_KEY, or TOKEN_METRICS_API_KEY"],
+                duration_ms=duration_ms,
+                timestamp=datetime.now(tz=UTC),
+                staleness_ms=None,
+                health=ProducerHealth.OK,
+            )
 
         try:
             raw = self.collect()

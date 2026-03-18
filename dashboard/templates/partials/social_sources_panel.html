@@ -1,0 +1,102 @@
+<div id="social-sources-panel" class="panel" style="margin-top:1rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+    <h2 class="panel-title">Source Config</h2>
+    <span class="text-dim" style="font-size:0.75rem;">{{ sources | length }} configured</span>
+  </div>
+
+  {% if status_feedback and status_feedback.message %}
+  <div style="margin-bottom:0.7rem; padding:0.5rem 0.65rem; border-radius:6px;
+    {% if status_feedback.level == 'success' %}
+      background:rgba(20,184,166,0.12); border:1px solid rgba(20,184,166,0.35); color:var(--green);
+    {% elif status_feedback.level == 'warning' %}
+      background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:var(--amber);
+    {% elif status_feedback.level == 'error' %}
+      background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:var(--red);
+    {% else %}
+      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:var(--text-bright);
+    {% endif %}
+    font-size:0.76rem;">
+    {{ status_feedback.message }}
+  </div>
+  {% endif %}
+
+  <div class="text-dim" style="font-size:0.74rem; margin-bottom:0.75rem; line-height:1.35;">
+    These entries are operator source descriptors used by the social producer. They are not raw Twitter account ingestion.
+  </div>
+
+  {% if api_ok is defined and not api_ok %}
+  <div style="margin-bottom:0.75rem; font-size:0.76rem; color:var(--amber);">
+    Sources API unavailable — shown state may be stale.
+  </div>
+  {% endif %}
+
+  {% if sources %}
+  <div style="display:flex; flex-direction:column; gap:0.45rem; margin-bottom:0.8rem;">
+    {% for source in sources %}
+    <div style="padding:0.45rem 0.55rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-size:0.74rem;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.2rem;">
+        <span style="color:var(--text-bright); font-weight:500;">{{ source.name }}</span>
+        <span class="text-dim" style="font-size:0.68rem;">{{ 'enabled' if source.enabled else 'disabled' }}</span>
+      </div>
+      <div class="text-dim" style="font-size:0.68rem;">
+        {% if source.type == 'keyword' %}
+          Keyword
+        {% elif source.type == 'subreddit' %}
+          Reddit subreddit
+        {% elif source.type == 'discord_channel' %}
+          Discord channel
+        {% elif source.type == 'external_feed' %}
+          External feed
+        {% elif source.type == 'custom_url' %}
+          Custom URL
+        {% elif source.type == 'twitter_account' %}
+          Legacy twitter_account (descriptor only)
+        {% else %}
+          {{ source.type }}
+        {% endif %}
+      </div>
+      <div style="margin-top:0.2rem; color:var(--text-bright); font-family:var(--mono); font-size:0.68rem; word-break:break-all;">
+        {{ source.value }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-dim" style="font-size:0.78rem; margin-bottom:0.9rem;">
+    No sources configured. Add one below so the social producer has a concrete target.
+  </div>
+  {% endif %}
+
+  <form hx-post="/social/action/add-source"
+        hx-target="#social-sources-panel"
+        hx-swap="outerHTML"
+        style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.3rem;">
+    <input type="text"
+           name="name"
+           placeholder="Source name"
+           style="background:var(--bg); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:0.45rem 0.55rem; color:var(--text-bright); font-size:0.8rem;"
+           required>
+
+    <select name="type"
+            style="background:var(--bg); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:0.45rem 0.55rem; color:var(--text-bright); font-size:0.8rem;"
+            required>
+      <option value="keyword">keyword</option>
+      <option value="subreddit">subreddit</option>
+      <option value="discord_channel">discord_channel</option>
+      <option value="external_feed">external_feed</option>
+      <option value="custom_url">custom_url</option>
+    </select>
+
+    <input type="text"
+           name="value"
+           placeholder="Keyword, subreddit, URL, channel id…"
+           style="background:var(--bg); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:0.45rem 0.55rem; color:var(--text-bright); font-size:0.8rem;"
+           required>
+
+    <button type="submit"
+            class="btn btn-sm"
+            style="font-size:0.75rem; padding:0.35rem 0.7rem; background:var(--blue); color:var(--bg); border:none; border-radius:4px; cursor:pointer; width:fit-content;">
+      Add source
+    </button>
+  </form>
+</div>

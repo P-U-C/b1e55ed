@@ -52,6 +52,17 @@ class CuratorIntelProducer(BaseProducer):
     schedule = "*/10 * * * *"  # 10m
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
+    configurable_fields = [
+        {
+            "key": "B1E55ED_CURATOR_URL",
+            "label": "Curator endpoint URL",
+            "type": "url",
+            "required": False,
+            "description": "HTTP endpoint serving curator intel JSON",
+        },
+        {"key": "B1E55ED_CURATOR_FILE", "label": "Curator file path", "type": "path", "required": False, "description": "Local JSON file with curator signals"},
+    ]
+
     def _endpoint(self) -> str | None:
         return os.getenv("B1E55ED_CURATOR_URL") or os.getenv("CURATOR_URL")
 
@@ -129,9 +140,14 @@ class CuratorIntelProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                health = ProducerHealth.DEGRADED
-            events = self.normalize(raw)
-            published = self.publish(events)
+                if not self._endpoint() and not self._file_path():
+                    health = ProducerHealth.OK
+                    errors.append("no_source_configured")
+                else:
+                    health = ProducerHealth.DEGRADED
+            else:
+                events = self.normalize(raw)
+                published = self.publish(events)
         except httpx.HTTPStatusError as e:
             code = getattr(e.response, "status_code", None)
             health = ProducerHealth.DEGRADED if code in (401, 403) else ProducerHealth.ERROR

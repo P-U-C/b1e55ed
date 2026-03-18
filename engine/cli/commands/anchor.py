@@ -67,7 +67,9 @@ def run_anchor(args: argparse.Namespace, *, repo_root: Path) -> int:
     if db_path_arg:
         db_path = Path(str(db_path_arg))
     else:
-        db_path = repo_root / "data" / "brain.db"
+        from engine.cli.main import _resolve_db_path
+
+        db_path = _resolve_db_path(repo_root)
 
     if not db_path.exists():
         msg = f"anchor: database not found: {db_path}"
@@ -79,7 +81,7 @@ def run_anchor(args: argparse.Namespace, *, repo_root: Path) -> int:
 
     # Query the latest hash-chain root.
     # There is no `seq` column; we use rowid as a monotonic sequence.
-    row = db.conn.execute("SELECT hash, rowid, created_at FROM events ORDER BY rowid DESC LIMIT 1").fetchone()
+    row = db.fetchone("SELECT hash, rowid, created_at FROM events ORDER BY rowid DESC LIMIT 1")
 
     if row is None:
         out: dict[str, Any] = {

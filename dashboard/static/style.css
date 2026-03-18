@@ -2,21 +2,21 @@
    PUC brand chrome (warm neutrals, grain, JetBrains 300)
    Terminal energy in data zones (green live numbers, density, scanlines) */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+/* Fonts loaded via base.html <link> — JetBrains Mono only */
 
 :root {
   /* Surface */
-  --bg:            #0a0a0a;
-  --bg-raised:     #111111;
-  --bg-elevated:   #1a1a1a;
-  --border:        rgba(255,255,255,0.06);
-  --border-active: rgba(255,255,255,0.12);
+  --bg:            #0c0c0c;
+  --bg-raised:     #151515;
+  --bg-elevated:   #1e1e1e;
+  --border:        rgba(255,255,255,0.10);
+  --border-active: rgba(255,255,255,0.18);
 
   /* Text */
-  --text:          #b0aca4;
-  --text-bright:   #d4d0c8;
-  --text-dim:      #5a5650;
-  --text-faint:    #2e2b28;
+  --text:          #e0dcd4;
+  --text-bright:   #f8f4ec;
+  --text-dim:      #a09c94;
+  --text-faint:    #686460;
 
   /* Semantic */
   --green:         #22C55E;
@@ -39,6 +39,19 @@
 
   /* Typography */
   --mono: 'JetBrains Mono', 'Courier New', monospace;
+  --sans: 'JetBrains Mono', monospace;
+
+  /* ── System colors (UI chrome, status indicators) ── */
+  --sys-ok: #22C55E;
+  --sys-warn: #F59E0B;
+  --sys-error: #DC2626;
+  --sys-info: #3B82F6;
+
+  /* ── Market colors (price action, P&L, direction) ── */
+  --mkt-bull: #10B981;
+  --mkt-bear: #EF4444;
+  --mkt-neutral: #6B7280;
+  --mkt-signal: #A78BFA;
 }
 
 /* Reset */
@@ -49,8 +62,8 @@ html { font-size: 15px; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--mono);
-  font-weight: 300;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 400;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
@@ -109,7 +122,7 @@ a:hover { color: var(--green); }
   display: flex;
   gap: 2px;
   flex: 1;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .nav-link {
@@ -134,6 +147,61 @@ a:hover { color: var(--green); }
   font-weight: 400;
 }
 
+/* ··· overflow dropdown */
+.nav-overflow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-overflow__trigger {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.nav-overflow__trigger:hover {
+  color: var(--text-bright);
+  border-color: var(--border-active);
+}
+
+.nav-overflow__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-active);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 140px;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+
+.nav-overflow__menu a {
+  display: block;
+  padding: 8px 16px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-overflow__menu a:hover {
+  background: var(--bg-raised);
+  color: var(--green);
+}
+
 .nav-right {
   display: flex;
   align-items: center;
@@ -149,11 +217,11 @@ a:hover { color: var(--green); }
   flex-shrink: 0;
 }
 
-.kill-dot.level-0 { background: var(--green); }
-.kill-dot.level-1 { background: var(--amber); }
-.kill-dot.level-2 { background: var(--amber); }
-.kill-dot.level-3 { background: var(--red); }
-.kill-dot.level-4 { background: var(--red); animation: pulse 3s ease-in-out infinite; }
+.kill-dot.level-0 { background: var(--sys-ok); }
+.kill-dot.level-1 { background: var(--sys-warn); }
+.kill-dot.level-2 { background: var(--sys-warn); }
+.kill-dot.level-3 { background: var(--sys-error); }
+.kill-dot.level-4 { background: var(--sys-error); animation: pulse 3s ease-in-out infinite; }
 
 /* Regime pill */
 .regime-pill {
@@ -286,8 +354,8 @@ a:hover { color: var(--green); }
 .text-bright { color: var(--text-bright); }
 .text-dim    { color: var(--text-dim); }
 .text-faint  { color: var(--text-faint); }
-.text-bull   { color: var(--green); }
-.text-bear   { color: var(--red); }
+.text-bull   { color: var(--mkt-bull); }
+.text-bear   { color: var(--mkt-bear); }
 .text-warn   { color: var(--amber); }
 .text-info   { color: var(--blue); }
 
@@ -303,10 +371,10 @@ a:hover { color: var(--green); }
   vertical-align: middle;
 }
 
-.dot-ok      { background: var(--green); }
-.dot-degraded { background: var(--amber); }
-.dot-stale   { background: var(--amber); }
-.dot-error   { background: var(--red); }
+.dot-ok      { background: var(--sys-ok); }
+.dot-degraded { background: var(--sys-warn); }
+.dot-stale   { background: var(--sys-warn); }
+.dot-error   { background: var(--sys-error); }
 
 /* Domain badges */
 .badge {
@@ -340,9 +408,9 @@ a:hover { color: var(--green); }
   transition: width 0.3s ease;
 }
 
-.conviction-bar-fill.long    { background: var(--green); }
-.conviction-bar-fill.short   { background: var(--red); }
-.conviction-bar-fill.neutral { background: var(--neutral); }
+.conviction-bar-fill.long    { background: var(--mkt-bull); }
+.conviction-bar-fill.short   { background: var(--mkt-bear); }
+.conviction-bar-fill.neutral { background: var(--mkt-neutral); }
 
 /* ── Buttons ─────────────────────────────────── */
 
@@ -386,8 +454,9 @@ a:hover { color: var(--green); }
 }
 
 .data-table th {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 0.6rem;
-  font-weight: 300;
+  font-weight: 500;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -459,6 +528,23 @@ a:hover { color: var(--green); }
   font-size: 0.7rem;
   font-weight: 300;
 }
+
+/* Semantic font classes */
+.font-value { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.font-log   { font-family: var(--mono); font-size: 0.8em; }
+.font-label { font-family: 'JetBrains Mono', monospace; font-weight: 500; letter-spacing: 0.02em; }
+
+/* Ghost / skeleton empty states */
+.ghost-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-dim);
+}
+.ghost-state svg { max-width: 300px; }
 
 /* ── CRT Data Zone ───────────────────────────── */
 
@@ -576,3 +662,34 @@ a:hover { color: var(--green); }
 /* HTMX indicator */
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator { display: inline-block; }
+
+/* ── Market Ticker ───────────────────────── */
+.market-ticker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  margin-right: 0.75rem;
+}
+.ticker-coin { margin: 0 0.15rem; }
+.ticker-sym { color: var(--text-bright); font-weight: 500; }
+.ticker-bull { color: var(--green, #22c55e); }
+.ticker-bear { color: var(--red, #ef4444); }
+.ticker-sep { color: var(--border); margin: 0 0.25rem; }
+
+@media (max-width: 768px) {
+  .market-ticker { display: none; }
+}
+
+/* ── Producer failure urgency banner ────── */
+.producer-urgency-banner {
+  background: var(--red, #ef4444);
+  color: #fff;
+  font-weight: 500;
+  font-size: 0.8125rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+}

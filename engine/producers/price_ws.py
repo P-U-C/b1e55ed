@@ -5,6 +5,9 @@ Price Alerts Producer (polling placeholder).
 This producer is intentionally implemented as a polling loop (HTTP request) even
 though the intended long-term interface is a websocket price stream.
 
+Free fallback uses the Binance Ticker public API (no auth required) when no
+custom endpoint is configured.
+
 It emits :class:`~engine.core.events.EventType.SIGNAL_PRICE_WS_V1` events.
 
 Easter egg:
@@ -49,15 +52,23 @@ class PriceAlertsProducer(BaseProducer):
     schedule = "*/1 * * * *"
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_PRICE_WS_URL",
+            "label": "Custom Price WS endpoint",
+            "type": "url",
+            "required": False,
+            "description": "Override the free Binance fallback with a custom price data service",
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_PRICE_WS_URL") or os.getenv("PRICE_WS_URL")
 
-    def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
-        if not url:
-            self.ctx.logger.warning("price_ws_endpoint_missing")
-            return []
-
+    def _collect_from_custom(self, url: str) -> list[dict[str, Any]]:
+        """Fetch from a custom POST endpoint (original behaviour)."""
         symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
         if isinstance(data, dict) and "data" in data:
@@ -65,6 +76,67 @@ class PriceAlertsProducer(BaseProducer):
         if not isinstance(data, list):
             return []
         return [row for row in data if isinstance(row, dict)]
+
+    _BINANCE_SKIP: dict[str, str] = {"HYPE": "hyperliquid"}
+
+    def _collect_coingecko(self, symbol: str, cg_id: str) -> dict[str, Any] | None:
+        try:
+            resp = httpx.get("https://api.coingecko.com/api/v3/simple/price", params={"ids": cg_id, "vs_currencies": "usd"}, timeout=10.0)
+            resp.raise_for_status()
+            price = float(resp.json().get(cg_id, {}).get("usd", 0))
+            if price > 0:
+                return {"symbol": symbol, "price": price, "bid": price, "ask": price, "venue": "coingecko", "data_source": "coingecko_free"}
+        except Exception as e:
+            self.ctx.logger.warning("coingecko_fallback_failed symbol=%s error=%s", symbol, e)
+        return None
+
+    def _collect_free(self) -> list[dict[str, Any]]:
+        """Free public API fallback (Binance Ticker). Always available."""
+        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        results: list[dict[str, Any]] = []
+
+        _cap = getattr(self.ctx.config.universe, "max_symbols", 0)
+        _syms = symbols[:_cap] if _cap > 0 else symbols
+        for sym in _syms:
+            if sym in self._BINANCE_SKIP:
+                row = self._collect_coingecko(sym, self._BINANCE_SKIP[sym])
+                if row:
+                    results.append(row)
+                continue
+            try:
+                resp = httpx.get(
+                    "https://api.binance.com/api/v3/ticker/24hr",
+                    params={"symbol": f"{sym}USDT"},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                results.append(
+                    {
+                        "symbol": sym,
+                        "price": float(data.get("lastPrice", 0)),
+                        "bid": float(data.get("bidPrice", 0)),
+                        "ask": float(data.get("askPrice", 0)),
+                        "venue": "binance",
+                        "data_source": "binance_free",
+                    }
+                )
+            except Exception as e:  # noqa: BLE001
+                self.ctx.logger.warning("price_free_symbol_failed symbol=%s error=%s", sym, e)
+                continue
+
+        return results
+
+    def collect(self) -> list[dict[str, Any]]:
+        url = self._custom_endpoint()
+        if url:
+            try:
+                return self._collect_from_custom(url)
+            except Exception:  # noqa: BLE001
+                self.ctx.logger.warning("custom_endpoint_failed_falling_back url=%s", url)
+        # Fall back to free API
+        return self._collect_free()
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)
