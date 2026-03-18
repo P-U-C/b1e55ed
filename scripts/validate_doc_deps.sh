@@ -22,7 +22,7 @@ all_mdx=$(find docs -name "*.mdx" -type f 2>/dev/null | sort)
 all_docs="$all_docs"$'\n'"$all_mdx"
 all_docs="$all_docs"$'\n'"README.md"
 all_docs="$all_docs"$'\n'"DOCKER.md"
-all_docs="$all_docs"$'\n'"ROADMAP.md"
+
 
 # 2. Check for orphaned docs (not referenced anywhere)
 echo ""
@@ -38,7 +38,7 @@ for doc in $all_docs; do
   basename=$(basename "$doc")
   
   # Check if referenced in any other doc (*.md or *.mdx)
-  if ! grep -r "$basename" docs samples README.md DOCKER.md ROADMAP.md --include="*.md" --include="*.mdx" 2>/dev/null | grep -v "^$doc:" | grep -q .; then
+  if ! grep -r "$basename" docs samples README.md DOCKER.md --include="*.md" --include="*.mdx" 2>/dev/null | grep -v "^$doc:" | grep -q .; then
     # Allow README.md to be unreferenced (it's the entry point)
     if [[ "$doc" != "README.md" ]]; then
       echo "  ❌ ORPHANED: $doc (not referenced by any other doc)"

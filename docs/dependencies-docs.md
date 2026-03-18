@@ -28,7 +28,6 @@ README.md
   → docs/deployment.md
   → docs/openclaw-integration.md
   → docs/learning-loop.md
-  → ROADMAP.md
 ```
 
 ## Core docs
@@ -157,12 +156,10 @@ producer-intelligence.md
 **References:**
 ```
 learning-loop.md
-  └→ ROADMAP.md               (Karma system design)
   └→ producer-intelligence.md  (P4 intelligence layer)
 ```
 
 **Referenced by:**
-- (Future: developers.md, ROADMAP.md)
 
 ---
 
@@ -252,11 +249,9 @@ DOCKER.md
 
 ## Roadmap
 
-### `ROADMAP.md`
 
 **References:**
 ```
-ROADMAP.md
   ├→ architecture.md          (System components)
   ├→ developers.md            (Extension points to implement)
   └→ security.md              (Security gates)
@@ -297,7 +292,6 @@ Tier 4: Extensions
   └─ samples/onchain/README.md
 
 Tier 5: Roadmap
-  └─ ROADMAP.md
 ```
 
 ---
@@ -314,7 +308,7 @@ find docs samples -name "*.md" -type f > /tmp/all_docs.txt
 # Grep for references in all docs
 for doc in $(cat /tmp/all_docs.txt); do
   basename=$(basename "$doc")
-  if ! grep -r "$basename" docs samples README.md DOCKER.md ROADMAP.md --include="*.md" | grep -v "^$doc:"; then
+  if ! grep -r "$basename" docs samples README.md DOCKER.md --include="*.md" | grep -v "^$doc:"; then
     echo "ORPHANED: $doc"
   fi
 done
@@ -377,7 +371,6 @@ done
 - ✅ `docs/dependencies-code.md`
 - ✅ `docs/dependencies-docs.md`
 - ✅ `DOCKER.md`
-- ✅ `ROADMAP.md`
 - ✅ `samples/README.md`
 - ✅ `samples/socials/README.md`
 - ✅ `samples/tradfi/README.md`
@@ -516,7 +509,7 @@ docs/security.md                    → crypto-primitives.md, deployment.md
 
 ```text
 docs/curator.md        (standalone — operator signal ingestion pipeline)
-docs/learning-loop.md  → ROADMAP.md, producer-intelligence.md
+docs/learning-loop.md  → producer-intelligence.md
 docs/backtest.md       (standalone — walk-forward, Kelly, regime-conditioned results)
 ```
 

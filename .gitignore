@@ -27,6 +27,8 @@ coverage.xml
 .coverage
 
 tools/forge/target/
+tools/forge/Cargo.lock
+docs/internal/
 .b1e55ed/
 
 # IDE

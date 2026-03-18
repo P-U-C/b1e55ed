@@ -32,7 +32,7 @@ class PostFiatSignalsProducer(BaseExternalProducer):
         "name": "post-fiat-signals",
         "version": "1.0.0",
         "domain": "tradfi",
-        "base_url": "${POST_FIAT_SIGNALS_URL:-http://84.32.34.46:8080}",
+        "base_url": "${POST_FIAT_SIGNALS_URL:-}",
         "poll_interval_sec": 60,
         "min_confidence": 0.55,
         "stale_threshold_sec": 300,
@@ -62,6 +62,13 @@ class PostFiatSignalsProducer(BaseExternalProducer):
             "source_assertion": "action",
         },
     }
+
+    def collect(self) -> list[dict]:
+        """Skip quietly when POST_FIAT_SIGNALS_URL is not configured."""
+        if not self._get_spec().base_url:
+            self.ctx.logger.info("post_fiat_signals_unconfigured", extra={"producer": self.name})
+            return []
+        return super().collect()
 
     def normalize(self, raw: RawExternalRecord) -> list[ExternalObservation]:  # type: ignore[override]
         """Parse post-fiat-signals response into ExternalObservations.
