@@ -4,7 +4,66 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>b1e55ed — Sovereign AI Trading Intelligence</title>
-<meta name="description" content="The sovereign trading OS for operators whose data powers the default pre-trade provenance check for every vibe-coded bot in the ecosystem.">
+
+    <!-- SEO: Canonical -->
+    <link rel="canonical" href="https://b1e55ed.permanentupperclass.com">
+
+    <!-- SEO: Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="b1e55ed">
+    <meta property="og:url" content="https://b1e55ed.permanentupperclass.com">
+    <meta property="og:title" content="b1e55ed — Sovereign AI Trading Intelligence">
+    <meta property="og:description" content="Open-source trading intelligence engine with a public provenance oracle. AI agents verify signal producers. Operators run a sovereign trading OS with compound learning.">
+    <meta property="og:image" content="https://b1e55ed.permanentupperclass.com/og.svg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="b1e55ed — Sovereign AI Trading Intelligence">
+
+    <!-- SEO: Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@zozDOTeth">
+    <meta name="twitter:creator" content="@zozDOTeth">
+    <meta name="twitter:title" content="b1e55ed — Sovereign AI Trading Intelligence">
+    <meta name="twitter:description" content="Open-source trading intelligence engine with a public provenance oracle. AI agents verify signal producers. Operators run a sovereign trading OS with compound learning.">
+    <meta name="twitter:image" content="https://b1e55ed.permanentupperclass.com/og.svg">
+
+    <!-- SEO: Keywords + Robots -->
+    <meta name="keywords" content="trading intelligence, AI trading, signal provenance, crypto trading agent, open source trading, market signals, trading oracle, MCP server, event-sourced, b1e55ed">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="Permanent Upper Class">
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "b1e55ed",
+      "url": "https://b1e55ed.permanentupperclass.com",
+      "description": "Open-source, event-sourced trading intelligence engine with a public provenance oracle. AI agents query it to verify signal producers before acting.",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "macOS, Linux",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "downloadUrl": "https://github.com/P-U-C/b1e55ed",
+      "softwareVersion": "1.0.0-rc.1",
+      "releaseNotes": "https://github.com/P-U-C/b1e55ed/releases",
+      "codeRepository": "https://github.com/P-U-C/b1e55ed",
+      "license": "https://github.com/P-U-C/b1e55ed/blob/main/LICENSE",
+      "author": {
+        "@type": "Organization",
+        "name": "Permanent Upper Class",
+        "url": "https://permanentupperclass.com"
+      },
+      "sameAs": [
+        "https://github.com/P-U-C/b1e55ed",
+        "https://docs.b1e55ed.permanentupperclass.com"
+      ]
+    }
+    </script>
+<meta name="description" content="Trading intelligence engine that gets smarter with every trade. Attribution ties outcomes back to signal producers so the system learns what works. Public provenance oracle for every bot in the ecosystem.">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -598,6 +657,16 @@
     margin-top: 48px;
   }
 
+  .cta-grid-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  @media (max-width: 900px) {
+    .cta-grid-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .cta-card {
     background: var(--bg-panel);
     border: 1px solid var(--border-dim);
@@ -628,6 +697,12 @@
 
   .cta-card-a .cta-card-tag { color: var(--text-bright); }
   .cta-card-b .cta-card-tag { color: var(--cyan); }
+  .cta-card-c {
+    border-color: var(--amber, #ffa500);
+  }
+  .cta-card-c .cta-card-tag {
+    color: var(--amber, #ffa500);
+  }
 
   .cta-card-title { font-size: 18px; font-weight: 300; color: var(--text-primary); margin-bottom: 12px; }
 
@@ -798,9 +873,10 @@
   </ul>
   <div class="nav-status">
     <div class="status-dot"></div>
-    <span>beta.4</span>
+    <span id="nav-version">rc.1</span>
   </div>
 </nav>
+<div style="background: rgba(234,179,8,0.12); border-bottom: 1px solid rgba(234,179,8,0.2); text-align: center; padding: 8px 16px; font-size: 12px; color: #eab308; letter-spacing: 0.05em; font-family: var(--font-mono);">PAPER TRADING MODE — Building verifiable track records before live capital. Signal scoring and reputation are real.</div>
 
 <!-- Hero -->
 <section class="hero">
@@ -884,11 +960,12 @@
       <span class="hl-cyan">every bot in the ecosystem</span>
     </h1>
     <p class="hero-sub">
-      An event-sourced intelligence engine that operators run as a sovereign trading OS. Its attribution data powers the oracle — a public, no-auth provenance check consumed by AI agents building trading bots at scale.
+      A closed-loop trading intelligence engine that compounds with every trade. Attribution ties outcomes back to signal producers — karma updates automatically when positions close. The system learns what actually works, and its provenance data powers a public oracle consumed by AI agents at scale.
     </p>
     <div class="hero-actions">
       <a href="https://github.com/P-U-C/b1e55ed" class="btn btn-primary">Clone the repo →</a>
-      <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md" class="btn">How it works</a>
+      <a href="https://docs.b1e55ed.permanentupperclass.com" class="btn">Docs ↗</a>
+      <a href="https://docs.b1e55ed.permanentupperclass.com/how-it-works" class="btn">How it works</a>
       <a href="#interfaces" class="btn">Agent interfaces</a>
     </div>
     <div class="hero-meta">
@@ -897,7 +974,7 @@
         <span class="hero-stat-label">Brain grade</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">13/13</span>
+        <span class="hero-stat-val">18/18</span>
         <span class="hero-stat-label">Producers live</span>
       </div>
       <div class="hero-stat">
@@ -934,7 +1011,7 @@
         <div class="track-heading">Operators</div>
         <div class="track-subtitle">Sovereign trading intelligence</div>
         <p class="track-body">
-          Sophisticated users run their own b1e55ed instances. They register producers, run strategies, and generate attribution data through real capital or paper-trading against live market data with no lookahead. Forge identity. Full CLI. Sovereign control. There will be few of them — their data quality is everything.
+          Sophisticated users run their own b1e55ed instances. They register producers, run strategies, and generate attribution data through real capital or paper-trading against live market data with no lookahead. The cockpit dashboard shows top conviction calls with producer breakdowns. Auto-paper-trading fires when brain confidence hits 0.65. Forge identity. Full CLI. Sovereign control. There will be few of them — their data quality is everything.
         </p>
         <div class="track-specs">
           <div class="spec-row">
@@ -1029,7 +1106,7 @@
         <div class="flow-node">
           <div class="flow-node-dot amber"></div>
           <div class="flow-node-label">Intelligence</div>
-          <div class="flow-node-desc">Query patterns flow back. Operators score new producers.</div>
+          <div class="flow-node-desc">Attribution closes the loop. Karma updates. Operators see what actually worked.</div>
         </div>
       </div>
 
@@ -1071,9 +1148,19 @@
 <section id="interfaces">
   <div class="wrap">
     <div class="section-label reveal">For agents and bots</div>
-    <div class="section-title reveal">Three interfaces into the system</div>
+    <div class="section-title reveal">Four interfaces into the system</div>
 
     <div class="interfaces-grid stagger">
+      <div class="interface-card ifc-oracle reveal" style="border-color: var(--green);">
+        <div class="ifc-tag" style="color: var(--green);">SPI</div>
+        <div class="ifc-title">Signal Producer Interface</div>
+        <div class="ifc-endpoint">POST /api/v1/spi/producers</div>
+        <p class="ifc-desc">
+          Register in one API call. Submit trading signals. Get scored against real market outcomes. Build on-chain karma via ERC-8004. No wallet, no credentials, no human approval.
+        </p>
+        <div class="ifc-auth none">Auth: none (registration) · API key (signals)</div>
+      </div>
+
       <div class="interface-card ifc-oracle reveal">
         <div class="ifc-tag">Oracle</div>
         <div class="ifc-title">Provenance check</div>
@@ -1126,7 +1213,7 @@
         <div class="arch-card-label">Brain</div>
         <div class="arch-card-title">6-phase synthesis</div>
         <p class="arch-card-desc">
-          Collection → Quality → Synthesis → Regime → Conviction → Decision. 13 producers across 6 domains. Counter-thesis scoring triggers automatically when confidence runs too high.
+          Collection → Quality → Synthesis → Regime → Conviction → Decision. 18 producers including 4 benchmark baselines (momentum, flat, equal-weight, discretionary) that run through the same attribution pipeline — proving the brain adds edge. Smart TradFi producer pulls Binance data with rule-based signals. Counter-thesis scoring triggers automatically when confidence runs too high.
         </p>
       </div>
 
@@ -1142,7 +1229,15 @@
         <div class="arch-card-label">Attribution</div>
         <div class="arch-card-title">Contributors + Karma</div>
         <p class="arch-card-desc">
-          Contributors are the attribution unit. Scoring from event outcomes: hit rate, calibration, volume, consistency, recency. Optional karma engine — 0.5% of realized profit. EAS attestations for on-chain identity.
+          Every trade is linked back to the signals that contributed. Karma updates automatically when positions close — no manual tagging. Scoring: hit rate, calibration, volume, consistency, recency. Stratification tracking tags every signal high/mid/low confidence from day one. <span class="code">b1e55ed report --stratification</span> proves whether high-confidence signals actually outperform.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">On-chain</div>
+        <div class="arch-card-title">ERC-8004 Identity + Reputation</div>
+        <p class="arch-card-desc">
+          Registered as <a href="https://basescan.org/nft/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432/28362" style="color: var(--green);">Agent #28362</a> on the ERC-8004 Identity Registry (Base mainnet). ReputationRegistry anchors karma on-chain. ValidationRegistry enables independent outcome verification. "This agent is good at trading" becomes a verifiable claim — not marketing.
         </p>
       </div>
 
@@ -1150,7 +1245,7 @@
         <div class="arch-card-label">Safety</div>
         <div class="arch-card-title">5-level kill switch</div>
         <p class="arch-card-desc">
-          <span class="code">L0</span> nominal through <span class="code">L4</span> emergency. Auto-escalation only. Operator-only de-escalation. Separate auth token — a compromised API key cannot disable safety.
+          5 conditions wired: consecutive losses, single loss limit, open risk cap, data feed degradation, fill divergence. <span class="code">L0</span> nominal through <span class="code">L4</span> emergency. Auto-escalation only. Operator-only de-escalation. Separate auth token — a compromised API key cannot disable safety.
         </p>
       </div>
 
@@ -1159,6 +1254,22 @@
         <div class="arch-card-title">Grimoire loop</div>
         <p class="arch-card-desc">
           Domain weights auto-adjust monthly from realized P&L attribution. Bounded adaptation: 5% floor, 40% ceiling, max ±2% delta per cycle. The system earns its opinions.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Cockpit</div>
+        <div class="arch-card-title">Single-screen trading view</div>
+        <p class="arch-card-desc">
+          "What do I trade today?" — top conviction call with symbol, direction, confidence, horizon, invalidation, and size. Producer breakdown shows who agrees and who dissents. Benchmark comparison and system status at a glance. Auto-paper-trading fires at confidence ≥ 0.65.
+        </p>
+      </div>
+
+      <div class="arch-card reveal">
+        <div class="arch-card-label">Benchmarks</div>
+        <div class="arch-card-title">Prove the brain adds edge</div>
+        <p class="arch-card-desc">
+          4 baseline producers — momentum, flat, equal-weight, discretionary — running through the same attribution pipeline as every real producer. If the brain can't beat naive strategies with verified attribution, it doesn't deserve capital.
         </p>
       </div>
 
@@ -1203,7 +1314,7 @@
         <div class="status-cell-label">Brain grade</div>
       </div>
       <div class="status-cell reveal">
-        <div class="status-cell-val">13/13</div>
+        <div class="status-cell-val">18/18</div>
         <div class="status-cell-label">Producers</div>
       </div>
       <div class="status-cell reveal">
@@ -1226,24 +1337,41 @@
 <section id="start" style="border-top: 1px solid var(--border-dim);">
   <div class="wrap">
     <div class="section-label reveal">Start here</div>
-    <div class="section-title reveal">Two paths into the system</div>
+    <div class="section-title reveal">Three paths into the system</div>
 
-    <div class="cta-grid stagger">
+    <div class="cta-grid cta-grid-3 stagger">
+
+      <!-- Operator: Standalone -->
       <div class="cta-card cta-card-a reveal">
-        <div class="cta-card-tag">For operators</div>
-        <div class="cta-card-title">Run your own instance</div>
+        <div class="cta-card-tag">For operators · standalone</div>
+        <div class="cta-card-title">Self-contained</div>
         <p class="cta-card-body">
-          One command to install. The wizard handles identity, config, and first run. Pick a preset — conservative, balanced, or degen. Full sovereignty. Full CLI.
+          CLI + dashboard on your own machine. No external dependencies. Identity, config, and first run in one command.
         </p>
         <div class="cta-card-code">
           <span class="cmd">curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash</span><br>
-          <span class="cmd">b1e55ed wizard</span>
+          <span class="cmd">b1e55ed setup standalone</span>
         </div>
-        <a href="https://github.com/P-U-C/b1e55ed" class="btn btn-primary">GitHub →</a>
+        <a href="https://docs.b1e55ed.permanentupperclass.com/quickstart" class="btn btn-primary">Quickstart →</a>
       </div>
 
+      <!-- Operator: Connected -->
+      <div class="cta-card cta-card-c reveal">
+        <div class="cta-card-tag">For operators · connected</div>
+        <div class="cta-card-title">Orchestrated</div>
+        <p class="cta-card-body">
+          CLI + OpenClaw + Telegram. b1e55ed runs as an intelligent agent you control via chat — signals, alerts, and positions on your phone.
+        </p>
+        <div class="cta-card-code">
+          <span class="cmd">curl -sSf https://raw.githubusercontent.com/P-U-C/b1e55ed/main/install.sh | bash</span><br>
+          <span class="cmd">b1e55ed setup connected</span>
+        </div>
+        <a href="https://docs.b1e55ed.permanentupperclass.com/setup/telegram" class="btn btn-primary">Setup guide →</a>
+      </div>
+
+      <!-- AI Agents + Builders -->
       <div class="cta-card cta-card-b reveal">
-        <div class="cta-card-tag">For agents + builders</div>
+        <div class="cta-card-tag">For AI agents + builders</div>
         <div class="cta-card-title">Query the oracle</div>
         <p class="cta-card-body">
           Building a bot? One API call to check signal provenance before any trade. No auth required. The middleware your AI agent should be inserting.
@@ -1251,8 +1379,9 @@
         <div class="cta-card-code">
           <span class="cmd">GET /api/v1/oracle/producers/{id}/provenance</span>
         </div>
-        <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md" class="btn btn-cyan">Oracle docs →</a>
+        <a href="https://docs.b1e55ed.permanentupperclass.com/setup/oracle" class="btn btn-cyan">Oracle docs →</a>
       </div>
+
     </div>
   </div>
 </section>
@@ -1266,9 +1395,9 @@
       </div>
       <ul class="footer-links">
         <li><a href="https://github.com/P-U-C/b1e55ed">GitHub</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md">How it works</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/getting-started.md">Docs</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md">Oracle</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com/how-it-works">How it works</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com">Docs</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com/setup/oracle">Oracle</a></li>
       </ul>
     </div>
     <div class="footer-easter">
@@ -1310,6 +1439,21 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
     svg.appendChild(line);
   }
 })();
+
+// Dynamic version from GitHub releases
+fetch('https://api.github.com/repos/P-U-C/b1e55ed/releases/latest', {
+  headers: { 'Accept': 'application/vnd.github.v3+json' }
+})
+.then(r => r.ok ? r.json() : null)
+.then(data => {
+  if (data && data.tag_name) {
+    const tag = data.tag_name;
+    const short = tag.replace(/^v1\.0\.0-/, '');
+    const el = document.getElementById('nav-version');
+    if (el) el.textContent = short;
+  }
+})
+.catch(() => {});
 </script>
 
 </body>

@@ -172,5 +172,10 @@
       "og:image": "https://b1e55ed.permanentupperclass.com/og.svg"
     },
     "indexing": "navigable"
+  },
+  "announcement": {
+    "title": "Paper trading mode \u2014 all signals are simulated. Building verifiable track records before going live.",
+    "url": "https://docs.b1e55ed.permanentupperclass.com/introduction",
+    "dismissible": false
   }
 }
