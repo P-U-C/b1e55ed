@@ -15,8 +15,9 @@ except ImportError:  # pragma: no cover
     UTC = _tz.utc  # noqa: N806, UP017
 
 from engine.brain.learning import StratificationTracker
-from engine.core.config import Config
+from engine.core.config import Config, UniverseBundle
 from engine.core.database import Database
+from engine.core.events import EventType
 from engine.security.identity import NodeIdentity
 
 
@@ -111,6 +112,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.75
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 8.0
         mock_conv_result.final_conviction = 80.0
         mock_conv_result.pcs = 80.0
         mock_conv_result.cts = 0.0
@@ -123,6 +125,196 @@ class TestAutoPaperTrade:
             patch.object(orch.conviction, "compute", return_value=mock_conv_result),
             patch.object(orch.conviction, "emit"),
             patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
+        ):
+            mock_dq.return_value = MagicMock(per_domain_quality={})
+            mock_synth_res = MagicMock()
+            mock_synth_res.snapshot.cycle_id = "c1"
+            mock_synth_res.snapshot.symbol = "BTC"
+            mock_synth_res.snapshot.ts = datetime.now(tz=UTC)
+            mock_synth_res.snapshot.features = {}
+            mock_synth_res.snapshot.source_event_ids = []
+            mock_synth_res.snapshot.regime = "BULL"
+            mock_synth_res.snapshot.version = "v1"
+            mock_synth.return_value = mock_synth_res
+
+            mock_regime_res = MagicMock()
+            mock_regime_res.state.regime = "BULL"
+            mock_regime.return_value = mock_regime_res
+
+            orch.run_cycle(["BTC"])
+            mock_oms.submit.assert_called_once()
+
+    def test_auto_trade_allows_symbol_when_bundle_policy_matches(self, db, config):
+        """Bundle policy allows BTC (crypto/global) -> OMS called."""
+        from engine.brain.orchestrator import BrainOrchestrator
+
+        identity = MagicMock(spec=NodeIdentity)
+        identity.node_id = "test-node"
+
+        config.universe = config.universe.model_copy(
+            update={
+                "bundles": [
+                    UniverseBundle(
+                        id="crypto-core",
+                        name="Crypto Core",
+                        symbols=["BTC"],
+                        asset_class="crypto",
+                        venue="global",
+                        tags=["starter"],
+                        enabled=True,
+                        source="user",
+                    )
+                ]
+            }
+        )
+
+        mock_oms = MagicMock()
+        mock_oms.submit.return_value = MagicMock(status="filled")
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
+
+        mock_conv_result = MagicMock()
+        mock_conv_result.score.confidence = 0.80
+        mock_conv_result.score.direction = "long"
+        mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 8.0
+        mock_conv_result.final_conviction = 85.0
+        mock_conv_result.pcs = 85.0
+        mock_conv_result.cts = 0.0
+
+        with (
+            patch.object(orch.data_quality, "evaluate") as mock_dq,
+            patch.object(orch.synthesis, "synthesize") as mock_synth,
+            patch.object(orch.regime, "detect") as mock_regime,
+            patch.object(orch.regime, "emit_if_changed"),
+            patch.object(orch.conviction, "compute", return_value=mock_conv_result),
+            patch.object(orch.conviction, "emit"),
+            patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
+        ):
+            mock_dq.return_value = MagicMock(per_domain_quality={})
+            mock_synth_res = MagicMock()
+            mock_synth_res.snapshot.cycle_id = "c1"
+            mock_synth_res.snapshot.symbol = "BTC"
+            mock_synth_res.snapshot.ts = datetime.now(tz=UTC)
+            mock_synth_res.snapshot.features = {}
+            mock_synth_res.snapshot.source_event_ids = []
+            mock_synth_res.snapshot.regime = "BULL"
+            mock_synth_res.snapshot.version = "v1"
+            mock_synth.return_value = mock_synth_res
+
+            mock_regime_res = MagicMock()
+            mock_regime_res.state.regime = "BULL"
+            mock_regime.return_value = mock_regime_res
+
+            orch.run_cycle(["BTC"])
+            mock_oms.submit.assert_called_once()
+
+    def test_auto_trade_skips_symbol_blocked_by_bundle_policy(self, db, config, caplog):
+        """Disallowed bundle metadata blocks OMS submit and emits explicit gating reason."""
+        from engine.brain.orchestrator import BrainOrchestrator
+
+        identity = MagicMock(spec=NodeIdentity)
+        identity.node_id = "test-node"
+
+        config.universe = config.universe.model_copy(
+            update={
+                "bundles": [
+                    UniverseBundle(
+                        id="tradfi-only",
+                        name="TradFi Only",
+                        symbols=["BTC"],
+                        asset_class="tradfi",
+                        venue="nyse",
+                        tags=["starter"],
+                        enabled=True,
+                        source="user",
+                    )
+                ]
+            }
+        )
+
+        mock_oms = MagicMock()
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
+
+        mock_conv_result = MagicMock()
+        mock_conv_result.score.confidence = 0.80
+        mock_conv_result.score.direction = "long"
+        mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 8.0
+        mock_conv_result.final_conviction = 85.0
+        mock_conv_result.pcs = 85.0
+        mock_conv_result.cts = 0.0
+
+        caplog.set_level("INFO", logger="b1e55ed.orchestrator")
+
+        with (
+            patch.object(orch.data_quality, "evaluate") as mock_dq,
+            patch.object(orch.synthesis, "synthesize") as mock_synth,
+            patch.object(orch.regime, "detect") as mock_regime,
+            patch.object(orch.regime, "emit_if_changed"),
+            patch.object(orch.conviction, "compute", return_value=mock_conv_result),
+            patch.object(orch.conviction, "emit"),
+            patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
+        ):
+            mock_dq.return_value = MagicMock(per_domain_quality={})
+            mock_synth_res = MagicMock()
+            mock_synth_res.snapshot.cycle_id = "c1"
+            mock_synth_res.snapshot.symbol = "BTC"
+            mock_synth_res.snapshot.ts = datetime.now(tz=UTC)
+            mock_synth_res.snapshot.features = {}
+            mock_synth_res.snapshot.source_event_ids = []
+            mock_synth_res.snapshot.regime = "BULL"
+            mock_synth_res.snapshot.version = "v1"
+            mock_synth.return_value = mock_synth_res
+
+            mock_regime_res = MagicMock()
+            mock_regime_res.state.regime = "BULL"
+            mock_regime.return_value = mock_regime_res
+
+            orch.run_cycle(["BTC"])
+
+        mock_oms.submit.assert_not_called()
+        assert any("execution_gated_by_bundle_policy" in rec.message for rec in caplog.records)
+
+        audit_events = db.get_events(event_type=EventType.AUDIT_V1, limit=10)
+        gating = next((ev for ev in audit_events if ev.payload.get("reason") == "execution_gated_by_bundle_policy"), None)
+        assert gating is not None
+        assert gating.payload.get("gate_reason") == "asset_class_not_allowed"
+        assert gating.payload.get("symbol") == "BTC"
+
+    def test_auto_trade_legacy_universe_fallback_without_bundles(self, db, config):
+        """No bundles configured -> legacy auto-paper-trade path remains active."""
+        from engine.brain.orchestrator import BrainOrchestrator
+
+        identity = MagicMock(spec=NodeIdentity)
+        identity.node_id = "test-node"
+
+        config.universe = config.universe.model_copy(update={"symbols": ["BTC"], "bundles": []})
+
+        mock_oms = MagicMock()
+        mock_oms.submit.return_value = MagicMock(status="filled")
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
+
+        mock_conv_result = MagicMock()
+        mock_conv_result.score.confidence = 0.80
+        mock_conv_result.score.direction = "long"
+        mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 8.0
+        mock_conv_result.final_conviction = 85.0
+        mock_conv_result.pcs = 85.0
+        mock_conv_result.cts = 0.0
+
+        with (
+            patch.object(orch.data_quality, "evaluate") as mock_dq,
+            patch.object(orch.synthesis, "synthesize") as mock_synth,
+            patch.object(orch.regime, "detect") as mock_regime,
+            patch.object(orch.regime, "emit_if_changed"),
+            patch.object(orch.conviction, "compute", return_value=mock_conv_result),
+            patch.object(orch.conviction, "emit"),
+            patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
         ):
             mock_dq.return_value = MagicMock(per_domain_quality={})
             mock_synth_res = MagicMock()
@@ -148,6 +340,7 @@ class TestAutoPaperTrade:
 
         identity = MagicMock(spec=NodeIdentity)
         identity.node_id = "test-node"
+        config.brain.auto_paper_trade_min_confidence = 0.65
         orch = BrainOrchestrator(config, db, identity)
 
         mock_conv_result = MagicMock()
@@ -156,6 +349,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.55
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 2.0
         mock_conv_result.final_conviction = 60.0
 
         with (
@@ -199,6 +393,7 @@ class TestAutoPaperTrade:
         mock_conv_result.score.confidence = 0.30
         mock_conv_result.score.direction = "long"
         mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 2.0
         mock_conv_result.final_conviction = 40.0
 
         with (
@@ -227,6 +422,53 @@ class TestAutoPaperTrade:
 
             orch.run_cycle(["BTC"])
             mock_oms_low.submit.assert_not_called()
+
+    def test_auto_trade_on_strong_directional_fallback(self, db, config):
+        """Low confidence can still auto-trade on very strong directional conviction."""
+        from engine.brain.orchestrator import BrainOrchestrator
+
+        identity = MagicMock(spec=NodeIdentity)
+        identity.node_id = "test-node"
+        mock_oms = MagicMock()
+        mock_oms.submit.return_value = MagicMock(status="filled")
+        orch = BrainOrchestrator(config, db, identity, oms=mock_oms)
+
+        mock_conv_result = MagicMock()
+        mock_conv_result.score.confidence = 0.10
+        mock_conv_result.score.direction = "short"
+        mock_conv_result.score.symbol = "BTC"
+        mock_conv_result.score.magnitude = 7.0
+        mock_conv_result.final_conviction = 0.0
+        mock_conv_result.pcs = 0.0
+        mock_conv_result.cts = 0.0
+
+        with (
+            patch.object(orch.data_quality, "evaluate") as mock_dq,
+            patch.object(orch.synthesis, "synthesize") as mock_synth,
+            patch.object(orch.regime, "detect") as mock_regime,
+            patch.object(orch.regime, "emit_if_changed"),
+            patch.object(orch.conviction, "compute", return_value=mock_conv_result),
+            patch.object(orch.conviction, "emit"),
+            patch.object(orch.decision, "decide_and_emit", return_value=None),
+            patch.object(orch, "_resolve_mid_price", return_value=95000.0),
+        ):
+            mock_dq.return_value = MagicMock(per_domain_quality={})
+            mock_synth_res = MagicMock()
+            mock_synth_res.snapshot.cycle_id = "c1"
+            mock_synth_res.snapshot.symbol = "BTC"
+            mock_synth_res.snapshot.ts = datetime.now(tz=UTC)
+            mock_synth_res.snapshot.features = {}
+            mock_synth_res.snapshot.source_event_ids = []
+            mock_synth_res.snapshot.regime = "BULL"
+            mock_synth_res.snapshot.version = "v1"
+            mock_synth.return_value = mock_synth_res
+
+            mock_regime_res = MagicMock()
+            mock_regime_res.state.regime = "BULL"
+            mock_regime.return_value = mock_regime_res
+
+            orch.run_cycle(["BTC"])
+            mock_oms.submit.assert_called_once()
 
     def test_auto_trade_disabled_by_config(self, db, config):
         """auto_paper_trade=False -> no trade."""

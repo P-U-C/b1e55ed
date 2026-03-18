@@ -72,6 +72,34 @@ def _seed_conviction_scores(db: Database, node_id: str, count: int = 3) -> None:
     db.conn.commit()
 
 
+async def _register_contributor(ac, node_id: str, name: str) -> dict:
+    r = await ac.post(
+        "/api/v1/contributors/register",
+        json={"node_id": node_id, "name": name, "role": "agent", "metadata": {}},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+async def _submit_curator_signal(ac, *, node_id: str, source: str) -> dict:
+    r = await ac.post(
+        "/api/v1/signals/submit",
+        json={
+            "event_type": "signal.curator.v1",
+            "node_id": node_id,
+            "source": source,
+            "payload": {
+                "symbol": "BTC",
+                "direction": "bullish",
+                "conviction": 7.0,
+                "rationale": "provenance identity test",
+            },
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -200,3 +228,52 @@ class TestChainVerified:
         assert body["has_provenance"] is True
         # Events appended via db.append_event always have hashes
         assert body["chain_verified"] is True
+
+
+class TestIdentitySemantics:
+    @pytest.mark.anyio
+    async def test_submit_then_query_by_node_id(self, _app_and_db):
+        """submit -> provenance should resolve on canonical contributor node_id."""
+        app, _db = _app_and_db
+
+        node_id = "node-prov-api-1"
+        source_alias = "operator:telegram"
+
+        async with make_client(app) as ac:
+            await _register_contributor(ac, node_id=node_id, name="Agent One")
+            await _submit_curator_signal(ac, node_id=node_id, source=source_alias)
+
+            r = await ac.get(f"/api/v1/oracle/producers/{node_id}/provenance")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["has_provenance"] is True
+        assert body["producer_id"] == node_id
+        assert body["total_signals"] == 1
+        assert body["operator_coverage"] == 1
+
+    @pytest.mark.anyio
+    async def test_query_by_source_alias_matches_node_identity(self, _app_and_db):
+        """Legacy source alias and canonical node_id should return one coherent provenance record."""
+        app, _db = _app_and_db
+
+        node_id = "node-prov-api-2"
+        source_alias = "agent-display-name"
+
+        async with make_client(app) as ac:
+            await _register_contributor(ac, node_id=node_id, name="Agent Two")
+            await _submit_curator_signal(ac, node_id=node_id, source=source_alias)
+
+            by_alias = await ac.get(f"/api/v1/oracle/producers/{source_alias}/provenance")
+            by_node = await ac.get(f"/api/v1/oracle/producers/{node_id}/provenance")
+
+        assert by_alias.status_code == 200
+        assert by_node.status_code == 200
+
+        alias_body = by_alias.json()
+        node_body = by_node.json()
+
+        assert alias_body["has_provenance"] is True
+        assert alias_body["producer_id"] == node_id
+        assert alias_body["total_signals"] == node_body["total_signals"] == 1
+        assert alias_body["operator_coverage"] == node_body["operator_coverage"] == 1

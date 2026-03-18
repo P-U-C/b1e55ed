@@ -25,14 +25,18 @@ def _repo_root() -> Path:
     override = os.environ.get("B1E55ED_REPO_ROOT")
     if override:
         return Path(override)
-    return Path.cwd()
+    from engine.core.paths import b1e55ed_dir
+
+    return b1e55ed_dir()
 
 
 def _db_path() -> Path:
     override = os.getenv("B1E55ED_DB_PATH")
     if override:
         return Path(override)
-    return _repo_root() / "data" / "brain.db"
+    from engine.core.paths import get_db_path
+
+    return get_db_path()
 
 
 def _connect_db() -> sqlite3.Connection | None:
@@ -75,26 +79,48 @@ class ProducerRow:
     last_run: str
     healthy: bool | None
     events_produced: int
+    last_success: str
+    consecutive_failures: int
+    last_error: str | None
+    quarantined_until: str | None
+    status: str
+    is_stale: bool
+    zero_events_warning: bool
+    no_source: bool
 
 
-def _producer_healthy(*, consecutive_failures: int, last_error: str | None) -> bool | None:
-    if consecutive_failures == 0 and not last_error:
-        return True
+def _producer_healthy(
+    *,
+    consecutive_failures: int,
+    last_error: str | None,
+    last_run_at: str | None,
+    events_produced: int,
+    is_stale: bool,
+) -> bool | None:
+    if last_run_at is None:
+        return None
+    if is_stale:
+        return False
     if consecutive_failures > 0 or last_error:
         return False
-    return None
+    return events_produced > 0
 
 
 def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
     cols = [str(r[1]) for r in conn.execute("PRAGMA table_info(producer_health)").fetchall()]
     has_endpoint = "endpoint" in cols
 
-    sel = "name, domain, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+    has_quarantined = "quarantined_until" in cols
+
+    base_cols = "name, domain, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
     if has_endpoint:
-        sel = "name, domain, endpoint, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+        base_cols = "name, domain, endpoint, schedule, last_run_at, last_success_at, last_error, consecutive_failures, events_produced"
+    if has_quarantined:
+        base_cols += ", quarantined_until"
 
-    rows = conn.execute(f"SELECT {sel} FROM producer_health ORDER BY name ASC").fetchall()
+    rows = conn.execute(f"SELECT {base_cols} FROM producer_health ORDER BY name ASC").fetchall()
 
+    now = datetime.now(tz=UTC)
     out: list[ProducerRow] = []
     for r in rows:
         if has_endpoint:
@@ -103,20 +129,63 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
             endpoint = str(r[2] or "—")
             schedule = str(r[3] or "—")
             last_run_at = str(r[4]) if r[4] is not None else None
+            last_success_at = str(r[5]) if r[5] is not None else None
             last_error = str(r[6]) if r[6] is not None else None
             consecutive_failures = int(r[7] or 0)
             events_produced = int(r[8] or 0)
+            q_idx = 9
         else:
             name = str(r[0] or "—")
             domain = str(r[1] or "—")
             endpoint = "—"
             schedule = str(r[2] or "—")
             last_run_at = str(r[3]) if r[3] is not None else None
+            last_success_at = str(r[4]) if r[4] is not None else None
             last_error = str(r[5]) if r[5] is not None else None
             consecutive_failures = int(r[6] or 0)
             events_produced = int(r[7] or 0)
+            q_idx = 8
 
-        healthy = _producer_healthy(consecutive_failures=consecutive_failures, last_error=last_error)
+        quarantined_until_raw = str(r[q_idx]) if has_quarantined and r[q_idx] is not None else None
+
+        # Determine quarantine display
+        quarantined_until_fmt: str | None = None
+        is_quarantined = False
+        if quarantined_until_raw:
+            q_dt = _parse_dt(quarantined_until_raw)
+            if q_dt and q_dt > now:
+                is_quarantined = True
+                quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
+
+        last_error_lc = last_error.lower() if last_error else ""
+        no_source = "no_source_configured" in last_error_lc or "no source configured" in last_error_lc or "not configured" in last_error_lc
+
+        last_run_dt = _parse_dt(last_run_at)
+        is_stale = bool(last_run_dt and (now - last_run_dt).total_seconds() > 30 * 60)
+        zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
+
+        # Triage predates software. Nightingale sorted the wounded the same way: healthy, degraded, failing.
+        # Dashboard semantics: stale (>30m) overrides healthy; zero events on a run is degraded.
+        if is_quarantined:
+            status = "quarantined"
+        elif is_stale:
+            status = "stale"
+        elif consecutive_failures > 4:
+            status = "failing"
+        elif no_source or consecutive_failures > 0 or last_error or zero_events_warning:
+            status = "degraded"
+        elif last_run_dt is not None:
+            status = "healthy"
+        else:
+            status = "unknown"
+
+        healthy = _producer_healthy(
+            consecutive_failures=consecutive_failures,
+            last_error=last_error,
+            last_run_at=last_run_at,
+            events_produced=events_produced,
+            is_stale=is_stale,
+        )
 
         out.append(
             ProducerRow(
@@ -127,6 +196,14 @@ def _list_producers(conn: sqlite3.Connection) -> list[ProducerRow]:
                 last_run=_fmt_ts(last_run_at),
                 healthy=healthy,
                 events_produced=events_produced,
+                last_success=_fmt_ts(last_success_at),
+                consecutive_failures=consecutive_failures,
+                last_error=last_error,
+                quarantined_until=quarantined_until_fmt,
+                status=status,
+                is_stale=is_stale,
+                zero_events_warning=zero_events_warning,
+                no_source=no_source,
             )
         )
 
@@ -180,8 +257,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "producers.html",
-            {
+            request=request,
+            name="producers.html",
+            context={
                 "request": request,
                 "active_page": "producers",
                 "kill_switch_level": 0,
@@ -215,8 +293,9 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             conn.close()
 
         return templates.TemplateResponse(
-            "producers.html",
-            {
+            request=request,
+            name="producers.html",
+            context={
                 "request": request,
                 "active_page": "producers",
                 "kill_switch_level": 0,

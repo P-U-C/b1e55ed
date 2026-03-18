@@ -1,3 +1,8 @@
+---
+title: "Cryptographic Primitives"
+description: "Hash functions, key generation, and chain verification used in b1e55ed."
+---
+
 # Cryptographic Primitives
 
 > Single source of truth for all crypto used in b1e55ed.

@@ -1,20 +1,34 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from api.deps import _load_config
 from api.main import create_app
+from engine.core.config import ApiConfig, Config
 from engine.core.database import Database
+
+
+# 🧹 the cache remembers what the test must forget
+def _make_app(tmp_path: Path):
+    """Create a test app with isolated config (no auth token, no cache bleed)."""
+    _load_config.cache_clear()
+    app = create_app()
+    app.state.db = Database(tmp_path / "brain.db")
+    # Inject a clean config with no auth_token so tests don't require a Bearer header.
+    # This prevents user.yaml's real auth_token from leaking into integration tests.
+    from engine.core.config import UniverseConfig
+
+    app.state.config = Config(api=ApiConfig(auth_token=""), universe=UniverseConfig(symbols=["BTC", "ETH", "SOL"]))
+    return app
 
 
 def test_contributor_register_submit_signal_and_attribution(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    os.environ.setdefault("B1E55ED_DEV_MODE", "1")
+    monkeypatch.setenv("B1E55ED_DEV_MODE", "1")
 
-    app = create_app()
-    app.state.db = Database(tmp_path / "brain.db")
+    app = _make_app(tmp_path)
 
     with TestClient(app) as client:
         # register contributor
@@ -55,10 +69,9 @@ def test_contributor_register_submit_signal_and_attribution(tmp_path: Path, monk
 
 def test_multiple_contributors_leaderboard(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    os.environ.setdefault("B1E55ED_DEV_MODE", "1")
+    monkeypatch.setenv("B1E55ED_DEV_MODE", "1")
 
-    app = create_app()
-    app.state.db = Database(tmp_path / "brain.db")
+    app = _make_app(tmp_path)
 
     with TestClient(app) as client:
         contributor_ids: set[str] = set()

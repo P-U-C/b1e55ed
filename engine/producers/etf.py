@@ -3,10 +3,14 @@
 ETF Flows Producer.
 
 Fetches ETF flow metrics (typically for BTC/ETH spot ETFs) from a configured
-HTTP endpoint and emits :class:`~engine.core.events.EventType.SIGNAL_ETF_V1`.
+HTTP endpoint or the Coinglass v4 API, and emits
+:class:`~engine.core.events.EventType.SIGNAL_ETF_V1`.
 
-The endpoint is configured via env and unit tests mock the injected
-``context.client``.
+Data sources (tried in order):
+1. Custom endpoint (B1E55ED_ETF_FLOWS_URL) — any URL that returns flow data
+2. Coinglass v4 API (COINGLASS_API_KEY) — free tier at coinglass.com/account
+3. Yahoo Finance free proxy (IBIT/ETHA price+volume) — directional signal only
+4. No source → reports OK with zero events (not DEGRADED)
 
 Easter egg:
 - Even in an index, someone chose the weights.
@@ -26,6 +30,7 @@ except ImportError:  # pragma: no cover
 
     UTC = _tz.utc  # noqa: N806, UP017
 
+import logging
 from typing import Any
 
 import httpx
@@ -50,22 +55,166 @@ class ETFFlowsProducer(BaseProducer):
     schedule = "0 */1 * * *"  # hourly
     mcp_source_url: str | None = None  # override with MCP server URL when available
 
-    def _endpoint(self) -> str | None:
+    # Settings discovery — the settings page reads these
+    configurable_fields = [
+        {
+            "key": "B1E55ED_ETF_FLOWS_URL",
+            "label": "Custom ETF flows endpoint",
+            "type": "url",
+            "required": False,
+            "description": "Custom HTTP endpoint for ETF flow data",
+        },
+        {
+            "key": "COINGLASS_API_KEY",
+            "label": "Coinglass API Key",
+            "type": "secret",
+            "required": False,
+            "description": (
+                "Free tier at coinglass.com/account — recommended for accurate BTC/ETH ETF flow data. "
+                "Without this, a Yahoo Finance proxy is used (directional only)."
+            ),
+        },
+    ]
+
+    def _custom_endpoint(self) -> str | None:
+        """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_ETF_FLOWS_URL") or os.getenv("ETF_FLOWS_URL")
 
-    def collect(self) -> list[dict[str, Any]]:
-        url = self._endpoint()
-        if not url:
-            self.ctx.logger.warning("etf_flows_endpoint_missing")
+    def _collect_coinglass(self) -> list[dict[str, Any]]:
+        """Fetch ETF flows from Coinglass v4 API (requires API key)."""
+        api_key = os.getenv("COINGLASS_API_KEY")
+        if not api_key:
             return []
 
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
-        data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
-        if not isinstance(data, list):
-            return []
-        return [row for row in data if isinstance(row, dict)]
+        _log = logging.getLogger(__name__)
+        results: list[dict[str, Any]] = []
+
+        for asset in ["bitcoin", "ethereum"]:
+            try:
+                resp = httpx.get(
+                    f"https://open-api-v4.coinglass.com/api/etf/{asset}/flow-history",
+                    headers={"CG-API-KEY": api_key, "User-Agent": "b1e55ed/1.0"},
+                    params={"limit": 7},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("code") == "0" and data.get("data"):
+                    for day in data["data"]:
+                        results.append(
+                            {
+                                "symbol": "BTC" if asset == "bitcoin" else "ETH",
+                                "date": day.get("date", ""),
+                                "total_net_flow_usd": float(day.get("totalNetFlow", 0)),
+                                "price": float(day.get("price", 0)),
+                                "etf_flows": day.get("flows", []),
+                                "data_source": "coinglass",
+                            }
+                        )
+            except Exception as e:  # noqa: BLE001
+                _log.warning("coinglass_etf_failed: %s %s", asset, e)
+
+        return results
+
+    def _collect_yahoo_free(self) -> list[dict[str, Any]]:
+        """Free fallback: estimate ETF flows from Yahoo Finance ETF price+volume.
+
+        Uses IBIT (BlackRock BTC ETF) and ETHA (iShares ETH ETF) as proxies.
+        Net flow estimated as: price_change_pct * avg_volume_usd (directional proxy only).
+        Not as accurate as Coinglass but gives directional signal with zero auth.
+        """
+        _log = logging.getLogger(__name__)
+        ticker_map = {"IBIT": "BTC", "ETHA": "ETH"}
+        results: list[dict[str, Any]] = []
+
+        for ticker, symbol in ticker_map.items():
+            try:
+                resp = httpx.get(
+                    f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+                    params={"interval": "1d", "range": "7d"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                chart = resp.json()
+
+                result_data = chart.get("chart", {}).get("result", [])
+                if not result_data:
+                    _log.warning("yahoo_etf_empty: %s", ticker)
+                    continue
+
+                indicators = result_data[0].get("indicators", {})
+                closes = indicators.get("quote", [{}])[0].get("close", [])
+                volumes = indicators.get("quote", [{}])[0].get("volume", [])
+
+                # Need at least 2 days for price change
+                closes = [c for c in closes if c is not None]
+                volumes = [v for v in volumes if v is not None]
+                if len(closes) < 2 or not volumes:
+                    continue
+
+                daily_flows: list[float] = []
+                for i in range(1, min(len(closes), len(volumes))):
+                    prev_close = closes[i - 1]
+                    today_close = closes[i]
+                    vol = volumes[i]
+                    if prev_close and prev_close != 0:
+                        price_change_pct = (today_close - prev_close) / prev_close
+                        volume_usd = vol * today_close
+                        daily_flows.append(price_change_pct * volume_usd)
+
+                if not daily_flows:
+                    continue
+
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "daily_flow_usd": daily_flows[-1],
+                        "cumulative_7d": sum(daily_flows),
+                        "data_source": "yahoo_free",
+                    }
+                )
+            except Exception as e:  # noqa: BLE001
+                _log.warning("yahoo_etf_failed: %s %s", ticker, e)
+
+        return results
+
+    def collect(self) -> list[dict[str, Any]]:
+        # 1. Try custom endpoint first
+        url = self._custom_endpoint()
+        if url:
+            try:
+                symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+                data: Any = asyncio.run(
+                    self.ctx.client.request_json(
+                        "POST",
+                        url,
+                        expected=(list, dict),
+                        json={"symbols": symbols},
+                    )
+                )
+                if isinstance(data, dict) and "data" in data:
+                    data = data["data"]
+                if isinstance(data, list):
+                    rows = [row for row in data if isinstance(row, dict)]
+                    if rows:
+                        return rows
+            except Exception:  # noqa: BLE001
+                self.ctx.logger.warning("custom_etf_endpoint_failed")
+
+        # 2. Try Coinglass
+        coinglass_data = self._collect_coinglass()
+        if coinglass_data:
+            return coinglass_data
+
+        # 3. Free Yahoo Finance fallback
+        yahoo_data = self._collect_yahoo_free()
+        if yahoo_data:
+            return yahoo_data
+
+        # 4. No source available
+        self.ctx.logger.info("etf_no_source_configured")
+        return []
 
     def normalize(self, raw: list[dict[str, Any]]) -> list[Event]:
         ts = datetime.now(tz=UTC)
@@ -78,7 +227,7 @@ class ETFFlowsProducer(BaseProducer):
 
             payload_obj = ETFFlowPayload(
                 symbol=sym,
-                daily_flow_usd=row.get("daily_flow_usd"),
+                daily_flow_usd=row.get("daily_flow_usd") or row.get("total_net_flow_usd"),
                 streak_days=int(row.get("streak_days") or 0),
                 cumulative_7d=row.get("cumulative_7d"),
             )
@@ -107,7 +256,12 @@ class ETFFlowsProducer(BaseProducer):
         try:
             raw = self.collect()
             if not raw:
-                health = ProducerHealth.DEGRADED
+                if not self._custom_endpoint() and not os.getenv("COINGLASS_API_KEY"):
+                    # No source configured — this is expected, not degraded
+                    health = ProducerHealth.OK
+                    errors.append("no_source_configured")
+                else:
+                    health = ProducerHealth.DEGRADED
             events = self.normalize(raw)
             published = self.publish(events)
         except httpx.HTTPStatusError as e:

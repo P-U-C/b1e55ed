@@ -3,23 +3,147 @@
 
 {% block content %}
 
-<!-- Regime Banner -->
+{% if is_new_operator %}
+<div class="panel" style="margin-bottom:1rem; border-color:rgba(167,139,250,0.3); background:rgba(167,139,250,0.05);">
+  <div class="panel-header">
+    <span class="panel-title" style="color:var(--mkt-signal);">Getting Started</span>
+  </div>
+  <div style="font-size:0.8125rem; color:var(--text); line-height:1.6;">
+    <p style="margin-bottom:0.75rem;">The brain is running but no signals have been processed yet.</p>
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div><span class="badge" style="background:rgba(167,139,250,0.15); color:var(--mkt-signal);">1</span> &nbsp;Register a producer → <a href="/producers">Producers</a></div>
+      <div><span class="badge" style="background:rgba(167,139,250,0.15); color:var(--mkt-signal);">2</span> &nbsp;Configure your settings → <a href="/settings">Settings</a></div>
+      <div><span class="badge" style="background:rgba(167,139,250,0.15); color:var(--mkt-signal);">3</span> &nbsp;Wait for the first synthesis cycle (~5 min)</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── 1. Regime Banner ────────────────────────── -->
 <div class="regime-banner {{ regime_class | default('transition') }}"
      hx-get="/partials/regime-banner"
      hx-trigger="every 30s"
      hx-swap="outerHTML">
   <span class="regime-name">{{ regime_name | default('TRANSITION') }}</span>
+  {% if is_new_operator and regime_name | default('TRANSITION') == 'TRANSITION' %}
+  <span class="regime-desc">Brain cycle hasn't run yet — regime detection starts after the first synthesis cycle (~5 min after startup)</span>
+  {% else %}
   <span class="regime-desc">{{ regime_desc | default('No clear trend') }}</span>
+  {% endif %}
   <span class="regime-confidence">{{ regime_confidence | default('—') }}</span>
 </div>
 
+<!-- ── 2. System Status (full-width compact bar) ── -->
+<div class="panel" style="margin-bottom:1rem; padding:0.5rem 1rem;"
+     hx-get="/partials/system-status"
+     hx-trigger="every 60s"
+     hx-swap="innerHTML">
+  <div style="display:flex; flex-wrap:wrap; align-items:center; gap:1.25rem; font-size:0.8rem;">
+    <span style="font-weight:500; color:var(--text-bright); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em;">System</span>
+    <span>
+      <span class="text-dim">Last cycle</span>&nbsp;
+      <span class="dot {{ 'dot-ok' if cycle_age_min | default(99) < 10 else ('dot-degraded' if cycle_age_min | default(99) < 30 else 'dot-error') }}"></span>
+      {{ cycle_age | default('never') }}
+    </span>
+    <span>
+      <span class="text-dim">Producers</span>&nbsp;
+      {{ producers_healthy | default(0) }}/{{ producers_total | default(0) }} healthy
+    </span>
+    <span>
+      <span class="text-dim">Events today</span>&nbsp;
+      {{ events_today | default(0) }}
+    </span>
+    <span>
+      <span class="text-dim">DB</span>&nbsp;
+      {{ db_size | default('—') }}
+    </span>
+    <span>
+      <span class="text-dim">Uptime</span>&nbsp;
+      {{ uptime | default('—') }}
+    </span>
+    <span>
+      <span class="text-dim">Karma</span>&nbsp;
+      {{ karma_pending | default('$0') }}
+    </span>
+    <span style="margin-left:auto;">
+      <button class="btn" style="font-size:0.7rem; padding:3px 10px;"
+              hx-post="/api/v1/brain/run"
+              hx-confirm="Run brain cycle now?"
+              hx-target="#cycle-result"
+              hx-indicator="#cycle-spinner">
+        ▶ Run Cycle
+      </button>
+      <button class="btn {{ 'btn-danger' if kill_switch_level | default(0) > 0 else '' }}"
+              style="font-size:0.7rem; padding:3px 10px;"
+              hx-post="/api/kill-switch"
+              hx-confirm="Toggle kill switch?"
+              hx-target="#cycle-result"
+              hx-swap="innerHTML">
+        ⚠ KS: {{ 'L%d' | format(kill_switch_level) if kill_switch_level | default(0) > 0 else 'OFF' }}
+      </button>
+      <span id="cycle-result" style="font-size:0.75rem;"></span>
+      <span id="cycle-spinner" class="htmx-indicator text-dim" style="font-size:0.7rem;">running...</span>
+    </span>
+  </div>
+</div>
+
+<!-- ── 3. Conviction Gauge (from cockpit) ───────── -->
+{% set tc = cockpit_state.get('top_call') if cockpit_state else None %}
+{% set cockpit_signals = cockpit_state.get('producer_signals', []) if cockpit_state else [] %}
+{% set cockpit_benchmarks = cockpit_state.get('benchmarks', []) if cockpit_state else [] %}
+{% set cockpit_sys = cockpit_state.get('system', {}) if cockpit_state else {} %}
+{% set conviction_value = cockpit_state.get('conviction', None) if cockpit_state else None %}
+
+<div class="panel" style="margin-bottom:1rem; text-align:center; padding:0.75rem;">
+  <div style="display:flex; justify-content:center; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+    <div>
+      <svg id="conviction-gauge" width="180" height="110" viewBox="0 0 200 120"></svg>
+      <div id="conviction-value"></div>
+    </div>
+    {% if tc %}
+    <div style="text-align:left; min-width:200px;">
+      <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--text-dim); margin-bottom:0.25rem;">THE CALL</div>
+      <div style="display:flex; align-items:baseline; gap:0.75rem; margin-bottom:0.5rem;">
+        <span class="text-bright" style="font-size:1.75rem; font-weight:600;">{{ tc.symbol }}</span>
+        <span style="font-size:1.25rem; font-weight:500; color:{% if tc.direction == 'long' %}var(--green){% elif tc.direction == 'short' %}var(--red){% else %}var(--neutral){% endif %};">
+          {{ tc.direction | upper }}
+        </span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.375rem;">
+        <span style="color:var(--text-dim); font-size:0.8rem;">Confidence</span>
+        <div style="flex:1; max-width:120px; height:6px; background:var(--bg); border-radius:3px; overflow:hidden;">
+          <div style="width:{{ (tc.confidence * 100) | int }}%; height:100%; background:linear-gradient(90deg, #16a34a, #22c55e); border-radius:3px;"></div>
+        </div>
+        <span class="text-bright" style="font-weight:500; font-size:0.85rem;">{{ '%.2f' | format(tc.confidence) }}</span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem 1rem; font-size:0.8rem; color:var(--text-dim);">
+        <div>Magnitude: <span class="text-bright">{{ '%.1f' | format(tc.magnitude) }}</span></div>
+        <div>Horizon: <span class="text-bright">{{ tc.horizon or '—' }}</span></div>
+        <div>PCS: <span class="text-bright">{{ '%.1f' | format(tc.pcs_score) }}</span></div>
+        <div>CTS: <span class="text-bright">{{ '%.1f' | format(tc.cts_score) }}</span></div>
+      </div>
+    </div>
+    {% else %}
+    <div style="text-align:left; color:var(--text-dim); font-size:0.8rem; min-width:180px;">
+      <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.15em; margin-bottom:0.25rem;">THE CALL</div>
+      <div>Waiting for first brain cycle...</div>
+      <div style="font-size:0.75rem; margin-top:0.25rem;">Top conviction trade setup appears here after synthesis.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── 4. Two-column: Positions+Call / Signals+Discretionary ── -->
 <div class="grid" style="margin-bottom: 1rem;">
 
-  <!-- Positions Panel -->
-  <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s" hx-swap="innerHTML">
+  <!-- LEFT: Positions -->
+  <div class="panel" hx-get="/partials/positions" hx-trigger="every 30s, refresh from:body" hx-swap="innerHTML">
     <div class="panel-header">
       <span class="panel-title">Positions</span>
-      <span class="panel-age">{{ positions_age | default('—') }}</span>
+      <span style="display:flex; align-items:center; gap:0.75rem;">
+        {% if positions %}<span style="font-size:0.7rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</span>{% endif %}
+        <span class="panel-age">{{ positions_age | default('—') }}</span>
+      </span>
     </div>
 
     {% if positions %}
@@ -27,7 +151,7 @@
       <div style="margin-bottom: 0.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:baseline;">
           <span class="text-bright" style="font-weight:400;">{{ p.id }} · {{ p.symbol }} {{ p.direction | upper }}</span>
-          <span class="{{ 'text-bull' if p.pnl_pct >= 0 else 'text-bear' }} data-live" style="font-weight:400;">
+          <span class="{{ 'text-bull' if p.pnl_pct > 0 else ('text-bear' if p.pnl_pct < 0 else 'text-dim') }}" style="font-weight:400;">
             {{ '%+.1f' | format(p.pnl_pct) }}%
           </span>
         </div>
@@ -45,132 +169,282 @@
         </div>
       </div>
       {% endfor %}
-      <div style="font-size:0.75rem; color:var(--text-dim);">{{ positions | length }} open · 0 pending</div>
+
     {% else %}
-      <div class="empty-state">No open positions. Brain decisions will appear here.</div>
+      {% set message = "No open positions" %}
+      {% set status = "Brain decisions will appear here" %}
+      {% set action_text = "Go to Positions" %}
+      {% set action_url = "/positions" %}
+      {% include "partials/empty_state.html" %}
     {% endif %}
   </div>
 
-  <!-- Conviction Panel -->
-  <div class="panel" hx-get="/partials/conviction" hx-trigger="every 60s" hx-swap="innerHTML">
-    <div class="panel-header">
-      <span class="panel-title">Conviction</span>
-      <span class="panel-age">{{ conviction_age | default('—') }}</span>
-    </div>
-
-    {% if convictions %}
-      {% for c in convictions %}
-      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
-        <span style="width:3rem; font-weight:400;">{{ c.symbol }}</span>
-        <div class="conviction-bar" style="flex:1;">
-          <div class="conviction-bar-fill {{ c.direction }}" style="width:{{ (c.magnitude / 10 * 100) | int }}%;"></div>
-        </div>
-        <span style="width:2rem; text-align:right; font-weight:400;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
-        <span style="width:4.5rem; font-size:0.75rem;" class="text-dim">{{ c.direction | upper }}</span>
+  <!-- RIGHT: Signal Feed + Conviction -->
+  <div style="display:flex; flex-direction:column; gap:1rem;">
+    <!-- Conviction -->
+    <div class="panel" hx-get="/partials/conviction" hx-trigger="every 60s" hx-swap="innerHTML">
+      <div class="panel-header">
+        <span class="panel-title">Conviction</span>
+        <span class="panel-age">{{ conviction_age | default('—') }}</span>
       </div>
-      {% endfor %}
 
-      {% if domain_weights %}
-      <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border-dim);">
-        <div class="panel-title" style="margin-bottom:0.5rem;">Domain Weights</div>
-        {% for w in domain_weights %}
-        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem; font-size:0.75rem;">
-          <span style="width:5rem; color:var(--text-dim);">{{ w.name }}</span>
-          <div style="flex:1; height:4px; background:var(--border-dim); border-radius:1px;">
-            <div style="width:{{ w.pct }}%; height:100%; background:var(--text-dim); border-radius:1px;"></div>
+      {% if convictions %}
+        {% for c in convictions %}
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.8125rem;">
+          <span style="width:3rem; font-weight:400;">{{ c.symbol }}</span>
+          <div class="conviction-bar" style="flex:1;">
+            <div class="conviction-bar-fill {{ c.direction }}" style="width:{{ (c.magnitude / 10 * 100) | int }}%;"></div>
           </div>
-          <span style="width:2.5rem; text-align:right; color:var(--text-dim);">{{ w.pct }}%</span>
+          <span style="width:2rem; text-align:right; font-weight:400;" class="text-bright">{{ '%.1f' | format(c.magnitude) }}</span>
+          <span style="width:4.5rem; font-size:0.75rem;" class="text-dim">{{ c.direction | upper }}</span>
         </div>
         {% endfor %}
-      </div>
+      {% else %}
+        {% set message = "No conviction scores yet" %}
+        {% set status = "Waiting for first brain cycle" %}
+        {% include "partials/empty_state.html" %}
       {% endif %}
-    {% else %}
-      <div class="empty-state">No conviction scores yet. Waiting for first brain cycle.</div>
-    {% endif %}
+    </div>
+
+    <!-- Signal Feed -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Signal Feed</span>
+        <span class="panel-age cursor-blink">live</span>
+      </div>
+      <div id="signal-feed" class="data-dense"
+           hx-get="/partials/signal-feed"
+           hx-trigger="every 30s"
+           hx-swap="innerHTML">
+        {% if signals %}
+          {% for s in signals %}
+          <div class="signal-row">
+            <span class="signal-ts">{{ s.ts }}</span>
+            <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
+            <span class="signal-asset">{{ s.asset }}</span>
+            <span class="signal-desc">{{ s.desc }}</span>
+            <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
+              {{ s.direction }}{{ '%.0f' | format(s.score) }}
+            </span>
+          </div>
+          {% endfor %}
+          <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
+            showing {{ signals | length }} of {{ total_signals | default('?') }} signals today
+          </div>
+        {% else %}
+          {% set message = "No signals yet" %}
+          {% set status = "Waiting for first producer cycle" %}
+          {% include "partials/empty_state.html" %}
+        {% endif %}
+      </div>
+    </div>
   </div>
 
 </div>
 
-<!-- Signal Feed -->
-<div class="panel" style="margin-bottom: 1rem;">
+<!-- ── Discretionary Signals + Form ──────────── -->
+<div class="panel" style="margin-bottom:1rem;">
   <div class="panel-header">
-    <span class="panel-title">Signal Feed</span>
-    <span class="panel-age cursor-blink">live</span>
+    <span class="panel-title">Discretionary Signals</span>
+    <span class="panel-age">active</span>
   </div>
-  <div id="signal-feed" class="data-dense"
-       hx-get="/partials/signal-feed"
-       hx-trigger="every 30s"
+
+  <!-- Submission Form -->
+  <form id="disc-form" style="display:grid; grid-template-columns:1fr 1fr 1fr 2fr auto; gap:0.5rem; align-items:end; margin-bottom:0.75rem; font-size:0.8rem;"
+        hx-post="/api/v1/signals/discretionary"
+        hx-target="#disc-result"
+        hx-swap="innerHTML"
+        hx-encoding="application/x-www-form-urlencoded">
+    <div>
+      <label class="text-dim" style="font-size:0.65rem; display:block; margin-bottom:2px;">Asset</label>
+      <input class="input" name="symbol" placeholder="BTC" required style="width:100%; padding:4px 8px; font-size:0.8rem;">
+    </div>
+    <div>
+      <label class="text-dim" style="font-size:0.65rem; display:block; margin-bottom:2px;">Direction</label>
+      <select class="input" name="direction" required style="width:100%; padding:4px 8px; font-size:0.8rem;">
+        <option value="long">Bullish</option>
+        <option value="short">Bearish</option>
+        <option value="flat">Neutral</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-dim" style="font-size:0.65rem; display:block; margin-bottom:2px;">Confidence (1-10)</label>
+      <input class="input" name="confidence" type="number" min="1" max="10" value="5" required style="width:100%; padding:4px 8px; font-size:0.8rem;">
+    </div>
+    <div>
+      <label class="text-dim" style="font-size:0.65rem; display:block; margin-bottom:2px;">Notes</label>
+      <input class="input" name="notes" placeholder="Cup and handle on 4h" style="width:100%; padding:4px 8px; font-size:0.8rem;">
+    </div>
+    <button class="btn" type="submit" style="padding:4px 12px; font-size:0.8rem; white-space:nowrap;">Submit</button>
+  </form>
+  <div id="disc-result" style="font-size:0.75rem; margin-bottom:0.5rem;"></div>
+
+  <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:0.75rem; border-top:1px solid var(--border-dim); padding-top:0.5rem;">
+    Example: <code style="font-size:0.65rem; background:rgba(255,255,255,0.04); padding:2px 4px; border-radius:2px;">{"symbol": "BTC", "direction": "bullish", "confidence": 7, "notes": "Cup and handle on 4h"}</code>
+  </div>
+
+  <div id="disc-signals-list"
+       hx-get="/partials/discretionary-signals"
+       hx-trigger="every 300s"
        hx-swap="innerHTML">
-    {% if signals %}
-      {% for s in signals %}
-      <div class="signal-row">
-        <span class="signal-ts">{{ s.ts }}</span>
-        <span class="badge badge-{{ s.domain }}">{{ s.domain }}</span>
-        <span class="signal-asset">{{ s.asset }}</span>
-        <span class="signal-desc">{{ s.desc }}</span>
-        <span class="signal-score data-live {{ 'text-bull' if s.score >= 7 else ('text-warn' if s.score >= 4 else 'text-dim') }}">
-          {{ s.direction }}{{ '%.0f' | format(s.score) }}
-        </span>
-      </div>
-      {% endfor %}
-      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">
-        showing {{ signals | length }} of {{ total_signals | default('?') }} signals today
-      </div>
-    {% else %}
-      <div class="empty-state">No signals yet. Waiting for first producer cycle.</div>
-    {% endif %}
+  {% if disc_signals %}
+  {% for s in disc_signals %}
+  <div style="display:flex; align-items:center; gap:0.75rem; padding:6px 0; font-size:0.8125rem; border-bottom:1px solid var(--border);">
+    <span style="width:3rem; font-weight:500; color:var(--text-bright);">{{ s.symbol }}</span>
+    <span style="color:{% if s.direction == 'long' %}var(--green){% elif s.direction == 'short' %}var(--red){% else %}var(--text-dim){% endif %}; width:3rem;">
+      {{ s.direction }}
+    </span>
+    <span style="width:3rem; text-align:right;">{{ '%.0f' | format((s.confidence or 0) * 100) }}%</span>
+    <span style="flex:1; color:var(--text-dim); font-size:0.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ s.reasoning }}</span>
+    <span style="font-size:0.7rem; color:var(--text-dim);">{{ s.expires_at[:16] if s.expires_at else '' }}</span>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="color:var(--text-dim); font-size:0.75rem;">No discretionary signals yet.</div>
+  {% endif %}
   </div>
 </div>
 
-<div class="grid">
+<!-- ── 5. Full-width: Producer Breakdown + Benchmarks (from cockpit) ── -->
+<div class="grid" style="margin-bottom:1rem;">
 
-  <!-- Quick Actions -->
+  <!-- Producer Breakdown -->
   <div class="panel">
     <div class="panel-header">
-      <span class="panel-title">Quick Actions</span>
+      <span class="panel-title">Producer Breakdown</span>
     </div>
-    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
-      <button class="btn"
-              hx-post="/api/brain/run"
-              hx-confirm="Run brain cycle now?"
-              hx-target="#cycle-result"
-              hx-indicator="#cycle-spinner">
-        ▶ Run Brain Cycle
-      </button>
-      <button class="btn {{ 'btn-danger' if kill_switch_level | default(0) > 0 else '' }}"
-              hx-post="/api/kill-switch"
-              hx-confirm="Toggle kill switch?">
-        ⚠ Kill Switch: {{ 'LEVEL %d' | format(kill_switch_level) if kill_switch_level | default(0) > 0 else 'OFF' }}
-      </button>
+    {% if cockpit_signals %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+      <thead>
+        <tr style="color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="text-align:left; padding:0.3rem;">Producer</th>
+          <th style="text-align:left; padding:0.3rem;">Domain</th>
+          <th style="text-align:left; padding:0.3rem;">Dir</th>
+          <th style="text-align:right; padding:0.3rem;">Conf</th>
+          <th style="text-align:right; padding:0.3rem;">Karma</th>
+          <th style="text-align:center; padding:0.3rem;">Agrees</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in cockpit_signals %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.3rem; color:var(--text-bright);">{{ s.producer_id }}</td>
+          <td style="padding:0.3rem;">{{ s.domain }}</td>
+          <td style="padding:0.3rem; color:{% if s.direction == 'long' %}var(--green){% elif s.direction == 'short' %}var(--red){% else %}var(--neutral){% endif %};">{{ s.direction }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(s.confidence) }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(s.karma_score) }}</td>
+          <td style="text-align:center; padding:0.3rem;">
+            {% if s.agrees %}<span style="color:var(--green);">✓</span>{% else %}<span style="color:var(--red);">✗</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">
+      No producer signals in last 30m.
+      <div style="font-size:0.75rem; margin-top:0.25rem;">Producer health and signal counts appear here after the first brain cycle.</div>
     </div>
-    <div id="cycle-result" style="margin-top:0.5rem; font-size:0.8125rem;"></div>
-    <span id="cycle-spinner" class="htmx-indicator text-dim" style="font-size:0.75rem;">running...</span>
+    {% endif %}
   </div>
 
-  <!-- System Status -->
-  <div class="panel" hx-get="/partials/system-status" hx-trigger="every 60s" hx-swap="innerHTML">
+  <!-- Benchmarks -->
+  <div class="panel">
     <div class="panel-header">
-      <span class="panel-title">System Status</span>
+      <span class="panel-title">Benchmarks</span>
     </div>
-    <div style="font-size:0.8125rem; display:grid; grid-template-columns:1fr 1fr; gap:0.375rem 1.5rem;">
-      <div><span class="text-dim">Last cycle</span></div>
-      <div>
-        <span class="dot {{ 'dot-ok' if cycle_age_min | default(99) < 10 else ('dot-degraded' if cycle_age_min | default(99) < 30 else 'dot-error') }}"></span>
-        {{ cycle_age | default('never') }}
-      </div>
-      <div><span class="text-dim">Producers</span></div>
-      <div>{{ producers_healthy | default(0) }}/{{ producers_total | default(0) }} healthy</div>
-      <div><span class="text-dim">Events today</span></div>
-      <div>{{ events_today | default(0) }}</div>
-      <div><span class="text-dim">DB size</span></div>
-      <div>{{ db_size | default('—') }}</div>
-      <div><span class="text-dim">Uptime</span></div>
-      <div>{{ uptime | default('—') }}</div>
-      <div><span class="text-dim">Karma pending</span></div>
-      <div>{{ karma_pending | default('$0') }}</div>
+    {% if cockpit_benchmarks %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+      <thead>
+        <tr style="color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="text-align:left; padding:0.3rem;">Source</th>
+          <th style="text-align:left; padding:0.3rem;">Dir</th>
+          <th style="text-align:right; padding:0.3rem;">7d P&amp;L</th>
+          <th style="text-align:right; padding:0.3rem;">Win Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in cockpit_benchmarks %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.3rem; color:var(--text-bright);">{{ b.name }}</td>
+          <td style="padding:0.3rem;">{{ b.direction }}</td>
+          <td style="text-align:right; padding:0.3rem;">{{ '%.2f' | format(b.pnl_7d) }}%</td>
+          <td style="text-align:right; padding:0.3rem;">{{ ('%.0f%%' | format(b.win_rate * 100)) if b.win_rate is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="color:var(--text-dim); padding:1rem;">
+      No benchmark data yet.
+      <div style="font-size:0.75rem; margin-top:0.25rem;">Portfolio benchmarks appear here when positions are open.</div>
     </div>
+    {% endif %}
   </div>
 
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var cv = {{ conviction_value | default('null') }};
+  var svg = document.getElementById('conviction-gauge');
+  var valDiv = document.getElementById('conviction-value');
+  if (!svg) return;
+
+  function arcPath(cx, cy, r, startAngle, endAngle) {
+    var s = startAngle * Math.PI / 180;
+    var e = endAngle * Math.PI / 180;
+    var x1 = cx + r * Math.cos(s), y1 = cy - r * Math.sin(s);
+    var x2 = cx + r * Math.cos(e), y2 = cy - r * Math.sin(e);
+    var large = (endAngle - startAngle > 180) ? 1 : 0;
+    return 'M ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 0 ' + x2 + ' ' + y2;
+  }
+
+  function svgEl(tag, attrs) {
+    var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  // Background arc
+  svg.appendChild(svgEl('path', {d: arcPath(100,100,80,0,180), fill:'none', stroke:'rgba(255,255,255,0.06)', 'stroke-width':'12', 'stroke-linecap':'round'}));
+
+  // Zone arcs: red 0-3 (0°-54°), amber 3-7 (54°-126°), green 7-10 (126°-180°)
+  svg.appendChild(svgEl('path', {d: arcPath(100,100,80,126,180), fill:'none', stroke:'rgba(220,38,38,0.25)', 'stroke-width':'12'}));
+  svg.appendChild(svgEl('path', {d: arcPath(100,100,80,54,126), fill:'none', stroke:'rgba(245,158,11,0.25)', 'stroke-width':'12'}));
+  svg.appendChild(svgEl('path', {d: arcPath(100,100,80,0,54), fill:'none', stroke:'rgba(34,197,94,0.25)', 'stroke-width':'12'}));
+
+  // Scale labels
+  svg.appendChild(svgEl('text', {x:'15', y:'115', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '0';
+  svg.appendChild(svgEl('text', {x:'100', y:'12', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '5';
+  svg.appendChild(svgEl('text', {x:'185', y:'115', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'9', 'text-anchor':'middle'})).textContent = '10';
+
+  if (cv === null || cv === undefined) {
+    svg.querySelector('path').setAttribute('stroke-dasharray', '8,6');
+    svg.appendChild(svgEl('text', {x:'100', y:'65', 'text-anchor':'middle', fill:'var(--text-dim)', 'font-family':'var(--mono)', 'font-size':'10'})).textContent = 'awaiting data';
+    return;
+  }
+
+  cv = parseFloat(cv);
+  // normalize: pcs_score is 0-100, gauge expects 0-10
+  if (cv > 10) cv = cv / 10;
+  var color = cv < 3 ? 'var(--red)' : (cv < 7 ? 'var(--amber)' : 'var(--green)');
+  var label = cv < 3 ? 'BEAR' : (cv < 7 ? 'NEUTRAL' : 'BULL');
+
+  // Needle
+  var angle = 180 - (cv / 10) * 180;
+  var rad = angle * Math.PI / 180;
+  var nx = 100 + 65 * Math.cos(rad);
+  var ny = 100 - 65 * Math.sin(rad);
+
+  svg.appendChild(svgEl('line', {x1:'100', y1:'100', x2:nx, y2:ny, stroke:color, 'stroke-width':'2', 'stroke-linecap':'round'}));
+  svg.appendChild(svgEl('circle', {cx:'100', cy:'100', r:'4', fill:color}));
+
+  valDiv.innerHTML = '<span style="font-size:1.5rem; font-weight:600; font-family:var(--mono); color:' + color + ';">' + cv.toFixed(1) + '</span>' +
+    '<div style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em;">' + label + '</div>';
+})();
+</script>
 {% endblock %}

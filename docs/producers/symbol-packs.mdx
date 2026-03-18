@@ -65,6 +65,21 @@ universe:
   symbols: ["DOGE", "SHIB", "PEPE", "WIF", "BONK"]
 ```
 
+### Runtime bundle packs (wizard/API)
+
+These packs are available in the setup wizard and `GET /api/v1/universe/packs`:
+
+- `tradfi-infra` — direct TradFi plumbing coverage for BTC/ETH/SOL
+- `hl-tradfi-perps` — Hyperliquid-perps style basket with TradFi factor overlays
+- `mixed-market` — blended direct + proxy basket
+
+#### Direct vs Proxy mappings
+
+- **Direct**: the symbol has first-order feed coverage in current producers (higher confidence).
+- **Proxy**: the symbol is mapped to an anchor symbol/factor basket (rates, dollar, vol, beta, liquidity) when direct coverage is weaker.
+
+Proxy mappings are practical scaffolding — they improve coverage without pretending to be a full factor model.
+
 ---
 
 ## Custom pack

@@ -1,3 +1,8 @@
+---
+title: "Contributors"
+description: "Attribution units, karma scoring, and EAS attestations."
+---
+
 # Contributors
 
 Contributors are the attribution unit for b1e55ed.

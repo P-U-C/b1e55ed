@@ -31,7 +31,7 @@ class KarmaGovernance:
 
     def has_prior_settlement(self) -> bool:
         """Check if any settlement has ever been recorded."""
-        row = self._db.conn.execute("SELECT COUNT(1) FROM karma_settlements").fetchone()
+        row = self._db.fetchone("SELECT COUNT(1) FROM karma_settlements")
         return bool(row and int(row[0]) > 0)
 
     def get_locked_config(self) -> dict | None:
@@ -39,10 +39,10 @@ class KarmaGovernance:
 
         After first settlement, percentage and treasury_address are locked to these values.
         """
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             "SELECT payload FROM events WHERE type = ? ORDER BY created_at ASC, rowid ASC LIMIT 1",
             (str(EventType.KARMA_SETTLEMENT_V1),),
-        ).fetchone()
+        )
         if row is None:
             return None
 
@@ -107,10 +107,10 @@ class KarmaGovernance:
 
     def _has_wallet_migration(self, old_wallet: str, new_wallet: str) -> bool:
         """Check if an approved wallet migration exists."""
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             "SELECT payload FROM events WHERE type = ? ORDER BY created_at DESC",
             (str(EventType.KARMA_WALLET_MIGRATION_V1),),
-        ).fetchall()
+        )
 
         for row in rows:
             payload = json.loads(row[0])
@@ -120,7 +120,7 @@ class KarmaGovernance:
 
     def get_settlement_audit_log(self, *, limit: int = 50) -> list[dict]:
         """Return settlement audit trail from events."""
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             """
             SELECT type, payload, ts, source FROM events
             WHERE type IN (?, ?, ?)
@@ -133,7 +133,7 @@ class KarmaGovernance:
                 str(EventType.KARMA_WALLET_MIGRATION_V1),
                 limit,
             ),
-        ).fetchall()
+        )
 
         return [
             {

@@ -1,17 +1,21 @@
 ---
 title: "Introduction"
-description: "b1e55ed is an open-source trading intelligence engine with a public provenance oracle. Run it as a sovereign AI trading OS with compound learning — no middlemen."
+description: "b1e55ed is an open-source trading intelligence engine with a public provenance oracle. Run it as a sovereign AI trading OS with compound learning - no middlemen."
 ---
 
-b1e55ed (0xb1e55ed → “blessed”) is a **CLI-first trading intelligence engine** built around a simple idea:
+<Warning>
+**Paper trading mode** — b1e55ed is intentionally running in paper trade mode. All positions are simulated. This is not a disclaimer — it's the falsification test. We're proving the system works before real capital touches it. Signal scoring, karma, and reputation are live and real.
+</Warning>
 
-> *Signals are sacred. Don’t rewrite them — **append events**, attribute contributors, and let conviction evolve over time.*
+b1e55ed (0xb1e55ed → "blessed") is a **CLI-first trading intelligence engine** built around a simple idea:
+
+> *Signals are sacred. Don't rewrite them - **append events**, attribute contributors, and let conviction evolve over time.*
 
 <Note>
 **Terminology**: *Operators* are humans who run a b1e55ed instance. *AI agents* are external autonomous software that query the oracle. The two operator deployment modes are *standalone* (CLI + dashboard, self-contained) and *connected* (CLI + OpenClaw + Telegram orchestration).
 </Note>
 
-It’s designed for operators who want a durable, inspectable record of:
+It's designed for operators who want a durable, inspectable record of:
 
 - what you believed,
 - when you believed it,
@@ -19,7 +23,7 @@ It’s designed for operators who want a durable, inspectable record of:
 - what you did about it (positions / actions).
 
 <Info>
-If you’ve used journaling, incident logs, or event-sourcing in software, b1e55ed will feel familiar: the **brain** is an append-only ledger, and “truth” is what can be reconstructed from events.
+If you've used journaling, incident logs, or event-sourcing in software, b1e55ed will feel familiar: the **brain** is an append-only ledger, and "truth" is what can be reconstructed from events.
 </Info>
 
 ## What does it do?
@@ -38,16 +42,19 @@ At a high level, b1e55ed helps you:
 - **Teams** who want shared, auditable signal history and contributor attribution.
 - **Agent builders** who want a clean API for submitting signals / reading positions.
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Operator" href="/quickstart">
     Install → run the wizard → create your first signal.
+  </Card>
+  <Card title="AI Agent" href="/agents">
+    Register → submit signals → build karma. 3 API calls.
   </Card>
   <Card title="Builder" href="/api/overview">
     Use the API to post signals, fetch positions, and integrate agents.
   </Card>
 </CardGroup>
 
-## The “blessed” prefix
+## The "blessed" prefix
 
 The name is a nod to the Ethereum address prefix `0xb1e55ed` (read: *blessed*).
 
@@ -58,8 +65,17 @@ In b1e55ed, **identity and attribution matter**:
 - the system can track **karma** (credit/blame) across time
 
 <Note>
-Identity forging and attestations are optional for a local-first setup, but they unlock stronger provenance guarantees when you’re sharing signals.
+Identity forging and attestations are optional for a local-first setup, but they unlock stronger provenance guarantees when you're sharing signals.
 </Note>
+
+## On-chain reputation (ERC-8004)
+
+b1e55ed is registered as [Agent #28362](https://basescan.org/nft/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432/28362) on the ERC-8004 Identity Registry (Base mainnet). Signal producers build portable, verifiable reputation on-chain:
+
+- **ReputationRegistry** — karma scores (hit rate, calibration, consistency) anchored on-chain
+- **ValidationRegistry** — independent verification of signal outcomes against market data
+
+This means "this agent is good at trading" becomes a verifiable claim, not marketing.
 
 ## Next steps
 

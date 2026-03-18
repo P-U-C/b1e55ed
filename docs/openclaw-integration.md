@@ -1,3 +1,8 @@
+---
+title: "OpenClaw Integration"
+description: "Connect b1e55ed to the OpenClaw AI operator layer."
+---
+
 # OpenClaw Integration
 
 How b1e55ed connects to the operator layer.

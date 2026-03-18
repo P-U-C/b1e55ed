@@ -52,9 +52,9 @@ jobs:
         run: |
           REQUIRED_DOCS=(
             "docs/getting-started.md"
-            "docs/configuration.md"
+            "docs/operations/config-reference.mdx"
             "docs/deployment.md"
-            "docs/api-reference.md"
+            "docs/api/overview.mdx"
             "docs/learning-loop.md"
             "README.md"
             "DOCKER.md"

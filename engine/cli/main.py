@@ -12,6 +12,7 @@ The hex is blessed: 0xb1e55ed.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
@@ -20,6 +21,8 @@ from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+
+from engine.core.paths import b1e55ed_dir, get_db_path
 
 if TYPE_CHECKING:  # pragma: no cover
     from engine.core.config import Config
@@ -73,7 +76,41 @@ class CliContext:
 
 
 def _repo_root_from_cwd() -> Path:
-    return Path.cwd()
+    """Return operator data root.
+
+    For dev checkouts (pyproject.toml present in cwd or any parent up to
+    5 levels), returns the repo root so config/default.yaml is found
+    relative to source.
+
+    For production uv tool installs, returns ~/.b1e55ed/ so all operator
+    data (config/, data/, corpus/) lives under the standard dir.
+    """
+    candidate = Path.cwd()
+    for _ in range(5):
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+    return b1e55ed_dir()
+
+    # Droste effect eliminated — one level of nesting is enough for anyone
+
+
+def _identity_dir(ctx: CliContext) -> Path:
+    """Return the directory where identity files are stored.
+
+    Always ~/.b1e55ed/ — identity is user-scoped regardless of dev vs production.
+    In dev checkouts, repo_root is the repo dir (no .b1e55ed suffix).
+    In production, repo_root IS ~/.b1e55ed, so we must not append .b1e55ed again.
+    """
+    return Path.home() / ".b1e55ed"
+
+
+def _resolve_db_path(repo_root: Path, config: object | None = None) -> Path:
+    """Derive brain.db path — delegates to get_db_path() (single source of truth)."""
+    return get_db_path(config)
 
 
 def _load_config(ctx: CliContext) -> Config | None:
@@ -116,6 +153,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
+    )
+    p_brain.add_argument(
+        "--force",
+        action="store_true",
+        help="Run even if daemon is already running (override concurrent cycle warning).",
     )
 
     p_signal = sub.add_parser("signal", help="Ingest operator intel as a curator signal")
@@ -172,6 +214,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
+    )
+    pos_sub = p_positions.add_subparsers(dest="positions_cmd")
+    p_pos_close = pos_sub.add_parser("close", help="Manually close an open position")
+    p_pos_close.add_argument("position_id", help="Position ID to close")
+    p_pos_close.add_argument(
+        "--exit-price",
+        type=float,
+        default=None,
+        dest="exit_price",
+        help="Exit price (defaults to current market price).",
     )
 
     # -- kelly --
@@ -378,6 +430,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve = sub.add_parser("resolve-outcomes", help="Resolve elapsed FORECAST_V1 events into FORECAST_OUTCOME_V1")
     p_resolve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    p_resolve_spi = sub.add_parser("resolve-spi", help="Resolve expired SPI signals against market outcomes")
+    p_resolve_spi.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- monitor-positions --
+    p_mon = sub.add_parser(
+        "monitor-positions",
+        help="Evaluate stop-loss, take-profit and time-based stops for all open positions.",
+    )
+    p_mon.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     p_keys = sub.add_parser("keys", help="Manage API keys")
     keys_sub = p_keys.add_subparsers(dest="keys_cmd")
 
@@ -431,6 +493,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_start.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     p_start.add_argument("--no-browser", action="store_true", help="Don't open browser automatically")
 
+    p_daemon = sub.add_parser(
+        "daemon",
+        help="Start all subsystems as a supervised process group (recommended for production)",
+    )
+    p_daemon.add_argument("--status", action="store_true", help="Show daemon status and exit")
+
     p_eas = sub.add_parser("eas", help="Ethereum Attestation Service (EAS) utilities")
     eas_sub = p_eas.add_subparsers(dest="eas_cmd")
 
@@ -441,9 +509,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_eas_verify.add_argument("--uid", required=True, help="Attestation UID")
     p_eas_verify.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    # -- doctor --
+    from engine.cli.doctor import build_doctor_parser
+
+    build_doctor_parser(sub)
+
     sub.add_parser("status", help="Print system status")
 
+    p_register = sub.add_parser("register", help="Register this node on-chain (ERC-8004)")
+    p_register.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
+
+    # -- spi --
+    p_spi = sub.add_parser("spi", help="SPI signal producer management")
+    spi_sub = p_spi.add_subparsers(dest="spi_cmd")
+
+    spi_sub.add_parser("register", help="Interactively register a new SPI signal producer")
+    spi_sub.add_parser("status", help="Show all registered SPI producers and lifecycle states")
+
+    p_spi_promote = spi_sub.add_parser("promote", help="Manually promote a producer to the next lifecycle state")
+    p_spi_promote.add_argument("producer_id", help="Producer ID to promote")
+
+    p_spi_test_key = spi_sub.add_parser("test-key", help="Test that an API key is valid")
+    p_spi_test_key.add_argument("producer_id", help="Producer ID whose key to test")
+
+    p_spi.add_argument("--api-url", default="http://127.0.0.1:5050", help="API base URL (default: http://127.0.0.1:5050)")
 
     p_uninstall = sub.add_parser("uninstall", help="Uninstall b1e55ed and clean up all related files")
     p_uninstall.add_argument(
@@ -473,6 +564,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_report_parser(sub)
 
+    # -- prune --
+    p_prune = sub.add_parser("prune", help="Prune old data according to retention policy")
+    p_prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted without actually deleting.",
+    )
+    p_prune.add_argument(
+        "--events-days",
+        type=int,
+        default=None,
+        help="Override events retention days (default: from config).",
+    )
+    p_prune.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -483,6 +593,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_integrity = sub.add_parser("integrity", help="Verify event chain integrity and projection consistency")
     p_integrity.add_argument("--fast", action="store_true", help="Check only recent events")
     p_integrity.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- verify-chain --
+    p_verify_chain = sub.add_parser("verify-chain", help="Verify the full event hash chain (alias for integrity --no-fast)")
+    p_verify_chain.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    # -- reconcile --
+    p_reconcile = sub.add_parser("reconcile", help="Backfill missing execution provenance events. Safe to run multiple times.")
+    p_reconcile.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     return parser
 
@@ -576,8 +694,8 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     identity = ensure_identity()
 
     # Initialize database
-    data_dir = repo_root / "data"
-    db_path = data_dir / "brain.db"
+    db_path = get_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     _ = Database(db_path)
 
     print("\nStatus summary")
@@ -587,11 +705,42 @@ def _cmd_setup(ctx: CliContext, args: argparse.Namespace) -> int:
     print(f"- keystore: {keystore.describe()}")
     print(f"- db: {db_path}")
 
+    # Optional: SPI producer registration
+    if not non_interactive:
+        spi_ans = input("\nWould you like to register an SPI signal producer? [y/N]: ").strip().lower()
+        if spi_ans in {"y", "yes"}:
+            spi_api_url = os.getenv("B1E55ED_API_URL", "http://127.0.0.1:5050")
+            _spi_register_flow(spi_api_url)
+
     print("\nYou're blessed. Run `b1e55ed brain` to start.")
     return 0
 
 
 def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
+    # Fix 5: Warn if daemon is already running (brain cycles are automatic when daemon is active)
+    force = bool(getattr(args, "force", False))
+    if not force:
+        _daemon_running = False
+        try:
+            import psutil  # type: ignore[import-not-found,import-untyped,unused-ignore]
+
+            for _proc in psutil.process_iter(["pid", "cmdline"]):
+                _cmdline = " ".join(_proc.info.get("cmdline") or [])
+                if "b1e55ed" in _cmdline and "daemon" in _cmdline:
+                    _daemon_running = True
+                    break
+        except Exception:
+            # psutil unavailable or access denied — fall back to lock-file check
+            _lock_path = Path.home() / ".b1e55ed" / "daemon.lock"
+            _daemon_running = _lock_path.exists()
+
+        if _daemon_running:
+            print(
+                "⚠ Daemon is already running — brain cycles are automatic. Use --force to run manually.",
+                file=sys.stderr,
+            )
+            return 0
+
     # Lazy import: brain pipeline can be heavy.
     from engine.core.config import Config
     from engine.core.database import Database
@@ -601,7 +750,7 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root, config))
     identity = ensure_identity()
 
     # Best-effort crash-recovery sweep on startup.
@@ -675,10 +824,10 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                 return None
 
         def _is_quarantined(name: str) -> tuple[bool, str | None]:
-            row = db.conn.execute(
+            row = db.fetchone(
                 "SELECT quarantined_until, quarantined_reason FROM producer_health WHERE name = ?",
                 (name,),
-            ).fetchone()
+            )
             if row is None:
                 return False, None
             until = str(row[0]) if row[0] is not None else None
@@ -719,8 +868,8 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             success = str(res.health) == str(ProducerHealth.OK)
 
             # Update row (create if missing)
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     """
                     INSERT INTO producer_health (
                         name, domain, schedule, endpoint, last_run_at, last_success_at, last_error,
@@ -760,18 +909,18 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
                 )
 
                 # Auto-quarantine after repeated failures (PH1b)
-                row = db.conn.execute(
+                row = db.fetchone(
                     "SELECT consecutive_failures FROM producer_health WHERE name = ?",
                     (n,),
-                ).fetchone()
+                )
                 failures = int(row[0] or 0) if row else 0
                 if not success and failures >= 5:
                     until = datetime.now(tz=UTC) + timedelta(hours=1)
-                    db.conn.execute(
+                    db.execute(
                         "UPDATE producer_health SET quarantined_until = ?, quarantined_reason = ? WHERE name = ?",
                         (until.isoformat(), "consecutive_failures", n),
                     )
-                    db.conn.execute(
+                    db.execute(
                         "INSERT INTO audit_log (action, actor, details, ts) VALUES (?, ?, ?, datetime('now'))",
                         (
                             "producer.quarantined",
@@ -804,13 +953,74 @@ def _cmd_brain(ctx: CliContext, args: argparse.Namespace) -> int:
             return 1
 
         orchestrator = BrainOrchestrator(config=config, db=db, identity=identity.identity)
-        result = orchestrator.run_cycle(symbols=config.universe.symbols)
+
+        # Inject OMS for auto-paper-trade when execution mode is paper.
+        try:
+            if getattr(config.execution, "mode", "paper") == "paper":
+                from engine.brain.kill_switch import KillSwitch
+                from engine.execution.oms import OMS, default_sizer_from_config
+                from engine.execution.preflight import Preflight, default_policy_from_risk
+
+                policy = default_policy_from_risk(
+                    max_daily_loss_usd=float(config.risk.daily_loss_limit_pct) * float(config.risk.portfolio_value_usd),
+                    max_position_size_pct=float(config.risk.max_position_pct),
+                    max_leverage_default=float(config.risk.max_leverage),
+                )
+                preflight = Preflight(policy=policy, kill_switch=KillSwitch(config=config, db=db))
+                orchestrator._oms = OMS(
+                    config=config,
+                    db=db,
+                    preflight=preflight,
+                    sizer=default_sizer_from_config(config),
+                    policy=policy,
+                )
+        except Exception:
+            logging.getLogger("b1e55ed.cli").debug("OMS injection skipped", exc_info=True)
+
+        result = orchestrator.run_cycle(symbols=config.universe.active_symbols())
 
         if bool(args.json):
             payload = {"cycle": asdict(result), "producers": producer_results}
             print(_json_dumps(payload))
         else:
-            print(result)
+            # The brain exhales 50KB of conviction tensors.
+            # The operator needs eight lines and a checkmark.
+            # --- #303: Human-readable brain cycle summary ---
+            _ts = result.ts.strftime("%Y-%m-%dT%H:%M:%SZ") if result.ts else "unknown"
+            _cid = result.cycle_id[:8] if result.cycle_id else "unknown"
+            _regime = result.regime.state.regime if result.regime and result.regime.state else "unknown"
+            _dq = result.data_quality.overall_quality * 100 if result.data_quality else 0.0
+
+            # Find top conviction call
+            _top_call = "none"
+            if result.convictions:
+                top_sym = max(
+                    result.convictions,
+                    key=lambda s: abs(result.convictions[s].final_conviction),
+                )
+                tc = result.convictions[top_sym]
+                _dir = tc.score.direction if tc.score else "neutral"
+                _mag = f"{tc.score.magnitude:.1f}" if tc.score else "?"
+                _conf = f"{(tc.score.confidence or 0):.1f}" if tc.score else "?"
+                _top_call = f"{top_sym} {_dir} (magnitude {_mag}, confidence {_conf})"
+
+            # Count active domains from data quality
+            _domains_active = "unknown"
+            if result.data_quality:
+                dq = result.data_quality
+                active = [d for d, q in dq.per_domain_quality.items() if q > 0]
+                total = len(dq.per_domain_quality) + len(dq.missing_domains)
+                _domains_active = f"{', '.join(active) or 'none'} ({len(active)} of {total})"
+
+            print("\n  \u2713 Brain cycle complete")
+            print(f"    Cycle ID:       {_cid}")
+            print(f"    Timestamp:      {_ts}")
+            print(f"    Regime:         {_regime}")
+            print(f"    Top call:       {_top_call}")
+            print(f"    Assets scored:  {len(result.synthesis)}")
+            print(f"    Data quality:   {_dq:.1f}%")
+            print(f"    Domains active: {_domains_active}")
+            print()
 
         try:
             import asyncio
@@ -848,7 +1058,7 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
 
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
     identity = ensure_identity()
 
     # Look up contributor for signal attribution (fail-open).
@@ -954,8 +1164,8 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
             dedupe_key=compute_dedupe_key(EventType.SIGNAL_CURATOR_V1, payload),
         )
         if contributor_id is not None:
-            with db.conn:
-                db.conn.execute(
+            with db._lock, db.conn:
+                db.execute(
                     """
                     INSERT OR IGNORE INTO contributor_signals (contributor_id, event_id, accepted)
                     VALUES (?, ?, 0)
@@ -1009,9 +1219,9 @@ def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.execution.dynamic_kelly import DynamicKelly, DynamicKellyConfig
 
     repo_root = ctx.repo_root
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     if not db_path.exists():
-        print("error: data/brain.db not found. Run `b1e55ed setup` first.", file=sys.stderr)
+        print(f"error: {db_path} not found. Run `b1e55ed setup` first.", file=sys.stderr)
         return 1
 
     db = Database(str(db_path))
@@ -1053,18 +1263,72 @@ def _cmd_kelly(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
+def _cmd_positions_close(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Close an open position by ID."""
+    from engine.core.config import Config
     from engine.core.database import Database
     from engine.execution.pnl import PnLTracker
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    db = Database(_resolve_db_path(repo_root, config))
+    tracker = PnLTracker(db, config)
+
+    position_id = str(args.position_id)
+    exit_price: float | None = getattr(args, "exit_price", None)
+
+    # Resolve exit price from market if not provided
+    if exit_price is None:
+        row = db.fetchone("SELECT asset FROM positions WHERE id = ? AND status = 'open'", (position_id,))
+        if row is None:
+            print(f"error: position not found or not open: {position_id}", file=sys.stderr)
+            return 1
+        asset = str(row[0]).upper()
+        try:
+            from engine.brain.orchestrator import BrainOrchestrator
+            from engine.security.identity import generate_node_identity
+
+            _orch = BrainOrchestrator(config=config, db=db, identity=generate_node_identity())
+            exit_price = _orch._resolve_mid_price(asset)
+        except Exception:
+            pass
+
+    if exit_price is None:
+        print("error: could not resolve market price; provide --exit-price", file=sys.stderr)
+        return 1
+
+    try:
+        tracker.close_position(position_id=position_id, exit_price=float(exit_price), reason="manual_close")
+    except Exception as e:
+        print(f"error closing position {position_id}: {e}", file=sys.stderr)
+        return 1
+
+    out = {"status": "ok", "position_id": position_id, "exit_price": float(exit_price), "reason": "manual_close"}
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(f"closed position {position_id} at {exit_price:.4f}")
+    return 0
+
+
+def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
+    # Dispatch to subcommand if given
+    positions_cmd = getattr(args, "positions_cmd", None)
+    if positions_cmd == "close":
+        return _cmd_positions_close(ctx, args)
+
+    from engine.core.database import Database
+    from engine.execution.pnl import PnLTracker
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
     tracker = PnLTracker(db)
 
     mark = _latest_mark_prices(db)
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT id, asset, direction, entry_price, size_notional, leverage, opened_at FROM positions WHERE status = 'open' ORDER BY opened_at DESC"
-    ).fetchall()
+    )
 
     out = []
     for r in rows:
@@ -1127,17 +1391,17 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
 
     def ensure_endpoint_column(db: Database) -> None:
-        cols = [str(r[1]) for r in db.conn.execute("PRAGMA table_info(producer_health)").fetchall()]
-        with db.conn:
+        cols = [str(r[1]) for r in db.fetchall("PRAGMA table_info(producer_health)")]
+        with db._lock, db.conn:
             if "endpoint" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN endpoint TEXT")
             if "quarantined_until" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_until TEXT")
             if "quarantined_reason" not in cols:
-                db.conn.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
+                db.execute("ALTER TABLE producer_health ADD COLUMN quarantined_reason TEXT")
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
     ensure_endpoint_column(db)
 
     cmd = str(getattr(args, "producers_cmd", "") or "")
@@ -1159,13 +1423,13 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         schedule = str(args.schedule)
 
         now = datetime.now(tz=UTC).isoformat()
-        existing = db.conn.execute("SELECT name FROM producer_health WHERE name = ?", (name,)).fetchone()
+        existing = db.fetchone("SELECT name FROM producer_health WHERE name = ?", (name,))
         if existing is not None:
             print(f"error: producer already registered: {name}", file=sys.stderr)
             return 1
 
-        with db.conn:
-            db.conn.execute(
+        with db._lock, db.conn:
+            db.execute(
                 "INSERT INTO producer_health (name, domain, schedule, endpoint, updated_at) VALUES (?, ?, ?, ?, ?)",
                 (name, domain, schedule, endpoint, now),
             )
@@ -1184,7 +1448,7 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
         return 0
 
     if cmd == "list":
-        rows = db.conn.execute("SELECT name, domain, schedule, endpoint, updated_at FROM producer_health ORDER BY name ASC").fetchall()
+        rows = db.fetchall("SELECT name, domain, schedule, endpoint, updated_at FROM producer_health ORDER BY name ASC")
         out: list[dict[str, str]] = [
             {
                 "name": str(r[0]),
@@ -1210,8 +1474,8 @@ def _cmd_producers(ctx: CliContext, args: argparse.Namespace) -> int:
 
     if cmd == "remove":
         name = str(args.name)
-        with db.conn:
-            cur = db.conn.execute("DELETE FROM producer_health WHERE name = ?", (name,))
+        with db._lock, db.conn:
+            cur = db.execute("DELETE FROM producer_health WHERE name = ?", (name,))
         if cur.rowcount == 0:
             print(f"error: producer not found: {name}", file=sys.stderr)
             return 1
@@ -1229,7 +1493,7 @@ def _cmd_contributors(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.security.identity import ensure_identity
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     cfg_path = repo_root / "config" / "user.yaml"
     config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
@@ -1368,7 +1632,7 @@ def _cmd_eas(ctx: CliContext, args: argparse.Namespace) -> int:
             return 2
 
         # We only verify locally stored off-chain attestations (in contributor metadata).
-        db = Database(repo_root / "data" / "brain.db")
+        db = Database(_resolve_db_path(repo_root))
         reg = _build_contributor_registry_with_eas(db=db, config=config)
 
         found: dict[str, object] | None = None
@@ -1465,7 +1729,7 @@ def _cmd_webhooks(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.webhooks import add_webhook_subscription, list_webhook_subscriptions, remove_webhook_subscription
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     cmd = str(getattr(args, "webhooks_cmd", "") or "")
     if cmd == "add":
@@ -1520,7 +1784,7 @@ def _cmd_kill_switch(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.events import EventType
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     if getattr(args, "kill_switch_cmd", None) == "set":
         lvl = int(args.level)
@@ -1556,7 +1820,7 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.time import parse_dt, utc_now
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     def _mk(
         *,
@@ -1602,9 +1866,9 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
     # Producer health
-    rows = db.conn.execute(
+    rows = db.fetchall(
         "SELECT name, domain, consecutive_failures, last_error, last_run_at FROM producer_health WHERE consecutive_failures > 0 OR last_error IS NOT NULL"
-    ).fetchall()
+    )
     for r in rows:
         name = str(r[0])
         domain = str(r[1] or "")
@@ -1624,11 +1888,11 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
 
     # Position stops/targets (with stop proximity)
     mark = _latest_mark_prices(db)
-    pos = db.conn.execute(
+    pos = db.fetchall(
         "SELECT asset, direction, stop_loss, take_profit, opened_at, id "
         "FROM positions "
         "WHERE status = 'open' AND (stop_loss IS NOT NULL OR take_profit IS NOT NULL)"
-    ).fetchall()
+    )
     for r in pos:
         sym = str(r[0]).upper()
         direction = str(r[1])
@@ -1729,7 +1993,7 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     except Exception as e:  # noqa: BLE001
         cfg_error = str(e)
 
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     db_ok = db_path.exists()
 
     chain_ok = None
@@ -1740,15 +2004,73 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001
             chain_ok = False
 
-    ks = Keystore.default()
+    try:
+        ks = Keystore.default()
+        ks_info = {"describe": ks.describe()}
+    except Exception:  # noqa: BLE001
+        ks_info = {"describe": "⚠ keystore unavailable"}
+
+    # Brain cycle freshness
+    stale_threshold_minutes = 30
+    cycle_age_minutes = None
+    brain_cycle_status = "unknown"
+    if db_ok and db is not None:
+        try:
+            last_cycle = db.fetchone("SELECT ts FROM events WHERE type = 'brain.cycle.v1' ORDER BY ts DESC LIMIT 1")
+            if last_cycle:
+                from datetime import datetime
+
+                try:
+                    from datetime import UTC  # py311+
+                except ImportError:  # pragma: no cover
+                    from datetime import timezone
+
+                    UTC = timezone.utc  # noqa: N806,E702,UP017,I001
+                last_ts = datetime.fromisoformat(str(last_cycle[0]).replace("Z", "+00:00"))
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=UTC)
+                cycle_age_minutes = (datetime.now(UTC) - last_ts).total_seconds() / 60
+                brain_cycle_status = "stale" if cycle_age_minutes > stale_threshold_minutes else "ok"
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Kill switch state
+    kill_switch_level = 0
+    kill_switch_active = False
+    if db_ok and db is not None:
+        try:
+            ks_row = db.fetchone("SELECT payload FROM events WHERE type = 'system.kill_switch.v1' ORDER BY ts DESC LIMIT 1")
+            if ks_row:
+                ks_payload = json.loads(ks_row[0])
+                kill_switch_level = int(ks_payload.get("level", 0))
+                kill_switch_active = kill_switch_level > 0
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Overall health: degrade on stale cycle or active kill switch
+    base_ok = bool(cfg_ok) and bool(db_ok) and (chain_ok is not False)
+    degraded = brain_cycle_status == "stale" or kill_switch_active
+    overall_status = "ok" if (base_ok and not degraded) else "degraded" if base_ok else "unhealthy"
 
     payload = {
         "ok": bool(cfg_ok) and bool(db_ok) and (chain_ok is not False),
+        "status": overall_status,
         "uptime_s": float(time.monotonic() - start),
         "config": {"path": str(cfg_path), "present": bool(cfg_path.exists()), "ok": bool(cfg_ok), "error": cfg_error},
         "db": {"path": str(db_path), "present": bool(db_ok), "hash_chain_ok": chain_ok},
+        "brain_cycle_status": brain_cycle_status,
+        "brain": {
+            "last_cycle_age_minutes": cycle_age_minutes,
+            "cycle_status": brain_cycle_status,
+            "stale_threshold_minutes": stale_threshold_minutes,
+        },
+        "kill_switch": {
+            "level": kill_switch_level,
+            "active": kill_switch_active,
+            **({"status": "active"} if kill_switch_active else {}),
+        },
         "identity": identity_status(),
-        "keystore": {"describe": ks.describe()},
+        "keystore": ks_info,
     }
 
     # health always returns JSON (suitable for cron/heartbeat)
@@ -1756,6 +2078,8 @@ def _cmd_health(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+# Stoic accounting: predictions make claims, outcomes settle them.
+# This command turns elapsed forecasts into receipts.
 def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     """Resolve eligible forecasts into FORECAST_OUTCOME_V1 events.
 
@@ -1766,7 +2090,7 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     resolved = 0
     skipped = 0
@@ -1779,10 +2103,105 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
         resolved = 0
         skipped = 0
 
+    # --- SPI signal resolution (Phase 1B) ---
+    spi_resolved = 0
+    spi_expired = 0
+    try:
+        from engine.spi.resolution import resolve_expired_signals
+
+        outcomes = resolve_expired_signals(db)
+        for outcome in outcomes:
+            if outcome.status == "resolved":
+                spi_resolved += 1
+            elif outcome.status == "expired":
+                spi_expired += 1
+    except Exception:
+        # Never fail this command; SPI resolver is also best-effort.
+        pass
+
     if bool(getattr(args, "json", False)):
-        print(_json_dumps({"resolved": resolved, "skipped_missing_price": skipped}))
+        print(
+            _json_dumps(
+                {
+                    "resolved": resolved,
+                    "skipped_missing_price": skipped,
+                    "spi_resolved": spi_resolved,
+                    "spi_expired": spi_expired,
+                }
+            )
+        )
     else:
-        print(f"resolved {resolved} forecasts, skipped {skipped} (missing price data)")
+        parts = [f"resolved {resolved} forecasts"]
+        if skipped:
+            parts.append(f"skipped {skipped} (missing price data)")
+        if spi_resolved or spi_expired:
+            parts.append(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
+        print(", ".join(parts))
+    return 0
+
+
+def _cmd_resolve_spi(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Resolve expired SPI signals against market outcomes. Exit code 0."""
+
+    from engine.core.database import Database
+    from engine.spi.resolution import resolve_expired_signals
+
+    db = Database(_resolve_db_path(ctx.repo_root))
+
+    spi_resolved = 0
+    spi_expired = 0
+    try:
+        outcomes = resolve_expired_signals(db)
+        for outcome in outcomes:
+            if outcome.status == "resolved":
+                spi_resolved += 1
+            elif outcome.status == "expired":
+                spi_expired += 1
+    except Exception as exc:
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps({"error": str(exc)}))
+        else:
+            print(f"SPI resolution failed: {exc}")
+        return 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"spi_resolved": spi_resolved, "spi_expired": spi_expired}))
+    else:
+        print(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
+    return 0
+
+
+def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Evaluate stop/target/time-stop for every open position. Exit code 0."""
+    from engine.core.database import Database
+    from engine.execution.position_monitor import monitor_positions
+
+    db = Database(_resolve_db_path(ctx.repo_root))
+    config = _load_config(ctx)
+
+    result: dict = {"evaluated": 0, "closed_stop": 0, "closed_target": 0, "closed_time_stop": 0, "errors": 0}
+    try:
+        result = monitor_positions(db, config)
+    except Exception as exc:
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps({"error": str(exc), **result}))
+        else:
+            print(f"monitor-positions failed: {exc}", file=sys.stderr)
+        return 0
+
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(result))
+    else:
+        closed = result["closed_stop"] + result["closed_target"] + result["closed_time_stop"]
+        print(
+            f"position-monitor: evaluated={result['evaluated']} "
+            f"closed_stop={result['closed_stop']} "
+            f"closed_target={result['closed_target']} "
+            f"closed_time_stop={result['closed_time_stop']} "
+            f"errors={result['errors']}"
+        )
+        if closed:
+            print(f"  ✓ {closed} position(s) auto-closed")
     return 0
 
 
@@ -1890,7 +2309,7 @@ def _identity_restore(ctx: CliContext, args: argparse.Namespace) -> int:
             eth_private_key=eth_key_hex,
         )
 
-        identity_path = ctx.repo_root / ".b1e55ed" / "identity.key"
+        identity_path = _identity_dir(ctx) / "identity.key"
         identity.save(identity_path)
 
     except Exception as e:  # noqa: BLE001
@@ -1937,7 +2356,7 @@ def _format_elapsed(seconds: float) -> str:
 def _identity_show(ctx: CliContext, args: argparse.Namespace) -> int:
     use_json = bool(getattr(args, "json", False))
 
-    identity_path = ctx.repo_root / ".b1e55ed" / "identity.json"
+    identity_path = _identity_dir(ctx) / "identity.json"
     if not identity_path.exists():
         if use_json:
             print(_json_dumps({"ok": False, "error": "identity_not_found"}))
@@ -2143,7 +2562,7 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     candidates = _safe_int(result.get("candidates"))
     elapsed_ms = _safe_int(result.get("elapsed_ms"))
 
-    identity_dir = ctx.repo_root / ".b1e55ed"
+    identity_dir = _identity_dir(ctx)
     identity_dir.mkdir(exist_ok=True)
 
     identity_data = {
@@ -2160,6 +2579,17 @@ def _identity_forge(ctx: CliContext, args: argparse.Namespace) -> int:
     key_path = identity_dir / "forge_key.enc"
     key_path.write_text(private_key, encoding="utf-8")
     key_path.chmod(0o600)
+
+    # Write identity.key — encrypted Ed25519 key derived from forge key (#299)
+    try:
+        from engine.security.identity import generate_node_identity
+
+        node_ident = generate_node_identity(eth_private_key=private_key, eth_address=address)
+        identity_key_path = identity_dir / "identity.key"
+        node_ident.save(identity_key_path)
+    except Exception as exc:  # noqa: BLE001
+        if not use_json:
+            print(f"  ⚠ Could not write identity.key: {exc}", file=sys.stderr)
 
     attestation_uid = None
     try:
@@ -2223,6 +2653,7 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     """Start API + dashboard as background processes, then tail their logs."""
     import contextlib
     import signal
+    import socket
     import subprocess as _sp
     import sys
     import time
@@ -2231,6 +2662,18 @@ def _cmd_start(ctx: CliContext, args: argparse.Namespace) -> int:
     api_port = args.api_port
     dash_port = args.dashboard_port
     open_browser = not args.no_browser
+
+    # --- #301: Check if ports are already in use before starting ---
+    for port in (api_port, dash_port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            if sock.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port)) == 0:
+                print()
+                # 0xb1e55ed — the port is bound, the oracle breathes
+                print(f"  b1e55ed is already running (port {port} is in use).")
+                print("  Use 'b1e55ed status' or 'b1e55ed health' to inspect.")
+                print()
+                return 0
 
     api_url = f"http://{host}:{api_port}"
     dash_url = f"http://{host}:{dash_port}"
@@ -2381,6 +2824,92 @@ def _cmd_dashboard(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_daemon(ctx: CliContext, args: argparse.Namespace) -> int:
+    if getattr(args, "status", False):
+        from engine.cli.commands.daemon import _show_status
+
+        return _show_status()
+
+    from engine.core.config import Config
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+
+    from engine.cli.commands.daemon import run_daemon
+
+    return run_daemon(repo_root, config)
+
+
+def _cmd_register(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Register this node on-chain via ERC-8004 identity registry."""
+    from engine.core.config import Config
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    cfg = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    as_json = getattr(args, "json", False)
+
+    # Already registered?
+    if cfg.onchain.system_agent_id != 0:
+        msg = f"Already registered (agentId={cfg.onchain.system_agent_id})"
+        if as_json:
+            print(_json_dumps({"status": "already_registered", "agent_id": cfg.onchain.system_agent_id}))
+        else:
+            print(f"⚠ {msg}")
+        return 1
+
+    # Chain configured?
+    if not cfg.onchain.enabled or not cfg.onchain.identity_registry_address:
+        msg = "identity_registry_address not set in config — enable onchain and set the registry address first"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    # Build agent URI
+    agent_uri = cfg.onchain.public_base_url.rstrip("/") + "/.well-known/agent-registration.json"
+    if not cfg.onchain.public_base_url:
+        agent_uri = f"b1e55ed://{cfg.onchain.network}/node"
+
+    # Register
+    from engine.oracle.chain import ChainClient
+
+    client = ChainClient(
+        rpc_url=cfg.onchain.rpc_url,
+        private_key=cfg.onchain.private_key.get_secret_value(),
+        identity_registry_address=cfg.onchain.identity_registry_address,
+        public_base_url=cfg.onchain.public_base_url,
+    )
+
+    if not client.enabled:
+        msg = "Chain client failed to initialise — check rpc_url and private_key"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    agent_id = client.register_producer(agent_uri)
+    if agent_id is None:
+        msg = "Registration transaction failed — check logs for details"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    if as_json:
+        print(_json_dumps({"status": "ok", "agent_id": agent_id, "agent_uri": agent_uri}))
+    else:
+        print(f"✅ Registered on-chain — agentId={agent_id}")
+        print(f"   agentURI: {agent_uri}")
+        print(f"   Update config: onchain.system_agent_id = {agent_id}")
+
+    return 0
+
+
 def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     import time
 
@@ -2403,20 +2932,61 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     except Exception as e:
         config_status = f"{cfg} (error: {e})"
 
-    db_path = repo_root / "data" / "brain.db"
+    db_path = _resolve_db_path(repo_root)
     db_status = "present" if db_path.exists() else "missing"
 
-    ks = Keystore.default()
+    try:
+        ks = Keystore.default()
+        ks_display = ks.describe()
+    except Exception:  # noqa: BLE001
+        ks_display = "⚠ keystore unavailable"
+
+    # --- #302: Surface API auth token (masked) ---
+    auth_token_display = "(not set)"
+    try:
+        from engine.core.config import Config as _Cfg
+
+        _config = _Cfg.from_yaml(cfg) if cfg.exists() else None
+        if _config and _config.api.auth_token:
+            tok = _config.api.auth_token
+            auth_token_display = tok[:8] + "..." if len(tok) > 8 else tok
+    except Exception:
+        auth_token_display = "(error reading config)"
 
     print("b1e55ed status")
     print(f"- uptime: {time.monotonic() - start:.3f}s")
     print(f"- config: {config_status}")
     print(f"- db: {db_path} ({db_status})")
     print(f"- identity: {identity_status()}")
-    print(f"- keystore: {ks.describe()}")
+    print(f"- keystore: {ks_display}")
+    print(f"- api auth token: {auth_token_display}")
 
     health = "blessed" if cfg.exists() else "degraded"
     print(f"- system health: {health}")
+
+    # --- Karma registration gate check ---
+    try:
+        from engine.core.config import Config as _CfgReg
+        from engine.core.database import Database
+
+        _cfg_reg = _CfgReg.from_yaml(cfg) if cfg.exists() else None
+        if _cfg_reg and db_path.exists():
+            _db = Database(db_path)
+            row = _db.execute("SELECT COALESCE(SUM(karma_amount_usd), 0) FROM karma_intents").fetchone()
+            total_karma = float(row[0]) if row else 0.0
+            threshold = _cfg_reg.karma.registration_threshold
+            chain_configured = bool(_cfg_reg.onchain.enabled and _cfg_reg.onchain.identity_registry_address)
+            unregistered = _cfg_reg.onchain.system_agent_id == 0
+
+            if total_karma >= threshold and unregistered and chain_configured:
+                is_agent = bool(_cfg_reg.onchain.public_base_url)
+                if is_agent:
+                    print(f"  ⚠ Agent node has {total_karma:.1f} karma — auto-registration recommended")
+                else:
+                    print(f"  ⚠ You have {total_karma:.1f} karma — run 'b1e55ed register' to claim it on-chain")
+    except Exception:  # noqa: BLE001
+        pass  # Best-effort — don't break status on karma check failure
+
     return 0
 
 
@@ -2449,6 +3019,82 @@ def _write_user_config(*, user_cfg_path: Path, preset: str) -> None:
     user_cfg_path.write_text(content, encoding="utf-8")
 
 
+def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Prune old records according to retention policy."""
+    from engine.core.config import Config
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    db = Database(_resolve_db_path(repo_root, config))
+
+    retention = config.retention
+
+    # Apply CLI overrides
+    if getattr(args, "events_days", None) is not None:
+        from copy import copy
+
+        retention = copy(retention)
+        object.__setattr__(retention, "events_keep_days", int(args.events_days))
+
+    dry_run = bool(getattr(args, "dry_run", False))
+    as_json = bool(getattr(args, "json", False))
+
+    if dry_run:
+        # Count without deleting (approximate — uses same WHERE clause)
+        result: dict[str, int] = {}
+        result["events"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM events WHERE created_at < datetime('now', ?)",
+                (f"-{retention.events_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["conviction_scores"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
+                (f"-{retention.conviction_log_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["feature_snapshots"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM feature_snapshots WHERE created_at < datetime('now', ?)",
+                (f"-{retention.feature_snapshots_keep_days} days",),
+            )
+            or (0,)
+        )[0]
+        result["api_rate_limits"] = (
+            db.fetchone(
+                "SELECT COUNT(*) FROM api_rate_limits WHERE window_start < strftime('%s','now') - (? * 3600)",
+                (retention.api_rate_limits_keep_hours,),
+            )
+            or (0,)
+        )[0]
+        out: dict[str, object] = {"dry_run": True, "would_delete": result}
+    else:
+        deleted = db.prune_old_data(retention)
+        out = {"dry_run": False, "deleted": deleted}
+
+    db.close()
+
+    if as_json:
+        print(_json_dumps(out))
+    else:
+        mode = "DRY RUN — would delete" if dry_run else "Deleted"
+        _raw_counts = out.get("would_delete") or out.get("deleted") or {}
+        counts: dict[str, int] = {str(k): int(v) for k, v in _raw_counts.items()} if isinstance(_raw_counts, dict) else {}
+        print(f"b1e55ed prune ({mode}):")
+        for table, count in counts.items():
+            print(f"  {table}: {count} rows")
+        total = sum(counts.values())
+        print(f"  total: {total} rows")
+        if dry_run:
+            print("\n  Run without --dry-run to apply.")
+    return 0
+
+
 def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
     """Rebuild all projections from event replay."""
     import time
@@ -2457,7 +3103,7 @@ def _cmd_replay(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.projections import ProjectionManager
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     try:
         t0 = time.monotonic()
@@ -2498,7 +3144,7 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.projections import ProjectionManager
 
     repo_root = ctx.repo_root
-    db = Database(repo_root / "data" / "brain.db")
+    db = Database(_resolve_db_path(repo_root))
 
     try:
         t0 = time.monotonic()
@@ -2547,6 +3193,37 @@ def _cmd_integrity(ctx: CliContext, args: argparse.Namespace) -> int:
                 print(f"  {icon} {name}: {val}")
             print(f"  Completed in {elapsed:.3f}s")
         return 0 if all_pass else 1
+    finally:
+        db.close()
+
+
+def _cmd_verify_chain(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Run a full (non-fast) hash chain verification and print results."""
+    import time
+
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+
+    try:
+        t0 = time.monotonic()
+        valid = db.verify_hash_chain()  # full scan, no fast=True
+        elapsed = time.monotonic() - t0
+
+        result = {
+            "status": "ok" if valid else "FAIL",
+            "hash_chain": "pass" if valid else "FAIL",
+            "elapsed_seconds": round(elapsed, 3),
+        }
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            icon = "✅" if valid else "❌"
+            print(f"verify-chain: {icon} {'PASS' if valid else 'FAIL'} (full scan, {elapsed:.3f}s)")
+
+        return 0 if valid else 1
     finally:
         db.close()
 
@@ -3055,10 +3732,290 @@ def _cmd_backtest(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reconcile(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Backfill provenance events for positions whose events were lost in a crash."""
+    from engine.core.database import Database
+    from engine.execution.oms import reconcile_execution_events
+
+    repo_root = ctx.repo_root
+    db_path = _resolve_db_path(repo_root)
+    if not db_path.exists():
+        msg = f"error: {db_path} not found. Run `b1e55ed setup` first."
+        print(msg, file=sys.stderr)
+        return 1
+
+    db = Database(db_path)
+    result = reconcile_execution_events(db)
+    db.close()
+
+    total = sum(result.values())
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps({"status": "ok", "repaired": result, "total": total}))
+    else:
+        print(f"reconcile complete: {total} events backfilled")
+        for event_type, count in result.items():
+            if count > 0:
+                print(f"  {event_type}: {count}")
+        if total == 0:
+            print("  (nothing to repair)")
+    return 0
+
+
 def _cmd_wizard(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.cli.commands.wizard import run_wizard
 
     return run_wizard(ctx, args)
+
+
+# ---------------------------------------------------------------------------
+# SPI helpers
+# ---------------------------------------------------------------------------
+
+_SPI_LIFECYCLE_ORDER = ["onboarding", "shadow", "active", "suspended", "retired"]
+
+
+def _spi_next_state(current: str) -> str | None:
+    """Return the next logical promotion state, or None if terminal."""
+    promotable = {"onboarding": "shadow", "shadow": "active"}
+    return promotable.get(current)
+
+
+def _spi_config_dir() -> Path:
+    """Return ~/.b1e55ed/spi/producers/, creating it if necessary."""
+    d = Path.home() / ".b1e55ed" / "spi" / "producers"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _spi_register_flow(api_url: str) -> int:
+    """Interactive producer registration flow. Returns 0 on success, 1 on error."""
+    import urllib.error
+    import urllib.request
+
+    print("\n  SPI Producer Registration")
+    print("  " + "-" * 40)
+
+    producer_id = input("  Producer ID (slug, e.g. sendoeth): ").strip()
+    if not producer_id:
+        print("error: producer_id is required", file=sys.stderr)
+        return 1
+
+    producer_name = input(f"  Producer name [default: {producer_id} Signal Producer]: ").strip()
+    if not producer_name:
+        producer_name = f"{producer_id} Signal Producer"
+
+    ingress_mode = _prompt_choice(
+        "  Ingress mode",
+        choices=["native", "adapter"],
+        default="native",
+    )
+
+    api_base_url: str | None = None
+    if ingress_mode == "adapter":
+        api_base_url = input("  API base URL: ").strip() or None
+
+    payload = json.dumps({"producer_id": producer_id, "producer_name": producer_name, "ingress_mode": ingress_mode}).encode()
+    req = urllib.request.Request(
+        f"{api_url}/api/v1/spi/producers",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        try:
+            err = json.loads(body)
+            msg = err.get("detail", {}).get("message", body) if isinstance(err.get("detail"), dict) else err.get("detail", body)
+        except Exception:  # noqa: BLE001
+            msg = body
+        print(f"error: {exc.code} — {msg}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+        return 1
+
+    api_key = data.get("api_key", "")
+
+    print()
+    print("  ┌─────────────────────────────────────────────────────────────┐")
+    print("  │  ⚠  STORE THIS KEY — IT WILL NOT BE SHOWN AGAIN            │")
+    print("  │                                                             │")
+    print(f"  │  {api_key:<59}│")
+    print("  └─────────────────────────────────────────────────────────────┘")
+    print()
+
+    # Save producer config (without the key)
+    try:
+        from datetime import UTC  # py311+
+    except ImportError:  # pragma: no cover
+        from datetime import timezone as _tz  # noqa: PLC0415
+
+        UTC = _tz.utc  # noqa: N806, UP017
+    from datetime import datetime
+
+    config_dir = _spi_config_dir()
+    config_path = config_dir / f"{producer_id}.json"
+    config = {
+        "producer_id": producer_id,
+        "producer_name": producer_name,
+        "ingress_mode": ingress_mode,
+        "registered_at": datetime.now(tz=UTC).isoformat(),
+        "api_base_url": api_base_url,
+    }
+    config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    config_path.chmod(0o600)  # producer config contains sensitive metadata
+    print(f"  Config saved → {config_path}")
+    print(f"  Producer '{producer_id}' registered successfully.")
+    return 0
+
+
+def _cmd_spi(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Dispatch SPI subcommands."""
+    import urllib.error
+    import urllib.request
+
+    cmd = str(getattr(args, "spi_cmd", "") or "")
+    api_url = str(getattr(args, "api_url", "http://127.0.0.1:5050"))
+
+    if not cmd:
+        print("error: missing spi subcommand (register|status|promote|test-key)", file=sys.stderr)
+        return 2
+
+    if cmd == "register":
+        return _spi_register_flow(api_url)
+
+    if cmd == "status":
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        producers = data.get("producers", [])
+        if not producers:
+            print("(no registered SPI producers)")
+            return 0
+
+        # Fetch karma for each producer to enrich the table
+        rows: list[list[str]] = []
+        for p in producers:
+            pid = p.get("producer_id", "")
+            state = p.get("lifecycle_state", "")
+            ingress = p.get("ingress_mode", "")
+            # Try to get karma details
+            karma_str = "-"
+            resolved_str = "-"
+            try:
+                kreq = urllib.request.Request(
+                    f"{api_url}/api/v1/spi/producers/{pid}",
+                    headers={"Accept": "application/json"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(kreq, timeout=5) as kresp:  # noqa: S310
+                    kdata = json.loads(kresp.read())
+                    k = kdata.get("running_karma")
+                    karma_str = f"{k:.3f}" if k is not None else "-"
+                    resolved_str = str(kdata.get("resolved_count", "-"))
+            except Exception:  # noqa: BLE001
+                pass
+            rows.append([pid, state, ingress, karma_str, resolved_str])
+
+        _print_table(["producer_id", "state", "ingress", "karma", "resolved"], rows)
+        return 0
+
+    if cmd == "promote":
+        producer_id = str(args.producer_id)
+        # Get current state first
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers/{producer_id}",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                pdata = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        current_state = pdata.get("lifecycle_state", "")
+        next_state = _spi_next_state(current_state)
+        if next_state is None:
+            print(f"error: producer '{producer_id}' is in terminal state '{current_state}' — cannot promote", file=sys.stderr)
+            return 1
+
+        payload = json.dumps({"to_state": next_state}).encode()
+        treq = urllib.request.Request(
+            f"{api_url}/api/v1/spi/producers/{producer_id}/transition",
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(treq, timeout=10) as tresp:  # noqa: S310
+                tdata = json.loads(tresp.read())
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            try:
+                err = json.loads(body)
+                msg = err.get("detail", {}).get("message", body) if isinstance(err.get("detail"), dict) else err.get("detail", body)
+            except Exception:  # noqa: BLE001
+                msg = body
+            print(f"error: {exc.code} — {msg}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+        prev = tdata.get("previous_state", current_state)
+        new = tdata.get("lifecycle_state", next_state)
+        print(f"  {producer_id}: {prev} → {new}")
+        return 0
+
+    if cmd == "test-key":
+        producer_id = str(args.producer_id)
+        api_key = getpass.getpass(f"  API key for '{producer_id}': ").strip()
+        if not api_key:
+            print("error: key is required", file=sys.stderr)
+            return 1
+
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/spi/signals",
+            headers={"Accept": "application/json", "X-Producer-Key": api_key},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                resp.read()  # consume body
+            print(f"  Key valid — producer '{producer_id}' authenticated successfully.")
+            return 0
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                print("error: key rejected (403 Forbidden) — key may be invalid or producer inactive", file=sys.stderr)
+            else:
+                print(f"error: {exc.code} — {exc.read().decode(errors='replace')}", file=sys.stderr)
+            return 1
+        except urllib.error.URLError as exc:
+            print(f"error: cannot reach API at {api_url} — {exc.reason}", file=sys.stderr)
+            return 1
+
+    print(f"error: unknown spi subcommand: {cmd}", file=sys.stderr)
+    return 2
 
 
 def _cmd_uninstall(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -3094,10 +4051,26 @@ def main(argv: list[str] | None = None) -> int:
     ctx = CliContext(repo_root=_repo_root_from_cwd())
 
     # Commands that don't require forged identity
-    ungated_commands = {"identity", "setup", "wizard", "uninstall"}
+    # Process supervisors (daemon, start) are ungated — identity is checked by sub-processes
+    # The conductor doesn't audition. The orchestra does.
+    ungated_commands = {"identity", "setup", "wizard", "uninstall", "daemon", "start"}
+
+    # Operational commands are identity-gate exempt — they must run to diagnose the identity itself.
+    # An operator with a broken identity still needs doctor/health/integrity to recover.
+    # These commands may still REPORT identity status internally, but they must not be blocked.
+    identity_gate_exempt = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
 
     cmd = getattr(args, "command", None)
-    if cmd not in ungated_commands:
+
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
+    # Wittgenstein: whereof one cannot speak, thereof one must be silent.
+    # But you spoke. You gave us the node_id. The gate opens.
+    # contributors register --node-id bypasses identity gate (explicit identity provided)
+    _contributors_register_with_node_id = (
+        cmd == "contributors" and getattr(args, "contributors_cmd", None) == "register" and bool(getattr(args, "node_id", None))
+    )
+
+    if cmd not in ungated_commands and cmd not in identity_gate_exempt and not _contributors_register_with_node_id:
         from engine.core.identity_gate import is_dev_mode, load_identity
 
         if not is_dev_mode() and load_identity(ctx.repo_root) is None:
@@ -3136,21 +4109,29 @@ def main(argv: list[str] | None = None) -> int:
         "kill-switch": _cmd_kill_switch,
         "health": _cmd_health,
         "resolve-outcomes": _cmd_resolve_outcomes,
+        "resolve-spi": _cmd_resolve_spi,
+        "monitor-positions": _cmd_monitor_positions,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
         "start": _cmd_start,
         "api": _cmd_api,
         "dashboard": _cmd_dashboard,
+        "daemon": _cmd_daemon,
         "status": _cmd_status,
+        "register": _cmd_register,
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,
+        "verify-chain": _cmd_verify_chain,
+        "reconcile": _cmd_reconcile,
         "backtest": _cmd_backtest,
         "kelly": _cmd_kelly,
+        "doctor": lambda ctx, args: __import__("engine.cli.doctor", fromlist=["run_doctor"]).run_doctor(args),
         "anchor": _cmd_anchor,
         "export": _cmd_export,
         "wizard": _cmd_wizard,
         "uninstall": _cmd_uninstall,
         "report": lambda ctx, args: __import__("engine.cli.commands.report", fromlist=["run_report"]).run_report(ctx, args),
+        "spi": _cmd_spi,
     }
 
     fn = dispatch.get(str(args.command))

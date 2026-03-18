@@ -16,10 +16,10 @@ router = APIRouter(dependencies=[AuthDep])
 
 @router.get("/treasury")
 def treasury(config: Config = Depends(get_config), db: Database = Depends(get_db)) -> dict[str, Any]:
-    pending = db.conn.execute("SELECT COUNT(1) FROM karma_intents WHERE settled = 0").fetchone()
+    pending = db.fetchone("SELECT COUNT(1) FROM karma_intents WHERE settled = 0")
     pending_n = int(pending[0]) if pending is not None else 0
 
-    receipts = db.conn.execute("SELECT COUNT(1) FROM karma_settlements").fetchone()
+    receipts = db.fetchone("SELECT COUNT(1) FROM karma_settlements")
     receipts_n = int(receipts[0]) if receipts is not None else 0
 
     return {

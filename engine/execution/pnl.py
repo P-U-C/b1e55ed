@@ -47,10 +47,10 @@ class PnLTracker:
         self._config = config
 
     def unrealized_usd(self, *, position_id: str, mark_price: float) -> float:
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT direction, entry_price, size_notional, status FROM positions WHERE id = ?",
             (str(position_id),),
-        ).fetchone()
+        )
         if row is None:
             return 0.0
         if str(row[3]) != "open":
@@ -69,10 +69,10 @@ class PnLTracker:
     def close_position(self, *, position_id: str, exit_price: float, reason: str = "") -> float:
         """Mark a position closed and store realized_pnl."""
 
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             "SELECT direction, entry_price, size_notional, status FROM positions WHERE id = ?",
             (str(position_id),),
-        ).fetchone()
+        )
         if row is None:
             raise ValueError("position not found")
         if str(row[3]) != "open":
@@ -87,36 +87,50 @@ class PnLTracker:
         realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
-        with self.db.conn:
-            self.db.conn.execute(
+        with self.db._lock, self.db.conn:
+            self.db.execute(
                 "UPDATE positions SET status = 'closed', closed_at = ?, realized_pnl = ? WHERE id = ?",
                 (now, float(realized), str(position_id)),
             )
             # Optional audit trail
             if reason:
-                self.db.conn.execute(
+                self.db.execute(
                     "INSERT INTO audit_log (action, actor, component, details) VALUES (?, ?, ?, ?)",
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
                 )
 
             # KS-1: Consecutive loss tracking
             try:
+                # In paper mode with paper_ignore_consecutive_loss_gate=True (default),
+                # we track the count but never escalate the kill switch.  This keeps
+                # paper trading alive through losing streaks without contaminating
+                # live-mode circuit-breaker state.
+                _paper_gate_bypass = (
+                    self._config is not None
+                    and str(getattr(self._config.execution, "mode", "paper")) == "paper"
+                    and bool(getattr(self._config.execution, "paper_ignore_consecutive_loss_gate", True))
+                )
                 if realized < 0:
-                    row_cl = self.db.conn.execute("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'").fetchone()
+                    row_cl = self.db.fetchone("SELECT value FROM system_state WHERE key = 'consecutive_loss_count'")
                     count = int(row_cl[0]) if row_cl else 0
                     count += 1
-                    self.db.conn.execute(
+                    self.db.execute(
                         "INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', ?, datetime('now'))",
                         (str(count),),
                     )
-                    if count >= 3 and self._config is not None:
+                    if not _paper_gate_bypass and count >= 3 and self._config is not None:
                         from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
 
                         ks = KillSwitch(self._config, self.db)
                         ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
                         _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
+                    elif _paper_gate_bypass and count >= 3:
+                        _log.info(
+                            "KS-1: %d consecutive paper losses — kill-switch escalation suppressed (paper_ignore_consecutive_loss_gate=True)",
+                            count,
+                        )
                 else:
-                    self.db.conn.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
+                    self.db.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
             except Exception:
                 _log.warning("KS-1 consecutive loss tracking failed", exc_info=True)
 
@@ -151,20 +165,20 @@ class PnLTracker:
                 # Resolve contributor attribution via conviction_id on the position.
                 contributor_id: str | None = None
                 try:
-                    pos_row = self.db.conn.execute(
+                    pos_row = self.db.fetchone(
                         "SELECT conviction_id FROM positions WHERE id = ?",
                         (str(position_id),),
-                    ).fetchone()
+                    )
                     if pos_row and pos_row["conviction_id"] is not None:
-                        contrib_row = self.db.conn.execute(
+                        contrib_row = self.db.fetchone(
                             "SELECT node_id FROM conviction_scores WHERE id = ?",
                             (pos_row["conviction_id"],),
-                        ).fetchone()
+                        )
                         if contrib_row and contrib_row["node_id"]:
-                            c_row = self.db.conn.execute(
+                            c_row = self.db.fetchone(
                                 "SELECT id FROM contributors WHERE node_id = ?",
                                 (str(contrib_row["node_id"]),),
-                            ).fetchone()
+                            )
                             contributor_id = str(c_row["id"]) if c_row else None
                 except Exception:
                     contributor_id = None  # fail-open
@@ -207,21 +221,36 @@ class PnLTracker:
                 from engine.brain.learning import StratificationTracker
 
                 strat = StratificationTracker(self.db)
-                pos_row2 = self.db.conn.execute(
+                pos_row2 = self.db.fetchone(
                     "SELECT conviction_id FROM positions WHERE id = ?",
                     (str(position_id),),
-                ).fetchone()
+                )
                 if pos_row2 and pos_row2["conviction_id"] is not None:
-                    cs_row = self.db.conn.execute(
+                    cs_row = self.db.fetchone(
                         "SELECT cycle_id, symbol FROM conviction_scores WHERE id = ?",
                         (pos_row2["conviction_id"],),
-                    ).fetchone()
+                    )
                     if cs_row and cs_row["cycle_id"] and cs_row["symbol"]:
                         sig_id = f"{cs_row['cycle_id']}:{cs_row['symbol']}"
                         strat.record_outcome(sig_id, float(realized), _utc_now())
             except Exception:
                 _log.warning(
                     "stratification outcome recording failed for position %s",
+                    position_id,
+                    exc_info=True,
+                )
+
+            # Benchmark stratification: record what each benchmark would have done.
+            try:
+                from engine.brain.stratification_recorder import record_benchmark_stratification
+
+                record_benchmark_stratification(
+                    db=self.db,
+                    position_id=str(position_id),
+                )
+            except Exception:
+                _log.warning(
+                    "benchmark stratification recording failed for position %s",
                     position_id,
                     exc_info=True,
                 )
@@ -251,9 +280,87 @@ class PnLTracker:
             _log.warning("KS-2 auto-close check failed for %s", position_id, exc_info=True)
         return False
 
+    def expire_stale_positions(self, *, current_prices: dict[str, float]) -> list[str]:
+        """Time-stop: close paper positions that have been open longer than
+        ``execution.paper_max_hold_hours`` (default 72h).
+
+        Returns a list of closed position_ids.  Emits ``execution.position_closed.v1``
+        with ``reason="time_stop"`` for each expired position.
+        Only runs when ``execution.mode == "paper"`` and ``paper_max_hold_hours > 0``.
+        """
+        if self._config is None:
+            return []
+        max_hours = int(getattr(self._config.execution, "paper_max_hold_hours", 72))
+        if max_hours <= 0:
+            return []
+        if str(self._config.execution.mode) != "paper":
+            return []
+
+        from engine.core.events import EventType
+
+        now = _utc_now()
+        closed_ids: list[str] = []
+
+        rows = self.db.fetchall(
+            "SELECT id, asset, opened_at FROM positions WHERE status = 'open'",
+            (),
+        )
+        for row in rows:
+            position_id = str(row[0])
+            asset = str(row[1]).upper()
+            opened_at_str = str(row[2])
+            try:
+                opened_at = datetime.fromisoformat(opened_at_str.replace("Z", "+00:00"))
+                if opened_at.tzinfo is None:
+                    opened_at = opened_at.replace(tzinfo=UTC)
+            except Exception:
+                _log.debug("expire_stale_positions: cannot parse opened_at '%s' for %s", opened_at_str, position_id)
+                continue
+
+            age_hours = (now - opened_at).total_seconds() / 3600.0
+            if age_hours < max_hours:
+                continue
+
+            mark_price = current_prices.get(asset)
+            if mark_price is None or mark_price <= 0:
+                _log.debug("expire_stale_positions: no mark price for %s, skipping time-stop", asset)
+                continue
+
+            try:
+                realized = self.close_position(
+                    position_id=position_id,
+                    exit_price=mark_price,
+                    reason="time_stop",
+                )
+                self.db.append_event(
+                    event_type=EventType.POSITION_CLOSED_V1,
+                    payload={
+                        "position_id": position_id,
+                        "asset": asset,
+                        "exit_price": mark_price,
+                        "realized_pnl": float(realized),
+                        "reason": "time_stop",
+                        "age_hours": round(age_hours, 2),
+                    },
+                    source="execution.pnl",
+                    dedupe_key=f"position_time_stop:{position_id}",
+                )
+                _log.info(
+                    "TIME_STOP: closed %s position %s after %.1fh, realized_pnl=%.2f USD",
+                    asset,
+                    position_id,
+                    age_hours,
+                    realized,
+                )
+                closed_ids.append(position_id)
+            except Exception:
+                _log.warning("Time-stop close failed for position %s", position_id, exc_info=True)
+
+        return closed_ids
+
     def snapshot(self, *, current_prices: dict[str, float]) -> PnLSnapshot:
         unreal = 0.0
-        for row in self.db.conn.execute("SELECT id, asset FROM positions WHERE status = 'open'").fetchall():
+        for row in self.db.fetchall("SELECT id, asset FROM positions WHERE status = 'open'"):
             pid = str(row[0])
             sym = str(row[1]).upper()
             px = current_prices.get(sym)
@@ -262,7 +369,7 @@ class PnLTracker:
             unreal += self.unrealized_usd(position_id=pid, mark_price=float(px))
 
         realized = 0.0
-        for row in self.db.conn.execute("SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL").fetchall():
+        for row in self.db.fetchall("SELECT realized_pnl FROM positions WHERE status = 'closed' AND realized_pnl IS NOT NULL"):
             realized += float(row[0])
 
         return PnLSnapshot(realized_usd=float(realized), unrealized_usd=float(unreal), total_usd=float(realized + unreal))

@@ -3,6 +3,26 @@
 
 {% block content %}
 
+<!-- Equity Curve + Drawdown Charts -->
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Equity Curve</span>
+    <span class="panel-age" id="equity-age">—</span>
+  </div>
+  <div id="equity-chart-container" style="width:100%; height:120px; position:relative;">
+    <svg id="equity-svg" width="100%" height="120" preserveAspectRatio="none"></svg>
+  </div>
+</div>
+
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <span class="panel-title">Drawdown</span>
+  </div>
+  <div id="drawdown-chart-container" style="width:100%; height:120px; position:relative;">
+    <svg id="drawdown-svg" width="100%" height="120" preserveAspectRatio="none"></svg>
+  </div>
+</div>
+
 <div class="grid" style="margin-bottom:1rem;">
 
   <!-- Summary -->
@@ -92,7 +112,9 @@
     </tbody>
   </table>
   {% else %}
-    <div class="empty-state">No closed trades. Performance data populates after first exit.</div>
+    {% set message = "No closed trades" %}
+    {% set status = "Performance data populates after first exit" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 
@@ -123,7 +145,9 @@
     </tbody>
   </table>
   {% else %}
-    <div class="empty-state">Initial weights active. Adjustments begin after 30 days (cold start).</div>
+    {% set message = "Initial weights active" %}
+    {% set status = "Adjustments begin after 30 days (cold start)" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 
@@ -157,8 +181,128 @@
       Total "didn't sell" tax: <span class="{{ 'text-bear' if exit_tax > 0 else '' }}">${{ '%+.0f' | format(exit_tax) }}</span>
     </div>
   {% else %}
-    <div class="empty-state">"Didn't sell" tax: tracks missed exits vs actual. Populates after first closed trade.</div>
+    {% set message = "Didn't sell tax" %}
+    {% set status = "Tracks missed exits vs actual · Populates after first closed trade" %}
+    {% include "partials/empty_state.html" %}
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  // Trade data for equity curve
+  var trades = [
+    {% if trades %}
+    {% for t in trades %}
+    { pnl: {{ (t.pnl if t.pnl is not none else 0) | tojson }}, ts: "{{ t.exit_ts | default('') }}" }{% if not loop.last %},{% endif %}
+    {% endfor %}
+    {% endif %}
+  ];
+
+  var equitySvg = document.getElementById('equity-svg');
+  var ddSvg = document.getElementById('drawdown-svg');
+  if (!equitySvg || !ddSvg) return;
+
+  var container = equitySvg.parentElement;
+  var W = container.offsetWidth || 800;
+  var H = 120;
+  var PAD = { l: 50, r: 10, t: 10, b: 20 };
+  var plotW = W - PAD.l - PAD.r;
+  var plotH = H - PAD.t - PAD.b;
+
+  equitySvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  ddSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+  function svgEl(parent, tag, attrs) {
+    var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    parent.appendChild(el);
+    return el;
+  }
+
+  if (!trades.length) {
+    // Ghost/placeholder state
+    [equitySvg, ddSvg].forEach(function(svg) {
+      svgEl(svg, 'line', {x1: PAD.l, y1: H/2, x2: W - PAD.r, y2: H/2, stroke: 'rgba(255,255,255,0.08)', 'stroke-width': '1', 'stroke-dasharray': '6,4'});
+      svgEl(svg, 'text', {x: W/2, y: H/2 + 20, 'text-anchor': 'middle', fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '10'}).textContent = 'No trade history yet';
+    });
+    // Y-axis label
+    svgEl(equitySvg, 'text', {x: 5, y: H/2 + 3, fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = '$0';
+    svgEl(ddSvg, 'text', {x: 5, y: H/2 + 3, fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = '0%';
+    return;
+  }
+
+  // Build equity curve
+  var equity = [0];
+  var cumPnl = 0;
+  trades.forEach(function(t) {
+    cumPnl += t.pnl;
+    equity.push(cumPnl);
+  });
+
+  var minEq = Math.min.apply(null, equity);
+  var maxEq = Math.max.apply(null, equity);
+  var eqRange = maxEq - minEq || 1;
+
+  // Build drawdown series
+  var peak = equity[0];
+  var drawdowns = [0];
+  for (var i = 1; i < equity.length; i++) {
+    if (equity[i] > peak) peak = equity[i];
+    var dd = peak > 0 ? ((equity[i] - peak) / peak) * 100 : 0;
+    drawdowns.push(dd);
+  }
+  var minDD = Math.min.apply(null, drawdowns);
+  var ddRange = Math.abs(minDD) || 1;
+
+  // Equity curve line
+  var eqPoints = [];
+  equity.forEach(function(v, i) {
+    var x = PAD.l + (i / (equity.length - 1)) * plotW;
+    var y = PAD.t + plotH - ((v - minEq) / eqRange) * plotH;
+    eqPoints.push(x + ',' + y);
+  });
+
+  // Axis
+  svgEl(equitySvg, 'line', {x1: PAD.l, y1: H - PAD.b, x2: W - PAD.r, y2: H - PAD.b, stroke: 'rgba(255,255,255,0.08)', 'stroke-width': '1'});
+
+  // Equity line
+  svgEl(equitySvg, 'polyline', {points: eqPoints.join(' '), fill: 'none', stroke: 'var(--green)', 'stroke-width': '1.5', 'stroke-linejoin': 'round'});
+
+  // Equity fill
+  var fillPoints = eqPoints.slice();
+  fillPoints.push((PAD.l + plotW) + ',' + (H - PAD.b));
+  fillPoints.push(PAD.l + ',' + (H - PAD.b));
+  svgEl(equitySvg, 'polygon', {points: fillPoints.join(' '), fill: 'rgba(34,197,94,0.08)'});
+
+  // Y labels for equity
+  svgEl(equitySvg, 'text', {x: PAD.l - 5, y: PAD.t + 10, 'text-anchor': 'end', fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = '$' + maxEq.toFixed(0);
+  svgEl(equitySvg, 'text', {x: PAD.l - 5, y: H - PAD.b - 2, 'text-anchor': 'end', fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = '$' + minEq.toFixed(0);
+
+  // Drawdown area chart
+  svgEl(ddSvg, 'line', {x1: PAD.l, y1: PAD.t, x2: W - PAD.r, y2: PAD.t, stroke: 'rgba(255,255,255,0.08)', 'stroke-width': '1'});
+
+  var ddPoints = [];
+  drawdowns.forEach(function(v, i) {
+    var x = PAD.l + (i / (drawdowns.length - 1)) * plotW;
+    var y = PAD.t + (Math.abs(v) / ddRange) * plotH;
+    ddPoints.push(x + ',' + y);
+  });
+
+  // Area fill
+  var ddFill = [PAD.l + ',' + PAD.t];
+  ddFill = ddFill.concat(ddPoints);
+  ddFill.push((PAD.l + plotW) + ',' + PAD.t);
+  svgEl(ddSvg, 'polygon', {points: ddFill.join(' '), fill: 'rgba(220,38,38,0.15)'});
+
+  // DD line
+  svgEl(ddSvg, 'polyline', {points: ddPoints.join(' '), fill: 'none', stroke: 'var(--red)', 'stroke-width': '1.5', 'stroke-linejoin': 'round'});
+
+  // Y labels for DD
+  svgEl(ddSvg, 'text', {x: PAD.l - 5, y: PAD.t + 10, 'text-anchor': 'end', fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = '0%';
+  svgEl(ddSvg, 'text', {x: PAD.l - 5, y: H - PAD.b - 2, 'text-anchor': 'end', fill: 'var(--text-dim)', 'font-family': 'var(--mono)', 'font-size': '9'}).textContent = minDD.toFixed(1) + '%';
+})();
+</script>
 {% endblock %}

@@ -1,3 +1,8 @@
+---
+title: "Curator Pipeline"
+description: "Submit operator intelligence as structured signals to the brain."
+---
+
 # Curator Pipeline
 
 The curator pipeline is how human intelligence enters b1e55ed.
@@ -54,7 +59,7 @@ See: [contributors.md](contributors.md) for contributor registration.
 
 Curator signals enter the brain synthesis as the `curator` domain. Default weight: 0.25 (configurable).
 
-See: [configuration.md](configuration.md) → `weights.curator`
+See: [operations/config-reference.mdx](operations/config-reference.mdx) → `weights.curator`
 
 ## Conviction scale
 

@@ -50,7 +50,50 @@ def test_submit_intent_paper_creates_fill_and_events(temp_dir: Path, test_config
     assert pos["status"] == "open"
 
     # execution events emitted
+    # Note: trade_intent.v1 is now emitted by decision.py, not OMS
     evs = db.get_events(limit=50)
     types = {e.type for e in evs}
-    assert "execution.trade_intent.v1" in {str(t) for t in types}
     assert "execution.order_filled.v1" in {str(t) for t in types}
+
+
+# Terra 2022 compressed this lesson into 72 hours: when direction flips, risk geometry flips with it.
+# This test keeps that memory executable.
+def test_submit_intent_short_uses_inverted_stop_and_target(temp_dir: Path, test_config: Config) -> None:
+    db = Database(temp_dir / "brain.db")
+    ks = KillSwitch(test_config, db)
+
+    pol = TradingPolicy(
+        max_daily_loss_usd=0.0,
+        max_position_size_pct=test_config.risk.max_position_pct,
+        kill_switch_enabled=True,
+        max_leverage_default=test_config.risk.max_leverage,
+    )
+    policy_engine = TradingPolicyEngine(policy=pol)
+
+    preflight = Preflight(policy=policy_engine, kill_switch=ks)
+    sizer = default_sizer_from_config(test_config)
+
+    oms = OMS(config=test_config, db=db, preflight=preflight, sizer=sizer)
+
+    intent = TradeIntent(
+        symbol="SOL",
+        direction="short",
+        size_pct=0.05,
+        leverage=1.0,
+        conviction_score=80.0,
+        regime="BEAR",
+        rationale="unit test short",
+        stop_loss_pct=0.05,
+        take_profit_pct=0.10,
+    )
+
+    mid = 100.0
+    res = oms.submit(intent, mid_price=mid, equity_usd=10_000.0)
+    assert res.status == "filled"
+    assert res.position_id is not None
+
+    pos = db.conn.execute("SELECT stop_loss, take_profit FROM positions WHERE id = ?", (res.position_id,)).fetchone()
+    assert pos is not None
+    # For shorts: stop above entry, target below entry.
+    assert float(pos["stop_loss"]) == 105.0
+    assert float(pos["take_profit"]) == 90.0

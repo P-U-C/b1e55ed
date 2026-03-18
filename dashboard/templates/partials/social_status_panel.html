@@ -1,0 +1,130 @@
+<div id="social-status-panel">
+  {% set label_map = {
+    'active': 'ACTIVE',
+    'running_no_data': 'RUNNING • NO DATA',
+    'unconfigured': 'UNCONFIGURED',
+    'degraded': 'DEGRADED',
+    'down': 'DOWN'
+  } %}
+  {% set status_label = label_map.get(pipeline_status, (pipeline_status or 'unknown') | upper) %}
+
+  {% if pipeline_status == 'active' %}
+    {% set status_class = 'text-bull' %}
+    {% set dot_class = 'dot-ok' %}
+  {% elif pipeline_status == 'running_no_data' %}
+    {% set status_class = 'text-dim' %}
+    {% set dot_class = 'dot' %}
+  {% elif pipeline_status == 'unconfigured' %}
+    {% set status_class = 'text-warn' %}
+    {% set dot_class = 'dot-degraded' %}
+  {% elif pipeline_status == 'degraded' %}
+    {% set status_class = 'text-warn' %}
+    {% set dot_class = 'dot-degraded' %}
+  {% else %}
+    {% set status_class = 'text-bear' %}
+    {% set dot_class = 'dot-error' %}
+  {% endif %}
+
+  {% if status_feedback and status_feedback.message %}
+  <div style="margin-bottom:0.75rem; padding:0.6rem 0.75rem; border-radius:6px;
+    {% if status_feedback.level == 'success' %}
+      background:rgba(20,184,166,0.12); border:1px solid rgba(20,184,166,0.35); color:var(--green);
+    {% elif status_feedback.level == 'warning' %}
+      background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:var(--amber);
+    {% elif status_feedback.level == 'error' %}
+      background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:var(--red);
+    {% else %}
+      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); color:var(--text-bright);
+    {% endif %}
+    font-size:0.78rem;">
+    {{ status_feedback.message }}
+  </div>
+  {% endif %}
+
+  <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; font-size:0.8125rem; margin-bottom:0.75rem;">
+    <div>
+      Pipeline:
+      <span class="dot {{ dot_class }}"></span>
+      <span class="{{ status_class }}" style="font-weight:600;">{{ status_label }}</span>
+    </div>
+    <div class="text-dim">Last run: {{ pipeline_last_run | default('never') }}</div>
+    <div class="text-dim">Last signal: {{ signal_last_seen | default('never') }}</div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:0.5rem; margin-bottom:0.75rem;">
+    <div style="padding:0.45rem 0.55rem; border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+      <div class="text-dim" style="font-size:0.68rem;">WATCHLIST</div>
+      <div style="font-size:0.9rem; color:var(--text-bright);">{{ watchlist_count }}</div>
+    </div>
+    <div style="padding:0.45rem 0.55rem; border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+      <div class="text-dim" style="font-size:0.68rem;">SOURCES</div>
+      <div style="font-size:0.9rem; color:var(--text-bright);">{{ sources_configured }}</div>
+    </div>
+    <div style="padding:0.45rem 0.55rem; border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+      <div class="text-dim" style="font-size:0.68rem;">SIGNAL EVENTS</div>
+      <div style="font-size:0.9rem; color:var(--text-bright);">{{ signal_events_count }}</div>
+    </div>
+    <div style="padding:0.45rem 0.55rem; border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+      <div class="text-dim" style="font-size:0.68rem;">FAILING PRODUCERS</div>
+      <div style="font-size:0.9rem; color:{{ 'var(--red)' if failing_producers else 'var(--text-bright)' }};">{{ failing_producers }}</div>
+    </div>
+  </div>
+
+  <div style="font-size:0.8125rem; color:var(--text); margin-bottom:0.75rem; padding:0.6rem 0.7rem; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:6px;">
+    <span style="font-weight:500; color:var(--text-dim);">Diagnosis:</span>
+    <span style="color:var(--text-bright);">{{ diagnosis | default('—') }}</span>
+  </div>
+
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.9rem;">
+    {% if 'seed_default_watchlist' in actions_available %}
+    <button class="btn btn-sm"
+            hx-post="/social/action/seed"
+            hx-target="#social-status-panel"
+            hx-swap="outerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--green); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Seed
+    </button>
+    {% endif %}
+
+    {% if 'reset_failures' in actions_available %}
+    <button class="btn btn-sm"
+            hx-post="/social/action/reset-failures"
+            hx-target="#social-status-panel"
+            hx-swap="outerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--amber); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Reset failures
+    </button>
+    {% endif %}
+
+    <button class="btn btn-sm"
+            hx-post="/social/action/run-now"
+            hx-target="#social-status-panel"
+            hx-swap="outerHTML"
+            style="font-size:0.75rem; padding:0.25rem 0.75rem; background:var(--blue); color:var(--bg); border:none; border-radius:4px; cursor:pointer;">
+      Run now
+    </button>
+  </div>
+
+  {% if producer_health %}
+  <div style="font-size:0.75rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+    {% for p in producer_health %}
+    <div style="display:flex; align-items:center; gap:0.65rem; flex-wrap:wrap; margin-bottom:0.38rem;">
+      <span class="dot {{ 'dot-ok' if p.healthy else ('dot-degraded' if p.consecutive_failures < 5 else 'dot-error') }}"></span>
+      <span style="min-width:9rem; color:var(--text-bright);">{{ p.name }}</span>
+      <span class="text-dim">failures: {{ p.consecutive_failures }}</span>
+      <span class="text-dim">events: {{ p.events_produced }}</span>
+      {% if p.last_success_at %}
+      <span class="text-dim" title="{{ p.last_success_at | fmt_iso }}">last success: {{ p.last_success_at | timeago }}</span>
+      {% endif %}
+      {% if p.last_error %}
+      <span style="color:var(--red); font-size:0.68rem;">{{ p.last_error[:80] }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-dim" style="font-size:0.75rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+    No social producers registered in backend.
+  </div>
+  {% endif %}
+</div>

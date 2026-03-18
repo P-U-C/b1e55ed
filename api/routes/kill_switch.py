@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 from api.auth_kill_switch import KillSwitchAuthDep
 from api.deps import get_db, get_kill_switch
-from api.errors import B1e55edError
 from engine.brain.kill_switch import KillSwitch
 from engine.core.database import Database
 
@@ -50,8 +49,5 @@ def set_level(
 
     with contextlib.suppress(Exception):
         ks.reset(level=level)
-
-    if level < 0 or level > 4:
-        raise B1e55edError(code="kill_switch.invalid_level", message="Level must be 0-4", status=400)
 
     return {"status": "ok", "event_id": ev.id, "level": level}

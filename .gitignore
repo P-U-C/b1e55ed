@@ -1,6 +1,9 @@
 # Runtime data
 data/
 !data/.gitkeep
+# Allow engine/data/ (source module, not runtime data)
+!engine/data/
+!engine/data/**
 
 # User state
 user/*.md
@@ -24,6 +27,8 @@ coverage.xml
 .coverage
 
 tools/forge/target/
+tools/forge/Cargo.lock
+docs/internal/
 .b1e55ed/
 
 # IDE
@@ -37,3 +42,4 @@ Thumbs.db
 # Secrets
 .env
 *.key
+config/user.yaml

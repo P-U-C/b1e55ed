@@ -27,6 +27,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from engine.core.paths import secrets_dir
+
 
 class KeystoreTier(IntEnum):
     ENV = 0
@@ -36,7 +38,7 @@ class KeystoreTier(IntEnum):
 
 _ITERATIONS = 480_000
 _SALT_SIZE = 32
-_DEFAULT_DIR = Path.home() / ".b1e55ed" / "secrets"
+_DEFAULT_DIR = secrets_dir()
 _DEFAULT_VAULT = _DEFAULT_DIR / "vault.enc"
 _DEFAULT_SALT = _DEFAULT_DIR / "vault.salt"
 _DEFAULT_METADATA = _DEFAULT_DIR / "key_metadata.json"

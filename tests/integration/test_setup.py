@@ -10,6 +10,8 @@ def test_setup_non_interactive_creates_config_identity_and_db(tmp_path: Path, mo
     # Create a minimal repo skeleton in tmp_path
     (tmp_path / "config" / "presets").mkdir(parents=True)
     (tmp_path / "data").mkdir(parents=True)
+    # Marker so _repo_root_from_cwd detects this as a dev checkout
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='b1e55ed'\n")
 
     preset_yaml = "weights:\n  curator: 0.25\n  onchain: 0.25\n  tradfi: 0.20\n  social: 0.15\n  technical: 0.10\n  events: 0.05\n"
 
@@ -33,4 +35,4 @@ def test_setup_non_interactive_creates_config_identity_and_db(tmp_path: Path, mo
 
     assert (tmp_path / "config" / "user.yaml").exists()
     assert (Path(os.environ["HOME"]) / ".b1e55ed" / "identity.key").exists()
-    assert (tmp_path / "data" / "brain.db").exists()
+    assert (Path(os.environ["HOME"]) / ".b1e55ed" / "data" / "brain.db").exists()

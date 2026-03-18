@@ -121,7 +121,7 @@ class PerformanceAggregator:
     def get_producer_stats(self, producer_id: str, asset: str, horizon: str, regime: str = "all") -> dict | None:
         """Read latest stats for one producer. Returns None if insufficient data."""
 
-        row = self.db.conn.execute(
+        row = self.db.fetchone(
             """
             SELECT computed_at, producer_id, asset, horizon, regime, window_days,
                    forecast_count, win_rate, avg_brier, avg_confidence, confidence_reliability
@@ -134,7 +134,7 @@ class PerformanceAggregator:
             LIMIT 1
             """,
             (str(producer_id), str(asset).upper(), str(horizon), str(regime)),
-        ).fetchone()
+        )
         if row is None:
             return None
 
@@ -159,7 +159,7 @@ class PerformanceAggregator:
     def get_correlation_matrix(self, asset: str, horizon: str) -> dict:
         """Read latest pairwise producer correlations."""
 
-        latest = self.db.conn.execute(
+        latest = self.db.fetchone(
             """
             SELECT MAX(computed_at)
             FROM producer_correlation
@@ -167,12 +167,12 @@ class PerformanceAggregator:
               AND horizon = ?
             """,
             (str(asset).upper(), str(horizon)),
-        ).fetchone()
+        )
         latest_ts = None if latest is None else latest[0]
         if latest_ts is None:
             return {"asset": str(asset).upper(), "horizon": str(horizon), "computed_at": None, "pairs": []}
 
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT producer_a, producer_b, agreement_rate,
                    agreement_win_rate, disagreement_win_rate_a, sample_count
@@ -183,7 +183,7 @@ class PerformanceAggregator:
             ORDER BY producer_a ASC, producer_b ASC
             """,
             (str(asset).upper(), str(horizon), float(latest_ts)),
-        ).fetchall()
+        )
 
         pairs = [
             {
@@ -205,7 +205,7 @@ class PerformanceAggregator:
         }
 
     def _load_outcomes(self, *, since_ts: float) -> list[dict]:
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """
             SELECT ts, payload
             FROM events
@@ -213,7 +213,7 @@ class PerformanceAggregator:
             ORDER BY ts ASC
             """,
             (EventType.FORECAST_OUTCOME_V1.value,),
-        ).fetchall()
+        )
 
         outcomes: list[dict] = []
         for row in rows:
@@ -247,7 +247,7 @@ class PerformanceAggregator:
             grouped[(producer_id, asset, horizon, "all")].append(out)
 
         inserted = 0
-        with self.db.conn:
+        with self.db._lock, self.db.conn:
             for (producer_id, asset, horizon, regime), rows in grouped.items():
                 n = len(rows)
                 wins = sum(1 for r in rows if bool(r.get("direction_correct")))
@@ -263,7 +263,7 @@ class PerformanceAggregator:
                 avg_conf = _mean(confidences)
                 reliability = _pearson(confidences, outcomes_bin)
 
-                self.db.conn.execute(
+                self.db.execute(
                     """
                     INSERT INTO producer_performance (
                         computed_at, producer_id, asset, horizon, regime,
@@ -295,7 +295,7 @@ class PerformanceAggregator:
         def _forecast_ts(event_id: str) -> float | None:
             if event_id in forecast_ts_cache:
                 return forecast_ts_cache[event_id]
-            row = self.db.conn.execute("SELECT ts FROM events WHERE id = ?", (event_id,)).fetchone()
+            row = self.db.fetchone("SELECT ts FROM events WHERE id = ?", (event_id,))
             if row is None:
                 forecast_ts_cache[event_id] = None
                 return None
@@ -336,7 +336,7 @@ class PerformanceAggregator:
             by_market[(asset, horizon)].append(episode)
 
         inserted = 0
-        with self.db.conn:
+        with self.db._lock, self.db.conn:
             for (asset, horizon), market_episodes in by_market.items():
                 producers = sorted({p for ep in market_episodes for p in ep})
                 for producer_a, producer_b in combinations(producers, 2):
@@ -372,7 +372,7 @@ class PerformanceAggregator:
                     disagreement_win_rate_a = None if disagree_count == 0 else float(disagree_wins_a / disagree_count)
 
                     # Backwards-compatible upsert against legacy UNIQUE(producer_a, producer_b, asset, regime).
-                    self.db.conn.execute(
+                    self.db.execute(
                         """
                         INSERT INTO producer_correlation (
                             computed_at, producer_a, producer_b, asset, horizon, regime,

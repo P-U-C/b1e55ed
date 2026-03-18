@@ -56,8 +56,7 @@ def test_duplicate_name_rejected() -> None:
                 return []
 
 
-def test_discovery_registers_template_producer() -> None:
+def test_discovery_skips_template_producer() -> None:
     _reset_for_tests()
     names = list_producers()
-    assert "template" in names
-    assert "template" in list_by_domain("events")
+    assert "template" not in names, "template producer should be excluded from registration"

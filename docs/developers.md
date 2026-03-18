@@ -1,3 +1,8 @@
+---
+title: "Developer Guide"
+description: "How to extend, contribute to, and build on b1e55ed."
+---
+
 # Developer Guide
 
 How to extend and contribute to b1e55ed.
@@ -197,6 +202,6 @@ Type checking runs on CI for the `engine/` and `api/` packages.
 ## See Also
 
 - [Architecture](architecture.md) — how the pieces fit together
-- [API reference](api-reference.md) — all endpoints
-- [CLI reference](cli-reference.md) — all commands
-- [Configuration](configuration.md) — all config keys
+- [API reference](api/overview.mdx) — all endpoints
+- [CLI reference](operations/cli-reference.mdx) — all commands
+- [Configuration](operations/config-reference.mdx) — all config keys

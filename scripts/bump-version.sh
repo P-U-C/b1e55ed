@@ -59,34 +59,26 @@ echo "✓ uv.lock"
 
 # ── 3. Stub CHANGELOG.md section ─────────────────────────────────────────────
 TODAY=$(date +%Y-%m-%d)
-STUB="## ${TAG} — ${TODAY}
 
-_TODO: fill in release notes_
-
-"
-
-# Insert stub after the first line (# Changelog header)
-python3 - <<PYEOF
-import re
-
+# Use a temp file to avoid heredoc/variable interpolation issues with python3
+python3 - "$TAG" "$TODAY" <<'PYEOF'
+import sys
+tag, today = sys.argv[1], sys.argv[2]
+stub = f"## {tag} — {today}\n\n_TODO: fill in release notes_\n\n"
 path = "CHANGELOG.md"
 try:
     content = open(path).read()
 except FileNotFoundError:
     content = "# Changelog\n"
-
-# Check if this version already has a section
-if "## ${TAG}" in content:
-    print("ℹ  CHANGELOG already has a section for ${TAG} — skipping stub")
+if f"## {tag}" in content:
+    print(f"ℹ  CHANGELOG already has a section for {tag} — skipping stub")
 else:
-    # Insert after the '# Changelog' header line
-    new_content = content.replace("# Changelog\n", "# Changelog\n\n${STUB}", 1)
+    new_content = content.replace("# Changelog\n", f"# Changelog\n\n{stub}", 1)
     if new_content == content:
-        # Fallback: prepend after first line
         lines = content.split("\n", 1)
-        new_content = lines[0] + "\n\n${STUB}" + (lines[1] if len(lines) > 1 else "")
+        new_content = lines[0] + f"\n\n{stub}" + (lines[1] if len(lines) > 1 else "")
     open(path, "w").write(new_content)
-    print("✓ CHANGELOG.md — stubbed section for ${TAG}")
+    print(f"✓ CHANGELOG.md — stubbed section for {tag}")
 PYEOF
 
 # ── 4. Update b1e55ed-site version ───────────────────────────────────────────

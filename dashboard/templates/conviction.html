@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Conviction — b1e55ed{% endblock %}
+
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+  <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Conviction</h1>
+</div>
+
+{% if convictions %}
+<div class="grid">
+  {% for c in convictions %}
+  <div class="panel">
+    <div class="panel-header">{{ c.symbol }}</div>
+    <div class="panel-body">
+      <div class="conviction-bar">
+        <div class="conviction-bar-fill {{ 'long' if c.direction == 'long' else 'short' if c.direction == 'short' else 'neutral' }}"
+             style="width:{{ (c.confidence * 100) | int }}%"></div>
+      </div>
+      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.25rem;">{{ c.regime }} · {{ c.age }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{% set message = "No conviction scores yet" %}
+{% set status = "Waiting for first brain cycle · Start a producer" %}
+{% set action_text = "Go to Producers" %}
+{% set action_url = "/producers" %}
+{% include "partials/empty_state.html" %}
+{% endif %}
+
+{% endblock %}

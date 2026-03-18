@@ -12,28 +12,11 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-
-try:
-    from enum import StrEnum  # py311+
-except ImportError:  # pragma: no cover
-    from enum import Enum
-
-    class StrEnum(str, Enum):  # type: ignore[no-redef]  # noqa: UP042
-        """Backport of Python 3.11's enum.StrEnum for Python 3.10.
-
-        Key behavior: str(member) should equal member.value.
-        """
-
-        def __str__(self) -> str:  # pragma: no cover
-            return str(self.value)
-
-        def __format__(self, spec: str) -> str:  # pragma: no cover
-            return format(str(self), spec)
-
-
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+
+from engine.core._compat import StrEnum  # noqa: F401
 
 
 class EventType(StrEnum):
@@ -58,6 +41,7 @@ class EventType(StrEnum):
     SIGNAL_PRICE_ALERT_V1 = "signal.price_alert.v1"
     SIGNAL_PRICE_WS_V1 = "signal.price_ws.v1"
     SIGNAL_BENCHMARK_V1 = "signal.benchmark.v1"
+    SIGNAL_RESEARCH_V1 = "signal.research.v1"
 
     # Brain events
     BRAIN_CYCLE_V1 = "brain.cycle.v1"
@@ -84,6 +68,7 @@ class EventType(StrEnum):
     KARMA_SETTLEMENT_V1 = "karma.settlement.v1"
     KARMA_RECEIPT_V1 = "karma.receipt.v1"
     KARMA_WALLET_MIGRATION_V1 = "karma.wallet_migration.v1"
+    KARMA_UPDATE_V1 = "KARMA_UPDATE_V1"
 
     # Learning
     LEARNING_OUTCOME_V1 = "learning.outcome.v1"
@@ -92,6 +77,7 @@ class EventType(StrEnum):
 
     # Attribution audit
     SIGNAL_ACCEPTED_V1 = "attribution.signal_accepted.v1"
+    ATTRIBUTION_GAP_V1 = "attribution.gap.v1"
 
     # Forecast events (producers → brain)
     FORECAST_V1 = "forecast.v1"
@@ -114,6 +100,17 @@ class AbstentionReason(StrEnum):
     CONFLICT_UNRESOLVED = "conflict_unresolved"
     THESIS_UNCHANGED = "thesis_unchanged"
     SHADOW_MODE = "shadow_mode"
+
+
+# Neyman & Pearson (1933): observe, detect, decide.
+# Three classes is not a design choice — it is the structure of inference itself.
+# An observation without a claim is safe. A conviction without a horizon is unfalsifiable.
+class SignalClass(StrEnum):
+    """Signal classification for research signals (DeerFlow S0)."""
+
+    OBSERVATION = "observation"  # Finding, no directional claim
+    DETECTION = "detection"  # Event occurred, timestamp required
+    CONVICTION = "conviction"  # Directional claim + falsifiable horizon required
 
 
 class ForecastLifecycleState(StrEnum):
@@ -162,6 +159,8 @@ class OnchainSignalPayload(BaseModel):
 
 
 class TradFiSignalPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     symbol: str
     basis_annualized: float | None = None
     funding_annualized: float | None = None
@@ -258,6 +257,41 @@ class BenchmarkSignalPayload(BaseModel):
     reasoning: str | None = None
 
 
+class ResearchSignalPayload(BaseModel):
+    """Payload for signal.research.v1 — DeerFlow institutional research signals."""
+
+    symbol: str
+    signal_class: SignalClass
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    direction: str  # "bullish" | "bearish" | "neutral"
+    horizon: str | None = None  # Required if signal_class == conviction
+    event_ts: str | None = None  # Required if signal_class == detection (ISO timestamp of the event)
+    rationale: str
+    sources: list[str] = Field(default_factory=list)
+    operator_node_id: str  # Forge node ID of the human operator
+    deerflow_task_id: str | None = None
+    artifact_url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_class_constraints(self) -> ResearchSignalPayload:
+        # conviction: requires horizon
+        if self.signal_class == SignalClass.CONVICTION and not self.horizon:
+            raise ValueError("signal_class='conviction' requires 'horizon' (e.g. '1-7d'). Conviction signals must be falsifiable.")
+        # detection: requires event_ts
+        if self.signal_class == SignalClass.DETECTION and not self.event_ts:
+            raise ValueError(
+                "signal_class='detection' requires 'event_ts' (ISO timestamp of when the event occurred). "
+                "Detection signals must be anchored to a specific event."
+            )
+        # observation: direction must be neutral — observations are findings, not directional calls
+        if self.signal_class == SignalClass.OBSERVATION and self.direction not in ("neutral", "", None):
+            raise ValueError(
+                f"signal_class='observation' cannot have a directional claim (direction='{self.direction}'). "
+                "Use signal_class='conviction' for directional signals."
+            )
+        return self
+
+
 class CuratorSignalPayload(BaseModel):
     symbol: str
     direction: Literal["bullish", "bearish", "neutral"]
@@ -296,6 +330,23 @@ class TradeIntentPayload(BaseModel):
     rationale: str
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+
+
+class KarmaUpdatePayload(BaseModel):
+    """Payload for KARMA_UPDATE_V1 — emitted on every producer_karma mutation.
+
+    Enables full karma history reconstruction from events alone (event-sourced audit trail).
+    """
+
+    producer_id: str
+    producer_name: str
+    karma_delta: float  # Change in karma score
+    karma_score_after: float  # New karma score
+    win_count_after: int
+    loss_count_after: int
+    trade_id: str | None = None  # Trade that triggered this update
+    realized_pnl: float | None = None
+    update_reason: str  # "trade_win" | "trade_loss" | "manual" | "settlement"
 
 
 class KarmaIntentPayload(BaseModel):
@@ -400,6 +451,8 @@ class ForecastPayload(BaseModel):
         return self
 
 
+# Brier (1950): a forecast is only complete when the outcome is observed.
+# This payload is the closure record.
 class ForecastOutcomePayload(BaseModel):
     """Payload for FORECAST_OUTCOME_V1 — resolved forecast outcome."""
 
@@ -430,10 +483,12 @@ PayloadModel = (
     | WhaleSignalPayload
     | OrderbookSignalPayload
     | BenchmarkSignalPayload
+    | ResearchSignalPayload
     | CuratorSignalPayload
     | ACISignalPayload
     | ConvictionPayload
     | TradeIntentPayload
+    | KarmaUpdatePayload
     | KarmaIntentPayload
     | KillSwitchPayload
     | LearningOutcomePayload
@@ -457,12 +512,14 @@ _EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.SIGNAL_WHALE_V1: WhaleSignalPayload,
     EventType.SIGNAL_ORDERBOOK_V1: OrderbookSignalPayload,
     EventType.SIGNAL_BENCHMARK_V1: BenchmarkSignalPayload,
+    EventType.SIGNAL_RESEARCH_V1: ResearchSignalPayload,
     EventType.SIGNAL_CURATOR_V1: CuratorSignalPayload,
     EventType.SIGNAL_ACI_V1: ACISignalPayload,
     # Brain
     EventType.CONVICTION_V1: ConvictionPayload,
     EventType.TRADE_INTENT_V1: TradeIntentPayload,
     # Karma
+    EventType.KARMA_UPDATE_V1: KarmaUpdatePayload,
     EventType.KARMA_INTENT_V1: KarmaIntentPayload,
     # Kill switch
     EventType.KILL_SWITCH_V1: KillSwitchPayload,

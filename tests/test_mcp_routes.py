@@ -106,3 +106,92 @@ def test_validate_mcp_key_valid() -> None:
 
 def test_validate_mcp_key_invalid() -> None:
     assert validate_mcp_key("bad", ["abc"]) is False
+
+
+# ---------------------------------------------------------------------------
+# ERC-8004: Public MCP methods + well-known manifest
+# ---------------------------------------------------------------------------
+
+
+def _rpc(method: str, params: dict | None = None, rpc_id: int = 1) -> dict:
+    body: dict = {"jsonrpc": "2.0", "id": rpc_id, "method": method}
+    if params is not None:
+        body["params"] = params
+    return body
+
+
+@pytest.fixture()
+def authed_client(temp_dir, test_config):
+    """Client with auth_token configured — non-public methods require auth."""
+    app = create_app()
+    db = Database(temp_dir / "brain.db")
+    cfg = test_config.model_copy(
+        update={"api": test_config.api.model_copy(update={"auth_token": "test-secret"})},
+    )
+    app.state.config = cfg
+    app.state.db = db
+
+    with TestClient(app) as tc:
+        yield tc
+
+    db.close()
+
+
+class TestMCPPublicMethods:
+    """initialize and tools/list must work WITHOUT auth."""
+
+    def test_initialize_no_auth(self, authed_client: TestClient) -> None:
+        resp = authed_client.post("/mcp", json=_rpc("initialize"))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "result" in data
+        assert "protocolVersion" in data["result"]
+
+    def test_tools_list_no_auth(self, authed_client: TestClient) -> None:
+        resp = authed_client.post("/mcp", json=_rpc("tools/list"))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "result" in data
+        assert "tools" in data["result"]
+        assert isinstance(data["result"]["tools"], list)
+
+        tool_names = {tool["name"] for tool in data["result"]["tools"]}
+        assert {
+            "get_brain_status",
+            "get_recent_signals",
+            "get_open_positions",
+            "get_signal_attribution",
+            "b1e55ed_provenance_check",
+            "emit_producer_signal",
+            "get_regime_status",
+            "get_top_signals",
+            "get_regime_history",
+            "submit_research_signal",
+            "get_signals_bulk_export",
+        }.issubset(tool_names)
+
+    def test_tools_call_requires_auth(self, authed_client: TestClient) -> None:
+        resp = authed_client.post(
+            "/mcp",
+            json=_rpc("tools/call", {"name": "get_brain_status", "arguments": {}}),
+        )
+        assert resp.status_code == 401
+
+
+class TestWellKnownAgentRegistration:
+    """/.well-known/agent-registration.json must return ERC-8004 manifest."""
+
+    def test_returns_200(self, client: TestClient) -> None:
+        resp = client.get("/.well-known/agent-registration.json")
+        assert resp.status_code == 200
+
+    def test_synthesis_participant(self, client: TestClient) -> None:
+        data = client.get("/.well-known/agent-registration.json").json()
+        assert data["synthesis_participant"] is True
+
+    def test_has_required_fields(self, client: TestClient) -> None:
+        data = client.get("/.well-known/agent-registration.json").json()
+        assert data["name"] == "b1e55ed"
+        assert "endpoints" in data
+        assert "supportedTrust" in data
+        assert "reputation" in data["supportedTrust"]

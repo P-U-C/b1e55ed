@@ -1,3 +1,8 @@
+---
+title: "Getting Started"
+description: "Install b1e55ed and run your first brain cycle."
+---
+
 # Getting Started
 
 b1e55ed is a CLI-first trading intelligence engine built around append-only events.
@@ -158,6 +163,8 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:5050/api/v1/capabilities
 ```
 
+This returns MCP tools, event domains, and producer capability summaries for onboarding.
+
 ## Cockpit
 
 After setup, visit the cockpit for a "what do I trade today" view:
@@ -177,9 +184,9 @@ b1e55ed report --cockpit-summary  # 7-day summary
 
 ## Next steps
 
-- [Configuration](configuration.md)
-- [CLI reference](cli-reference.md)
-- [API reference](api-reference.md)
+- [Configuration](operations/config-reference.mdx)
+- [CLI reference](operations/cli-reference.mdx)
+- [API reference](api/overview.mdx)
 - [Architecture](architecture.md)
 - [Agent interfaces](agent-interfaces.md)
 - [Oracle](oracle.md)

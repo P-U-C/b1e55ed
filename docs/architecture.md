@@ -1,3 +1,8 @@
+---
+title: "Architecture"
+description: "System design, event flow, and component overview for b1e55ed."
+---
+
 # Architecture Overview
 
 b1e55ed is an event-sourced signal engine. Producers emit events. The brain reads events and emits events. Execution reads events and emits events.
@@ -211,6 +216,6 @@ Reference modules:
 - SSE stream: `GET /api/v1/events/stream`.
 - Oracle: `GET /api/v1/oracle/producers/{id}/provenance` (no auth).
 
-See: [api-reference.md](api-reference.md).
+See: [api/overview.mdx](api/overview.mdx).
 
-For the full flywheel spec (attribution algorithm, kill switch conditions, Phase 0 success metric), see [FLYWHEEL_SPEC.md](FLYWHEEL_SPEC.md).
+For the full flywheel spec (attribution algorithm, kill switch conditions, Phase 0 success metric), see [internal/FLYWHEEL_SPEC.md](internal/FLYWHEEL_SPEC.md).

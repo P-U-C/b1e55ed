@@ -1,3 +1,8 @@
+---
+title: "Oracle"
+description: "Public producer provenance endpoint — no auth required."
+---
+
 # Oracle
 
 The oracle is a read-only, publicly accessible projection layer over the event store.
@@ -64,6 +69,14 @@ X-Attribution-Notice: Fields informational only. May change without notice. Opti
 | `operator_coverage` | int | Distinct nodes that have observed this producer |
 | `attribution_windows` | object | Per-window hit rates and drawdowns |
 
+## Identity semantics (`source` vs `node_id`)
+
+- **Canonical producer identity is `node_id`** when a signal is linked to a registered contributor.
+- Oracle lookups accept either the canonical `node_id` **or** a historical `events.source` alias.
+- When an alias resolves unambiguously to a contributor, the response `producer_id` returns the canonical `node_id`.
+
+This keeps provenance queries coherent across legacy source labels and contributor-linked submissions.
+
 ## MCP tool
 
 The `b1e55ed_provenance_check` MCP tool wraps this endpoint for agent use.
@@ -89,9 +102,9 @@ See: [agent-interfaces.md](agent-interfaces.md) for full MCP server documentatio
 
 ## Karma scoring
 
-The oracle draws on karma scores described in `docs/KARMA-SPEC.md`.
+The oracle draws on karma scores described in `docs/internal/internal/KARMA-SPEC.md`.
 
-Scores are NOT returned by the provenance endpoint — the endpoint returns facts. Karma calibration, update rules, and failure modes are specified in KARMA-SPEC.md.
+Scores are NOT returned by the provenance endpoint — the endpoint returns facts. Karma calibration, update rules, and failure modes are specified in internal/KARMA-SPEC.md.
 
 ## Query logging
 
@@ -105,4 +118,4 @@ Raw producer IDs are never logged. This data is demand intelligence — it never
 
 ## Reproducibility
 
-`docs/SEED_MANIFEST.md` documents the initial seed dataset and how to verify scores are reproducible.
+`docs/internal/SEED_MANIFEST.md` documents the initial seed dataset and how to verify scores are reproducible.

@@ -8,7 +8,16 @@
   <!-- HTMX -->
   <script src="/static/htmx.min.js"></script>
 
+  <!-- High contrast preference restore -->
+  <script>
+  (function(){
+    if(localStorage.getItem('b1e55ed:hc')==='true') document.documentElement.setAttribute('data-high-contrast','true');
+  })();
+  </script>
+
   <!-- CRT → PUC Aesthetic -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -23,27 +32,34 @@
     <a href="/" class="nav-logo">b1e55<span class="hex">ed</span></a>
 
     <div class="nav-links">
-      <!-- Core -->
       <a href="/" class="nav-link {% if active_page == 'brain' %}active{% endif %}">Brain</a>
-      <a href="/cockpit" class="nav-link {% if active_page == 'cockpit' %}active{% endif %}">Cockpit</a>
-      <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
       <a href="/signals" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signals</a>
-      <a href="/social" class="nav-link {% if active_page == 'social' %}active{% endif %}">Social</a>
-
-      <!-- Network -->
-      <a href="/contributors" class="nav-link {% if active_page == 'contributors' %}active{% endif %}">Contributors</a>
       <a href="/producers" class="nav-link {% if active_page == 'producers' %}active{% endif %}">Producers</a>
-      <a href="/webhooks" class="nav-link {% if active_page == 'webhooks' %}active{% endif %}">Webhooks</a>
-
-      <!-- System -->
-      <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Performance</a>
-      <a href="/system" class="nav-link {% if active_page == 'system' %}active{% endif %}">System</a>
-      <a href="/identity" class="nav-link {% if active_page == 'identity' %}active{% endif %}">Identity</a>
-      <a href="/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Config</a>
-      <a href="/treasury" class="nav-link {% if active_page == 'treasury' %}active{% endif %}">Treasury</a>
+      <a href="/positions" class="nav-link {% if active_page == 'positions' %}active{% endif %}">Positions</a>
+      <a href="/performance" class="nav-link {% if active_page == 'performance' %}active{% endif %}">Perf</a>
+      <a href="/forecasts" class="nav-link {% if active_page == 'forecasts' %}active{% endif %}">Forecasts</a>
+      <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">Settings</a>
+      <div class="nav-overflow">
+        <button class="nav-overflow__trigger" id="nav-more-btn" onclick="(function(){var m=document.getElementById('nav-more-menu');m.style.display=m.style.display==='block'?'none':'block';})()" aria-label="More pages">···</button>
+        <div class="nav-overflow__menu" id="nav-more-menu" style="display:none">
+          <a href="/social">Social</a>
+          <a href="/artifacts">Artifacts</a>
+          <a href="/treasury">Treasury</a>
+        </div>
+      </div>
     </div>
 
     <div class="nav-right">
+      <!-- Live Market Ticker -->
+      <div id="market-ticker"
+           class="market-ticker"
+           hx-get="/api/market-ticker"
+           hx-trigger="load, every 60s"
+           hx-swap="innerHTML"
+           hx-target="#market-ticker-inner">
+        <span id="market-ticker-inner" class="ticker-coins">—</span>
+      </div>
+
       <div class="kill-dot level-{{ kill_switch_level | default(0) }}"
            title="Kill switch: level {{ kill_switch_level | default(0) }}"
            hx-get="/partials/kill-dot"
@@ -59,14 +75,116 @@
     </div>
   </nav>
 
+  <!-- Vitals Bar -->
+  <div id="vitals-bar" class="vitals-bar"
+       hx-get="/partials/vitals-bar"
+       hx-trigger="load, every 15s"
+       hx-swap="innerHTML">
+    <span class="vitals-item"><span class="vitals-label">SIGNAL</span> <span class="vitals-value">—</span></span>
+  </div>
+
+  <!-- ── Registration Banner ───────────────────── -->
+  <div id="registration-banner" style="display:none; background:linear-gradient(90deg,rgba(34,197,94,0.12),rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); border-radius:6px; margin:8px 16px; padding:10px 16px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#d4d0c8; position:relative;">
+    <button onclick="dismissRegistrationBanner()" style="position:absolute;right:8px;top:6px;background:none;border:none;color:#666;cursor:pointer;font-size:14px;" aria-label="Dismiss">✕</button>
+    <span id="registration-banner-text"></span>
+  </div>
+  <script>
+  (function(){
+    if(localStorage.getItem('registration_banner_dismissed')==='true') return;
+    fetch('/api/v1/chain/registration-status')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if(!d || d.registered || !d.threshold_reached || !d.chain_configured) return;
+        var banner = document.getElementById('registration-banner');
+        var text = document.getElementById('registration-banner-text');
+        if(d.is_agent){
+          text.innerHTML = '⚙ Agent node has <strong>' + d.karma_balance.toFixed(1) + '</strong> karma pending registration — register programmatically';
+        } else {
+          text.innerHTML = '🎉 You\'ve earned <strong>' + d.karma_balance.toFixed(1) + '</strong> karma — <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/specs/erc-8004-agent-registration.md" style="color:#22C55E;text-decoration:underline;" target="_blank">Register on-chain →</a>';
+        }
+        banner.style.display = 'block';
+      })
+      .catch(function(){});
+  })();
+  function dismissRegistrationBanner(){
+    document.getElementById('registration-banner').style.display='none';
+    localStorage.setItem('registration_banner_dismissed','true');
+  }
+  </script>
+
   <!-- ── Page Content ─────────────────────────── -->
-  <main class="page">
+  <main class="page" style="padding-top: 76px;">
     {% block content %}{% endblock %}
   </main>
 
   <!-- Neural mesh background -->
   <script src="/static/synapses.js"></script>
 
+  <!-- Market ticker HTMX handler -->
+  <script>
+  document.addEventListener('htmx:beforeSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'market-ticker-inner') {
+      try {
+        var data = JSON.parse(e.detail.xhr.responseText);
+        var html = '';
+        if (data.coins && data.coins.length) {
+          data.coins.forEach(function(c, i) {
+            var dir = c.change_24h >= 0 ? 'bull' : 'bear';
+            var sign = c.change_24h >= 0 ? '+' : '';
+            var price = c.price >= 1000 ? c.price.toLocaleString('en-US', {maximumFractionDigits:0}) : c.price.toFixed(2);
+            html += '<span class="ticker-coin">';
+            html += '<span class="ticker-sym">' + c.symbol + '</span>';
+            html += ' $' + price + ' ';
+            html += '<span class="ticker-' + dir + '">' + sign + c.change_24h.toFixed(1) + '%</span>';
+            html += '</span>';
+            if (i < data.coins.length - 1) html += '<span class="ticker-sep">\u00b7</span>';
+          });
+        } else {
+          html = '\u2014';
+        }
+        e.detail.target.innerHTML = html;
+        e.detail.shouldSwap = false;
+      } catch(err) { /* let HTMX handle as text */ }
+    }
+  });
+  </script>
+
+  <script>
+  // Guard: block full-shell injection into partial targets (prevents double-navbar)
+  document.body.addEventListener('htmx:beforeSwap', function(e) {
+    if (!e.detail.target || e.detail.target === document.body) return;
+    var text = (e.detail.xhr && e.detail.xhr.responseText) || '';
+    if (text.indexOf('<nav') !== -1 || text.indexOf('<!DOCTYPE') !== -1) {
+      console.warn('b1e55ed: blocked shell injection into partial', e.detail.target.id || e.detail.target.className);
+      e.detail.shouldSwap = false;
+    }
+  });
+
+  document.body.addEventListener('htmx:responseError', function(e) {
+    var target = e.detail.target;
+    if (!target) return;
+    var status = e.detail.xhr ? e.detail.xhr.status : '?';
+    target.innerHTML = '<span class="text-red-400 text-sm">\u2717 Error ' + status + '</span>';
+  });
+
+  // Nav overflow outside-click handler
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('nav-more-menu');
+    var btn = document.getElementById('nav-more-btn');
+    if (menu && menu.style.display === 'block' && btn && !menu.contains(e.target) && e.target !== btn) {
+      menu.style.display = 'none';
+    }
+  });
+  </script>
+
   {% block scripts %}{% endblock %}
+
+  <!-- Footer -->
+  <footer style="position:fixed; bottom:0; left:0; right:0; height:24px; background:rgba(10,10,10,0.95); border-top:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:space-between; padding:0 16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#3a3630; z-index:50; backdrop-filter:blur(4px);">
+    <span>b1e55<span style="color:#22C55E;">ed</span> &nbsp;·&nbsp; dashboard <span style="color:#5a5650;">v{{ dashboard_version }}</span></span>
+    <span style="color:#2a2620;">permanentupperclass.com</span>
+  </footer>
+  <!-- push content above fixed footer -->
+  <style>main.page { padding-bottom: 32px; }</style>
 </body>
 </html>

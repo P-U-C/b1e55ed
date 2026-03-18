@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from engine.core.contributors import ContributorRegistry
 from engine.core.database import Database
 from engine.core.events import EventType
 from engine.core.oracle_query_log import log_oracle_query
@@ -88,6 +89,32 @@ def _seed_conviction_scores(db: Database, node_id: str, count: int = 3) -> None:
     db.conn.commit()
 
 
+def _seed_contributor_mapped_signals(
+    db: Database,
+    *,
+    node_id: str,
+    name: str,
+    source_alias: str,
+    count: int = 2,
+) -> None:
+    reg = ContributorRegistry(db)
+    contributor = reg.register(node_id=node_id, name=name, role="agent", metadata={})
+
+    for i in range(count):
+        db.append_event(
+            event_type=EventType.SIGNAL_CURATOR_V1,
+            payload={
+                "symbol": "BTC",
+                "direction": "bullish",
+                "conviction": float(i + 1),
+                "rationale": f"mapped signal {i}",
+                "source": source_alias,
+            },
+            source=source_alias,
+            contributor_id=contributor.id,
+        )
+
+
 # ---------------------------------------------------------------------------
 # 1. Known producer → has_provenance=True, total_signals > 0
 # ---------------------------------------------------------------------------
@@ -105,7 +132,7 @@ def test_known_producer_has_provenance(db):
 
 
 def test_known_producer_total_signals_positive(db):
-    """total_signals counts conviction_scores rows for this producer."""
+    """total_signals counts signal events for this producer identity."""
     producer_id = "producer-signals-001"
     _seed_producer_events(db, producer_id, count=3)
     _seed_conviction_scores(db, producer_id, count=4)
@@ -113,7 +140,7 @@ def test_known_producer_total_signals_positive(db):
     result = compute_provenance(producer_id, db)
 
     assert result.has_provenance is True
-    assert result.total_signals == 4, f"Expected 4 conviction score rows, got {result.total_signals}"
+    assert result.total_signals == 3, f"Expected 3 signal events, got {result.total_signals}"
 
 
 def test_known_producer_first_last_seen(db):
@@ -249,6 +276,46 @@ def test_multiple_producers_independent(db):
     # Operator coverage counts are independent
     assert result_a.producer_id == pid_a
     assert result_b.producer_id == pid_b
+
+
+def test_provenance_resolves_node_id_to_source_alias_events(db):
+    """node_id lookups must include contributor-linked source aliases."""
+    node_id = "node-provenance-001"
+    _seed_contributor_mapped_signals(
+        db,
+        node_id=node_id,
+        name="agent-provenance",
+        source_alias="operator:telegram",
+        count=2,
+    )
+
+    result = compute_provenance(node_id, db)
+
+    assert result.has_provenance is True
+    assert result.producer_id == node_id
+    assert result.total_signals == 2
+    assert result.operator_coverage == 1
+
+
+def test_provenance_resolves_source_alias_to_canonical_node_id(db):
+    """source alias lookups must resolve to the same canonical producer identity."""
+    node_id = "node-provenance-002"
+    source_alias = "agent-display-name"
+    _seed_contributor_mapped_signals(
+        db,
+        node_id=node_id,
+        name="Agent Display Name",
+        source_alias=source_alias,
+        count=3,
+    )
+
+    by_alias = compute_provenance(source_alias, db)
+    by_node = compute_provenance(node_id, db)
+
+    assert by_alias.has_provenance is True
+    assert by_alias.producer_id == node_id
+    assert by_alias.total_signals == by_node.total_signals == 3
+    assert by_alias.operator_coverage == by_node.operator_coverage == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://deerflow.dev/schemas/extensions_config.json",
+  "description": "b1e55ed MCP integration for DeerFlow — two modes available.",
+  "modes": {
+    "direct": {
+      "description": "Run b1e55ed MCP server as a subprocess. Requires b1e55ed installed locally.",
+      "command": "python",
+      "args": ["-m", "b1e55ed.mcp"],
+      "env": {
+        "B1E55ED_DB": "./data/b1e55ed.db"
+      }
+    },
+    "gateway": {
+      "description": "Connect via the b1e55ed MCP gateway (recommended for teams).",
+      "url": "http://localhost:7338",
+      "headers": {
+        "X-API-Key": "${B1E55ED_API_KEY}"
+      }
+    }
+  }
+}

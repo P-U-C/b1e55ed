@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
+from typing import Any
 
 try:
     from datetime import UTC  # py311+
@@ -61,6 +62,13 @@ class CycleResult:
     intents: list[dict]
 
 
+@dataclass(frozen=True, slots=True)
+class AutoTradePolicyDecision:
+    allowed: bool
+    reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class BrainOrchestrator:
     def __init__(
         self,
@@ -83,6 +91,258 @@ class BrainOrchestrator:
         self.decision = DecisionEngine(config, db)
         self.stratification = StratificationTracker(db)
         self._domain_miss_counts: dict[str, int] = {}
+
+    def _resolve_mid_price(self, symbol: str) -> float | None:
+        """Resolve mid price for a symbol.
+
+        Strategy:
+        1. Query most recent PRICE_V1 event from the DB
+        2. Fallback: query Binance public ticker API
+        3. Returns None if no price available (caller should skip the trade)
+        """
+        _log = logging.getLogger("b1e55ed.orchestrator")
+
+        # 1) Try DB: most recent price event for this symbol
+        try:
+            row = self.db.fetchone(
+                """
+                SELECT payload FROM events
+                WHERE type IN ('signal.price_ws.v1', 'PRICE_V1')
+                  AND json_extract(payload, '$.symbol') = ?
+                ORDER BY ts DESC LIMIT 1
+                """,
+                (symbol.upper(),),
+            )
+            if row is not None:
+                import json as _json
+
+                payload = _json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                price = 0.0
+                for _pk in ("price", "close", "mid"):
+                    _pv = payload.get(_pk)
+                    if _pv is not None:
+                        price = float(_pv)
+                        break
+                if price > 0:
+                    _log.debug("mid_price for %s from DB: %.4f", symbol, price)
+                    return price
+        except Exception:
+            _log.debug("DB price lookup failed for %s", symbol, exc_info=True)
+
+        # 2) Fallback: CoinGecko for HYPE, then Binance
+        cg_map = {"HYPE": "hyperliquid"}
+        sym_upper = symbol.upper()
+        if sym_upper in cg_map:
+            try:
+                import urllib.request
+
+                cg_id = cg_map[sym_upper]
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
+                req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    import json as _json
+
+                    data = _json.loads(resp.read())
+                    price = float(data.get(cg_id, {}).get("usd", 0))
+                    if price > 0:
+                        _log.debug("mid_price for %s from CoinGecko: %.4f", symbol, price)
+                        return price
+            except Exception:
+                _log.debug("CoinGecko price lookup failed for %s", symbol, exc_info=True)
+            return None
+        try:
+            import urllib.request
+
+            ticker_symbol = f"{sym_upper}USDT"
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={ticker_symbol}"
+            req = urllib.request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                import json as _json
+
+                data = _json.loads(resp.read())
+                price = float(data.get("price", 0))
+                if price > 0:
+                    _log.debug("mid_price for %s from Binance: %.4f", symbol, price)
+                    return price
+        except Exception:
+            _log.debug("Binance price lookup failed for %s", symbol, exc_info=True)
+
+        return None
+
+    @staticmethod
+    def _normalize_list(values: Any, *, upper: bool = False) -> list[str]:
+        vals = values if isinstance(values, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in vals:
+            item = str(raw or "").strip()
+            if not item:
+                continue
+            item = item.upper() if upper else item.lower()
+            if item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    def _bundle_auto_trade_policy(self, symbol: str) -> AutoTradePolicyDecision:
+        """Resolve whether auto execution is allowed for this symbol.
+
+        Backward compatibility rule:
+        - no bundles configured => allow legacy behavior
+        """
+
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return AutoTradePolicyDecision(allowed=False, reason="invalid_symbol", metadata={"symbol": symbol})
+
+        universe = getattr(self.config, "universe", None)
+        if universe is None:
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_no_universe"})
+
+        try:
+            enabled_bundles_fn = getattr(universe, "enabled_bundles", None)
+            if callable(enabled_bundles_fn):
+                enabled_bundles = list(enabled_bundles_fn())
+            else:
+                bundles = getattr(universe, "bundles", [])
+                enabled_bundles = [b for b in bundles if bool(getattr(b, "enabled", True))]
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").debug("bundle policy lookup failed; using legacy allow", exc_info=True)
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_bundle_lookup_error"})
+
+        if not enabled_bundles:
+            return AutoTradePolicyDecision(allowed=True, reason=None, metadata={"policy_mode": "legacy_no_bundles"})
+
+        metadata_fn = getattr(universe, "execution_metadata_for_symbol", None)
+        metadata: dict[str, Any]
+        if callable(metadata_fn):
+            raw_meta = metadata_fn(sym)
+            metadata = dict(raw_meta) if isinstance(raw_meta, dict) else {}
+        else:
+            symbol_bundles = [b for b in enabled_bundles if sym in self._normalize_list(getattr(b, "symbols", []), upper=True)]
+            metadata = {
+                "bundle_ids": [str(getattr(b, "id", "")) for b in symbol_bundles],
+                "asset_classes": [str(getattr(b, "asset_class", "")).lower() for b in symbol_bundles],
+                "venues": [str(getattr(b, "venue", "")).lower() for b in symbol_bundles],
+                "tags": [tag for b in symbol_bundles for tag in self._normalize_list(getattr(b, "tags", []))],
+                "execution_mode_hints": [
+                    str(getattr(b, "execution_mode_hint", "")).lower() for b in symbol_bundles if str(getattr(b, "execution_mode_hint", "")).strip()
+                ],
+            }
+
+        bundle_ids = self._normalize_list(metadata.get("bundle_ids", []), upper=False)
+        asset_classes = self._normalize_list(metadata.get("asset_classes", []), upper=False)
+        venues = self._normalize_list(metadata.get("venues", []), upper=False)
+        tags = self._normalize_list(metadata.get("tags", []), upper=False)
+        mode_hints = self._normalize_list(metadata.get("execution_mode_hints", []), upper=False)
+
+        policy_meta = {
+            "symbol": sym,
+            "bundle_ids": bundle_ids,
+            "asset_classes": asset_classes,
+            "venues": venues,
+            "tags": tags,
+            "execution_mode_hints": mode_hints,
+        }
+
+        if not bundle_ids:
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="symbol_not_in_active_bundle",
+                metadata=policy_meta,
+            )
+
+        deny_tags = {
+            "no-trade",
+            "no_trade",
+            "observe-only",
+            "observe_only",
+            "signal-only",
+            "signal_only",
+            "conviction-only",
+            "conviction_only",
+            "watchlist-only",
+            "watchlist_only",
+        }
+        deny_hints = {
+            "disabled",
+            "off",
+            "none",
+            "signal_only",
+            "signal-only",
+            "conviction_only",
+            "conviction-only",
+            "observe_only",
+            "observe-only",
+            "no_trade",
+            "no-trade",
+        }
+
+        if any(tag in deny_tags for tag in tags):
+            return AutoTradePolicyDecision(allowed=False, reason="execution_tag_blocks_execution", metadata=policy_meta)
+
+        if any(hint in deny_hints for hint in mode_hints):
+            return AutoTradePolicyDecision(allowed=False, reason="execution_mode_hint_blocks_execution", metadata=policy_meta)
+
+        execution_cfg = getattr(self.config, "execution", None)
+        runtime_mode = str(getattr(execution_cfg, "mode", "paper") or "paper").strip().lower()
+
+        restricted_modes: set[str] = set()
+        for hint in mode_hints:
+            if hint in {"paper_only", "paper-only"}:
+                restricted_modes.add("paper")
+            elif hint in {"live_only", "live-only"}:
+                restricted_modes.add("live")
+
+        if restricted_modes and runtime_mode not in restricted_modes:
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="execution_mode_hint_mismatch",
+                metadata={**policy_meta, "runtime_mode": runtime_mode, "allowed_modes": sorted(restricted_modes)},
+            )
+
+        allowed_asset_classes = self._normalize_list(getattr(execution_cfg, "allowed_bundle_asset_classes", ["crypto"]), upper=False)
+        if asset_classes and allowed_asset_classes and not set(asset_classes).intersection(allowed_asset_classes):
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="asset_class_not_allowed",
+                metadata={**policy_meta, "allowed_asset_classes": allowed_asset_classes},
+            )
+
+        allowed_venues = self._normalize_list(
+            getattr(execution_cfg, "allowed_bundle_venues", ["global", "paper", "hyperliquid", "binance", "coinbase"]),
+            upper=False,
+        )
+        if venues and allowed_venues and not set(venues).intersection(allowed_venues):
+            return AutoTradePolicyDecision(
+                allowed=False,
+                reason="venue_not_allowed",
+                metadata={**policy_meta, "allowed_venues": allowed_venues},
+            )
+
+        return AutoTradePolicyDecision(allowed=True, reason=None, metadata=policy_meta)
+
+    def _emit_execution_gate_event(self, *, symbol: str, cycle_id: str, decision: AutoTradePolicyDecision) -> None:
+        try:
+            self.db.append_event(
+                event_type=EventType.AUDIT_V1,
+                payload={
+                    "reason": "execution_gated_by_bundle_policy",
+                    "gate_reason": str(decision.reason or "unknown"),
+                    "symbol": str(symbol).upper(),
+                    "details": dict(decision.metadata),
+                    "cycle_id": cycle_id,
+                },
+                source="brain.orchestrator",
+                trace_id=cycle_id,
+            )
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").debug(
+                "failed to emit execution gate audit event for %s",
+                symbol,
+                exc_info=True,
+            )
 
     def run_cycle(self, symbols: list[str]) -> CycleResult:
         # Abort immediately if kill switch is active.
@@ -160,8 +420,8 @@ class BrainOrchestrator:
 
             # Persist feature snapshot row (reproducibility)
             snap = synth_results[sym_upper].snapshot
-            with self.db.conn:
-                self.db.conn.execute(
+            with self.db._lock, self.db.conn:
+                self.db.execute(
                     """
                     INSERT INTO feature_snapshots (cycle_id, symbol, ts, features, source_event_ids, regime, version)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -180,17 +440,22 @@ class BrainOrchestrator:
                 # Contributor attribution: mark signals that made it into synthesis as accepted.
                 if snap.source_event_ids:
                     placeholders = ",".join(["?"] * len(snap.source_event_ids))
-                    self.db.conn.execute(
+                    self.db.execute(
                         f"UPDATE contributor_signals SET accepted = 1 WHERE event_id IN ({placeholders})",
                         tuple(snap.source_event_ids),
                     )
 
             # Emit immutable audit event for accepted signals so acceptance
             # decisions are part of the hash-chained event log.
+            # NOTE: SIGNAL_ACCEPTED_V1 requires {trade_id, producer_id, domain, signal_event_id,
+            # direction, confidence} — those are only available after a trade is submitted.
+            # At synthesis time we emit AUDIT_V1 to preserve the bulk-acceptance record.
+            # The canonical SIGNAL_ACCEPTED_V1 events (one per signal) are emitted by OMS._emit_signal_accepted().
             if snap.source_event_ids:
                 self.db.append_event(
-                    event_type=EventType.SIGNAL_ACCEPTED_V1,
+                    event_type=EventType.AUDIT_V1,
                     payload={
+                        "reason": "signals_ingested_for_cycle",
                         "cycle_id": cycle_id,
                         "event_ids": list(snap.source_event_ids),
                         "symbol": sym,
@@ -233,6 +498,7 @@ class BrainOrchestrator:
                 regime=regime_res.state.regime,
                 kill_level=self.kill_switch.level,
                 trace_id=cycle_id,
+                source_event_ids=list(synth.snapshot.source_event_ids or []),
             )
             if intent is not None:
                 # TradeIntent is a frozen slots dataclass.
@@ -244,10 +510,77 @@ class BrainOrchestrator:
         if getattr(self.config.brain, "auto_paper_trade", True):
             _log = logging.getLogger("b1e55ed.orchestrator")
             for sym, conv in convictions.items():
-                confidence = conv.score.confidence or 0.0
-                if confidence >= 0.65 and self.kill_switch.level == KillSwitchLevel.SAFE:
+                confidence = float(conv.score.confidence or 0.0)
+                magnitude = float(conv.score.magnitude or 0.0)
+                final_conviction = float(conv.final_conviction or 0.0)
+
+                min_conf = float(getattr(self.config.brain, "auto_paper_trade_min_confidence", 0.35) or 0.35)
+
+                # Primary trigger: calibrated confidence.
+                # Fallback trigger: very strong directional conviction even when confidence calibration is conservative.
+                strong_directional = conv.score.direction != "neutral" and magnitude >= 6.5 and (final_conviction >= 80.0 or final_conviction <= 20.0)
+
+                should_auto_trade = confidence >= min_conf or strong_directional
+
+                if should_auto_trade and self.kill_switch.level == KillSwitchLevel.SAFE:
+                    gate_decision = self._bundle_auto_trade_policy(sym)
+                    if not gate_decision.allowed:
+                        _log.info(
+                            "execution_gated_by_bundle_policy: symbol=%s gate_reason=%s metadata=%s",
+                            sym,
+                            gate_decision.reason,
+                            gate_decision.metadata,
+                        )
+                        self._emit_execution_gate_event(symbol=sym, cycle_id=cycle_id, decision=gate_decision)
+                        continue
+
+                    # Fix 1: Hard gate — skip neutral or missing direction.
+                    # Never open a position on a neutral conviction; neutral means "no edge".
+                    _direction = str(conv.score.direction or "").strip().lower()
+                    if not _direction or _direction == "neutral":
+                        _log.info("auto-paper-trade skipped: %s direction is neutral/missing", sym)
+                        continue
+
+                    # Fix 2: Minimum magnitude threshold — low-magnitude signals lack conviction.
+                    min_magnitude = float(getattr(self.config.brain, "auto_paper_trade_min_magnitude", 5.0) or 5.0)
+                    if min_magnitude < 3.0:
+                        _log.warning(
+                            "auto_paper_trade_min_magnitude=%.1f is below 3.0 — "
+                            "this will trigger trades on weak signals. "
+                            "Suitable for testing only; raise to ≥5.0 before live trading.",
+                            min_magnitude,
+                        )
+                    if magnitude < min_magnitude:
+                        _log.info(
+                            "auto-paper-trade skipped: %s magnitude %.2f < %.2f threshold",
+                            sym,
+                            magnitude,
+                            min_magnitude,
+                        )
+                        continue
+
                     try:
-                        direction = conv.score.direction if conv.score.direction != "neutral" else "long"
+                        direction = _direction  # already validated above; cannot be neutral or empty
+
+                        # Resolve mid_price from DB price events or Binance API
+                        # Resolve mid_price from DB price events or Binance API
+                        mid_price = self._resolve_mid_price(sym)
+                        if mid_price is None:
+                            _log.warning("auto-paper-trade skipped for %s: no price available", sym)
+                            continue
+
+                        # Look up conviction_id from the most recent conviction_scores row
+                        _conv_id = None
+                        try:
+                            _row = self.db.fetchone(
+                                "SELECT id FROM conviction_scores WHERE cycle_id = ? AND symbol = ? ORDER BY id DESC LIMIT 1",
+                                (cycle_id, sym),
+                            )
+                            if _row is not None:
+                                _conv_id = int(_row[0])
+                        except Exception:
+                            _log.debug("conviction_id lookup failed for %s", sym, exc_info=True)
+
                         ti = TradeIntent(
                             symbol=sym,
                             direction=direction,
@@ -258,18 +591,93 @@ class BrainOrchestrator:
                             rationale="auto_paper_trade:high_confidence",
                             stop_loss_pct=0.05,
                             take_profit_pct=0.10,
+                            intended_price=mid_price,
+                            conviction_id=_conv_id,
+                            source_event_ids=list(synth_results[sym].snapshot.source_event_ids or []),
                         )
                         if self._oms is None:
                             _log.warning("auto-paper-trade skipped: no OMS injected")
                             continue
-                        oms_result = self._oms.submit(ti, mid_price=1.0, equity_usd=10000.0)
-                        _log.info("auto-paper-trade: %s %s -> %s", sym, direction, oms_result.status)
+                        oms_result = self._oms.submit(ti, mid_price=mid_price, equity_usd=float(self.config.risk.portfolio_value_usd))
+                        _log.info("auto-paper-trade: %s %s @ %.2f -> %s", sym, direction, mid_price, oms_result.status)
                     except Exception:
                         _log.exception("auto-paper-trade failed for %s -- brain cycle continues", sym)
                 elif 0.45 <= confidence < 0.65:
                     _log.info("watch: %s confidence=%.2f", sym, confidence)
                 elif confidence < 0.45:
                     _log.debug("low conviction: %s confidence=%.2f", sym, confidence)
+
+        # Fix 4: Auto-close open positions when stop-loss or take-profit is hit.
+        # Runs at the end of every brain cycle so paper positions resolve promptly.
+        if getattr(self.config.brain, "auto_paper_trade", True):
+            _close_log = logging.getLogger("b1e55ed.orchestrator")
+            try:
+                from engine.execution.pnl import PnLTracker  # local import: avoids circular deps
+
+                pnl_tracker = PnLTracker(self.db, self.config)
+                open_positions = self.db.fetchall("SELECT id, asset, direction, stop_loss, take_profit FROM positions WHERE status = 'open'")
+                for _pos in open_positions:
+                    _pid = str(_pos[0])
+                    _asset = str(_pos[1]).upper()
+                    _dirn = str(_pos[2]).lower()
+                    _stop = float(_pos[3]) if _pos[3] is not None else None
+                    _tp = float(_pos[4]) if _pos[4] is not None else None
+
+                    _mark = self._resolve_mid_price(_asset)
+                    if _mark is None:
+                        continue
+
+                    # Track max_drawdown_during: update each cycle before checking stop/target.
+                    try:
+                        _dd_row = self.db.fetchone(
+                            "SELECT entry_price, max_drawdown_during FROM positions WHERE id = ? AND status = 'open'",
+                            (_pid,),
+                        )
+                        if _dd_row is not None:
+                            _entry_px = float(_dd_row[0] or 0.0)
+                            _existing_dd = float(_dd_row[1] or 0.0)
+                            if _entry_px > 0:
+                                if _dirn == "long":
+                                    _drawdown = max(0.0, (_entry_px - _mark) / _entry_px)
+                                else:  # short
+                                    _drawdown = max(0.0, (_mark - _entry_px) / _entry_px)
+                                if _drawdown > _existing_dd:
+                                    with self.db._lock, self.db.conn:
+                                        self.db.execute(
+                                            "UPDATE positions SET max_drawdown_during = ? WHERE id = ? AND status = 'open'",
+                                            (_drawdown, _pid),
+                                        )
+                    except Exception:
+                        pass  # non-critical; don't disrupt close logic
+
+                    _close_reason: str | None = None
+                    if _dirn == "long":
+                        if _stop is not None and _mark <= _stop:
+                            _close_reason = "stop_loss"
+                        elif _tp is not None and _mark >= _tp:
+                            _close_reason = "take_profit"
+                    elif _dirn == "short":
+                        # For shorts: stop is ABOVE entry, take-profit is BELOW entry.
+                        if _stop is not None and _mark >= _stop:
+                            _close_reason = "stop_loss"
+                        elif _tp is not None and _mark <= _tp:
+                            _close_reason = "take_profit"
+
+                    if _close_reason:
+                        try:
+                            pnl_tracker.close_position(position_id=_pid, exit_price=_mark, reason=_close_reason)
+                            _close_log.info(
+                                "auto-close: position %s (%s %s) closed at %.4f reason=%s",
+                                _pid,
+                                _dirn,
+                                _asset,
+                                _mark,
+                                _close_reason,
+                            )
+                        except Exception:
+                            _close_log.warning("auto-close failed for position %s", _pid, exc_info=True)
+            except Exception:
+                _close_log.warning("auto-close cycle check failed", exc_info=True)
 
         # Fowler's event sourcing invariant: state is the function of events, not the inverse.
         # This cycle event now carries enough state to reconstruct the moment entirely.

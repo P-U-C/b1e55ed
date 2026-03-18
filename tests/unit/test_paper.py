@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from engine.core.database import Database
-from engine.execution.paper import PaperBroker
+from engine.execution.paper import PaperBroker, PaperConfig
 
 
 def test_paper_exec_creates_order_and_position(temp_dir: Path) -> None:
@@ -53,3 +55,66 @@ def test_paper_idempotency_key_returns_existing(temp_dir: Path) -> None:
 
     assert a.order_id == b.order_id
     assert a.position_id == b.position_id
+
+
+def test_paper_multi_position_same_symbol(temp_dir: Path) -> None:
+    """paper_max_positions_per_symbol=2 allows a second concurrent position."""
+    db = Database(temp_dir / "brain.db")
+    cfg = PaperConfig(max_positions_per_symbol=2)
+    broker = PaperBroker(db, config=cfg)
+
+    fill1 = broker.execute_market(
+        symbol="SOL",
+        direction="long",
+        notional_usd=500.0,
+        leverage=1.0,
+        mid_price=100.0,
+        idempotency_key="sol-1",
+    )
+    # Second position on same symbol — must succeed
+    fill2 = broker.execute_market(
+        symbol="SOL",
+        direction="short",
+        notional_usd=500.0,
+        leverage=1.0,
+        mid_price=100.0,
+        idempotency_key="sol-2",
+    )
+
+    assert fill1.position_id != fill2.position_id
+
+    # Third position must be rejected (at limit=2)
+    with pytest.raises(ValueError, match="duplicate_open_position"):
+        broker.execute_market(
+            symbol="SOL",
+            direction="long",
+            notional_usd=500.0,
+            leverage=1.0,
+            mid_price=100.0,
+            idempotency_key="sol-3",
+        )
+
+
+def test_paper_single_position_legacy_blocks_duplicate(temp_dir: Path) -> None:
+    """max_positions_per_symbol=1 (legacy default) still blocks a second position."""
+    db = Database(temp_dir / "brain.db")
+    broker = PaperBroker(db)  # default PaperConfig: max_positions_per_symbol=1
+
+    broker.execute_market(
+        symbol="BTC",
+        direction="long",
+        notional_usd=1000.0,
+        leverage=1.0,
+        mid_price=50_000.0,
+        idempotency_key="btc-1",
+    )
+
+    with pytest.raises(ValueError, match="duplicate_open_position"):
+        broker.execute_market(
+            symbol="BTC",
+            direction="short",
+            notional_usd=1000.0,
+            leverage=1.0,
+            mid_price=50_000.0,
+            idempotency_key="btc-2",
+        )

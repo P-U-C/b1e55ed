@@ -8,7 +8,7 @@
          color:{{ 'var(--red)' if a.type == 'echo_chamber' else ('var(--amber)' if a.type == 'velocity' else 'var(--blue)') }};">
       {{ a.type | replace('_', ' ') }}
     </div>
-    <div style="font-size:0.8125rem; font-weight:400; color:var(--text-bright);">{{ a.token }}</div>
+    <div style="font-size:0.8125rem; font-weight:400; color:var(--text-bright);">{{ a.token | default(a.symbol) }}</div>
     <div style="font-size:0.75rem; color:var(--text);">{{ a.desc }}</div>
   </div>
   {% endfor %}

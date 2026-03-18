@@ -84,7 +84,7 @@ class ContributorScoring:
 
     def _accepted_streak_days(self, contributor_id: str) -> int:
         """Consecutive days with at least one ACCEPTED signal."""
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             """
             SELECT DISTINCT substr(created_at, 1, 10) as d
             FROM contributor_signals
@@ -92,7 +92,7 @@ class ContributorScoring:
             ORDER BY d DESC
             """,
             (contributor_id,),
-        ).fetchall()
+        )
         if not rows:
             return 0
 
@@ -125,7 +125,7 @@ class ContributorScoring:
         Lower is better. 0.25 = random baseline. < 0.25 = better than random.
         Returns 0.25 (neutral) if insufficient data.
         """
-        rows = self._db.conn.execute(
+        rows = self._db.fetchall(
             """
             SELECT signal_score, profitable
             FROM contributor_signals
@@ -133,7 +133,7 @@ class ContributorScoring:
               AND profitable IS NOT NULL AND signal_score IS NOT NULL
             """,
             (contributor_id,),
-        ).fetchall()
+        )
 
         if len(rows) < MIN_RESOLVED_FOR_HIT_RATE:
             return 0.25  # neutral
@@ -150,7 +150,7 @@ class ContributorScoring:
         # Deterministic reference time for replay — pass as_of to reproduce historical scores.
         ref_time = as_of if as_of is not None else datetime.now(tz=UTC)
 
-        row = self._db.conn.execute(
+        row = self._db.fetchone(
             """
             SELECT
                 COUNT(1) as submitted,
@@ -163,8 +163,9 @@ class ContributorScoring:
             WHERE contributor_id = ?
             """,
             (contributor_id,),
-        ).fetchone()
+        )
 
+        assert row is not None  # Aggregate query always returns a row
         submitted = int(row[0] or 0)
         accepted = int(row[1] or 0)
         profitable = int(row[2] or 0)
@@ -235,10 +236,10 @@ class ContributorScoring:
         total_karma = 0.0
         contrib = self._registry.get(contributor_id)
         if contrib is not None:
-            k_row = self._db.conn.execute(
+            k_row = self._db.fetchone(
                 "SELECT SUM(karma_amount_usd) FROM karma_intents WHERE node_id = ?",
                 (contrib.node_id,),
-            ).fetchone()
+            )
             if k_row is not None and k_row[0] is not None:
                 total_karma = float(k_row[0])
 
@@ -273,7 +274,7 @@ class ContributorScoring:
         placeholders = ",".join("?" * len(contrib_ids))
 
         # Batch 1: aggregate signal stats for all contributors in one query
-        stats_rows = self._db.conn.execute(
+        stats_rows = self._db.fetchall(
             f"""
             SELECT
                 contributor_id,
@@ -288,11 +289,11 @@ class ContributorScoring:
             GROUP BY contributor_id
             """,
             contrib_ids,
-        ).fetchall()
+        )
         stats_map = {str(r[0]): r for r in stats_rows}
 
         # Batch 2: brier calibration data for all contributors at once
-        brier_rows = self._db.conn.execute(
+        brier_rows = self._db.fetchall(
             f"""
             SELECT contributor_id, signal_score, profitable
             FROM contributor_signals
@@ -300,13 +301,13 @@ class ContributorScoring:
               AND accepted = 1 AND profitable IS NOT NULL AND signal_score IS NOT NULL
             """,
             contrib_ids,
-        ).fetchall()
+        )
         brier_map: dict[str, list[tuple[float, int]]] = {}
         for r in brier_rows:
             brier_map.setdefault(str(r[0]), []).append((float(r[1]), int(r[2])))
 
         # Batch 3: accepted days per contributor (for streak calculation)
-        streak_rows = self._db.conn.execute(
+        streak_rows = self._db.fetchall(
             f"""
             SELECT contributor_id, substr(created_at, 1, 10)
             FROM contributor_signals
@@ -315,7 +316,7 @@ class ContributorScoring:
             ORDER BY contributor_id, substr(created_at, 1, 10) DESC
             """,
             contrib_ids,
-        ).fetchall()
+        )
         streak_days_map: dict[str, list[str]] = {}
         for r in streak_rows:
             streak_days_map.setdefault(str(r[0]), []).append(str(r[1]))
@@ -324,10 +325,10 @@ class ContributorScoring:
         node_map = {c.id: c.node_id for c in contributors}
         node_ids = list(node_map.values())
         kp = ",".join("?" * len(node_ids))
-        karma_rows = self._db.conn.execute(
+        karma_rows = self._db.fetchall(
             f"SELECT node_id, SUM(karma_amount_usd) FROM karma_intents WHERE node_id IN ({kp}) GROUP BY node_id",
             node_ids,
-        ).fetchall()
+        )
         karma_by_node: dict[str, float] = {str(r[0]): float(r[1]) for r in karma_rows if r[1] is not None}
 
         def _score_from_batch(contributor_id: str) -> ContributorScore:
@@ -416,8 +417,8 @@ class ContributorScoring:
 
     def mark_signal_outcome(self, contributor_id: str, *, signal_id: str, profitable: bool) -> None:
         """Mark a specific signal as profitable or not.  For targeted updates."""
-        with self._db.conn:
-            self._db.conn.execute(
+        with self._db._lock, self._db.conn:
+            self._db.execute(
                 """
                 UPDATE contributor_signals
                 SET profitable = ?
@@ -439,7 +440,7 @@ class ContributorScoring:
         Returns the number of signals updated.
         """
         # Find contributors who have at least one resolved conviction outcome.
-        resolved_rows = self._db.conn.execute(
+        resolved_rows = self._db.fetchall(
             """
             SELECT c.id AS contributor_id,
                    cs.outcome
@@ -448,7 +449,7 @@ class ContributorScoring:
             WHERE cs.outcome IS NOT NULL
             ORDER BY cs.outcome_ts DESC
             """
-        ).fetchall()
+        )
 
         if not resolved_rows:
             return 0
@@ -463,10 +464,10 @@ class ContributorScoring:
                 per_contributor.append((cid, float(row["outcome"])))
 
         total_updated = 0
-        with self._db.conn:
+        with self._db._lock, self._db.conn:
             for contributor_id, outcome in per_contributor:
                 profitable_val = 1 if outcome > 0 else 0
-                cur = self._db.conn.execute(
+                cur = self._db.execute(
                     """
                     UPDATE contributor_signals
                     SET profitable = ?

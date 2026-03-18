@@ -54,7 +54,12 @@ def _open_position(db: Database, position_id: str, entry_price: float = 50000.0,
 
 
 def test_ks1_three_consecutive_losses_triggers_defensive(temp_dir: Path, test_config: Config) -> None:
-    db, ks, oms, pnl, pf = _make_stack(temp_dir, test_config)
+    # Disable the paper-mode loss-gate bypass so that KS-1 still fires in this test.
+    # (paper_ignore_consecutive_loss_gate=True is the new default for paper mode but
+    # intentionally bypasses the kill-switch escalation — this test verifies the
+    # underlying escalation path when the bypass is disabled.)
+    live_config = test_config.model_copy(update={"execution": test_config.execution.model_copy(update={"paper_ignore_consecutive_loss_gate": False})})
+    db, ks, oms, pnl, pf = _make_stack(temp_dir, live_config)
 
     for i in range(3):
         pid = f"loss-{i}"
