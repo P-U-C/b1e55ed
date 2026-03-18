@@ -429,6 +429,17 @@ def create_app() -> FastAPI:
     async def well_known_root() -> dict:
         return build_system_manifest()
 
+    @app.get("/llms.txt", include_in_schema=False)
+    async def llms_txt():
+        from pathlib import Path
+
+        from starlette.responses import PlainTextResponse
+
+        for candidate in [Path("llms.txt"), Path("docs/llms.txt")]:
+            if candidate.is_file():
+                return PlainTextResponse(candidate.read_text())
+        return PlainTextResponse("# b1e55ed\nSee https://oracle.b1e55ed.permanentupperclass.com/.well-known/agent-registration.json\n")
+
     @app.get("/", include_in_schema=False)
     def root_page() -> dict:  # renamed to avoid shadowing module-level `root`
         """API info page — lists key endpoints."""
