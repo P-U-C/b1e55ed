@@ -8,6 +8,7 @@ from api.routes import (
     benchmarks,
     brain,
     capabilities,
+    chain,
     cockpit,
     config,
     contributors,
@@ -18,6 +19,7 @@ from api.routes import (
     mcp,
     metrics,
     oracle,
+    outcomes,
     positions,
     producers,
     producers_feedback,
@@ -57,6 +59,15 @@ def get_api_router() -> APIRouter:
     router.include_router(trace.router, tags=["trace"])
     router.include_router(spi.router, tags=["spi"])
     router.include_router(spi_admin.router, tags=["spi-admin"])
+
+    # ERC-8004 chain registration status
+    router.include_router(chain.router, tags=["chain"])
+
+    # ERC-8004 agent manifests
+    router.include_router(agents.router, tags=["agents"])
+
+    # ERC-8004 E2: outcome provenance endpoint (fileURI target)
+    router.include_router(outcomes.router, tags=["outcomes"])
 
     # Oracle: public-facing provenance endpoint (no auth dependency)
     router.include_router(oracle.router, prefix="/oracle", tags=["oracle"])

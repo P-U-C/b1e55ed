@@ -512,6 +512,18 @@ b1e55ed prune [--dry-run]
 
 ---
 
+### `b1e55ed register`
+
+Register this node on the ERC-8004 Identity Registry. Mints an agent NFT
+linking the oracle to its on-chain identity. Requires `onchain.enabled: true`
+and a funded wallet configured in `onchain.private_key`.
+
+```bash
+b1e55ed register [--json]
+```
+
+---
+
 ### `b1e55ed reconcile`
 
 Backfill missing execution provenance events. Safe to run multiple times.

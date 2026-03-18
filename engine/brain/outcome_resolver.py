@@ -15,6 +15,10 @@ import logging
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.brain.karma_chain import KarmaChainWriter
 
 try:
     from datetime import UTC  # py311+
@@ -95,8 +99,10 @@ def _binance_symbol(asset: str) -> str:
 
 
 class OutcomeResolver:
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, karma_chain_writer: KarmaChainWriter | None = None):
+
         self.db = db
+        self.karma_chain_writer: KarmaChainWriter | None = karma_chain_writer
         self.last_skipped_missing_price = 0
 
     def resolve_pending(self, now: datetime | None = None) -> int:
@@ -142,12 +148,68 @@ class OutcomeResolver:
                         (outcome.forecast_event_id, outcome.resolved_at, outcome_event_id),
                     )
                 resolved += 1
+
+                # ERC-8004 E2: queue karma event for on-chain write
+                self._queue_karma(forecast, outcome)
             except Exception:  # noqa: BLE001
                 logger.exception("outcome_resolver_forecast_failed", extra={"forecast_event_id": forecast_event_id})
                 continue
 
+        # ERC-8004 E2: flush queued karma events to chain after batch resolution
+        self._flush_karma()
+
         self.last_skipped_missing_price = skipped_missing_price
         return resolved
+
+    def _queue_karma(self, forecast: dict, outcome: ForecastOutcomePayload) -> None:
+        """Queue a karma delta for on-chain write. Fail-open."""
+        if self.karma_chain_writer is None:
+            return
+        try:
+            # Karma delta: positive for correct, negative for incorrect
+            karma_delta = 1.0 if outcome.direction_correct else -0.5
+            # Scale by confidence — higher confidence wrong = bigger penalty
+            karma_delta *= outcome.forecast_confidence if outcome.forecast_confidence > 0 else 0.5
+
+            # Look up agent_id from contributors table
+            agent_id = self._lookup_agent_id(str(forecast.get("producer_id", "")))
+            if agent_id is None:
+                logger.debug("_queue_karma: no agent_id for producer %s — skipping", forecast.get("producer_id"))
+                return
+
+            self.karma_chain_writer.queue_karma_event(
+                agent_id=agent_id,
+                karma_delta=karma_delta,
+                forecast_id=outcome.forecast_event_id,
+                producer_node_id=str(forecast.get("producer_id", "")),
+            )
+        except Exception:
+            logger.warning("_queue_karma: failed", exc_info=True)
+
+    def _flush_karma(self) -> None:
+        """Flush queued karma events to chain. Fail-open."""
+        if self.karma_chain_writer is None:
+            return
+        try:
+            tx_hashes = self.karma_chain_writer.flush()
+            if tx_hashes:
+                logger.info("outcome_resolver_karma_flush: %d tx(s) submitted", len(tx_hashes))
+        except Exception:
+            logger.warning("outcome_resolver_karma_flush: failed", exc_info=True)
+
+    def _lookup_agent_id(self, producer_id: str) -> int | None:
+        """Look up on-chain agent_id from contributors table."""
+        try:
+            # Try by node_id first, then by name
+            row = self.db.conn.execute(
+                "SELECT agent_id FROM contributors WHERE node_id = ? OR name = ? LIMIT 1",
+                (producer_id, producer_id),
+            ).fetchone()
+            if row and row["agent_id"] is not None:
+                return int(row["agent_id"])
+        except Exception:
+            logger.debug("_lookup_agent_id: failed for %s", producer_id, exc_info=True)
+        return None
 
     def _find_unresolved(self, before_ts: float) -> list[dict]:
         """Find FORECAST_V1 events not yet in forecast_resolution_state."""
@@ -326,8 +388,8 @@ class OutcomeResolver:
         return str(event.id)
 
 
-def run_resolver(db: Database) -> int:
+def run_resolver(db: Database, karma_chain_writer: KarmaChainWriter | None = None) -> int:
     """Convenience entry point for cron/CLI. Returns count of resolved forecasts."""
 
-    resolver = OutcomeResolver(db)
+    resolver = OutcomeResolver(db, karma_chain_writer=karma_chain_writer)
     return resolver.resolve_pending()

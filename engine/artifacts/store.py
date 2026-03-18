@@ -13,7 +13,7 @@ import mimetypes
 import sqlite3
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 try:
     from datetime import UTC
 except ImportError:  # pragma: no cover
-    UTC = UTC  # noqa: N806
+    from datetime import timezone
+
+    UTC = timezone.utc  # noqa: UP017
 
 
 @dataclass(frozen=True)

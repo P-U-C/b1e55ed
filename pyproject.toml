@@ -30,6 +30,9 @@ eas = [
     "eth-abi>=5.1",
     "eth-typing>=3.5",
 ]
+oracle = [
+    "web3>=6.0",
+]
 
 dev = [
     "pytest>=8.0",

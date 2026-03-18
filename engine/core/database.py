@@ -626,6 +626,24 @@ CREATE TABLE IF NOT EXISTS signal_log (
 );
 CREATE INDEX IF NOT EXISTS idx_signal_log_producer ON signal_log(producer_id);
 CREATE INDEX IF NOT EXISTS idx_signal_log_created ON signal_log(created_at);
+
+-- Karma Chain Queue (ERC-8004 E2 — on-chain reputation writes)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS karma_chain_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL,
+    karma_delta REAL NOT NULL,
+    forecast_id TEXT NOT NULL,
+    producer_node_id TEXT NOT NULL,
+    outcome_json TEXT,
+    status TEXT DEFAULT 'pending',
+    tx_hash TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    submitted_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_karma_chain_queue_status ON karma_chain_queue(status);
+CREATE INDEX IF NOT EXISTS idx_karma_chain_queue_forecast ON karma_chain_queue(forecast_id);
 """
 
 
@@ -752,6 +770,11 @@ class Database:
         with self.conn:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_position ON signal_stratification(position_id)")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_benchmark ON signal_stratification(benchmark_name)")
+        # ERC-8004 E1 — on-chain identity columns
+        self._ensure_column("contributors", "agent_id", "INTEGER")
+        self._ensure_column("contributors", "chain_tx_hash", "TEXT")
+        # ERC-8004 E2 — karma chain queue for on-chain reputation writes
+        self._ensure_table_exists("karma_chain_queue")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(

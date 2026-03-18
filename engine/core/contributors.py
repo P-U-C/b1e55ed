@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,10 +31,18 @@ class Contributor:
 
 
 class ContributorRegistry:
-    def __init__(self, db: Database, *, eas_client: object | None = None, github_publisher: object | None = None):
+    def __init__(
+        self,
+        db: Database,
+        *,
+        eas_client: object | None = None,
+        github_publisher: object | None = None,
+        chain_client: object | None = None,
+    ):
         self._db = db
         self._eas = eas_client
         self._gh_publisher = github_publisher
+        self._chain_client = chain_client
 
     @staticmethod
     def _row_to_contributor(row: sqlite3.Row) -> Contributor:
@@ -150,6 +160,39 @@ class ContributorRegistry:
                 )
         except sqlite3.IntegrityError as e:
             raise ValueError("contributor.duplicate_node") from e
+
+        # ERC-8004 fire-and-forget: mint on-chain identity NFT after DB write.
+        # Runs in a background thread — wait_for_transaction_receipt blocks up to 120s
+        # and must never hold up the HTTP handler that called register().
+        if self._chain_client is not None:
+            _chain_client = self._chain_client
+            _db = self._db
+            _public_base_url: str = getattr(_chain_client, "_public_base_url", "") or ""
+            _manifest_url = (
+                f"{_public_base_url}/api/v1/agents/{node_id}/manifest" if _public_base_url else f"/api/v1/agents/{node_id}/manifest"
+                # NOTE: relative URLs are non-resolvable on-chain; set onchain.public_base_url in config
+                # to ensure a fully-qualified agentURI is minted.
+            )
+            _log = logging.getLogger("b1e55ed.contributors")
+
+            def _mint_onchain() -> None:  # noqa: WPS430
+                try:
+                    agent_id = _chain_client.register_producer(_manifest_url)  # type: ignore[attr-defined]
+                    if agent_id is not None:
+                        with _db.conn:
+                            _db.conn.execute(
+                                "UPDATE contributors SET agent_id = ? WHERE id = ?",
+                                (agent_id, contributor_id),
+                            )
+                        _log.info("ERC-8004 chain registration succeeded for %s — agentId=%d", node_id, agent_id)
+                except Exception:
+                    _log.warning(
+                        "ERC-8004 chain registration failed for %s — continuing without on-chain identity",
+                        node_id,
+                        exc_info=True,
+                    )
+
+            threading.Thread(target=_mint_onchain, daemon=True, name=f"erc8004-mint-{node_id[:8]}").start()
 
         return Contributor(
             id=contributor_id,

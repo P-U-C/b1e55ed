@@ -7,7 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import UTC, datetime
+
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+
+    UTC = timezone.utc  # noqa: UP017
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field

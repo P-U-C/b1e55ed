@@ -513,6 +513,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Print system status")
 
+    p_register = sub.add_parser("register", help="Register this node on-chain (ERC-8004)")
+    p_register.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     sub.add_parser("wizard", help="Interactive setup wizard for new contributors")
 
     # -- spi --
@@ -2774,6 +2777,75 @@ def _cmd_daemon(ctx: CliContext, args: argparse.Namespace) -> int:
     return run_daemon(repo_root, config)
 
 
+def _cmd_register(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Register this node on-chain via ERC-8004 identity registry."""
+    from engine.core.config import Config
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    cfg = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    as_json = getattr(args, "json", False)
+
+    # Already registered?
+    if cfg.onchain.system_agent_id != 0:
+        msg = f"Already registered (agentId={cfg.onchain.system_agent_id})"
+        if as_json:
+            print(_json_dumps({"status": "already_registered", "agent_id": cfg.onchain.system_agent_id}))
+        else:
+            print(f"⚠ {msg}")
+        return 1
+
+    # Chain configured?
+    if not cfg.onchain.enabled or not cfg.onchain.identity_registry_address:
+        msg = "identity_registry_address not set in config — enable onchain and set the registry address first"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    # Build agent URI
+    agent_uri = cfg.onchain.public_base_url.rstrip("/") + "/.well-known/agent-registration.json"
+    if not cfg.onchain.public_base_url:
+        agent_uri = f"b1e55ed://{cfg.onchain.network}/node"
+
+    # Register
+    from engine.oracle.chain import ChainClient
+
+    client = ChainClient(
+        rpc_url=cfg.onchain.rpc_url,
+        private_key=cfg.onchain.private_key.get_secret_value(),
+        identity_registry_address=cfg.onchain.identity_registry_address,
+        public_base_url=cfg.onchain.public_base_url,
+    )
+
+    if not client.enabled:
+        msg = "Chain client failed to initialise — check rpc_url and private_key"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    agent_id = client.register_producer(agent_uri)
+    if agent_id is None:
+        msg = "Registration transaction failed — check logs for details"
+        if as_json:
+            print(_json_dumps({"status": "error", "message": msg}))
+        else:
+            print(f"error: {msg}")
+        return 1
+
+    if as_json:
+        print(_json_dumps({"status": "ok", "agent_id": agent_id, "agent_uri": agent_uri}))
+    else:
+        print(f"✅ Registered on-chain — agentId={agent_id}")
+        print(f"   agentURI: {agent_uri}")
+        print(f"   Update config: onchain.system_agent_id = {agent_id}")
+
+    return 0
+
+
 def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
     import time
 
@@ -2827,6 +2899,29 @@ def _cmd_status(ctx: CliContext, args: argparse.Namespace) -> int:
 
     health = "blessed" if cfg.exists() else "degraded"
     print(f"- system health: {health}")
+
+    # --- Karma registration gate check ---
+    try:
+        from engine.core.config import Config as _CfgReg
+        from engine.core.database import Database
+
+        _cfg_reg = _CfgReg.from_yaml(cfg) if cfg.exists() else None
+        if _cfg_reg and db_path.exists():
+            _db = Database(db_path)
+            row = _db.execute("SELECT COALESCE(SUM(karma_amount_usd), 0) FROM karma_intents").fetchone()
+            total_karma = float(row[0]) if row else 0.0
+            threshold = _cfg_reg.karma.registration_threshold
+            chain_configured = bool(_cfg_reg.onchain.enabled and _cfg_reg.onchain.identity_registry_address)
+            unregistered = _cfg_reg.onchain.system_agent_id == 0
+
+            if total_karma >= threshold and unregistered and chain_configured:
+                is_agent = bool(_cfg_reg.onchain.public_base_url)
+                if is_agent:
+                    print(f"  ⚠ Agent node has {total_karma:.1f} karma — auto-registration recommended")
+                else:
+                    print(f"  ⚠ You have {total_karma:.1f} karma — run 'b1e55ed register' to claim it on-chain")
+    except Exception:  # noqa: BLE001
+        pass  # Best-effort — don't break status on karma check failure
 
     return 0
 
@@ -3958,6 +4053,7 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard": _cmd_dashboard,
         "daemon": _cmd_daemon,
         "status": _cmd_status,
+        "register": _cmd_register,
         "replay": _cmd_replay,
         "integrity": _cmd_integrity,
         "verify-chain": _cmd_verify_chain,

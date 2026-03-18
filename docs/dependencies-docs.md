@@ -762,3 +762,10 @@ docs/producer-intelligence.md (standalone — intelligence layer, signal synthes
 - docs/producers/reference.mdx
 - docs/architecture.md
 - docs/learning-loop.md
+
+## ERC-8004 / Synthesis architecture plans (docs/architecture/)
+```text
+docs/architecture/ERC8004_PLAN.md (standalone — on-chain integration plan, no internal deps)
+docs/architecture/X402_PLAN.md (standalone — x402 payment roadmap, no internal deps)
+docs/architecture/SYNTHESIS_APPLICATION.md (standalone — Synthesis hackathon submission draft, no internal deps)
+```

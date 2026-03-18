@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 from engine.core.exceptions import ConfigError
@@ -198,6 +198,7 @@ class KarmaConfig(BaseModel):
     settlement_mode: Literal["manual", "daily", "weekly", "threshold"] = "manual"
     threshold_usd: float = 50.0
     treasury_address: str = ""
+    registration_threshold: float = 10.0  # karma units before prompting on-chain registration
 
 
 class DaemonConfig(BaseModel):
@@ -428,13 +429,28 @@ class MCPConfig(BaseModel):
     api_keys: list[str] = Field(default_factory=list)
 
 
+class OnChainConfig(BaseModel):
+    """ERC-8004 on-chain identity & reputation layer."""
+
+    enabled: bool = False
+    rpc_url: str = ""
+    private_key: SecretStr = SecretStr("")  # Never logged — use .get_secret_value() when passing to ChainClient
+    network: str = "base-sepolia"
+    public_base_url: str = ""  # Fully-qualified external URL (e.g. https://b1e55ed.xyz) for on-chain agentURI minting
+    identity_registry_address: str = ""
+    reputation_registry_address: str = ""
+    validation_registry_address: str = ""
+    # Our ERC-8004 tokenId — 0 until the oracle registers on-chain
+    system_agent_id: int = 0
+
+
 class EASConfig(BaseModel):
     enabled: bool = True  # off-chain attestations work without rpc_url; on-chain needs rpc_url
     rpc_url: str = "https://eth.llamarpc.com"  # Free public RPC
     eas_contract: str = "0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587"
     schema_registry: str = "0xA7b39296258348C78294F95B872b282326A97BDF"
     schema_uid: str = ""  # Set after schema registration
-    attester_private_key: str = ""  # Private key for signing attestations
+    attester_private_key: SecretStr = SecretStr("")  # Never logged — use .get_secret_value() when passing to EAS client
     mode: Literal["onchain", "offchain"] = "offchain"
 
 
@@ -478,6 +494,7 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    onchain: OnChainConfig = Field(default_factory=OnChainConfig)
     eas: EASConfig = Field(default_factory=EASConfig)
     publish: PublishConfig = Field(default_factory=PublishConfig)
     github_publish: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
