@@ -79,6 +79,9 @@ _CRYPTO_SYMBOLS: dict[str, str] = {
 }
 
 
+# Black-Scholes (1973): d2 = [ln(S/K) - ½σ²t] / (σ√t) gives risk-neutral P(S_T > K).
+# Fischer Black died in 1995. The Nobel went to Scholes and Merton in 1997.
+# His formula survives here — four lines, no scipy, stdlib only.
 def _norm_cdf(x: float) -> float:
     """Standard normal CDF — implemented via math.erfc (no scipy required)."""
     return 0.5 * math.erfc(-x / math.sqrt(2))
@@ -410,6 +413,9 @@ class PolymarketProducer(BaseProducer):
         d2 = (math.log(spot / strike) - 0.5 * sigma**2 * t) / (sigma * math.sqrt(t))
         return _norm_cdf(d2)
 
+    # Goodhart's Law: when the measure becomes the target, it ceases to be a good measure.
+    # The old _estimate_p_true derived p_true from mid_price — so EV was always ≈ 0.
+    # This dispatcher breaks the loop: GBM, near-resolution, spread — all independent.
     def _estimate_p_true(
         self,
         *,

@@ -20,6 +20,26 @@
       "placement": "module_docstring",
       "pr_number": 450,
       "applied_at": "2026-03-17T23:35:15Z"
+    },
+    {
+      "id": "egg_65fc9911",
+      "file": "engine/producers/polymarket.py",
+      "anchor": "def _norm_cdf(x: float) -> float:",
+      "tradition": "black-scholes",
+      "content": "# Black-Scholes (1973): d2 = [ln(S/K) - ½σ²t] / (σ√t) gives risk-neutral P(S_T > K).\n# Fischer Black died in 1995. The Nobel went to Scholes and Merton in 1997.\n# His formula survives here — four lines, no scipy, stdlib only.",
+      "placement": "before_function",
+      "pr_number": 452,
+      "applied_at": "2026-03-18T11:25:46Z"
+    },
+    {
+      "id": "egg_55355c17",
+      "file": "engine/producers/polymarket.py",
+      "anchor": "def _estimate_p_true(",
+      "tradition": "goodharts-law",
+      "content": "# Goodhart's Law: when the measure becomes the target, it ceases to be a good measure.\n# The old _estimate_p_true derived p_true from mid_price — so EV was always ≈ 0.\n# This dispatcher breaks the loop: GBM, near-resolution, spread — all independent.",
+      "placement": "before_function",
+      "pr_number": 452,
+      "applied_at": "2026-03-18T11:25:46Z"
     }
   ]
 }
