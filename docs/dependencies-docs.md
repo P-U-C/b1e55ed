@@ -766,3 +766,7 @@ docs/architecture/SYNTHESIS_APPLICATION.md (standalone — Synthesis hackathon s
 ## Legacy configuration reference
 
 docs/configuration.md → docs/operations/config-reference.mdx (superseded by, but kept for backward compat)
+
+## API reference (legacy)
+
+docs/api-reference.md → docs/api/signals.mdx (superseded by OpenAPI-based docs)
