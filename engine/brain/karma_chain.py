@@ -12,7 +12,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime
+
+    UTC = UTC
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

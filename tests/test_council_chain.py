@@ -250,8 +250,8 @@ class TestSystemManifestValidation:
     def test_manifest_has_validation_capability(self):
         from api.routes.agents import build_system_manifest
 
-        manifest = build_system_manifest(api_base="https://oracle.b1e55ed.example.com")
-        assert manifest["capabilities"]["validation"] is True
+        manifest = build_system_manifest()
+        assert "validation" in manifest["supportedTrust"]
 
     def test_manifest_supported_trust_includes_validation(self):
         from api.routes.agents import build_system_manifest

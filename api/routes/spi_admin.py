@@ -7,7 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import UTC, datetime
+
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime
+
+    UTC = UTC
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
