@@ -11,9 +11,9 @@ import secrets
 try:
     from datetime import UTC, datetime
 except ImportError:
-    from datetime import datetime
+    from datetime import datetime, timezone
 
-    UTC = UTC
+    UTC = timezone.utc  # noqa: UP017
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
