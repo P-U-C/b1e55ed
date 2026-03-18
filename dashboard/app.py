@@ -308,6 +308,69 @@ def _shell(request: Request, active_page: str, *, kill_switch_level: int = 0, re
     }
 
 
+def _producer_is_registered(producer: dict[str, Any]) -> bool:
+    """Best-effort registration check for producer status entries."""
+    if "registered" in producer:
+        return bool(producer.get("registered"))
+    if "is_registered" in producer:
+        return bool(producer.get("is_registered"))
+
+    if producer.get("registered_at") or producer.get("updated_at"):
+        return True
+    if producer.get("endpoint") or producer.get("schedule"):
+        return True
+    if producer.get("last_run_at") or producer.get("last_success_at") or producer.get("last_error"):
+        return True
+    if producer.get("healthy") in {True, False}:
+        return True
+
+    with contextlib.suppress(Exception):
+        if int(producer.get("consecutive_failures") or 0) > 0:
+            return True
+    with contextlib.suppress(Exception):
+        if int(producer.get("events_produced") or producer.get("event_count") or 0) > 0:
+            return True
+
+    return False
+
+
+def _producer_is_disabled(producer: dict[str, Any]) -> bool:
+    if "disabled" in producer:
+        return bool(producer.get("disabled"))
+    if "is_disabled" in producer:
+        return bool(producer.get("is_disabled"))
+
+    enabled = producer.get("enabled")
+    if enabled is not None:
+        return not bool(enabled)
+
+    status = str(producer.get("status") or producer.get("lifecycle_state") or "").strip().lower()
+    return status in {"disabled", "inactive"}
+
+
+def _active_producer_items(producers_map: Any) -> list[tuple[str, dict[str, Any]]]:
+    if not isinstance(producers_map, dict):
+        return []
+
+    active: list[tuple[str, dict[str, Any]]] = []
+    for name, raw in producers_map.items():
+        if not isinstance(raw, dict):
+            continue
+        if not _producer_is_registered(raw):
+            continue
+        if _producer_is_disabled(raw):
+            continue
+        active.append((str(name), raw))
+
+    return active
+
+
+def _producer_health_counts(producers_map: Any) -> tuple[int, int]:
+    active_producers = _active_producer_items(producers_map)
+    healthy = sum(1 for _, producer in active_producers if producer.get("healthy") is True)
+    return healthy, len(active_producers)
+
+
 def _fetch_live_price_fallback(sym: str) -> float:
     """Fetch live price for *sym* from Binance (then CoinGecko) with a 60-s cache.
 
@@ -1156,13 +1219,8 @@ def brain_overview(request: Request) -> HTMLResponse:
     total_signals = sig_res.data.get("total") if (sig_res.ok and isinstance(sig_res.data, dict)) else None
 
     prod_res = client.get_producers_status()
-    producers = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
-    producers_total = len(producers) if isinstance(producers, dict) else 0
-    producers_healthy = 0
-    if isinstance(producers, dict):
-        for v in producers.values():
-            if isinstance(v, dict) and v.get("healthy") is True:
-                producers_healthy += 1
+    producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+    producers_healthy, producers_total = _producer_health_counts(producers_map)
 
     cycle_age = "never"
     cycle_age_min = 10**9
@@ -1232,6 +1290,18 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
     else:
         positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
 
+    pnl_values: list[float] = []
+    for p in positions:
+        with contextlib.suppress(Exception):
+            pnl_values.append(float(p.get("pnl_usd") or 0.0))
+
+    net_pnl = sum(pnl_values)
+    gross_profit = sum(v for v in pnl_values if v > 0)
+    gross_loss = abs(sum(v for v in pnl_values if v < 0))
+    winners = sum(1 for v in pnl_values if v > 0)
+    total_with_pnl = sum(1 for v in pnl_values if v != 0)
+    win_rate = (winners / total_with_pnl * 100) if total_with_pnl > 0 else 0
+
     return templates.TemplateResponse(
         request=request,
         name="positions.html",
@@ -1239,6 +1309,10 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
             **_shell(request, "positions"),
             "view": view,
             "positions": positions,
+            "net_pnl": net_pnl,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+            "win_rate": win_rate,
         },
     )
 
@@ -2138,34 +2212,31 @@ def settings_page(request: Request) -> HTMLResponse:
     # System data (merged from /system page)
     prod_res = client.get_producers_status()
     producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+    active_producers = _active_producer_items(producers_map)
 
     producers: list[dict[str, Any]] = []
-    producers_healthy = 0
-    if isinstance(producers_map, dict):
-        for name, v in producers_map.items():
-            if not isinstance(v, dict):
-                continue
-            healthy = v.get("healthy")
-            health = "ok" if healthy is True else ("error" if healthy is False else "degraded")
-            if healthy is True:
-                producers_healthy += 1
+    producers_healthy = sum(1 for _, v in active_producers if v.get("healthy") is True)
+    producers_total = len(active_producers)
+    for name, v in active_producers:
+        healthy = v.get("healthy")
+        health = "ok" if healthy is True else ("error" if healthy is False else "degraded")
 
-            last_run = "—"
-            if isinstance(v.get("last_run_at"), str):
-                try:
-                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
-                    last_run, _ = _age_str(dt)
-                except Exception:
-                    last_run = "—"
+        last_run = "—"
+        if isinstance(v.get("last_run_at"), str):
+            try:
+                dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
+                last_run, _ = _age_str(dt)
+            except Exception:
+                last_run = "—"
 
-            producers.append(
-                {
-                    "name": str(name),
-                    "domain": v.get("domain") or "—",
-                    "health": health,
-                    "last_run": last_run,
-                }
-            )
+        producers.append(
+            {
+                "name": str(name),
+                "domain": v.get("domain") or "—",
+                "health": health,
+                "last_run": last_run,
+            }
+        )
 
     ks_res = client.get_kill_switch()
     ks_level = 0
@@ -2211,7 +2282,7 @@ def settings_page(request: Request) -> HTMLResponse:
             # System page data
             "producers": producers,
             "producers_healthy": producers_healthy,
-            "producers_total": len(producers),
+            "producers_total": producers_total,
             "kill_switch_level": ks_level,
             "kill_switch_label": label,
             "kill_switch_last_change": kill_last_change,
@@ -2785,19 +2856,15 @@ def vitals_bar_partial(request: Request) -> HTMLResponse:
                         last_signal_age = f"{int(age_s / 3600)}h"
                 except Exception:
                     pass
-            try:
-                tables_here = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-                if "signals" in tables_here:
-                    r = conn.execute("SELECT COUNT(DISTINCT producer_id) FROM signals WHERE ts > datetime('now','-1 hour')").fetchone()
-                else:
-                    # Fallback: count active sources from events table
-                    r = conn.execute("SELECT COUNT(DISTINCT source) FROM events WHERE type LIKE 'signal.%' AND ts > datetime('now','-1 hour')").fetchone()
-                producer_count = r[0] if r else 0
-            except Exception:
-                pass
             conn.close()
         except Exception:
             pass
+
+    client = _api(request)
+    prod_res = client.get_producers_status()
+    producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+    _, producer_count = _producer_health_counts(producers_map)
+
     try:
         from engine.core.config import Config
         from engine.core.paths import config_dir as _config_dir
@@ -2882,13 +2949,8 @@ def system_status_partial(request: Request) -> HTMLResponse:
                 pass
 
     prod_res = client.get_producers_status()
-    producers = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
-    producers_total = len(producers) if isinstance(producers, dict) else 0
-    producers_healthy = 0
-    if isinstance(producers, dict):
-        for v in producers.values():
-            if isinstance(v, dict) and v.get("healthy") is True:
-                producers_healthy += 1
+    producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+    producers_healthy, producers_total = _producer_health_counts(producers_map)
 
     treasury_res = client.get_karma_summary()
     karma_pending = "$0"
@@ -2920,6 +2982,9 @@ def producers_partial(request: Request) -> HTMLResponse:
     client = _api(request)
     prod_res = client.get_producers_status()
     producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
+    active_producers = _active_producer_items(producers_map)
+    producers_healthy = sum(1 for _, v in active_producers if v.get("healthy") is True)
+    producers_total = len(active_producers)
 
     # Collect configurable producer names for "Configure →" links
     _config_producer_names: set[str] = set()
@@ -2935,92 +3000,85 @@ def producers_partial(request: Request) -> HTMLResponse:
         pass
 
     producers: list[dict[str, Any]] = []
-    producers_healthy = 0
-    if isinstance(producers_map, dict):
-        for name, v in producers_map.items():
-            if not isinstance(v, dict):
-                continue
-            healthy = v.get("healthy")
-            consecutive_failures = int(v.get("consecutive_failures") or 0)
-            last_error_raw = v.get("last_error")
-            last_error = str(last_error_raw).strip() if last_error_raw not in (None, "") else None
-            last_error_lc = last_error.lower() if last_error else ""
-            no_source = "no_source_configured" in last_error_lc or "no source configured" in last_error_lc or "not configured" in last_error_lc
-            quarantined_until_raw = v.get("quarantined_until")
-            events_produced = int(v.get("events_produced") or v.get("event_count") or 0)
+    for name, v in active_producers:
+        healthy = v.get("healthy")
+        consecutive_failures = int(v.get("consecutive_failures") or 0)
+        last_error_raw = v.get("last_error")
+        last_error = str(last_error_raw).strip() if last_error_raw not in (None, "") else None
+        last_error_lc = last_error.lower() if last_error else ""
+        no_source = "no_source_configured" in last_error_lc or "no source configured" in last_error_lc or "not configured" in last_error_lc
+        quarantined_until_raw = v.get("quarantined_until")
+        events_produced = int(v.get("events_produced") or v.get("event_count") or 0)
 
-            last_run = "—"
-            last_run_dt: datetime | None = None
-            if isinstance(v.get("last_run_at"), str):
-                try:
-                    dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=UTC)
-                    last_run_dt = dt.astimezone(UTC)
-                    last_run, _ = _age_str(last_run_dt)
-                except Exception:
-                    last_run = "—"
+        last_run = "—"
+        last_run_dt: datetime | None = None
+        if isinstance(v.get("last_run_at"), str):
+            try:
+                dt = datetime.fromisoformat(str(v["last_run_at"]).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                last_run_dt = dt.astimezone(UTC)
+                last_run, _ = _age_str(last_run_dt)
+            except Exception:
+                last_run = "—"
 
-            is_stale = bool(last_run_dt and (datetime.now(tz=UTC) - last_run_dt).total_seconds() > 30 * 60)
-            zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
+        is_stale = bool(last_run_dt and (datetime.now(tz=UTC) - last_run_dt).total_seconds() > 30 * 60)
+        zero_events_warning = bool(last_run_dt and events_produced <= 0 and not last_error and consecutive_failures == 0)
 
-            # Determine status: quarantined > stale > failing > degraded > healthy
-            quarantined_until_fmt: str | None = None
-            is_quarantined = False
-            if quarantined_until_raw:
-                try:
-                    q_str = str(quarantined_until_raw).replace("Z", "+00:00")
-                    q_dt = datetime.fromisoformat(q_str)
-                    if q_dt.tzinfo is None:
-                        q_dt = q_dt.replace(tzinfo=UTC)
-                    if q_dt > datetime.now(tz=UTC):
-                        is_quarantined = True
-                        quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
-                except Exception:
-                    pass
+        # Determine status: quarantined > stale > failing > degraded > healthy
+        quarantined_until_fmt: str | None = None
+        is_quarantined = False
+        if quarantined_until_raw:
+            try:
+                q_str = str(quarantined_until_raw).replace("Z", "+00:00")
+                q_dt = datetime.fromisoformat(q_str)
+                if q_dt.tzinfo is None:
+                    q_dt = q_dt.replace(tzinfo=UTC)
+                if q_dt > datetime.now(tz=UTC):
+                    is_quarantined = True
+                    quarantined_until_fmt = q_dt.strftime("%H:%M UTC")
+            except Exception:
+                pass
 
-            if is_quarantined:
-                status = "quarantined"
-                health = "error"
-            elif is_stale:
-                status = "stale"
-                health = "degraded"
-            elif consecutive_failures > 4:
-                status = "failing"
-                health = "error"
-            elif no_source or consecutive_failures > 0 or last_error or zero_events_warning:
-                status = "degraded"
-                health = "degraded"
-            elif healthy is True or last_run_dt is not None:
-                status = "healthy"
-                health = "ok"
-            elif healthy is False:
-                status = "error"
-                health = "error"
-            else:
-                status = "unknown"
-                health = "degraded"
+        if is_quarantined:
+            status = "quarantined"
+            health = "error"
+        elif is_stale:
+            status = "stale"
+            health = "degraded"
+        elif consecutive_failures > 4:
+            status = "failing"
+            health = "error"
+        elif no_source or consecutive_failures > 0 or last_error or zero_events_warning:
+            status = "degraded"
+            health = "degraded"
+        elif healthy is True or last_run_dt is not None:
+            status = "healthy"
+            health = "ok"
+        elif healthy is False:
+            status = "error"
+            health = "error"
+        else:
+            status = "unknown"
+            health = "degraded"
 
-            if status == "healthy":
-                producers_healthy += 1
-
-            producers.append(
-                {
-                    "name": str(name),
-                    "domain": v.get("domain") or "—",
-                    "health": health,
-                    "last_run": last_run,
-                    "status": status,
-                    "last_error": last_error,
-                    "consecutive_failures": consecutive_failures,
-                    "events_produced": events_produced,
-                    "quarantined_until": quarantined_until_fmt,
-                    "is_stale": is_stale,
-                    "zero_events_warning": zero_events_warning,
-                    "no_source": no_source,
-                    "has_config": name in _config_producer_names,
-                }
-            )
+        producers.append(
+            {
+                "name": str(name),
+                "domain": v.get("domain") or "—",
+                "health": health,
+                "last_run": last_run,
+                "status": status,
+                "last_error": last_error,
+                "consecutive_failures": consecutive_failures,
+                "events_produced": events_produced,
+                "quarantined_until": quarantined_until_fmt,
+                "is_stale": is_stale,
+                "zero_events_warning": zero_events_warning,
+                "no_source": no_source,
+                "has_config": name in _config_producer_names,
+            }
+        )
 
     return templates.TemplateResponse(
         request=request,
@@ -3029,7 +3087,7 @@ def producers_partial(request: Request) -> HTMLResponse:
             "request": request,
             "producers": producers,
             "producers_healthy": producers_healthy,
-            "producers_total": len(producers),
+            "producers_total": producers_total,
         },
     )
 
