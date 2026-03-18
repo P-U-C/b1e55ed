@@ -12,7 +12,7 @@ b1e55ed is a **falsifiable trading intelligence engine** designed to close that 
 
 The benchmark is not beating a market index — it's beating flat/no-trade. The system must prove it earns its execution cost. Four benchmarks run in parallel (naive momentum, equal-weight ensemble, flat/no-trade, discretionary override), and the brain must outperform all four to claim edge. The primary proof metric is confidence stratification: do signals with confidence > 0.65 outperform signals with confidence < 0.45 after fees?
 
-The current implementation (beta.8) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via a directional EMA (α=0.05). All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate (an operational minimum calibrated for the effect sizes we aim to detect). This is deliberate: the system must prove its calibration before it earns trust.
+The current implementation (rc.1) runs 13 domain producers through a 7-layer interpreter stack, resolves outcomes every 30 minutes via Brier score, and updates producer karma via a directional EMA (α=0.05). All adaptive layers default to shadow mode — they observe and log without mutating forecasts. The meta-producer activates only after 500 resolved outcomes accumulate (an operational minimum calibrated for the effect sizes we aim to detect). This is deliberate: the system must prove its calibration before it earns trust.
 
 ---
 
@@ -473,7 +473,7 @@ Both metrics must be healthy. Neither alone is sufficient for elevated synthesis
 
 #### Future Hardening: Sharpness Weighting
 
-*Status: specified, not yet deployed in beta.8*
+*Status: specified, not yet deployed in rc.1*
 
 To prevent Goodhart collapse toward timid forecasts, a sharpness multiplier is under evaluation:
 
@@ -994,7 +994,7 @@ To enable live mode for a shadow layer:
 - Meta-producer (pattern logging, always abstains)
 - Regime-conditional karma (logging, not affecting synthesis)
 
-### 8.2 Implementation Status (beta.8)
+### 8.2 Implementation Status (rc.1)
 
 | Component | Status |
 |-----------|--------|

@@ -1,6 +1,162 @@
 # Changelog
 
-## Unreleased — Flywheel Sprints (S0–S7)
+## [1.0.0-rc.1] — 2026-03-18
+
+Release candidate. The first version where the full loop works end-to-end: agents register permissionlessly, submit trading signals, get scored against real market outcomes, and build on-chain reputation via ERC-8004.
+
+~130 PRs since beta.8 across every layer of the stack.
+
+### Highlights
+
+- **Signal Producer Interface (SPI)** — permissionless agent registration, signal submission, lifecycle state machine with slash conditions, auto-promotion, and CLI onboarding wizard (#424–#427)
+- **ERC-8004 On-Chain Identity** — Identity, Reputation, and Validation registries deployed on Base mainnet; on-chain reputation scores anchored to Ethereum addresses (#356)
+- **Signal Resolution** — daemon automatically scores signals against real market outcomes every 15 minutes; wired into scheduler lifecycle (#459)
+- **Agent Discovery** — `.well-known/agent-registration.json`, `/llms.txt` at API root, MCP server, `CONTRIBUTING.md`, issue templates for autonomous agent onboarding (#456, #457, #460–#461)
+- **Paper Trade Engine** — multi-position per symbol, 72h time-stops, kill switch integration, benchmark comparison on close (#439, #441)
+- **DeerFlow Integration** — signal class taxonomy, artifact store, distribution pipeline, scheduled research triggers, skill pack (#334–#343)
+- **Dashboard Overhaul** — 5 UX sprints: beeswarm signals, conviction gauge, equity curve, forecasts page, vitals bar, Inter font, semantic colors, design tokens (#349–#352)
+
+### Added
+
+**SPI / External Producers**
+- External adapter framework with `post-fiat-signals` reference producer (#424)
+- Producer lifecycle state machine — slash conditions, auto-promotion after performance threshold (#425)
+- `b1e55ed spi` CLI commands + interactive producer onboarding wizard (#426)
+- External producer guide and interface spec (#427)
+- `SPEC_INLINE` support for binary installs — specs travel with the producer (#449)
+- Adaptive forge onboarding with machine estimation (#455)
+- Signal resolution wired to daemon scheduler — 15-min auto-scoring loop (#459)
+
+**ERC-8004 / On-Chain**
+- Identity, Reputation, and Validation registries (Base mainnet) — ERC-8004 compliant on-chain identity for agents and operators (#356)
+
+**Brain / Execution**
+- Runtime universe bundles with dashboard filters and wizard starter packs (#379, #380, #381)
+- Bundle-aware gating for auto trade intents — only trade symbols in active bundles (#380)
+- Paper mode throughput — multi-position per symbol, 72h time-stop, position monitor stop/target evaluation (#439, #441)
+- Benchmark comparison wired into position close flow (#440)
+- Brain cycle auto-scheduler + dashboard signal scoring (#361)
+- yFinance + Twelve Data price feed, TradFi symbols UI in settings (#392)
+- `b1e55ed doctor` + E2E test suites (#353)
+
+**Dashboard**
+- Sprint 2: beeswarm signals, producer cards, conviction gauge, equity curve, sentiment horizons (#349)
+- Sprint 3: forecasts page, calibration view, discretionary signals panel (#350)
+- Sprint 4: Inter font, semantic colors, ghost charts, onboarding flow (#351)
+- Sprint 5: vitals bar, signal drawer, design tokens, font purge, high-contrast, nav consolidation (#352)
+- Live position marks + realtime refresh for signals/positions (#382)
+- v1.0.0-beta.1 versioning scaffolding — CHANGELOG, footer, version API (#345)
+
+**DeerFlow Integration**
+- Signal class taxonomy + composable MCP tools + karma dampening (#335)
+- b1e55ed skill pack for DeerFlow (#336)
+- Artifact store + distribution pipeline + dashboard panel (#337)
+- Harness-agnostic gateway + DeerFlow integration config + operator docs (#338, #341)
+- Scheduled research trigger producer + dashboard integration (#343)
+
+**Deployment / Daemon**
+- Unified process supervisor daemon (`b1e55ed daemon`) (#297)
+- Wizard systemd install with EnvironmentFile + brain cron for autonomous operation (#294, #295)
+- b1e55ing runs inline in CI — never blocks merge, auto-skip housekeeping (#296)
+
+**Config / CLI**
+- `auto_paper_trade_min_magnitude` exposed as documented config item (#431)
+- Inline comments on all config YAML files (#432)
+
+**Docs / Whitepapers**
+- Whitepaper v4 final — falsification test, difficulty-adjusted sharpness, adversarial model (#279, #280)
+- Setup guide — OpenClaw + b1e55ed installation (#277)
+- Full doc pass — restructure nav, wire orphans, remove stubs (#434)
+- Agent discovery — README, CONTRIBUTING, llms.txt, issue templates (#457)
+- Consolidate env templates, remove hardcoded IP, add onboarding guidance (#460)
+- Paper trade banner, ERC-8004 section, agent card in intro (#461)
+
+### Fixed
+
+**Attribution / Karma**
+- Wired `conviction_id` through full position open → close → karma loop (#443–#445)
+- Fixed `source_event_ids` flywheel — query DB for signal attribution instead of relying on payload guard (#403, #407, #409)
+- `ATTRIBUTION_GAP_V1` fallback for missing attribution + TemplateResponse deprecation warnings (#412)
+- Contributor `signal accepted=1` correctly set after brain cycle (#443)
+
+**Dashboard**
+- P&L colors: correct neg=red/pos=green/zero=dim across all views (#428–#430)
+- Live price fallback for positions missing `price_ws` signal (#420)
+- Conviction gauge normalization + signal timeline null-ts scatter fix (#421)
+- Signal timeline: hourly bucketed sampling, 24h window, top-10-per-hour spread (#422, #423)
+- Performance trade history, closed position UX, PnL colors (#390)
+- Signal timeline, producer health, conviction-position conflict (#385)
+- Brain run timeout + bundle delete HTMX target fix (#396)
+- Hide fake settings + fix close refresh + accurate verify message (#406)
+- Nav overflow dropdown + contrast fixes (#360, #362)
+- UX sprints: consolidate pages, merge brain+cockpit, fix empty states, discretionary form (#364, #366)
+- Wire brain controls and make settings actions truthful (#370)
+
+**Brain / Execution**
+- OMS injection in brain scheduler — add preflight and sizer (#388, #389)
+- Short stop-loss/take-profit price math corrected (#383)
+- Short risk levels, HYPE data sources, dedupe tolerance, bearish conviction bias (#384)
+- Live PnL, engine gates, auto-close, signal arrows (#386)
+- Restore auto intents and correct OMS doctor signal; inject OMS into brain run paths (#377, #375)
+- Raw timestamps preserved for timeline plotting (#378)
+- Wire OMS, real mid_price, config repair, conviction_id linkage (#354)
+- Stale conviction scores + TradFi config hot-reload (#394)
+- Stale universe on forecasts page + correct bundle pack symbols (#395)
+
+**Database / Infrastructure**
+- SQLite WAL mode + busy_timeout + created_at/symbol indexes (#401)
+- Single authoritative `get_db_path()` — all surfaces route through config (#414)
+- `INSERT OR IGNORE` on event_dedup to prevent brain-full crash on duplicate keys (#448)
+- Atomic event emission + crash reconciliation (#404)
+- Wire reconcile to daemon startup + CLI + mark placeholder events (#411)
+- Wire prune scheduler — retention now automatic per `prune_interval_seconds` (#417)
+- Brain cycle freshness + kill switch added to health check — degrade on stale (#419)
+- Ungate maintenance/recovery commands from identity requirement (#416)
+- Register reconcile subparser + fix setup repair kill-switch event type (#415)
+
+**Deployment / Daemon**
+- Production install hardening — dashboard auth, Binance 451, learning race (#326)
+- Identity gate double-nesting, config root resolution for uv tool installs (#321–#325)
+- `engine.core.paths` — single source of truth for `~/.b1e55ed` (#323)
+- API reads DB from `data_dir()` not `Path.cwd()/data` (#327)
+- Operator bugs batch: data dir, dashboard routes, status crash, wizard UX (#318, #319)
+- Operator UX improvements + onboarding critical path fixes (#306, #307)
+- Wizard: skip re-registration on 409, stop duplicate GH issues, env vars + systemd (#285–#295)
+
+**Polymarket**
+- Update `WATCHLIST_SLUGS` to active 2026 markets (#446)
+- Independent `p_true` estimation — GBM + near-resolution + spread-anomaly models (#452)
+
+**Other**
+- Yahoo Finance candle feed for equities; graceful degradation on endpoint unavailability (#450)
+- Scoring universe derived from enabled bundles (#442)
+- Data pruning + karma event-sourcing + retention bug fixes (#402, #405)
+- Producer health fallbacks, SQLite thread safety, dashboard UX (#358, #359)
+- Wire producer action buttons: run-now, restart, reset-failures (#357)
+- Social panel refresh and source visibility (#367, #371)
+- API: capabilities and OpenAPI docs aligned with real routes; manifest route schema crash fixed (#369, #373)
+- Producer identity semantics unified (#374)
+- DeerFlow merge fix: restore missing endfor/table close in social.html (#339)
+- Two-poll write-stability check prevents race on artifact ingestion (#342)
+- b1e55ing CI: bless PRs without mutating head SHA; blessing commits must not suppress CI (#291, #376)
+- Full system audits — dashboard rendering, engine pipeline, mock test harness (#391, #393, #397)
+
+### Changed
+
+- Repo sweep — remove internal docs, hardcoded IPs, stale files (#458)
+- Root cleanup — remove DIAGNOSIS.md, update roadmap/skill version, fix stale crons (#435)
+- Move internal specs to `docs/internal/`, remove UX artifacts and superseded .md files (#436)
+- Foundation cleanup — StrEnum dedup, HTMX path normalize, dead code removal (#398–#400)
+- Auto-update dependency graphs (#278, #281, #286)
+- CODEX.md agent quick-reference and `codex-init.sh` baseline script (#453)
+- SPI manifest onboarding pointed to producer flow (#454)
+- MCP docs aligned with current tool contract (#372)
+- DeerFlow integration plan v2 documentation (#334, #340)
+- Consolidate SPI docs into producers section, merge nav groups (#433)
+
+---
+
+## v1.0.0-beta.8 — Flywheel Sprints (S0–S7)
 
 ### Highlights
 
