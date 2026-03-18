@@ -1,7 +1,7 @@
 name: post-fiat-signals
 version: "1.0.0"
 domain: tradfi
-base_url: "${POST_FIAT_SIGNALS_URL:-http://84.32.34.46:8080}"
+base_url: "${POST_FIAT_SIGNALS_URL}"
 poll_interval_sec: 60
 min_confidence: 0.55
 stale_threshold_sec: 300
