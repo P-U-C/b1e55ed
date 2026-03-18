@@ -22,7 +22,7 @@ try:
 
     __version__ = _pkg_version("b1e55ed")
 except Exception:
-    __version__ = "1.0.0-beta.8"  # fallback when running from source without install
+    __version__ = "1.0.0rc1"  # fallback when running from source without install
 
 # 0xb1e55ed = "blessed"
 BLESSED_HEX = 0xB1E55ED

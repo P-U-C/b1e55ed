@@ -242,14 +242,14 @@ The system does not guarantee:
 
 b1e55ed is in beta.
 
-Version: 1.0.0-beta.8
+Version: 1.0.0-rc.1
 
 ### Implementation Status
 
 | Component | Status |
 |-----------|--------|
-| Forecast emission, Brier scoring, outcome resolution | ✅ Implemented — beta.8 |
-| Karma EMA attribution | ✅ Implemented — beta.8 |
+| Forecast emission, Brier scoring, outcome resolution | ✅ Implemented — rc.1 |
+| Karma EMA attribution | ✅ Implemented — rc.1 |
 | LLM critic, regime matrix, prosecutor | ✅ Deployed — shadow mode only |
 | Cross-producer novelty penalty (P4.3) | ✅ Deployed — shadow mode only |
 | Meta-producer | ✅ Deployed — activates at 500 outcomes |

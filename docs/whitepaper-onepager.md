@@ -59,7 +59,7 @@ Beat all four. Same fees. Same slippage. Same data. Or no edge claim.
 
 ## Current Status
 
-b1e55ed v1.0.0-beta.8 is in data accumulation. Forecasts are being emitted, attributed, and scored. The meta-producer activates at 500 resolved outcomes (~3–4 weeks with 13 producers across BTC, ETH, SOL).
+b1e55ed v1.0.0-rc.1 is in data accumulation. Forecasts are being emitted, attributed, and scored. The meta-producer activates at 500 resolved outcomes (~3–4 weeks with 13 producers across BTC, ETH, SOL).
 
 What is live: forecast emission, Brier scoring, karma attribution, outcome resolution, oracle.
 
