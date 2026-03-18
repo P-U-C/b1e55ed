@@ -544,6 +544,18 @@ b1e55ed resolve-outcomes [--dry-run]
 
 ---
 
+### `b1e55ed resolve-spi`
+
+Resolve expired SPI signals against real market outcomes. Updates producer karma.
+
+```bash
+b1e55ed resolve-spi [--json]
+```
+
+Automatically run by the daemon every 30 minutes via `resolve-outcomes`. Use this command to trigger SPI resolution manually.
+
+---
+
 ### `b1e55ed spi`
 
 SPI signal producer management (register, status, promote, test-key).
