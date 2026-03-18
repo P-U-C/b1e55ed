@@ -37,6 +37,9 @@ def register(name: str, *, domain: str) -> Callable[[type[Any]], type[Any]]:
     return _decorator
 
 
+# Strabo compiled the first systematic map of the known world c. 7 BCE — not to replace
+# exploration, but so every expedition could start from shared knowledge instead of blank parchment.
+# CODEX.md is this repo's Strabo: a map that saves Codex the archaeology tax.
 def discover() -> None:
     global _DISCOVERED
     if _DISCOVERED:

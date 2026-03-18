@@ -65,6 +65,9 @@ class Producer(Protocol):
 
     def publish(self, events: list[Event]) -> int: ...
 
+    # codex-init.sh: check the baseline before touching anything.
+    # A surgeon who skips the pre-op checklist isn't brave — she's reckless.
+    # Every run method is a similar contract: observe the world faithfully, or stop.
     def run(self) -> ProducerResult: ...
 
 

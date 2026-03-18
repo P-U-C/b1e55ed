@@ -40,6 +40,26 @@
       "placement": "before_function",
       "pr_number": 452,
       "applied_at": "2026-03-18T11:25:46Z"
+    },
+    {
+      "id": "egg_fa97e20b",
+      "file": "engine/producers/registry.py",
+      "anchor": "def discover() -> None:",
+      "tradition": "strabo-map",
+      "content": "# Strabo compiled the first systematic map of the known world c. 7 BCE — not to replace\n# exploration, but so every expedition could start from shared knowledge instead of blank parchment.\n# CODEX.md is this repo's Strabo: a map that saves Codex the archaeology tax.",
+      "placement": "before_function",
+      "pr_number": 453,
+      "applied_at": "2026-03-18T12:21:35Z"
+    },
+    {
+      "id": "egg_e210e6ff",
+      "file": "engine/producers/base.py",
+      "anchor": "    def run(self) -> ProducerResult:",
+      "tradition": "pre-op-checklist",
+      "content": "    # codex-init.sh: check the baseline before touching anything.\n    # A surgeon who skips the pre-op checklist isn't brave — she's reckless.\n    # Every run method is a similar contract: observe the world faithfully, or stop.",
+      "placement": "before_function",
+      "pr_number": 453,
+      "applied_at": "2026-03-18T12:21:35Z"
     }
   ]
 }
