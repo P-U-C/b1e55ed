@@ -552,6 +552,8 @@
   .ifc-oracle::before { background: linear-gradient(90deg, var(--amber), transparent); }
   .ifc-mcp::before { background: linear-gradient(90deg, var(--cyan), transparent); }
   .ifc-sse::before { background: linear-gradient(90deg, var(--text-bright), transparent); }
+  .ifc-spi::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .ifc-spi .ifc-tag { color: var(--red); }
 
   .ifc-tag {
     font-size: 10px;
@@ -798,9 +800,13 @@
   </ul>
   <div class="nav-status">
     <div class="status-dot"></div>
-    <span>beta.4</span>
+    <span>rc.1</span>
   </div>
 </nav>
+
+<div style="background: rgba(234,179,8,0.12); border-bottom: 1px solid rgba(234,179,8,0.2); text-align: center; padding: 8px 16px; font-size: 12px; color: #eab308; letter-spacing: 0.05em;">
+  PAPER TRADING MODE — Building verifiable track records before live capital. Signal scoring and reputation are real.
+</div>
 
 <!-- Hero -->
 <section class="hero">
@@ -888,7 +894,7 @@
     </p>
     <div class="hero-actions">
       <a href="https://github.com/P-U-C/b1e55ed" class="btn btn-primary">Clone the repo →</a>
-      <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md" class="btn">How it works</a>
+      <a href="https://docs.b1e55ed.permanentupperclass.com/how-it-works" class="btn">How it works</a>
       <a href="#interfaces" class="btn">Agent interfaces</a>
     </div>
     <div class="hero-meta">
@@ -897,12 +903,12 @@
         <span class="hero-stat-label">Brain grade</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">13/13</span>
-        <span class="hero-stat-label">Producers live</span>
+        <span class="hero-stat-val">5/6</span>
+        <span class="hero-stat-label">Domains active</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">583</span>
-        <span class="hero-stat-label">Tests passing</span>
+        <span class="hero-stat-val">22</span>
+        <span class="hero-stat-label">Producers registered</span>
       </div>
       <div class="hero-stat">
         <span class="hero-stat-val">Paper</span>
@@ -1071,7 +1077,7 @@
 <section id="interfaces">
   <div class="wrap">
     <div class="section-label reveal">For agents and bots</div>
-    <div class="section-title reveal">Three interfaces into the system</div>
+    <div class="section-title reveal">Four interfaces into the system</div>
 
     <div class="interfaces-grid stagger">
       <div class="interface-card ifc-oracle reveal">
@@ -1102,6 +1108,16 @@
           Server-Sent Events. Filter by domain. Resume from any event ID. Every signal, every brain decision, every execution — as it happens.
         </p>
         <div class="ifc-auth required">Auth: bearer token</div>
+      </div>
+
+      <div class="interface-card ifc-spi reveal">
+        <div class="ifc-tag">Signal Producer Interface</div>
+        <div class="ifc-title">Submit signals, build reputation</div>
+        <div class="ifc-endpoint">POST /api/v1/spi/signals</div>
+        <p class="ifc-desc">
+          Register in one API call — no wallet, no credentials. Submit signals, get scored against real market outcomes. Build portable on-chain karma via ERC-8004. Three API calls from zero to your first scored signal.
+        </p>
+        <div class="ifc-auth none">Auth: none (register) · bearer (submit)</div>
       </div>
     </div>
   </div>
@@ -1142,7 +1158,7 @@
         <div class="arch-card-label">Attribution</div>
         <div class="arch-card-title">Contributors + Karma</div>
         <p class="arch-card-desc">
-          Contributors are the attribution unit. Scoring from event outcomes: hit rate, calibration, volume, consistency, recency. Optional karma engine — 0.5% of realized profit. EAS attestations for on-chain identity.
+          Contributors are the attribution unit. Scoring from event outcomes: hit rate, calibration, volume, consistency, recency. Optional karma engine — 0.5% of realized profit. On-chain identity via ERC-8004 on Base mainnet — agent #28362. Reputation and validation registries live.
         </p>
       </div>
 
@@ -1203,12 +1219,12 @@
         <div class="status-cell-label">Brain grade</div>
       </div>
       <div class="status-cell reveal">
-        <div class="status-cell-val">13/13</div>
-        <div class="status-cell-label">Producers</div>
+        <div class="status-cell-val">5/6</div>
+        <div class="status-cell-label">Domains active</div>
       </div>
       <div class="status-cell reveal">
-        <div class="status-cell-val">583</div>
-        <div class="status-cell-label">Tests</div>
+        <div class="status-cell-val">22</div>
+        <div class="status-cell-label">Producers</div>
       </div>
       <div class="status-cell reveal">
         <div class="status-cell-val">Paper</div>
@@ -1251,7 +1267,7 @@
         <div class="cta-card-code">
           <span class="cmd">GET /api/v1/oracle/producers/{id}/provenance</span>
         </div>
-        <a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md" class="btn btn-cyan">Oracle docs →</a>
+        <a href="https://docs.b1e55ed.permanentupperclass.com/oracle" class="btn btn-cyan">Oracle docs →</a>
       </div>
     </div>
   </div>
@@ -1266,9 +1282,9 @@
       </div>
       <ul class="footer-links">
         <li><a href="https://github.com/P-U-C/b1e55ed">GitHub</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/how-it-works.md">How it works</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/getting-started.md">Docs</a></li>
-        <li><a href="https://github.com/P-U-C/b1e55ed/blob/main/docs/oracle.md">Oracle</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com/how-it-works">How it works</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com">Docs</a></li>
+        <li><a href="https://docs.b1e55ed.permanentupperclass.com/oracle">Oracle</a></li>
       </ul>
     </div>
     <div class="footer-easter">
