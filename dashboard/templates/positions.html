@@ -21,16 +21,16 @@
     <div>
       <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Net P&L</span><br>
       <span class="{{ 'text-bull' if net_pnl > 0 else ('text-bear' if net_pnl < 0 else 'text-dim') }}" style="font-size:1.25rem; font-weight:500;">
-        ${{ '%+,.0f' | format(net_pnl) }}
+        ${{ '{:+,.0f}'.format(net_pnl) }}
       </span>
     </div>
     <div>
       <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Gross Profit</span><br>
-      <span class="text-bull" style="font-size:1rem;">${{ '%,.0f' | format(gross_profit) }}</span>
+      <span class="text-bull" style="font-size:1rem;">${{ '{:,.0f}'.format(gross_profit) }}</span>
     </div>
     <div>
       <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Gross Loss</span><br>
-      <span class="text-bear" style="font-size:1rem;">${{ '%,.0f' | format(gross_loss) }}</span>
+      <span class="text-bear" style="font-size:1rem;">${{ '{:,.0f}'.format(gross_loss) }}</span>
     </div>
     <div>
       <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Win Rate</span><br>

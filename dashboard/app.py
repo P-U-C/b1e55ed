@@ -367,7 +367,17 @@ def _active_producer_items(producers_map: Any) -> list[tuple[str, dict[str, Any]
 
 def _producer_health_counts(producers_map: Any) -> tuple[int, int]:
     active_producers = _active_producer_items(producers_map)
-    healthy = sum(1 for _, producer in active_producers if producer.get("healthy") is True)
+    healthy = 0
+    for _, producer in active_producers:
+        if producer.get("healthy") is not True:
+            continue
+        # A producer with no_source_configured is degraded, not healthy
+        last_err = str(producer.get("last_error") or "").lower()
+        if "no_source_configured" in last_err or "no source configured" in last_err or "not configured" in last_err:
+            continue
+        if int(producer.get("consecutive_failures") or 0) > 4:
+            continue
+        healthy += 1
     return healthy, len(active_producers)
 
 
@@ -2983,8 +2993,7 @@ def producers_partial(request: Request) -> HTMLResponse:
     prod_res = client.get_producers_status()
     producers_map = prod_res.data.get("producers") if (prod_res.ok and isinstance(prod_res.data, dict)) else {}
     active_producers = _active_producer_items(producers_map)
-    producers_healthy = sum(1 for _, v in active_producers if v.get("healthy") is True)
-    producers_total = len(active_producers)
+    producers_healthy, producers_total = _producer_health_counts(producers_map)
 
     # Collect configurable producer names for "Configure →" links
     _config_producer_names: set[str] = set()
