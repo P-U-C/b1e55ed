@@ -61,7 +61,7 @@ for doc in "${missing[@]}"; do
   basename=$(basename "$doc")
   name="${basename%.md}"
   # Insert new table row before the *Last updated* line
-  sed -i "s|^\*Last updated.*|\| [$basename]($doc) | Auto-detected — add description |\n\0|" "$DEPS_FILE"
+  sed -i "/^\*Last updated/i \| [$basename]($doc) \| Auto-detected — add description |" "$DEPS_FILE"
 done
 
 # Update the "Last updated" date
