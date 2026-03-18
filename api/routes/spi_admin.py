@@ -15,7 +15,7 @@ except ImportError:
 
     UTC = timezone.utc  # noqa: UP017
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_db
@@ -32,6 +32,14 @@ from engine.spi.slash import check_slash_conditions
 
 router = APIRouter(prefix="/spi", tags=["spi-admin"])
 
+FORGE_EXPECTED_CANDIDATES = 16**7
+FORGE_RUST_RATE_PER_CORE = 5_000_000
+FORGE_PYTHON_RATE = 50_000
+FORGE_REQUIRED = False
+FORGE_GRACE_PERIOD_DAYS = 90
+FORGE_PREFIX = "0xb1e55ed"
+FORGE_MESSAGE = "Every b1e55ed producer eventually needs a 0xb1e55ed vanity address. You can forge one now or later."
+
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -44,9 +52,17 @@ class RegisterProducerRequest(BaseModel):
     ingress_mode: str = Field("native", description='"native" or "adapter"')
 
 
+class ForgeOnboardingInfo(BaseModel):
+    required: bool
+    grace_period_days: int
+    estimate_url: str
+    message: str
+
+
 class RegisterProducerResponse(BaseModel):
     producer_id: str
     api_key: str  # returned ONCE, not stored in plaintext
+    forge: ForgeOnboardingInfo
 
 
 class ActivateProducerResponse(BaseModel):
@@ -89,6 +105,80 @@ class ProducerListItem(BaseModel):
 
 class ProducerListResponse(BaseModel):
     producers: list[ProducerListItem]
+
+
+class ForgeEstimateRequest(BaseModel):
+    cpu_cores: int = Field(4, ge=1)
+    cpu_model: str = ""
+    has_rust: bool = False
+    platform: str = ""
+
+
+class ForgeEstimateResponse(BaseModel):
+    estimated_seconds: int
+    recommendation: str
+    message: str
+    instructions: dict[str, str]
+    forge_required: bool
+    grace_period_days: int
+
+
+class ForgeCompleteRequest(BaseModel):
+    forged_address: str
+    signature: str
+
+
+class ForgeCompleteResponse(BaseModel):
+    producer_id: str
+    forged_address: str
+    verified: bool
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_forge_info(producer_id: str) -> ForgeOnboardingInfo:
+    return ForgeOnboardingInfo(
+        required=FORGE_REQUIRED,
+        grace_period_days=FORGE_GRACE_PERIOD_DAYS,
+        estimate_url=f"/api/v1/spi/producers/{producer_id}/forge-estimate",
+        message=FORGE_MESSAGE,
+    )
+
+
+def _forge_binary_url(platform: str) -> str:
+    platform_normalized = platform.lower()
+    if platform_normalized.startswith("darwin"):
+        return "https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-macos"
+    if platform_normalized.startswith("linux"):
+        return "https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64"
+    return "https://github.com/P-U-C/b1e55ed/releases/latest/download/b1e55ed-forge-linux-x86_64"
+
+
+def _forge_recommendation(estimated_seconds: int) -> tuple[str, str]:
+    if estimated_seconds < 60:
+        return (
+            "forge_now",
+            f"Your machine can forge a 0xb1e55ed address in ~{estimated_seconds}s. We recommend forging now.",
+        )
+
+    if estimated_seconds < 600:
+        return (
+            "forge_background",
+            f"Estimated forge time: ~{estimated_seconds // 60} minutes. You can forge in the background while submitting signals.",
+        )
+
+    return (
+        "forge_later",
+        (
+            f"Estimated forge time: ~{estimated_seconds // 60} minutes. "
+            "You can start submitting signals now and forge later. "
+            "Your address will be mapped to your forged identity when ready."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +271,118 @@ def register_producer(
     return RegisterProducerResponse(
         producer_id=body.producer_id,
         api_key=raw_key,
+        forge=_build_forge_info(body.producer_id),
+    )
+
+
+@router.post(
+    "/producers/{producer_id}/forge-estimate",
+    response_model=ForgeEstimateResponse,
+    summary="Estimate forge runtime and onboarding guidance",
+)
+def forge_estimate(
+    producer_id: str,
+    req: ForgeEstimateRequest = Body(...),
+) -> ForgeEstimateResponse:
+    # 7 hex chars = 16^7 = 268,435,456 expected candidates
+    if req.has_rust:
+        # Rust grinder: ~5M candidates/sec/core (conservative)
+        rate = req.cpu_cores * FORGE_RUST_RATE_PER_CORE
+    else:
+        # Python fallback: ~50K/sec single-threaded
+        rate = FORGE_PYTHON_RATE
+
+    estimated_seconds = int(FORGE_EXPECTED_CANDIDATES / max(rate, 1))
+
+    recommendation, message = _forge_recommendation(estimated_seconds)
+    binary_url = _forge_binary_url(req.platform)
+
+    instructions = {
+        "download": f"curl -Lo b1e55ed-forge {binary_url} && chmod +x b1e55ed-forge",
+        "forge": f"./b1e55ed-forge --prefix b1e55ed --threads {req.cpu_cores} --json",
+        "register_forged": (
+            f"curl -X POST https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers/{producer_id}/forge-complete "
+            "-H 'Content-Type: application/json' "
+            f'-d \'{{"forged_address": "0xb1e55edYOURADDRESS", "signature": "0xYOUR_EIP191_SIGNATURE"}}\''
+        ),
+        "note": "The private key stays on YOUR machine. You only prove ownership by signing a message.",
+    }
+
+    return ForgeEstimateResponse(
+        estimated_seconds=estimated_seconds,
+        recommendation=recommendation,
+        message=message,
+        instructions=instructions,
+        forge_required=FORGE_REQUIRED,
+        grace_period_days=FORGE_GRACE_PERIOD_DAYS,
+    )
+
+
+@router.post(
+    "/producers/{producer_id}/forge-complete",
+    response_model=ForgeCompleteResponse,
+    summary="Link a forged 0xb1e55ed address to a producer",
+)
+def forge_complete(
+    producer_id: str,
+    req: ForgeCompleteRequest = Body(...),
+    db: Database = Depends(get_db),
+) -> ForgeCompleteResponse:
+    _ensure_key_column(db)
+
+    forged_address = req.forged_address.strip()
+    if not forged_address.lower().startswith(FORGE_PREFIX):
+        raise HTTPException(status_code=400, detail="Address must start with 0xb1e55ed")
+
+    producer = db.fetchone(
+        "SELECT producer_id FROM spi_producers WHERE producer_id = ?",
+        (producer_id,),
+    )
+    if producer is None:
+        raise B1e55edError(
+            code="spi.producer_not_found",
+            message=f"Producer '{producer_id}' not found",
+            status=404,
+        )
+
+    message = f"b1e55ed-forge-{producer_id}"
+    verified = True
+
+    try:
+        from eth_account import Account
+        from eth_account.messages import encode_defunct
+
+        msg = encode_defunct(text=message)
+        recovered = Account.recover_message(msg, signature=req.signature)
+        if recovered.lower() != forged_address.lower():
+            raise HTTPException(status_code=400, detail="Signature does not match forged address")
+    except ImportError:
+        # eth_account not available — skip verification for now.
+        verified = False
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Signature verification failed: {exc}") from exc
+
+    now = datetime.now(tz=UTC).isoformat()
+    db.execute(
+        """
+        UPDATE spi_producers
+        SET forged_address = ?, forged_at = ?, updated_at = ?
+        WHERE producer_id = ?
+        """,
+        (forged_address, now, now, producer_id),
+    )
+
+    success_message = "Identity forged. Your 0xb1e55ed address is now linked to your producer account."
+    if not verified:
+        success_message = "Identity linked. Signature verification was skipped because eth_account is unavailable on the server."
+
+    return ForgeCompleteResponse(
+        producer_id=producer_id,
+        forged_address=forged_address,
+        verified=verified,
+        message=success_message,
     )
 
 
