@@ -268,4 +268,7 @@ def _write_outcome(  # noqa: ANN001, PLR0913
         (status, now, now, signal_id),
     )
 
+    # Persist to disk so CLI and other connections can see the resolution.
+    db.conn.commit()
+
     return outcome

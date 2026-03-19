@@ -278,8 +278,10 @@ def accept_signal(
                 "spi_auto_promote_failed",
                 extra={"producer_id": producer_id, "error": str(exc)},
             )
+        db.conn.commit()
         return result
 
+    db.conn.commit()
     return accepted  # fresh insert (shouldn't reach here but safe fallback)
 
 
@@ -386,5 +388,9 @@ def _ensure_tables(db) -> None:  # noqa: ANN001
     ]:
         with contextlib.suppress(Exception):
             db.execute(col_sql)
+
+    # Commit DDL so tables persist to disk and are visible to other connections
+    # (e.g. CLI resolve-spi opening a fresh Database handle).
+    db.conn.commit()
 
     _TABLES_ENSURED.add(db)
