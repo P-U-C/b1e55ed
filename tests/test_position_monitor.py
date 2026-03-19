@@ -11,6 +11,13 @@ Tests:
 6. Time-based stop does NOT trigger when position is not losing > 5%
 7. No close when neither stop nor time-stop condition is met
 8. consecutive_loss_count = 2 does NOT block new trades (kill switch stays SAFE)
+9. Bias-flip close: conviction flips direction for same (symbol, horizon) → close
+10. Bias-flip does NOT trigger when conviction is stale (> 60 min)
+11. Bias-flip does NOT trigger when conviction is same direction
+12. Bias-flip does NOT trigger when conviction is for different horizon
+13. Horizon-expiry close: position open longer than horizon_hours → close
+14. Horizon-expiry does NOT trigger when position is younger than horizon
+15. Horizon-expiry does NOT trigger when horizon_hours is NULL
 """
 
 from __future__ import annotations
@@ -56,6 +63,7 @@ def _insert_position(
     take_profit: float | None = 84.82,
     opened_at: datetime | None = None,
     size_notional: float = 449.0,
+    horizon_hours: float | None = None,
 ) -> str:
     """Insert a fake open position directly and return its ID."""
     import uuid
@@ -67,8 +75,8 @@ def _insert_position(
             """
             INSERT INTO positions
               (id, asset, direction, entry_price, stop_loss, take_profit,
-               size_notional, status, opened_at, platform)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, 'paper')
+               size_notional, status, opened_at, platform, horizon_hours)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, 'paper', ?)
             """,
             (
                 pos_id,
@@ -79,9 +87,33 @@ def _insert_position(
                 take_profit,
                 size_notional,
                 opened_at_iso,
+                horizon_hours,
             ),
         )
     return pos_id
+
+
+def _insert_conviction(
+    db: Database,
+    *,
+    symbol: str = "BTC",
+    direction: str = "short",
+    timeframe: str = "4h",
+    ts: datetime | None = None,
+    magnitude: float = 7.0,
+) -> int:
+    """Insert a conviction_scores row and return its id."""
+    ts_iso = (ts or datetime.now(tz=UTC)).isoformat()
+    with db._lock, db.conn:
+        cursor = db.conn.execute(
+            """
+            INSERT INTO conviction_scores
+              (node_id, symbol, direction, magnitude, timeframe, ts, commitment_hash)
+            VALUES ('test-node', ?, ?, ?, ?, ?, 'test-hash')
+            """,
+            (symbol, direction, magnitude, timeframe, ts_iso),
+        )
+        return cursor.lastrowid
 
 
 def _mark_price_side_effect(price: float):
@@ -303,3 +335,278 @@ class TestConsecutiveLossGate:
         assert ks.level == KillSwitchLevel.SAFE, (
             "Paper mode with paper_ignore_consecutive_loss_gate=True should not escalate kill switch even after 3 consecutive losses"
         )
+
+
+class TestBiasFlipClose:
+    """Bias-flip close: when latest conviction for (symbol, horizon) flips, close."""
+
+    def test_bias_flip_closes_long_when_conviction_flips_short(self, tmp_db: Database, paper_config: Config):
+        """BTC long (4h horizon) open → latest conviction says short (4h) → close."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="long",
+            entry_price=100.0,
+            stop_loss=90.0,
+            take_profit=120.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=2),
+            horizon_hours=4.0,
+        )
+        # Insert a recent conviction that says SHORT for BTC on 4h timeframe
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="short",
+            timeframe="4h",
+            ts=datetime.now(tz=UTC) - timedelta(minutes=10),
+        )
+
+        with _mark_price_side_effect(102.0):  # price doesn't matter for bias flip
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        assert stats["closed_bias_flip"] == 1
+
+    def test_bias_flip_closes_short_when_conviction_flips_long(self, tmp_db: Database, paper_config: Config):
+        """BTC short (4h) open → latest conviction says long (4h) → close."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="short",
+            entry_price=100.0,
+            stop_loss=110.0,
+            take_profit=90.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=1),
+            horizon_hours=4.0,
+        )
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="long",
+            timeframe="4h",
+            ts=datetime.now(tz=UTC) - timedelta(minutes=5),
+        )
+
+        with _mark_price_side_effect(99.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        assert stats["closed_bias_flip"] == 1
+
+    def test_bias_flip_does_not_trigger_on_stale_conviction(self, tmp_db: Database, paper_config: Config):
+        """Conviction > 60 min old should NOT trigger a bias flip close."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="long",
+            entry_price=100.0,
+            stop_loss=90.0,
+            take_profit=120.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=2),
+            horizon_hours=4.0,
+        )
+        # Stale conviction: 2 hours old
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="short",
+            timeframe="4h",
+            ts=datetime.now(tz=UTC) - timedelta(hours=2),
+        )
+
+        with _mark_price_side_effect(102.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open", "Stale conviction should NOT trigger bias flip"
+        assert stats["closed_bias_flip"] == 0
+
+    def test_bias_flip_does_not_trigger_on_same_direction(self, tmp_db: Database, paper_config: Config):
+        """Conviction same direction as position → no flip, stay open."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="long",
+            entry_price=100.0,
+            stop_loss=90.0,
+            take_profit=120.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=1),
+            horizon_hours=4.0,
+        )
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="long",  # same direction
+            timeframe="4h",
+            ts=datetime.now(tz=UTC) - timedelta(minutes=5),
+        )
+
+        with _mark_price_side_effect(102.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open"
+        assert stats["closed_bias_flip"] == 0
+
+    def test_bias_flip_does_not_trigger_on_different_horizon(self, tmp_db: Database, paper_config: Config):
+        """BTC long on 4h horizon, conviction flips on 24h → different view, no close."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="long",
+            entry_price=100.0,
+            stop_loss=90.0,
+            take_profit=120.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=1),
+            horizon_hours=4.0,  # position is 4h
+        )
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="short",
+            timeframe="24h",  # conviction is 24h — different view
+            ts=datetime.now(tz=UTC) - timedelta(minutes=5),
+        )
+
+        with _mark_price_side_effect(102.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open", "Different horizon conviction should NOT trigger bias flip"
+        assert stats["closed_bias_flip"] == 0
+
+    def test_bias_flip_skipped_when_no_horizon(self, tmp_db: Database, paper_config: Config):
+        """Position without horizon_hours set → bias flip check is skipped entirely."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="BTC",
+            direction="long",
+            entry_price=100.0,
+            stop_loss=90.0,
+            take_profit=120.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=1),
+            horizon_hours=None,
+        )
+        _insert_conviction(
+            tmp_db,
+            symbol="BTC",
+            direction="short",
+            timeframe="4h",
+            ts=datetime.now(tz=UTC) - timedelta(minutes=5),
+        )
+
+        with _mark_price_side_effect(102.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open"
+        assert stats["closed_bias_flip"] == 0
+
+
+class TestHorizonExpiryClose:
+    """Horizon-expiry close: position open longer than its horizon_hours → close."""
+
+    def test_horizon_expiry_triggers_when_elapsed(self, tmp_db: Database, paper_config: Config):
+        """Position with horizon_hours=4 open for 5h → should be closed."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="ETH",
+            direction="long",
+            entry_price=3000.0,
+            stop_loss=2800.0,
+            take_profit=3500.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=5),
+            horizon_hours=4.0,
+        )
+
+        with _mark_price_side_effect(3100.0):  # in profit — doesn't matter
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        assert stats["closed_horizon_expiry"] == 1
+
+    def test_horizon_expiry_triggers_at_loss(self, tmp_db: Database, paper_config: Config):
+        """Horizon expiry closes regardless of PnL — even at a loss."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="ETH",
+            direction="long",
+            entry_price=3000.0,
+            stop_loss=2800.0,  # not triggered at 2900
+            take_profit=3500.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=25),
+            horizon_hours=24.0,
+        )
+
+        with _mark_price_side_effect(2900.0):  # at a loss but above stop
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status, realized_pnl FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        assert row["realized_pnl"] < 0, "Should close at a loss — horizon doesn't care about PnL"
+        assert stats["closed_horizon_expiry"] == 1
+
+    def test_horizon_expiry_does_not_trigger_when_young(self, tmp_db: Database, paper_config: Config):
+        """Position younger than horizon_hours → stays open."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="ETH",
+            direction="long",
+            entry_price=3000.0,
+            stop_loss=2800.0,
+            take_profit=3500.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=2),
+            horizon_hours=4.0,
+        )
+
+        with _mark_price_side_effect(3100.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open", "Position younger than horizon should stay open"
+        assert stats["closed_horizon_expiry"] == 0
+
+    def test_horizon_expiry_does_not_trigger_when_null(self, tmp_db: Database, paper_config: Config):
+        """Position with horizon_hours=NULL → no expiry, stays open."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="ETH",
+            direction="long",
+            entry_price=3000.0,
+            stop_loss=2800.0,
+            take_profit=3500.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=100),
+            horizon_hours=None,
+        )
+
+        with _mark_price_side_effect(3100.0):
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "open"
+        assert stats["closed_horizon_expiry"] == 0
+
+    def test_stop_loss_takes_priority_over_horizon_expiry(self, tmp_db: Database, paper_config: Config):
+        """When both stop_loss and horizon_expiry would trigger, stop_loss wins."""
+        pos_id = _insert_position(
+            tmp_db,
+            asset="ETH",
+            direction="long",
+            entry_price=3000.0,
+            stop_loss=2800.0,
+            take_profit=3500.0,
+            opened_at=datetime.now(tz=UTC) - timedelta(hours=25),
+            horizon_hours=24.0,
+        )
+
+        with _mark_price_side_effect(2700.0):  # below stop_loss
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        # stop_loss is evaluated first, so it should win
+        assert stats["closed_stop"] == 1
+        assert stats["closed_horizon_expiry"] == 0

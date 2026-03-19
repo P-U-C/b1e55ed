@@ -29,6 +29,7 @@ from engine.core.events import EventType, SignalAcceptedPayload
 from engine.core.policy import TradingPolicyEngine
 from engine.core.types import TradeIntent
 from engine.execution.paper import PaperBroker, PaperConfig
+from engine.execution.position_monitor import _parse_horizon_to_hours
 from engine.execution.position_sizer import CorrelationAwareSizer, PositionSizer, RiskLimits
 from engine.execution.preflight import Preflight
 
@@ -134,6 +135,12 @@ class OMS:
                     except Exception:
                         pass  # cts_at_entry remains None — non-critical
 
+                # Parse horizon string (e.g. "4h") to numeric hours for
+                # position_monitor bias-flip scoping + horizon-expiry close.
+                _horizon_hours = None
+                if intent.horizon:
+                    _horizon_hours = _parse_horizon_to_hours(intent.horizon)
+
                 fill = self.paper.execute_market(
                     symbol=intent.symbol,
                     direction=intent.direction,
@@ -147,6 +154,7 @@ class OMS:
                     regime_at_entry=str(intent.regime) if intent.regime else None,
                     pcs_at_entry=float(intent.conviction_score),
                     cts_at_entry=_cts_at_entry,
+                    horizon_hours=_horizon_hours,
                 )
             except ValueError as _e:
                 # Deduplication rejection: same symbol already has an open position.
