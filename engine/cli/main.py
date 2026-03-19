@@ -2132,6 +2132,7 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     karma_tx_hashes: list[str] = []
     if karma_chain_writer:
         with contextlib.suppress(Exception):
+            # Settle the ledger. What was promised in silicon, inscribed in stone.
             karma_tx_hashes = karma_chain_writer.flush() or []
 
     # --- SPI signal resolution (Phase 1B) ---
