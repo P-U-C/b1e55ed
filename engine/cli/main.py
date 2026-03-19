@@ -12,6 +12,7 @@ The hex is blessed: 0xb1e55ed.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
@@ -2087,21 +2088,51 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     """
 
     from engine.brain.outcome_resolver import OutcomeResolver
+    from engine.core.config import Config
     from engine.core.database import Database
 
     repo_root = ctx.repo_root
     db = Database(_resolve_db_path(repo_root))
 
+    # --- Wire up on-chain karma writer (fail-open) ---
+    karma_chain_writer = None
+    try:
+        cfg_path = repo_root / "config" / "user.yaml"
+        cfg = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+        if cfg.onchain.enabled and cfg.onchain.rpc_url and cfg.onchain.private_key.get_secret_value():
+            from engine.oracle.chain import ChainClient
+
+            chain_client = ChainClient(
+                rpc_url=cfg.onchain.rpc_url,
+                private_key=cfg.onchain.private_key.get_secret_value(),
+                identity_registry_address=cfg.onchain.identity_registry_address,
+                reputation_registry_address=cfg.onchain.reputation_registry_address,
+                validation_registry_address=cfg.onchain.validation_registry_address,
+                public_base_url=cfg.onchain.public_base_url,
+            )
+            if chain_client.enabled:
+                from engine.brain.karma_chain import KarmaChainWriter
+
+                karma_chain_writer = KarmaChainWriter(chain_client=chain_client, db=db)
+    except Exception:
+        karma_chain_writer = None  # fail-open
+
     resolved = 0
     skipped = 0
     try:
-        resolver = OutcomeResolver(db)
+        resolver = OutcomeResolver(db, karma_chain_writer=karma_chain_writer)
         resolved = int(resolver.resolve_pending())
         skipped = int(getattr(resolver, "last_skipped_missing_price", 0))
     except Exception:
         # Never fail this command; resolver itself is best-effort.
         resolved = 0
         skipped = 0
+
+    # --- Flush on-chain karma writes ---
+    karma_tx_hashes: list[str] = []
+    if karma_chain_writer:
+        with contextlib.suppress(Exception):
+            karma_tx_hashes = karma_chain_writer.flush() or []
 
     # --- SPI signal resolution (Phase 1B) ---
     spi_resolved = 0
@@ -2127,6 +2158,7 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
                     "skipped_missing_price": skipped,
                     "spi_resolved": spi_resolved,
                     "spi_expired": spi_expired,
+                    "karma_tx_hashes": karma_tx_hashes,
                 }
             )
         )
@@ -2136,6 +2168,8 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
             parts.append(f"skipped {skipped} (missing price data)")
         if spi_resolved or spi_expired:
             parts.append(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
+        if karma_tx_hashes:
+            parts.append(f"karma on-chain: {len(karma_tx_hashes)} tx")
         print(", ".join(parts))
     return 0
 
