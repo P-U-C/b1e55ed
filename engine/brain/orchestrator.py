@@ -761,5 +761,20 @@ class BrainOrchestrator:
             intents=intents,
         )
 
+        # Resolve expired SPI signals
+        try:
+            from engine.spi.resolution import resolve_expired_signals
+
+            spi_outcomes = resolve_expired_signals(self.db)
+            if spi_outcomes:
+                logging.getLogger("b1e55ed.orchestrator").info(
+                    "SPI resolution: %d outcomes (%d resolved, %d expired)",
+                    len(spi_outcomes),
+                    sum(1 for o in spi_outcomes if o.status == "resolved"),
+                    sum(1 for o in spi_outcomes if o.status == "expired"),
+                )
+        except Exception:
+            logging.getLogger("b1e55ed.orchestrator").debug("SPI resolution skipped (non-fatal)", exc_info=True)
+
         self.hooks.post_cycle(PostCycleContext(config=self.config, db=self.db, cycle_id=cycle_id, result=result))
         return result
