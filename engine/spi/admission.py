@@ -27,6 +27,91 @@ from engine.spi.models import AcceptedSignal
 _TABLES_ENSURED: weakref.WeakSet = weakref.WeakSet()
 
 
+def _horizon_matches(h1: int, h2: int) -> bool:
+    """Check if two horizon values are in the same bucket or within ±2h."""
+    buckets = [(0, 2), (3, 5), (6, 18), (19, 48)]
+    for lo, hi in buckets:
+        if lo <= h1 <= hi and lo <= h2 <= hi:
+            return True
+    return abs(h1 - h2) <= 2
+
+
+def find_or_create_cluster(
+    db,
+    *,
+    signal_id: str,
+    producer_id: str,
+    symbol: str,
+    direction: str,
+    confidence: float,
+    horizon_hours: int,
+    now_iso: str,
+) -> tuple[str, int, float]:
+    """Find an existing cluster or create a new one.
+
+    Returns (cluster_id, position, cluster_weight).
+    """
+    # Look for recent clusters matching symbol + direction
+    lookback_minutes = max(horizon_hours * 15, 15)
+    cutoff = (datetime.fromisoformat(now_iso) - timedelta(minutes=lookback_minutes)).isoformat()
+
+    rows = (
+        db.fetchall(
+            """
+        SELECT cluster_id, avg_confidence, horizon_hours, signal_count
+        FROM spi_signal_clusters
+        WHERE symbol = ? AND direction = ?
+          AND datetime(substr(created_at, 1, 19)) >= datetime(?)
+        ORDER BY created_at DESC
+        """,
+            (symbol, direction, cutoff[:19]),
+        )
+        if hasattr(db, "fetchall")
+        else db.execute(
+            """
+        SELECT cluster_id, avg_confidence, horizon_hours, signal_count
+        FROM spi_signal_clusters
+        WHERE symbol = ? AND direction = ?
+          AND datetime(substr(created_at, 1, 19)) >= datetime(?)
+        ORDER BY created_at DESC
+        """,
+            (symbol, direction, cutoff[:19]),
+        ).fetchall()
+    )
+
+    for row in rows:
+        c_id, c_conf, c_horizon, c_count = row
+        if abs(confidence - c_conf) <= 0.10 and _horizon_matches(horizon_hours, c_horizon):
+            # Match found — join this cluster
+            new_count = c_count + 1
+            position = new_count
+            weight = 1.0 / (position**1.5)
+            # Update cluster stats
+            new_avg_conf = (c_conf * c_count + confidence) / new_count
+            db.execute(
+                """
+                UPDATE spi_signal_clusters
+                SET signal_count = ?, avg_confidence = ?, updated_at = ?
+                WHERE cluster_id = ?
+                """,
+                (new_count, new_avg_conf, now_iso, c_id),
+            )
+            return c_id, position, weight
+
+    # No match — create new cluster
+    cluster_id = str(uuid.uuid4())
+    db.execute(
+        """
+        INSERT INTO spi_signal_clusters (
+            cluster_id, symbol, direction, avg_confidence, horizon_hours,
+            first_signal_id, first_producer_id, signal_count, created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,1,?,?)
+        """,
+        (cluster_id, symbol, direction, confidence, horizon_hours, signal_id, producer_id, now_iso, now_iso),
+    )
+    return cluster_id, 1, 1.0
+
+
 def accept_signal(
     *,
     producer_id: str,
@@ -93,14 +178,32 @@ def accept_signal(
 
     # Ensure tables exist then write the record.
     _ensure_tables(db)
+
+    # Clustering: find or create a cluster for deduplication
+    cluster_id, cluster_position, cluster_weight = find_or_create_cluster(
+        db,
+        signal_id=signal_id,
+        producer_id=producer_id,
+        symbol=symbol,
+        direction=direction,
+        confidence=confidence,
+        horizon_hours=horizon_hours,
+        now_iso=now.isoformat(),
+    )
+    accepted.cluster_id = cluster_id
+    accepted.cluster_position = cluster_position
+    accepted.cluster_weight = cluster_weight
+
     db.execute(
         """
         INSERT OR IGNORE INTO spi_signals (
             signal_id, signal_client_id, submission_id, producer_id,
             ingress_mode, symbol, direction, confidence, horizon_hours,
             submitted_at, attribution_window_start, attribution_window_end,
-            status, event_id, signal_payload_json, created_at, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            status, event_id, signal_payload_json,
+            cluster_id, cluster_position, cluster_weight,
+            created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             accepted.signal_id,
@@ -118,6 +221,9 @@ def accept_signal(
             accepted.status,
             accepted.event_id,
             accepted.signal_payload_json,
+            accepted.cluster_id,
+            accepted.cluster_position,
+            accepted.cluster_weight,
             accepted.created_at,
             accepted.updated_at,
         ),
@@ -130,7 +236,8 @@ def accept_signal(
         "SELECT signal_id, signal_client_id, submission_id, producer_id, ingress_mode, "
         "symbol, direction, confidence, horizon_hours, submitted_at, "
         "attribution_window_start, attribution_window_end, status, event_id, "
-        "signal_payload_json, created_at, updated_at "
+        "signal_payload_json, cluster_id, cluster_position, cluster_weight, "
+        "created_at, updated_at "
         "FROM spi_signals WHERE signal_client_id = ? AND submission_id = ?",
         (signal_client_id, submission_id),
     ).fetchone()
@@ -153,8 +260,11 @@ def accept_signal(
             status=existing[12],
             event_id=existing[13],
             signal_payload_json=existing[14],
-            created_at=existing[15],
-            updated_at=existing[16],
+            cluster_id=existing[15],
+            cluster_position=existing[16],
+            cluster_weight=existing[17],
+            created_at=existing[18],
+            updated_at=existing[19],
         )
         # Phase 2B: auto-promote producer after signal acceptance
         try:
@@ -250,5 +360,31 @@ def _ensure_tables(db) -> None:  # noqa: ANN001
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )""")
+
+    # Signal clustering table
+    db.execute("""CREATE TABLE IF NOT EXISTS spi_signal_clusters (
+        cluster_id TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        avg_confidence REAL NOT NULL,
+        horizon_hours INTEGER NOT NULL,
+        first_signal_id TEXT NOT NULL,
+        first_producer_id TEXT NOT NULL,
+        signal_count INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_spi_clusters_symbol_dir ON spi_signal_clusters(symbol, direction)")
+
+    # Add cluster columns to spi_signals (idempotent via try/except)
+    import contextlib  # noqa: PLC0415
+
+    for col_sql in [
+        "ALTER TABLE spi_signals ADD COLUMN cluster_id TEXT",
+        "ALTER TABLE spi_signals ADD COLUMN cluster_position INTEGER DEFAULT 1",
+        "ALTER TABLE spi_signals ADD COLUMN cluster_weight REAL DEFAULT 1.0",
+    ]:
+        with contextlib.suppress(Exception):
+            db.execute(col_sql)
 
     _TABLES_ENSURED.add(db)

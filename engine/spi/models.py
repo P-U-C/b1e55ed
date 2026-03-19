@@ -24,6 +24,25 @@ class AcceptedSignal:
     status: str = "accepted"
     event_id: str | None = None  # native b1e55ed event_id (from emit_observation)
     signal_payload_json: str | None = None
+    cluster_id: str | None = None
+    cluster_position: int = 1
+    cluster_weight: float = 1.0
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class SignalCluster:
+    """A cluster of semantically similar signals."""
+
+    cluster_id: str
+    symbol: str
+    direction: str
+    avg_confidence: float
+    horizon_hours: int
+    first_signal_id: str
+    first_producer_id: str
+    signal_count: int = 1
     created_at: str = ""
     updated_at: str = ""
 
