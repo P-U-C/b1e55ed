@@ -775,6 +775,9 @@ class Database:
         self._ensure_column("contributors", "chain_tx_hash", "TEXT")
         # ERC-8004 E2 — karma chain queue for on-chain reputation writes
         self._ensure_table_exists("karma_chain_queue")
+        # Horizon-based auto-close: track which horizon a position was opened from.
+        # Also used for bias-flip scoping (same symbol + same horizon = same view).
+        self._ensure_column("positions", "horizon_hours", "REAL")
 
     def _ensure_table_exists(self, table: str) -> None:
         row = self.conn.execute(
