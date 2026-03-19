@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
@@ -8,10 +8,16 @@ from pydantic import BaseModel
 from api.auth import AuthDep
 from api.deps import get_config, get_db
 from api.errors import B1e55edError
-from api.schemas.positions import PositionResponse
+from api.schemas.positions import (
+    PositionResponse,
+    PublicPositionResponse,
+    PublicPositionsResponse,
+    PublicPositionsSummaryResponse,
+)
 from engine.core.config import Config
 from engine.core.database import Database
 
+public_router = APIRouter(prefix="/positions")
 router = APIRouter(prefix="/positions", dependencies=[AuthDep])
 
 
@@ -49,6 +55,55 @@ def _row_to_position(r) -> PositionResponse:
     )
 
 
+_OPEN_POSITION_STATUSES = {"open", "monitoring", "degrading", "closing"}
+
+
+def _to_utc(ts: datetime | None) -> datetime | None:
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC)
+
+
+def _row_to_public_position(r) -> PublicPositionResponse:
+    opened_at = _to_utc(_parse_dt(str(r[7]))) or datetime.fromtimestamp(0, tz=UTC)
+    closed_at = _to_utc(_parse_dt(str(r[8]))) if r[8] is not None else None
+
+    return PublicPositionResponse(
+        id=str(r[0]),
+        asset=str(r[1]),
+        direction=str(r[2]),
+        entry_price=float(r[3]),
+        size_notional=float(r[4]),
+        stop_loss=float(r[5]) if r[5] is not None else None,
+        take_profit=float(r[6]) if r[6] is not None else None,
+        opened_at=opened_at,
+        closed_at=closed_at,
+        status=str(r[9]),
+        realized_pnl=float(r[10]) if r[10] is not None else None,
+        regime_at_entry=str(r[11]) if r[11] is not None else None,
+        pcs_at_entry=float(r[12]) if r[12] is not None else None,
+    )
+
+
+def _build_public_positions_summary(positions: list[PublicPositionResponse]) -> PublicPositionsSummaryResponse:
+    open_count = sum(1 for p in positions if p.status in _OPEN_POSITION_STATUSES)
+    closed_positions = [p for p in positions if p.status not in _OPEN_POSITION_STATUSES]
+
+    net_pnl = sum(float(p.realized_pnl or 0.0) for p in closed_positions)
+    wins = sum(1 for p in closed_positions if p.realized_pnl is not None and p.realized_pnl > 0)
+    closed_count = len(closed_positions)
+
+    return PublicPositionsSummaryResponse(
+        total_positions=len(positions),
+        open=open_count,
+        closed=closed_count,
+        net_pnl=float(net_pnl),
+        win_rate=float(wins / closed_count) if closed_count else 0.0,
+    )
+
+
 def _fetch_row(db: Database, position_id: str):
     return db.execute(
         """
@@ -61,6 +116,45 @@ def _fetch_row(db: Database, position_id: str):
         """,
         (position_id,),
     ).fetchone()
+
+
+@public_router.get("/public", response_model=PublicPositionsResponse)
+def list_public_positions(
+    db: Database = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> PublicPositionsResponse:
+    """Read-only public view of paper-trading positions for external verification."""
+
+    rows = db.execute(
+        """
+        SELECT id, asset, direction, entry_price, size_notional,
+               stop_loss, take_profit, opened_at, closed_at,
+               status, realized_pnl, regime_at_entry, pcs_at_entry
+        FROM positions
+        WHERE platform = 'paper'
+        ORDER BY opened_at DESC
+        """
+    ).fetchall()
+
+    cutoff = datetime.now(tz=UTC) - timedelta(days=7)
+
+    public_positions: list[PublicPositionResponse] = []
+    for row in rows:
+        position = _row_to_public_position(row)
+        if position.status in _OPEN_POSITION_STATUSES:
+            public_positions.append(position)
+            continue
+
+        closed_at = _to_utc(position.closed_at)
+        if closed_at is not None and closed_at >= cutoff:
+            public_positions.append(position)
+
+    return PublicPositionsResponse(
+        mode="paper",
+        start_balance=float(config.execution.paper_start_balance),
+        positions=public_positions,
+        summary=_build_public_positions_summary(public_positions),
+    )
 
 
 @router.get("", response_model=list[PositionResponse])
