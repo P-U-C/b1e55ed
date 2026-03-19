@@ -46,6 +46,7 @@ def get_api_router() -> APIRouter:
     router.include_router(events.router, tags=["events"])
     router.include_router(signals.router, tags=["signals"])
     router.include_router(signals_validate.router, tags=["signals"])
+    router.include_router(positions.public_router, tags=["positions"])
     router.include_router(positions.router, tags=["positions"])
     router.include_router(regime.router, tags=["regime"])
     router.include_router(producers.router, tags=["producers"])
