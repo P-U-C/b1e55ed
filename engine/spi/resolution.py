@@ -77,9 +77,10 @@ def resolve_expired_signals(db, current_epoch: int = 0) -> list[SignalOutcome]: 
         direction_correct = determine_direction_correct(direction, price_change_pct)
         brier = compute_brier(confidence, direction_correct)
 
-        # Update karma.
+        # Update karma (apply cluster weight for dedup).
+        cluster_weight = _get_cluster_weight(db, signal_id)
         current_karma = _get_running_karma(db, producer_id)
-        karma_delta = compute_karma_delta(current_karma, brier)
+        karma_delta = compute_karma_delta(current_karma, brier) * cluster_weight
         _update_karma(db, producer_id, current_epoch, brier, current_karma + karma_delta)
 
         outcome = _write_outcome(
@@ -113,6 +114,17 @@ def resolve_expired_signals(db, current_epoch: int = 0) -> list[SignalOutcome]: 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_cluster_weight(db, signal_id: str) -> float:  # noqa: ANN001
+    """Get cluster_weight for a signal; defaults to 1.0 (grandfathered)."""
+    row = db.fetchone(
+        "SELECT cluster_weight FROM spi_signals WHERE signal_id = ?",
+        (signal_id,),
+    )
+    if row and row[0] is not None:
+        return float(row[0])
+    return 1.0
 
 
 def _get_entry_price(db, signal_id: str) -> float | None:  # noqa: ANN001
