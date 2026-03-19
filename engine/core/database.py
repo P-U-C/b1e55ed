@@ -682,8 +682,11 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         # Set connection-level pragmas before any other DB operations.
-        # busy_timeout: retry for 5s on SQLITE_BUSY instead of failing immediately.
-        # WAL + synchronous are set in _init_schema via executescript.
+        # These MUST run before _init_schema() and outside any transaction:
+        # journal_mode=WAL cannot be changed inside a transaction, and
+        # executescript() in _init_schema has unpredictable transaction state.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA busy_timeout=5000")
         self.conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
@@ -714,8 +717,8 @@ class Database:
     def _init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(SCHEMA)
-            self.conn.execute("PRAGMA journal_mode=WAL")
-            self.conn.execute("PRAGMA synchronous=NORMAL")
+            # WAL + synchronous are now set in __post_init__ before this method
+            # runs, so they apply before any schema operations.
             self.conn.execute("PRAGMA foreign_keys=ON")
 
         # Lightweight migrations for additive columns (SQLite-friendly).

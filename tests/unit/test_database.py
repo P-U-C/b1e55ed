@@ -60,3 +60,21 @@ def test_batch_append(temp_dir: Path) -> None:
         assert out[0].source == "unit"
     finally:
         db.close()
+
+
+def test_wal_mode_and_busy_timeout_set_on_new_connections(temp_dir: Path) -> None:
+    """WAL mode and busy_timeout must be set on every new connection to prevent
+    'database is locked' errors when multiple processes share the same DB file."""
+    db = Database(temp_dir / "brain.db")
+    try:
+        journal = db.conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert journal == "wal", f"Expected WAL journal mode, got {journal}"
+
+        timeout = db.conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        assert timeout == 5000, f"Expected busy_timeout=5000, got {timeout}"
+
+        sync = db.conn.execute("PRAGMA synchronous").fetchone()[0]
+        # synchronous=NORMAL is 1 in SQLite's integer representation
+        assert sync == 1, f"Expected synchronous=NORMAL (1), got {sync}"
+    finally:
+        db.close()
