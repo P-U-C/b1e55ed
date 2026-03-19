@@ -198,6 +198,7 @@ def _update_karma(  # noqa: ANN001
     )
 
 
+# Ashes to ashes, dust to disk.
 def _write_outcome(  # noqa: ANN001, PLR0913
     db,
     *,
