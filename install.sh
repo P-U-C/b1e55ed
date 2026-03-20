@@ -147,7 +147,7 @@ info "Installing b1e55ed..."
 if [ -f "pyproject.toml" ] && grep -q 'b1e55ed' pyproject.toml 2>/dev/null; then
     REPO_DIR="$(pwd)"
     info "Installing from local repo: $REPO_DIR"
-    if uv tool install --editable . 2>/dev/null; then
+    if uv tool install --editable --with "web3>=6.0" . 2>/dev/null; then
         success "b1e55ed installed as a uv tool (editable)"
     else
         warn "uv tool install failed, falling back to uv sync..."
@@ -158,7 +158,7 @@ else
     # Install from GitHub — always explicit branch (never relies on default branch)
     INSTALL_URL="git+https://github.com/P-U-C/b1e55ed.git@${BRANCH}"
     info "Installing from: $INSTALL_URL"
-    if uv tool install --refresh "$INSTALL_URL" 2>/dev/null; then
+    if uv tool install --refresh --with "web3>=6.0" "$INSTALL_URL" 2>/dev/null; then
         success "b1e55ed installed as a uv tool"
     else
         error "Installation failed. Clone the repo and run ./install.sh from inside it."
