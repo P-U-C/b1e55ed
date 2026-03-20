@@ -110,6 +110,22 @@ def _try_kraken(sym: str, timeout_sec: int) -> float | None:
     return None
 
 
+def _try_yahoo(sym: str, timeout_sec: int) -> float | None:
+    """Fetch equity price from Yahoo Finance (unofficial API).
+
+    Works for stocks, ETFs, indices. Used as fallback when crypto feeds fail
+    and as primary source for equity symbols (NVDA, AMD, etc).
+    """
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1m&range=1d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            return float(data["chart"]["result"][0]["meta"]["regularMarketPrice"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _try_binance(sym: str, timeout_sec: int) -> float | None:
     try:
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT"
@@ -135,6 +151,11 @@ def fetch_price_usd(symbol: str, timeout_sec: int = 5) -> float | None:
         return price
 
     price = _try_kraken(sym, timeout_sec)
+    if price is not None:
+        return price
+
+    # Try Yahoo Finance — handles equities (NVDA, AMD, etc) and crypto.
+    price = _try_yahoo(sym, timeout_sec)
     if price is not None:
         return price
 
