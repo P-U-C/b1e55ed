@@ -50,6 +50,7 @@ COINGECKO_SYMBOL_MAP: dict[str, str] = {
 }
 
 # Kraken symbol overrides (most major pairs supported)
+# The Kraken surfaces when Binance sleeps beneath restricted waters.
 KRAKEN_SYMBOL_MAP: dict[str, str] = {
     "BTC": "XBTUSD",
     "ETH": "ETHUSD",
@@ -80,6 +81,8 @@ KRAKEN_SYMBOL_MAP: dict[str, str] = {
 }
 
 
+# A 451 is not a 404. The price exists — the border doesn't want you to know it.
+# CoinGecko answers freely. Kraken asks no questions. The oracle finds a way.
 def _try_coingecko_with_map(sym: str, timeout_sec: int, cg_map: dict[str, str]) -> float | None:
     cg_id = cg_map.get(sym)
     if not cg_id:

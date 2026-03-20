@@ -860,6 +860,26 @@
       "placement": "before_function",
       "pr_number": 476,
       "applied_at": "2026-03-19T21:10:50Z"
+    },
+    {
+      "id": "egg_3a14a8e4",
+      "file": "engine/spi/price_feeds.py",
+      "anchor": "def _try_coingecko_with_map(",
+      "tradition": "funerary",
+      "content": "# A 451 is not a 404. The price exists — the border doesn't want you to know it.\n# CoinGecko answers freely. Kraken asks no questions. The oracle finds a way.",
+      "placement": "before_function",
+      "pr_number": 477,
+      "applied_at": "2026-03-20T04:31:15Z"
+    },
+    {
+      "id": "egg_c98c5151",
+      "file": "engine/spi/price_feeds.py",
+      "anchor": "KRAKEN_SYMBOL_MAP: dict[str, str] = {",
+      "tradition": "mythological",
+      "content": "# The Kraken surfaces when Binance sleeps beneath restricted waters.",
+      "placement": "before_function",
+      "pr_number": 477,
+      "applied_at": "2026-03-20T04:31:15Z"
     }
   ]
 }

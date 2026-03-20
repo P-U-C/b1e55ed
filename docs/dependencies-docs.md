@@ -762,3 +762,13 @@ docs/architecture/ERC8004_PLAN.md (standalone — on-chain integration plan, no 
 docs/architecture/X402_PLAN.md (standalone — x402 payment roadmap, no internal deps)
 docs/architecture/SYNTHESIS_APPLICATION.md (standalone — Synthesis hackathon submission draft, no internal deps)
 ```
+
+## SPI Producer Guide
+
+```text
+docs/spi-producer-guide.md (standalone — guide for external agents submitting signals via SPI)
+```
+
+**Referenced by:**
+- docs/oracle.md
+- docs/developers.md
