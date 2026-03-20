@@ -80,8 +80,8 @@ KRAKEN_SYMBOL_MAP: dict[str, str] = {
 }
 
 
-def _try_coingecko(sym: str, timeout_sec: int) -> float | None:
-    cg_id = COINGECKO_SYMBOL_MAP.get(sym)
+def _try_coingecko_with_map(sym: str, timeout_sec: int, cg_map: dict[str, str]) -> float | None:
+    cg_id = cg_map.get(sym)
     if not cg_id:
         return None
     try:
@@ -93,8 +93,8 @@ def _try_coingecko(sym: str, timeout_sec: int) -> float | None:
         return None
 
 
-def _try_kraken(sym: str, timeout_sec: int) -> float | None:
-    kraken_pair = KRAKEN_SYMBOL_MAP.get(sym)
+def _try_kraken_with_map(sym: str, timeout_sec: int, kr_map: dict[str, str]) -> float | None:
+    kraken_pair = kr_map.get(sym)
     if not kraken_pair:
         return None
     try:
@@ -108,6 +108,15 @@ def _try_kraken(sym: str, timeout_sec: int) -> float | None:
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+# Convenience aliases using static maps (used by tests and simple callers).
+def _try_coingecko(sym: str, timeout_sec: int) -> float | None:
+    return _try_coingecko_with_map(sym, timeout_sec, COINGECKO_SYMBOL_MAP)
+
+
+def _try_kraken(sym: str, timeout_sec: int) -> float | None:
+    return _try_kraken_with_map(sym, timeout_sec, KRAKEN_SYMBOL_MAP)
 
 
 def _try_yahoo(sym: str, timeout_sec: int) -> float | None:
@@ -136,25 +145,40 @@ def _try_binance(sym: str, timeout_sec: int) -> float | None:
         return None
 
 
-def fetch_price_usd(symbol: str, timeout_sec: int = 5) -> float | None:
+def fetch_price_usd(
+    symbol: str,
+    timeout_sec: int = 5,
+    extra_coingecko: dict[str, str] | None = None,
+    extra_kraken: dict[str, str] | None = None,
+) -> float | None:
     """Fetch current USD price for a symbol.
 
-    Provider order: CoinGecko → Kraken → Binance.
+    Provider order: CoinGecko → Kraken → Yahoo Finance → Binance.
     Binance is geo-blocked (HTTP 451) on some oracle deployments.
+
+    Args:
+        symbol: Ticker symbol (BTC, ETH, NVDA, etc.)
+        timeout_sec: Per-request timeout in seconds.
+        extra_coingecko: Additional symbol→CoinGecko-ID mappings (from config).
+        extra_kraken: Additional symbol→Kraken-pair mappings (from config).
 
     Returns None on failure — callers should handle gracefully.
     """
     sym = symbol.upper().replace("-USD", "").replace("USDT", "")
 
-    price = _try_coingecko(sym, timeout_sec)
+    # Merge static maps with runtime config overrides.
+    cg_map = {**COINGECKO_SYMBOL_MAP, **(extra_coingecko or {})}
+    kr_map = {**KRAKEN_SYMBOL_MAP, **(extra_kraken or {})}
+
+    price = _try_coingecko_with_map(sym, timeout_sec, cg_map)
     if price is not None:
         return price
 
-    price = _try_kraken(sym, timeout_sec)
+    price = _try_kraken_with_map(sym, timeout_sec, kr_map)
     if price is not None:
         return price
 
-    # Try Yahoo Finance — handles equities (NVDA, AMD, etc) and crypto.
+    # Yahoo Finance handles equities (NVDA, AMD, etc) + broad crypto.
     price = _try_yahoo(sym, timeout_sec)
     if price is not None:
         return price

@@ -765,7 +765,12 @@ class BrainOrchestrator:
         try:
             from engine.spi.resolution import resolve_expired_signals
 
-            spi_outcomes = resolve_expired_signals(self.db)
+            spi_cfg = getattr(self.config, "spi", None)
+            spi_outcomes = resolve_expired_signals(
+                self.db,
+                extra_coingecko=getattr(spi_cfg, "extra_coingecko_symbols", None),
+                extra_kraken=getattr(spi_cfg, "extra_kraken_symbols", None),
+            )
             if spi_outcomes:
                 logging.getLogger("b1e55ed.orchestrator").info(
                     "SPI resolution: %d outcomes (%d resolved, %d expired)",

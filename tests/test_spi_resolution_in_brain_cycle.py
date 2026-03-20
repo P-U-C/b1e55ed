@@ -47,7 +47,7 @@ def test_resolve_expired_signals_called_with_db(tmp_path):
     with patch("engine.spi.resolution.resolve_expired_signals", mock_resolve):
         result = orch.run_cycle(symbols=["BTC"])
 
-    mock_resolve.assert_called_once_with(db)
+    mock_resolve.assert_called_once_with(db, extra_coingecko={}, extra_kraken={})
     assert result is not None
 
 

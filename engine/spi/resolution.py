@@ -18,7 +18,12 @@ from engine.spi.price_feeds import fetch_price_usd
 from engine.spi.scoring import compute_brier, compute_karma_delta, determine_direction_correct
 
 
-def resolve_expired_signals(db, current_epoch: int = 0) -> list[SignalOutcome]:  # noqa: ANN001
+def resolve_expired_signals(  # noqa: ANN001
+    db,
+    current_epoch: int = 0,
+    extra_coingecko: dict[str, str] | None = None,
+    extra_kraken: dict[str, str] | None = None,
+) -> list[SignalOutcome]:
     """Find expired accepted signals, fetch prices, compute outcomes, write results.
 
     Marks each resolved/expired signal's status in spi_signals.
@@ -52,7 +57,7 @@ def resolve_expired_signals(db, current_epoch: int = 0) -> list[SignalOutcome]: 
         ) = row
 
         entry_price = _get_entry_price(db, signal_id)
-        exit_price = fetch_price_usd(symbol)
+        exit_price = fetch_price_usd(symbol, extra_coingecko=extra_coingecko, extra_kraken=extra_kraken)
 
         if entry_price is None or exit_price is None:
             # Can't resolve prices — mark as expired.
