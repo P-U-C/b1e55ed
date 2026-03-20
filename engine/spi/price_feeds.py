@@ -16,26 +16,71 @@ COINGECKO_SYMBOL_MAP: dict[str, str] = {
     "DOGE": "dogecoin",
     "SUI": "sui",
     "HYPE": "hyperliquid",
+    "XRP": "ripple",
+    "DOT": "polkadot",
+    "UNI": "uniswap",
+    "LTC": "litecoin",
+    "ATOM": "cosmos",
+    "NEAR": "near",
+    "ARB": "arbitrum",
+    "OP": "optimism",
+    "MATIC": "matic-network",
+    "FIL": "filecoin",
+    "AAVE": "aave",
+    "CRV": "curve-dao-token",
+    "SNX": "havven",
+    "APT": "aptos",
+    "INJ": "injective-protocol",
+    "TIA": "celestia",
+    "SEI": "sei-network",
+    "JTO": "jito-governance-token",
+    "WIF": "dogwifcoin",
+    "BONK": "bonk",
+    "JUP": "jupiter-exchange-solana",
+    "PYTH": "pyth-network",
+    "PEPE": "pepe",
+    "FLOKI": "floki",
+    "RENDER": "render-token",
+    "FET": "fetch-ai",
+    "OCEAN": "ocean-protocol",
+    "TAO": "bittensor",
+    "VIRTUAL": "virtual-protocol",
+    "AI16Z": "ai16z",
+    "AIXBT": "aixbt-by-virtuals",
+}
+
+# Kraken symbol overrides (most major pairs supported)
+KRAKEN_SYMBOL_MAP: dict[str, str] = {
+    "BTC": "XBTUSD",
+    "ETH": "ETHUSD",
+    "SOL": "SOLUSD",
+    "ADA": "ADAUSD",
+    "DOGE": "XDGUSD",
+    "DOT": "DOTUSD",
+    "LINK": "LINKUSD",
+    "UNI": "UNIUSD",
+    "ATOM": "ATOMUSD",
+    "NEAR": "NEARUSD",
+    "MATIC": "MATICUSD",
+    "AVAX": "AVAXUSD",
+    "AAVE": "AAVEUSD",
+    "LTC": "XLTCZUSD",
+    "FIL": "FILUSD",
+    "APT": "APTUSD",
+    "INJ": "INJUSD",
+    "PEPE": "PEPEUSD",
+    "FET": "FETUSD",
+    "RENDER": "RENDERUSD",
+    "ARB": "ARBUSD",
+    "OP": "OPUSD",
+    "TIA": "TIAUSD",
+    "WIF": "WIFUSD",
+    "BONK": "BONKUSD",
+    "JUP": "JUPUSD",
 }
 
 
-def fetch_price_usd(symbol: str, timeout_sec: int = 5) -> float | None:
-    """Fetch current USD price for a symbol via Binance (primary) or CoinGecko (fallback).
-
-    Returns None on failure — callers should handle gracefully.
-    """
-    sym = symbol.upper().replace("-USD", "").replace("USDT", "")
-
-    # Try Binance first — no rate limits for single spot queries.
-    try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT"
-        with urllib.request.urlopen(url, timeout=timeout_sec) as resp:  # noqa: S310
-            data = json.loads(resp.read())
-            return float(data["price"])
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Fallback: CoinGecko simple price endpoint.
+def _try_coingecko(sym: str, timeout_sec: int) -> float | None:
     cg_id = COINGECKO_SYMBOL_MAP.get(sym)
     if not cg_id:
         return None
@@ -46,3 +91,52 @@ def fetch_price_usd(symbol: str, timeout_sec: int = 5) -> float | None:
             return float(data[cg_id]["usd"])
     except Exception:  # noqa: BLE001
         return None
+
+
+def _try_kraken(sym: str, timeout_sec: int) -> float | None:
+    kraken_pair = KRAKEN_SYMBOL_MAP.get(sym)
+    if not kraken_pair:
+        return None
+    try:
+        url = f"https://api.kraken.com/0/public/Ticker?pair={kraken_pair}"
+        with urllib.request.urlopen(url, timeout=timeout_sec) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            result = data.get("result", {})
+            if result:
+                pair_data = next(iter(result.values()))
+                return float(pair_data["c"][0])  # last trade close price
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _try_binance(sym: str, timeout_sec: int) -> float | None:
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT"
+        with urllib.request.urlopen(url, timeout=timeout_sec) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            return float(data["price"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fetch_price_usd(symbol: str, timeout_sec: int = 5) -> float | None:
+    """Fetch current USD price for a symbol.
+
+    Provider order: CoinGecko → Kraken → Binance.
+    Binance is geo-blocked (HTTP 451) on some oracle deployments.
+
+    Returns None on failure — callers should handle gracefully.
+    """
+    sym = symbol.upper().replace("-USD", "").replace("USDT", "")
+
+    price = _try_coingecko(sym, timeout_sec)
+    if price is not None:
+        return price
+
+    price = _try_kraken(sym, timeout_sec)
+    if price is not None:
+        return price
+
+    # Last resort — may be geo-blocked.
+    return _try_binance(sym, timeout_sec)
