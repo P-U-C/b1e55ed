@@ -112,6 +112,7 @@ def find_or_create_cluster(
     return cluster_id, 1, 1.0
 
 
+# What is written to WAL shall not be forgotten. — Book of Commits 3:16
 def accept_signal(
     *,
     producer_id: str,

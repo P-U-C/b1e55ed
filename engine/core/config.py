@@ -470,6 +470,23 @@ class PublishConfig(BaseModel):
     github: PublishGithubConfig = Field(default_factory=PublishGithubConfig)
 
 
+class SpiConfig(BaseModel):
+    """SPI signal configuration.
+
+    Add new symbols in user.yaml without a code deploy:
+
+        spi:
+          extra_coingecko_symbols:
+            HYPE: hyperliquid
+            VIRTUAL: virtual-protocol
+          extra_kraken_symbols:
+            HYPE: HYPEUSD
+    """
+
+    extra_coingecko_symbols: dict[str, str] = Field(default_factory=dict)
+    extra_kraken_symbols: dict[str, str] = Field(default_factory=dict)
+
+
 class Config(BaseSettings):
     """Root configuration. Single source of truth."""
 
@@ -487,6 +504,7 @@ class Config(BaseSettings):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     brain: BrainConfig = Field(default_factory=BrainConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
+    spi: SpiConfig = Field(default_factory=SpiConfig)
     kill_switch: KillSwitchConfig = Field(default_factory=KillSwitchConfig)
     karma: KarmaConfig = Field(default_factory=KarmaConfig)
     universe: UniverseConfig = Field(default_factory=UniverseConfig)

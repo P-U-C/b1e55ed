@@ -840,6 +840,26 @@
       "placement": "inline_comment",
       "pr_number": 474,
       "applied_at": "2026-03-19T18:20:42Z"
+    },
+    {
+      "id": "egg_976bc019",
+      "file": "engine/spi/admission.py",
+      "anchor": "def accept_signal(",
+      "tradition": "scriptural",
+      "content": "# What is written to WAL shall not be forgotten. — Book of Commits 3:16",
+      "placement": "before_function",
+      "pr_number": 476,
+      "applied_at": "2026-03-19T21:10:50Z"
+    },
+    {
+      "id": "egg_940e8d9d",
+      "file": "engine/spi/resolution.py",
+      "anchor": "def _write_outcome(",
+      "tradition": "funerary",
+      "content": "# Ashes to ashes, dust to disk.",
+      "placement": "before_function",
+      "pr_number": 476,
+      "applied_at": "2026-03-19T21:10:50Z"
     }
   ]
 }

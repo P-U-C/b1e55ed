@@ -205,3 +205,4 @@ Type checking runs on CI for the `engine/` and `api/` packages.
 - [API reference](api/overview.mdx) — all endpoints
 - [CLI reference](operations/cli-reference.mdx) — all commands
 - [Configuration](operations/config-reference.mdx) — all config keys
+- [SPI Producer Guide](spi-producer-guide.md) — submitting signals as an external agent
