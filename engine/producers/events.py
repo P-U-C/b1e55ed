@@ -70,6 +70,38 @@ class MarketEventsProducer(BaseProducer):
         """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_EVENTS_URL") or os.getenv("EVENTS_URL")
 
+    # CryptoPanic free API only supports a subset of major currencies.
+    # Requesting unsupported symbols returns 404. This set is the known-good list.
+    # Expand conservatively — verify on https://cryptopanic.com/api/free/v1/currencies/
+    # The 404 is the market's way of saying: not every token deserves attention.
+    _CRYPTOPANIC_SUPPORTED: frozenset[str] = frozenset(
+        {
+            "BTC",
+            "ETH",
+            "SOL",
+            "BNB",
+            "XRP",
+            "ADA",
+            "AVAX",
+            "DOGE",
+            "DOT",
+            "MATIC",
+            "LTC",
+            "LINK",
+            "UNI",
+            "ATOM",
+            "NEAR",
+            "ARB",
+            "OP",
+            "FIL",
+            "AAVE",
+            "CRV",
+            "SNX",
+            "APT",
+            "SUI",
+        }
+    )
+
     def _collect_cryptopanic(self) -> list[dict[str, Any]]:
         """Free fallback: CryptoPanic public news API (no auth required).
 
@@ -79,7 +111,9 @@ class MarketEventsProducer(BaseProducer):
         by payload hash (30-min window via producer schedule).
         """
         _log = logging.getLogger(__name__)
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        all_symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        # Skip symbols CryptoPanic doesn't support — they return 404.
+        symbols = [s for s in all_symbols if s in self._CRYPTOPANIC_SUPPORTED]
         results: list[dict[str, Any]] = []
 
         for sym in symbols:
