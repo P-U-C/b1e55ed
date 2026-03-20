@@ -860,6 +860,16 @@
       "placement": "before_function",
       "pr_number": 476,
       "applied_at": "2026-03-19T21:10:50Z"
+    },
+    {
+      "id": "egg_a78417d5",
+      "file": "engine/producers/events.py",
+      "anchor": "_CRYPTOPANIC_SUPPORTED: frozenset[str] = frozenset(",
+      "tradition": "comment",
+      "content": "    # The 404 is the market's way of saying: not every token deserves attention.",
+      "placement": "before_function",
+      "pr_number": 479,
+      "applied_at": "2026-03-20T04:45:08Z"
     }
   ]
 }

@@ -73,6 +73,7 @@ class MarketEventsProducer(BaseProducer):
     # CryptoPanic free API only supports a subset of major currencies.
     # Requesting unsupported symbols returns 404. This set is the known-good list.
     # Expand conservatively — verify on https://cryptopanic.com/api/free/v1/currencies/
+    # The 404 is the market's way of saying: not every token deserves attention.
     _CRYPTOPANIC_SUPPORTED: frozenset[str] = frozenset(
         {
             "BTC",
