@@ -153,7 +153,11 @@ class ChainClient:
         return self._nonce
 
     def _send_tx(self, fn: Any) -> str | None:
-        """Build, sign, and send a contract function call.  Returns tx hash hex or None."""
+        """Build, sign, send, and confirm a contract function call.
+
+        Returns tx hash hex on success (status=1), None on any failure.
+        Waits for receipt to catch on-chain reverts.
+        """
         if self._w3 is None or self._account is None:
             return None
         try:
@@ -166,8 +170,17 @@ class ChainClient:
                 }
             )
             signed = self._account.sign_transaction(tx)
-            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
-            return self._w3.to_hex(tx_hash)
+            raw_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hash_hex = self._w3.to_hex(raw_hash)
+
+            # Wait for confirmation and check receipt status
+            receipt = self._w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
+            if receipt.get("status") != 1:
+                logger.warning("ChainClient: tx reverted on-chain tx=%s", tx_hash_hex)
+                self._nonce = None
+                return None
+
+            return tx_hash_hex
         except Exception:
             logger.warning("ChainClient: tx send failed", exc_info=True)
             self._nonce = None  # reset on failure so next call re-fetches from chain
