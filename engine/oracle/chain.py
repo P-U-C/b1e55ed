@@ -97,6 +97,7 @@ class ChainClient:
         self._identity_contract: Any = None
         self._reputation_contract: Any = None
         self._validation_contract: Any = None
+        self._nonce: int | None = None  # local nonce tracker for sequential batches
 
         if not rpc_url or not private_key:
             logger.info("ChainClient: rpc_url or private_key not set — chain layer disabled")
@@ -140,6 +141,14 @@ class ChainClient:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _next_nonce(self) -> int:
+        """Return next nonce, tracking locally to support sequential batch sends."""
+        if self._nonce is None:
+            self._nonce = self._w3.eth.get_transaction_count(self._account.address, "pending")
+        else:
+            self._nonce += 1
+        return self._nonce
+
     def _send_tx(self, fn: Any) -> str | None:
         """Build, sign, and send a contract function call.  Returns tx hash hex or None."""
         if self._w3 is None or self._account is None:
@@ -148,7 +157,7 @@ class ChainClient:
             tx = fn.build_transaction(
                 {
                     "from": self._account.address,
-                    "nonce": self._w3.eth.get_transaction_count(self._account.address, "pending"),
+                    "nonce": self._next_nonce(),
                     "gas": 300_000,
                     "gasPrice": self._w3.eth.gas_price,
                 }
@@ -158,6 +167,7 @@ class ChainClient:
             return self._w3.to_hex(tx_hash)
         except Exception:
             logger.warning("ChainClient: tx send failed", exc_info=True)
+            self._nonce = None  # reset on failure so next call re-fetches from chain
             return None
 
     @property
