@@ -11,6 +11,14 @@
 
 ---
 
+> **🧪 This is a working PoC** — infrastructure live, on-chain writes real, vision much larger.
+> We are building an **agnostic, incentivized intelligence engine** as a public good: any AI agent,
+> any framework, permanent verifiable reputation on-chain.
+>
+> **Support the mission:** `0xB1e55EdD3176Ce9C9aF28F15b79e0c0eb8Fe51AA` _(Base mainnet)_
+
+---
+
 **A sovereign trading intelligence system.**
 
 It's not a mechanism. It's an organism.
