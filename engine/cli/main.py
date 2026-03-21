@@ -434,6 +434,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve_spi = sub.add_parser("resolve-spi", help="Resolve expired SPI signals against market outcomes")
     p_resolve_spi.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    p_flush_karma = sub.add_parser("flush-karma", help="Flush pending karma queue entries to the on-chain Reputation Registry")
+    p_flush_karma.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     # -- monitor-positions --
     p_mon = sub.add_parser(
         "monitor-positions",
@@ -2185,12 +2188,38 @@ def _cmd_resolve_spi(ctx: CliContext, args: argparse.Namespace) -> int:
     from engine.core.database import Database
     from engine.spi.resolution import resolve_expired_signals
 
-    db = Database(_resolve_db_path(ctx.repo_root))
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+    cfg = _load_config(ctx)
+
+    # Wire chain client (fail-open)
+    chain_client = None
+    system_agent_id = 0
+    try:
+        onchain_cfg = getattr(cfg, "onchain", None)
+        if (
+            onchain_cfg is not None
+            and getattr(onchain_cfg, "enabled", False)
+            and getattr(onchain_cfg, "rpc_url", "")
+            and getattr(onchain_cfg, "private_key", None)
+        ):
+            from engine.oracle.chain import ChainClient
+
+            chain_client = ChainClient(
+                rpc_url=onchain_cfg.rpc_url,
+                private_key=onchain_cfg.private_key.get_secret_value(),
+                reputation_registry_address=getattr(onchain_cfg, "reputation_registry_address", ""),
+                public_base_url=getattr(onchain_cfg, "public_base_url", ""),
+            )
+            system_agent_id = getattr(onchain_cfg, "system_agent_id", 0)
+    except Exception:
+        pass
 
     spi_resolved = 0
     spi_expired = 0
+    karma_tx_hashes: list[str] = []
     try:
-        outcomes = resolve_expired_signals(db)
+        outcomes = resolve_expired_signals(db, chain_client=chain_client, system_agent_id=system_agent_id)
         for outcome in outcomes:
             if outcome.status == "resolved":
                 spi_resolved += 1
@@ -2204,10 +2233,58 @@ def _cmd_resolve_spi(ctx: CliContext, args: argparse.Namespace) -> int:
         return 0
 
     if bool(getattr(args, "json", False)):
-        print(_json_dumps({"spi_resolved": spi_resolved, "spi_expired": spi_expired}))
+        print(_json_dumps({"spi_resolved": spi_resolved, "spi_expired": spi_expired, "karma_tx_hashes": karma_tx_hashes}))
     else:
-        print(f"SPI: {spi_resolved} resolved, {spi_expired} expired")
+        parts = [f"SPI: {spi_resolved} resolved, {spi_expired} expired"]
+        if karma_tx_hashes:
+            parts.append(f"karma on-chain: {len(karma_tx_hashes)} tx")
+        print(", ".join(parts))
     return 0
+
+
+def _cmd_flush_karma(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Flush pending karma_chain_queue entries to the on-chain Reputation Registry."""
+
+    from engine.core.database import Database
+
+    db = Database(_resolve_db_path(ctx.repo_root))
+    cfg = _load_config(ctx)
+
+    onchain_cfg = getattr(cfg, "onchain", None)
+    if not onchain_cfg or not getattr(onchain_cfg, "enabled", False):
+        print("on-chain layer not enabled — set onchain.enabled=true in config")
+        return 1
+
+    try:
+        from engine.brain.karma_chain import KarmaChainWriter
+        from engine.oracle.chain import ChainClient
+
+        chain_client = ChainClient(
+            rpc_url=onchain_cfg.rpc_url,
+            private_key=onchain_cfg.private_key.get_secret_value(),
+            reputation_registry_address=getattr(onchain_cfg, "reputation_registry_address", ""),
+            public_base_url=getattr(onchain_cfg, "public_base_url", ""),
+        )
+        if not chain_client.enabled:
+            print("ChainClient failed to initialise — check rpc_url and private_key")
+            return 1
+
+        writer = KarmaChainWriter(chain_client=chain_client, db=db)
+        tx_hashes = writer.flush()
+
+        if bool(getattr(args, "json", False)):
+            print(_json_dumps({"flushed": len(tx_hashes), "tx_hashes": tx_hashes}))
+        else:
+            if tx_hashes:
+                print(f"karma flush: {len(tx_hashes)} tx submitted")
+                for h in tx_hashes:
+                    print(f"  {h}")
+            else:
+                print("karma flush: nothing pending")
+        return 0
+    except Exception as exc:
+        print(f"karma flush failed: {exc}")
+        return 1
 
 
 def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
@@ -4149,6 +4226,7 @@ def main(argv: list[str] | None = None) -> int:
         "health": _cmd_health,
         "resolve-outcomes": _cmd_resolve_outcomes,
         "resolve-spi": _cmd_resolve_spi,
+        "flush-karma": _cmd_flush_karma,
         "monitor-positions": _cmd_monitor_positions,
         "keys": _cmd_keys,
         "identity": _cmd_identity,
