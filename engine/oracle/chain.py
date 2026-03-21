@@ -148,7 +148,7 @@ class ChainClient:
             tx = fn.build_transaction(
                 {
                     "from": self._account.address,
-                    "nonce": self._w3.eth.get_transaction_count(self._account.address),
+                    "nonce": self._w3.eth.get_transaction_count(self._account.address, "pending"),
                     "gas": 300_000,
                     "gasPrice": self._w3.eth.gas_price,
                 }
