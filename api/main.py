@@ -33,7 +33,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Allow health/docs without rate limiting
-        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
+        if request.url.path in ("/health", "/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
             return await call_next(request)
 
         # Key by bearer token if present, else by client IP.
@@ -78,7 +78,7 @@ class IdentityGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Allow health/docs without identity (monitoring + introspection)
-        if request.url.path in ("/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
+        if request.url.path in ("/health", "/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
             return await call_next(request)
 
         from engine.core.identity_gate import load_identity
@@ -421,6 +421,13 @@ def create_app() -> FastAPI:
     from api.routes.mcp import router as mcp_router
 
     app.include_router(mcp_router)
+
+    # Root /health alias — shortcut for judges and external monitors
+    from starlette.responses import RedirectResponse  # noqa: PLC0415
+
+    @app.get("/health", include_in_schema=False)
+    async def health_root():
+        return RedirectResponse(url="/api/v1/health", status_code=302)
 
     # Well-known agent registration (mounted at root, not under /api/v1)
     from api.routes.agents import build_system_manifest
