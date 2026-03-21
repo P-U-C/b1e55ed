@@ -766,10 +766,36 @@ class BrainOrchestrator:
             from engine.spi.resolution import resolve_expired_signals
 
             spi_cfg = getattr(self.config, "spi", None)
+
+            # Build chain_client for on-chain karma writes (fail-open)
+            _chain_client = None
+            _system_agent_id = 0
+            try:
+                onchain_cfg = getattr(self.config, "onchain", None)
+                if (
+                    onchain_cfg is not None
+                    and getattr(onchain_cfg, "enabled", False)
+                    and getattr(onchain_cfg, "rpc_url", "")
+                    and getattr(onchain_cfg, "private_key", None)
+                ):
+                    from engine.oracle.chain import ChainClient  # noqa: PLC0415
+
+                    _chain_client = ChainClient(
+                        rpc_url=onchain_cfg.rpc_url,
+                        private_key=onchain_cfg.private_key.get_secret_value(),
+                        reputation_registry_address=getattr(onchain_cfg, "reputation_registry_address", ""),
+                        public_base_url=getattr(onchain_cfg, "public_base_url", ""),
+                    )
+                    _system_agent_id = getattr(onchain_cfg, "system_agent_id", 0)
+            except Exception:
+                logging.getLogger("b1e55ed.orchestrator").debug("chain_client init skipped (non-fatal)", exc_info=True)
+
             spi_outcomes = resolve_expired_signals(
                 self.db,
                 extra_coingecko=getattr(spi_cfg, "extra_coingecko_symbols", None),
                 extra_kraken=getattr(spi_cfg, "extra_kraken_symbols", None),
+                chain_client=_chain_client,
+                system_agent_id=_system_agent_id,
             )
             if spi_outcomes:
                 logging.getLogger("b1e55ed.orchestrator").info(
