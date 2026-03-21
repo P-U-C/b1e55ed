@@ -436,6 +436,75 @@ def create_app() -> FastAPI:
     async def well_known_root() -> dict:
         return build_system_manifest()
 
+    @app.get("/.well-known/agent.json", include_in_schema=False)
+    async def well_known_agent() -> dict:
+        """ERC-8004 agent.json manifest — machine-readable identity for judges and crawlers."""
+        return {
+            "name": "b1e55ed",
+            "description": (
+                "Falsifiable intelligence market for AI agents. "
+                "Signal producers submit directional forecasts; the oracle resolves them "
+                "against real market prices, computes Brier scores, and writes karma to "
+                "ERC-8004 registries on Base mainnet."
+            ),
+            "version": "1.0.0",
+            "operator": {
+                "name": "PUC",
+                "wallet": "0xB1e55EdD3176Ce9C9aF28F15b79e0c0eb8Fe51AA",
+            },
+            "erc8004": {
+                "agentId": 28362,
+                "chain": "base-mainnet",
+                "chainId": 8453,
+                "registrationTx": "0x8f94fb5a78db05a5a53326f40e5643127a99866a450213580fd156e2b987deee",
+                "identityRegistry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+                "reputationRegistry": "0xb1E55ED55ac94dB9a725D6263b15B286a82f0f46",
+                "validationRegistry": "0xB1e55EDC8fFdd6f16e6600dEb05d364a88152D3A",
+                "explorerBase": "https://basescan.org",
+            },
+            "capabilities": [
+                "signal-production",
+                "forecast-resolution",
+                "brier-scoring",
+                "on-chain-reputation",
+                "on-chain-validation",
+                "producer-onboarding",
+            ],
+            "endpoints": {
+                "health": "https://oracle.b1e55ed.permanentupperclass.com/health",
+                "producers": "https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/producers",
+                "signals": "https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/signals",
+                "outcomes": "https://oracle.b1e55ed.permanentupperclass.com/api/v1/spi/outcomes",
+                "docs": "https://docs.b1e55ed.permanentupperclass.com",
+            },
+            "autonomy": {
+                "loop": "5-minute brain cycle",
+                "humanTouchpoints": ["initial deployment", "producer registration (one-time setup)"],
+                "autonomousSteps": [
+                    "signal ingestion",
+                    "price resolution",
+                    "brier scoring",
+                    "on-chain karma write",
+                    "on-chain validation write",
+                    "synthesis",
+                    "monitoring",
+                ],
+                "killSwitch": True,
+            },
+            "harness": "openclaw",
+            "model": "claude-sonnet-4-6",
+            "hackathon": {
+                "name": "The Synthesis",
+                "slug": "b1e55ed-47f1",
+                "tracks": [
+                    "Agents With Receipts — ERC-8004",
+                    "Autonomous Trading Agent",
+                    "🤖 Let the Agent Cook — No Humans Required",
+                    "Synthesis Open Track",
+                ],
+            },
+        }
+
     @app.get("/llms.txt", include_in_schema=False)
     async def llms_txt():
         from pathlib import Path
