@@ -31,17 +31,20 @@ _IDENTITY_REGISTRY_ABI: list[dict[str, Any]] = [
     },
 ]
 
-# Minimal Reputation Registry ABI (postKarma)
+# Minimal Reputation Registry ABI (giveFeedback — ERC-8004 spec)
 _REPUTATION_REGISTRY_ABI: list[dict[str, Any]] = [
     {
         "inputs": [
             {"internalType": "uint256", "name": "agentId", "type": "uint256"},
-            {"internalType": "int256", "name": "karmaDelta", "type": "int256"},
-            {"internalType": "string", "name": "tag", "type": "string"},
-            {"internalType": "string", "name": "fileURI", "type": "string"},
-            {"internalType": "bytes32", "name": "fileHash", "type": "bytes32"},
+            {"internalType": "int128", "name": "value", "type": "int128"},
+            {"internalType": "uint8", "name": "valueDecimals", "type": "uint8"},
+            {"internalType": "string", "name": "tag1", "type": "string"},
+            {"internalType": "string", "name": "tag2", "type": "string"},
+            {"internalType": "string", "name": "endpoint", "type": "string"},
+            {"internalType": "string", "name": "feedbackURI", "type": "string"},
+            {"internalType": "bytes32", "name": "feedbackHash", "type": "bytes32"},
         ],
-        "name": "postKarma",
+        "name": "giveFeedback",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function",
@@ -150,7 +153,11 @@ class ChainClient:
         return self._nonce
 
     def _send_tx(self, fn: Any) -> str | None:
-        """Build, sign, and send a contract function call.  Returns tx hash hex or None."""
+        """Build, sign, send, and confirm a contract function call.
+
+        Returns tx hash hex on success (status=1), None on any failure.
+        Waits for receipt to catch on-chain reverts.
+        """
         if self._w3 is None or self._account is None:
             return None
         try:
@@ -163,8 +170,17 @@ class ChainClient:
                 }
             )
             signed = self._account.sign_transaction(tx)
-            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
-            return self._w3.to_hex(tx_hash)
+            raw_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hash_hex = self._w3.to_hex(raw_hash)
+
+            # Wait for confirmation and check receipt status
+            receipt = self._w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
+            if receipt.get("status") != 1:
+                logger.warning("ChainClient: tx reverted on-chain tx=%s", tx_hash_hex)
+                self._nonce = None
+                return None
+
+            return tx_hash_hex
         except Exception:
             logger.warning("ChainClient: tx send failed", exc_info=True)
             self._nonce = None  # reset on failure so next call re-fetches from chain
@@ -218,16 +234,19 @@ class ChainClient:
             logger.debug("post_karma_feedback: reputation registry not configured — skipping")
             return None
         try:
-            # Convert float karma to int256 (scale by 1e6 for 6 decimal precision)
-            karma_int = int(karma_delta * 1_000_000)
+            # Scale karma to int128 with 6 decimal places (e.g. 0.042 → 42000)
+            karma_int = int(karma_delta * 10**6)
             padded_hash = file_hash.ljust(32, b"\x00")[:32]
 
-            fn = self._reputation_contract.functions.postKarma(
+            fn = self._reputation_contract.functions.giveFeedback(
                 agent_id,
-                karma_int,
-                tag,
-                file_uri,
-                padded_hash,
+                karma_int,  # int128 value
+                6,  # uint8 valueDecimals
+                tag,  # tag1 e.g. "spi_karma"
+                "forecast_outcome",  # tag2
+                file_uri,  # endpoint
+                file_uri,  # feedbackURI
+                padded_hash,  # feedbackHash
             )
             tx_hash = self._send_tx(fn)
             if tx_hash:
