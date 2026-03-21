@@ -161,11 +161,12 @@ class ChainClient:
         if self._w3 is None or self._account is None:
             return None
         try:
+            gas_estimate = fn.estimate_gas({"from": self._account.address})
             tx = fn.build_transaction(
                 {
                     "from": self._account.address,
                     "nonce": self._next_nonce(),
-                    "gas": 300_000,
+                    "gas": int(gas_estimate * 1.3),  # 30% buffer
                     "gasPrice": self._w3.eth.gas_price,
                 }
             )
