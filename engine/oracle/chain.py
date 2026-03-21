@@ -56,9 +56,10 @@ _VALIDATION_REGISTRY_ABI: list[dict[str, Any]] = [
     {
         "inputs": [
             {"internalType": "uint256", "name": "agentId", "type": "uint256"},
-            {"internalType": "string", "name": "verdict", "type": "string"},
-            {"internalType": "string", "name": "resultURI", "type": "string"},
-            {"internalType": "bytes32", "name": "resultHash", "type": "bytes32"},
+            {"internalType": "string", "name": "verdictStr", "type": "string"},
+            {"internalType": "string", "name": "context", "type": "string"},
+            {"internalType": "string", "name": "validationURI", "type": "string"},
+            {"internalType": "bytes32", "name": "verdictHash", "type": "bytes32"},
         ],
         "name": "postValidation",
         "outputs": [],
@@ -263,8 +264,12 @@ class ChainClient:
         verdict: str,
         result_uri: str = "",
         result_hash: bytes = b"",
+        context: str = "",
     ) -> str | None:
-        """Post council verdict to Validation Registry.  Returns tx_hash or None."""
+        """Post council verdict to Validation Registry.  Returns tx_hash or None.
+
+        Maps to: postValidation(agentId, verdictStr, context, validationURI, verdictHash)
+        """
         if self._validation_contract is None:
             logger.debug("post_validation: validation registry not configured — skipping")
             return None
@@ -274,7 +279,8 @@ class ChainClient:
             fn = self._validation_contract.functions.postValidation(
                 agent_id,
                 verdict,
-                result_uri,
+                context or result_uri,  # context field — PR URL or signal reference
+                result_uri,  # validationURI — full outcome link
                 padded_hash,
             )
             tx_hash = self._send_tx(fn)

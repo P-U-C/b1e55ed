@@ -79,6 +79,28 @@ def resolve_expired_signals(  # noqa: ANN001
                 karma_delta=None,
             )
             outcomes.append(outcome)
+
+            # On-chain validation write for expired signals (fail-open)
+            if chain_client is not None and system_agent_id:
+                try:
+                    import hashlib  # noqa: PLC0415
+
+                    validation_uri = f"https://oracle.b1e55ed.permanentupperclass.com/api/v1/outcomes/{signal_id}"
+                    verdict_hash = hashlib.sha3_256(signal_id.encode()).digest()[:32]
+                    chain_client.post_validation(
+                        agent_id=system_agent_id,
+                        verdict="concern",
+                        result_uri=validation_uri,
+                        result_hash=verdict_hash,
+                        context=f"signal:{signal_id} expired (no price data)",
+                    )
+                except Exception:  # noqa: BLE001
+                    import logging  # noqa: PLC0415
+
+                    logging.getLogger("b1e55ed.spi.resolution").warning(
+                        "on-chain validation write failed for expired signal %s (non-fatal)", signal_id, exc_info=True
+                    )
+
             continue
 
         price_change_pct = ((exit_price - entry_price) / entry_price) * 100
@@ -107,24 +129,36 @@ def resolve_expired_signals(  # noqa: ANN001
         )
         outcomes.append(outcome)
 
-        # On-chain karma write (fail-open)
-        if chain_client is not None and system_agent_id and karma_delta is not None:
+        # On-chain karma + validation writes (fail-open)
+        if chain_client is not None and system_agent_id:
             try:
                 import hashlib  # noqa: PLC0415
 
                 file_uri = f"https://oracle.b1e55ed.permanentupperclass.com/api/v1/outcomes/{signal_id}"
                 file_hash = hashlib.sha3_256(signal_id.encode()).digest()[:32]
-                chain_client.post_karma_feedback(
+
+                if karma_delta is not None:
+                    chain_client.post_karma_feedback(
+                        agent_id=system_agent_id,
+                        karma_delta=karma_delta,
+                        tag="spi_karma",
+                        file_uri=file_uri,
+                        file_hash=file_hash,
+                    )
+
+                # Validation write: "pass" for correct, "concern" for incorrect
+                verdict = "pass" if direction_correct else "concern"
+                chain_client.post_validation(
                     agent_id=system_agent_id,
-                    karma_delta=karma_delta,
-                    tag="spi_karma",
-                    file_uri=file_uri,
-                    file_hash=file_hash,
+                    verdict=verdict,
+                    result_uri=file_uri,
+                    result_hash=file_hash,
+                    context=f"signal:{signal_id} direction={'correct' if direction_correct else 'incorrect'} brier={brier:.4f}",
                 )
             except Exception:  # noqa: BLE001
                 import logging  # noqa: PLC0415
 
-                logging.getLogger("b1e55ed.spi.resolution").warning("on-chain karma write failed for signal %s (non-fatal)", signal_id, exc_info=True)
+                logging.getLogger("b1e55ed.spi.resolution").warning("on-chain write failed for signal %s (non-fatal)", signal_id, exc_info=True)
 
         # Phase 2B: check slash conditions after karma update and apply if triggered
         try:
