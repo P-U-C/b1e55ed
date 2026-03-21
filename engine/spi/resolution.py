@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from typing import Any
 
 try:
     from datetime import UTC  # py311+
@@ -23,6 +24,8 @@ def resolve_expired_signals(  # noqa: ANN001
     current_epoch: int = 0,
     extra_coingecko: dict[str, str] | None = None,
     extra_kraken: dict[str, str] | None = None,
+    chain_client: Any | None = None,
+    system_agent_id: int = 0,
 ) -> list[SignalOutcome]:
     """Find expired accepted signals, fetch prices, compute outcomes, write results.
 
@@ -103,6 +106,25 @@ def resolve_expired_signals(  # noqa: ANN001
             karma_delta=karma_delta,
         )
         outcomes.append(outcome)
+
+        # On-chain karma write (fail-open)
+        if chain_client is not None and system_agent_id and karma_delta is not None:
+            try:
+                import hashlib  # noqa: PLC0415
+
+                file_uri = f"https://oracle.b1e55ed.permanentupperclass.com/api/v1/outcomes/{signal_id}"
+                file_hash = hashlib.sha3_256(signal_id.encode()).digest()[:32]
+                chain_client.post_karma_feedback(
+                    agent_id=system_agent_id,
+                    karma_delta=karma_delta,
+                    tag="spi_karma",
+                    file_uri=file_uri,
+                    file_hash=file_hash,
+                )
+            except Exception:  # noqa: BLE001
+                import logging  # noqa: PLC0415
+
+                logging.getLogger("b1e55ed.spi.resolution").warning("on-chain karma write failed for signal %s (non-fatal)", signal_id, exc_info=True)
 
         # Phase 2B: check slash conditions after karma update and apply if triggered
         try:

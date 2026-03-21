@@ -2141,7 +2141,11 @@ def _cmd_resolve_outcomes(ctx: CliContext, args: argparse.Namespace) -> int:
     try:
         from engine.spi.resolution import resolve_expired_signals
 
-        outcomes = resolve_expired_signals(db)
+        outcomes = resolve_expired_signals(
+            db,
+            chain_client=chain_client if "chain_client" in dir() else None,
+            system_agent_id=cfg.onchain.system_agent_id if "cfg" in dir() else 0,
+        )
         for outcome in outcomes:
             if outcome.status == "resolved":
                 spi_resolved += 1
