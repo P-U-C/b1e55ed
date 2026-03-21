@@ -249,6 +249,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "twelvedata" },
     { name = "uvicorn" },
+    { name = "web3" },
     { name = "yfinance" },
 ]
 
@@ -321,6 +322,7 @@ requires-dist = [
     { name = "twelvedata", marker = "extra == 'tradfi'", specifier = ">=1.2" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "uvicorn", specifier = ">=0.29" },
+    { name = "web3", specifier = ">=6.0" },
     { name = "web3", marker = "extra == 'oracle'", specifier = ">=6.0" },
     { name = "yfinance", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'tradfi'", specifier = ">=0.2" },
