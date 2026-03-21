@@ -556,6 +556,18 @@ Automatically run by the daemon every 30 minutes via `resolve-outcomes`. Use thi
 
 ---
 
+### `b1e55ed flush-karma`
+
+Flush all pending entries in the karma queue to the on-chain Reputation Registry (ERC-8004).
+
+```bash
+b1e55ed flush-karma [--json]
+```
+
+Drains `karma_chain_queue` rows with `status='pending'` and submits them as `giveFeedback` transactions to the deployed ReputationRegistry contract on Base mainnet. Use after a backfill or if the daemon missed on-chain writes.
+
+---
+
 ### `b1e55ed spi`
 
 SPI signal producer management (register, status, promote, test-key).
