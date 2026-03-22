@@ -60,3 +60,22 @@ def karma_settle(
 @router.get("/karma/receipts")
 def karma_receipts(karma: KarmaEngine = Depends(get_karma)) -> dict[str, Any]:
     return {"items": [r.__dict__ for r in karma.get_receipts()]}
+
+
+@router.get("/karma/queue/status")
+def karma_queue_status(db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Return karma chain queue counts by status."""
+    try:
+        rows = db.fetchall("SELECT status, COUNT(*) as cnt FROM karma_chain_queue GROUP BY status")
+        by_status = {row["status"]: int(row["cnt"]) for row in rows}
+    except Exception:
+        by_status = {}
+
+    total = sum(by_status.values())
+    return {
+        "total": total,
+        "by_status": by_status,
+        "pending": by_status.get("pending", 0),
+        "submitted": by_status.get("submitted", 0),
+        "failed": by_status.get("failed", 0),
+    }

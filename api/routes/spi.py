@@ -288,3 +288,51 @@ def get_karma(
         epoch=int(row[1]),
         resolved_count=int(row[2]) if row[2] is not None else 0,
     )
+
+
+@router.get("/accuracy")
+def spi_accuracy(db: Database = Depends(get_db)) -> dict:
+    """Return aggregate signal accuracy stats from spi_outcomes."""
+    _ensure_tables(db)
+    row = db.fetchone(
+        """
+        SELECT
+            COUNT(*)                                                        AS total,
+            SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END)          AS resolved,
+            SUM(CASE WHEN status = 'expired'  THEN 1 ELSE 0 END)          AS expired,
+            SUM(CASE WHEN direction_correct = 1 THEN 1 ELSE 0 END)        AS correct_direction,
+            SUM(CASE WHEN direction_correct = 0 THEN 1 ELSE 0 END)        AS wrong_direction,
+            AVG(CASE WHEN brier_component IS NOT NULL THEN brier_component END) AS avg_brier,
+            AVG(CASE WHEN karma_delta IS NOT NULL THEN karma_delta END)    AS avg_karma_delta
+        FROM spi_outcomes
+        """
+    )
+    if row is None:
+        return {
+            "total": 0,
+            "resolved": 0,
+            "expired": 0,
+            "correct_direction": 0,
+            "wrong_direction": 0,
+            "win_rate": None,
+            "avg_brier": None,
+            "avg_karma_delta": None,
+        }
+
+    total = int(row[0] or 0)
+    resolved = int(row[1] or 0)
+    correct = int(row[3] or 0)
+    wrong = int(row[4] or 0)
+    directional = correct + wrong
+    win_rate = round(correct / directional, 4) if directional > 0 else None
+
+    return {
+        "total": total,
+        "resolved": resolved,
+        "expired": int(row[2] or 0),
+        "correct_direction": correct,
+        "wrong_direction": wrong,
+        "win_rate": win_rate,
+        "avg_brier": round(float(row[5]), 4) if row[5] is not None else None,
+        "avg_karma_delta": round(float(row[6]), 4) if row[6] is not None else None,
+    }
