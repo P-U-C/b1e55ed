@@ -62,9 +62,11 @@ class KillSwitch:
         import json as _json
 
         try:
+            canonical_type = getattr(EventType.KILL_SWITCH_V1, "value", str(EventType.KILL_SWITCH_V1))
+            legacy_type = "KILL_SWITCH_V1"
             row = self.db.fetchone(
-                "SELECT payload FROM events WHERE type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
-                (getattr(EventType.KILL_SWITCH_V1, "value", str(EventType.KILL_SWITCH_V1)),),
+                "SELECT payload FROM events WHERE type IN (?, ?) ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (canonical_type, legacy_type),
             )
             if row:
                 data = _json.loads(row[0])
@@ -111,7 +113,12 @@ class KillSwitch:
 
         if crisis_conditions is not None and crisis_conditions >= self.config.kill_switch.l3_crisis_threshold:
             target = max(target, KillSwitchLevel.LOCKDOWN)
-            why = why or f"crisis_conditions={crisis_conditions}"
+            crisis_reason = f"crisis_conditions={crisis_conditions}"
+            if why:
+                if crisis_reason not in why:
+                    why = f"{why};{crisis_reason}"
+            else:
+                why = crisis_reason
 
         if max_drawdown_pct is not None and max_drawdown_pct >= self.config.kill_switch.l4_max_drawdown_pct:
             target = max(target, KillSwitchLevel.EMERGENCY)
