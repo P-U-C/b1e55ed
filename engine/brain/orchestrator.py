@@ -39,7 +39,7 @@ from engine.brain.conviction import ConvictionEngine, ConvictionResult
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
 from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
-from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel
+from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel, PauseGate
 from engine.brain.learning import StratificationTracker
 from engine.brain.regime import RegimeDetector, RegimeResult
 from engine.brain.synthesis import SynthesisResult, VectorSynthesis
@@ -87,6 +87,7 @@ class BrainOrchestrator:
         self.synthesis = VectorSynthesis(config, db)
         self.regime = RegimeDetector(db)
         self.kill_switch = KillSwitch(config, db)
+        self.pause_gate = PauseGate(db)
         self.conviction = ConvictionEngine(config, db, node_id=identity.node_id)
         self.decision = DecisionEngine(config, db)
         self.stratification = StratificationTracker(db)
@@ -350,6 +351,14 @@ class BrainOrchestrator:
         if int(ks_level) >= int(KillSwitchLevel.DEFENSIVE):
             logging.getLogger("b1e55ed.orchestrator").warning("Brain cycle aborted: kill switch level %s is active", ks_level)
             raise RuntimeError(f"Brain cycle blocked by kill switch (level={ks_level})")
+
+        paused, pause_reason = self.pause_gate.is_paused()
+        if paused:
+            reason = str(pause_reason or "operator pause")
+            _log = logging.getLogger("b1e55ed.orchestrator")
+            _log.warning("Brain cycle paused by operator: %s", reason)
+            self.pause_gate.consume()
+            raise RuntimeError(f"Brain cycle paused: {reason}")
 
         cycle_id = str(uuid.uuid4())
         cycle_started_at = datetime.now(tz=UTC)

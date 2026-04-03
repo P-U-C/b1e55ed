@@ -421,6 +421,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    p_pause = sub.add_parser("pause", help="Pause the next brain cycle")
+    p_pause.add_argument(
+        "--reason",
+        default="operator pause",
+        help="Reason written to system.pause.v1.",
+    )
+    p_pause.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
+    p_resume = sub.add_parser("resume", help="Clear active pause gate")
+    p_resume.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
     p_health = sub.add_parser("health", help="System health check")
     p_health.add_argument(
         "--json",
@@ -1816,6 +1835,49 @@ def _cmd_kill_switch(ctx: CliContext, args: argparse.Namespace) -> int:
         print(_json_dumps(state))
     else:
         print(f"kill switch: L{state['level']}\nreason: {state['reason']}")
+    return 0
+
+
+def _cmd_pause(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.core.events import EventType
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+
+    reason = str(getattr(args, "reason", "operator pause") or "").strip() or "operator pause"
+    payload = {
+        "reason": reason,
+        "actor": "operator",
+    }
+    ev = db.append_event(event_type=EventType.PAUSE_V1, payload=payload, source="cli.pause")
+
+    out = {"status": "ok", "event_id": ev.id, "payload": payload}
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(f"pause requested: {reason} (event {ev.id})")
+    return 0
+
+
+def _cmd_resume(ctx: CliContext, args: argparse.Namespace) -> int:
+    from engine.core.database import Database
+    from engine.core.events import EventType
+
+    repo_root = ctx.repo_root
+    db = Database(_resolve_db_path(repo_root))
+
+    payload = {
+        "consumed_by": "operator",
+        "auto": False,
+    }
+    ev = db.append_event(event_type=EventType.PAUSE_CONSUMED_V1, payload=payload, source="cli.resume")
+
+    out = {"status": "ok", "event_id": ev.id, "payload": payload}
+    if bool(getattr(args, "json", False)):
+        print(_json_dumps(out))
+    else:
+        print(f"pause cleared (event {ev.id})")
     return 0
 
 
@@ -4223,6 +4285,8 @@ def main(argv: list[str] | None = None) -> int:
         "eas": _cmd_eas,
         "webhooks": _cmd_webhooks,
         "kill-switch": _cmd_kill_switch,
+        "pause": _cmd_pause,
+        "resume": _cmd_resume,
         "health": _cmd_health,
         "resolve-outcomes": _cmd_resolve_outcomes,
         "resolve-spi": _cmd_resolve_spi,
