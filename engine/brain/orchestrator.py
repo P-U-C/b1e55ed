@@ -808,4 +808,12 @@ class BrainOrchestrator:
             logging.getLogger("b1e55ed.orchestrator").debug("SPI resolution skipped (non-fatal)", exc_info=True)
 
         self.hooks.post_cycle(PostCycleContext(config=self.config, db=self.db, cycle_id=cycle_id, result=result))
+
+        try:
+            from engine.core.city_memory import log_heartbeat
+
+            log_heartbeat(checks_run=["price_check", "position_monitor"], issues=[])
+        except Exception:
+            pass  # never block the brain
+
         return result
