@@ -70,6 +70,26 @@ b1e55ed brain [--full] [--json]
 | `--full` | Include slower producers / more expensive work |
 | `--json` | Emit JSON summary (cron/automation friendly) |
 
+### `b1e55ed pause`
+
+Pause the trading engine for one cycle (soft gate).
+
+```bash
+b1e55ed pause --reason "<reason>"
+```
+
+| Flag | Description |
+|---|---|
+| `--reason` | Required human-readable reason recorded with the pause gate |
+
+### `b1e55ed resume`
+
+Clear the pause gate and allow normal engine execution to continue.
+
+```bash
+b1e55ed resume
+```
+
 ### `b1e55ed signal`
 
 Inject operator intel as a **curator** signal.
