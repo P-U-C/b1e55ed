@@ -46,6 +46,7 @@ from engine.brain.synthesis import SynthesisResult, VectorSynthesis
 from engine.core.config import Config
 from engine.core.database import Database
 from engine.core.events import EventType, canonical_json
+from engine.core.kill_switch_alerts import notify_kill_switch_escalated
 from engine.core.types import TradeIntent
 from engine.security.identity import NodeIdentity
 
@@ -380,7 +381,14 @@ class BrainOrchestrator:
                 q_mult[domain] = 0.0
 
             if degraded_domains and len(degraded_domains) >= len(domains) and len(domains) > 0:
-                self.kill_switch.evaluate(manual_level=KillSwitchLevel.CAUTION, reason="all_domains_degraded")
+                degraded_ks_dec = self.kill_switch.evaluate(manual_level=KillSwitchLevel.CAUTION, reason="all_domains_degraded")
+                if degraded_ks_dec is not None:
+                    notify_kill_switch_escalated(
+                        previous_level=int(degraded_ks_dec.previous_level),
+                        level=int(degraded_ks_dec.level),
+                        level_name=degraded_ks_dec.level.name,
+                        reason=degraded_ks_dec.reason,
+                    )
         except Exception:
             logging.getLogger("b1e55ed.orchestrator").warning("KS-4 degradation check failed", exc_info=True)
 
@@ -474,6 +482,13 @@ class BrainOrchestrator:
         ks_dec = None
         if regime_res.state.regime == "CRISIS":
             ks_dec = self.kill_switch.evaluate(crisis_conditions=self.config.kill_switch.l3_crisis_threshold, reason="regime_crisis")
+            if ks_dec is not None:
+                notify_kill_switch_escalated(
+                    previous_level=int(ks_dec.previous_level),
+                    level=int(ks_dec.level),
+                    level_name=ks_dec.level.name,
+                    reason=ks_dec.reason,
+                )
 
         convictions: dict[str, ConvictionResult] = {}
         intents: list[dict] = []

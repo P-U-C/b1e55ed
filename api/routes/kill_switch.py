@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field
 
 from api.auth_kill_switch import KillSwitchAuthDep
 from api.deps import get_db, get_kill_switch
-from engine.brain.kill_switch import KillSwitch
+from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
 from engine.core.database import Database
+from engine.core.kill_switch_alerts import notify_kill_switch_escalated, notify_kill_switch_reset
 
 router = APIRouter(prefix="/kill-switch", dependencies=[KillSwitchAuthDep], tags=["brain"])
 
@@ -44,6 +45,17 @@ def set_level(
         },
         source="api.kill_switch",
     )
+
+    if level > prev:
+        level_name = KillSwitchLevel(level).name
+        notify_kill_switch_escalated(
+            previous_level=prev,
+            level=level,
+            level_name=level_name,
+            reason=str(payload.reason),
+        )
+    elif level < prev:
+        notify_kill_switch_reset(previous_level=prev, level=level, actor="api")
 
     import contextlib
 
