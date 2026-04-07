@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from api.routes import (
     agents,
+    alerts,
     artifacts,
     benchmarks,
     brain,
@@ -74,5 +75,8 @@ def get_api_router() -> APIRouter:
     router.include_router(mcp.router, tags=["mcp"])
     router.include_router(artifacts.router, tags=["artifacts"])
     router.include_router(agents.router, tags=["agents"])
+
+    # Dashboard compatibility stubs (/alerts, /conviction)
+    router.include_router(alerts.router, tags=["dashboard-compat"])
 
     return router

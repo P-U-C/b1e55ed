@@ -18,6 +18,21 @@ from engine.security import ensure_identity
 router = APIRouter(prefix="/brain", dependencies=[AuthDep])
 
 
+@router.get("/regime")
+def brain_regime(db: Database = Depends(get_db)) -> dict:
+    """Alias for /api/v1/regime — dashboard requests this path."""
+    row = db.execute(
+        "SELECT payload, ts FROM events WHERE type = ? ORDER BY ts DESC LIMIT 1",
+        ("brain.regime_change.v1",),
+    ).fetchone()
+    if row is None:
+        return {"regime": None, "changed_at": None, "conditions": {}}
+    payload = json.loads(str(row[0]))
+    regime = payload.get("regime") or payload.get("state") or payload.get("name")
+    conditions = payload.get("conditions") or {}
+    return {"regime": regime, "changed_at": _parse_dt(str(row[1])), "conditions": conditions}
+
+
 def _parse_dt(ts: str | None) -> datetime | None:
     if not ts:
         return None
