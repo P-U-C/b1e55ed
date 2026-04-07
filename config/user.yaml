@@ -1,17 +1,24 @@
 # User config — personal overrides on top of defaults and preset.
+# Reconciled 2026-04-07: aligned with runtime ~/.b1e55ed/config/user.yaml
 
 api:
-  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
+  auth_token: "2f47b229a6fb93ab59057efedfa8697f8c616c12f52a5b66dbdfb7a6217d92da"
 
 daemon:
   brain_interval_seconds: 300
-  brain_full_interval_seconds: 21600
+  brain_full_interval_seconds: 21600  # 6h — full deep-analysis cycle. Runtime had 1800 (30min)
+                                      # which is too aggressive for a full cycle and overlaps with
+                                      # brain_interval_seconds (5min fast cycle). 6h is correct
+                                      # per default.yaml and gives producers time to accumulate.
   resolver_interval_seconds: 1800
 
 brain:
   auto_paper_trade: true
   auto_paper_trade_min_confidence: 0.35
-  auto_paper_trade_min_magnitude: 2.0
+  auto_paper_trade_min_magnitude: 3.0  # Was 0.5 runtime / 2.0 repo. 3.0 is the safe middle:
+                                       # below 3.0 triggers a code warning (orchestrator.py:561),
+                                       # 0.5 was firing on noise, 2.0 was still too low for
+                                       # production. 5.0+ recommended before live trading.
 
 universe:
   symbols:
