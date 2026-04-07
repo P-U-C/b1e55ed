@@ -2,6 +2,7 @@
 
 api:
   auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
+  kill_switch_token: ""  # REQUIRED: set via B1E55ED_API__KILL_SWITCH_TOKEN env var before enabling live trading
 
 daemon:
   brain_interval_seconds: 300

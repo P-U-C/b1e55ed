@@ -3,12 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from api.auth import AuthDep
 from api.auth_kill_switch import KillSwitchAuthDep
 from api.deps import get_db, get_kill_switch
 from engine.brain.kill_switch import KillSwitch
 from engine.core.database import Database
 
-router = APIRouter(prefix="/kill-switch", dependencies=[KillSwitchAuthDep], tags=["brain"])
+router = APIRouter(prefix="/kill-switch", dependencies=[AuthDep], tags=["brain"])
 
 
 class KillSwitchSetRequest(BaseModel):
@@ -21,7 +22,7 @@ def status(ks: KillSwitch = Depends(get_kill_switch)) -> dict:
     return {"level": int(ks.level)}
 
 
-@router.post("/set")
+@router.post("/set", dependencies=[KillSwitchAuthDep])
 def set_level(
     payload: KillSwitchSetRequest,
     db: Database = Depends(get_db),

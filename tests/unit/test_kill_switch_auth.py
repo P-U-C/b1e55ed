@@ -50,7 +50,29 @@ async def test_kill_switch_requires_separate_token(temp_dir, test_config):
 
 
 @pytest.mark.anyio
-async def test_kill_switch_missing_token_is_500(temp_dir, test_config):
+async def test_kill_switch_status_works_without_ks_token(temp_dir, test_config):
+    """GET /status is read-only and should work with just the general API token,
+    even when kill_switch_token is not configured."""
+    test_config = test_config.model_copy(update={"api": test_config.api.model_copy(update={"auth_token": "general"})})
+
+    app = create_app()
+    app.state.config = test_config
+    app.state.db = Database(temp_dir / "brain.db")
+
+    async with make_client(app) as ac:
+        r = await ac.get(
+            "/api/v1/kill-switch/status",
+            headers={"Authorization": "Bearer general"},
+        )
+        assert r.status_code == 200
+        assert "level" in r.json()
+
+    app.state.db.close()
+
+
+@pytest.mark.anyio
+async def test_kill_switch_set_missing_token_is_500(temp_dir, test_config):
+    """POST /set still requires kill_switch_token — returns 500 when not configured."""
     test_config = test_config.model_copy(update={"api": test_config.api.model_copy(update={"auth_token": "general"})})
 
     app = create_app()
