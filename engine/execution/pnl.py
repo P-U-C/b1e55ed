@@ -87,7 +87,7 @@ class PnLTracker:
         realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 "UPDATE positions SET status = 'closed', closed_at = ?, realized_pnl = ? WHERE id = ?",
                 (now, float(realized), str(position_id)),

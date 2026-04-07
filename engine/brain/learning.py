@@ -488,7 +488,7 @@ class LearningLoop:
                 continue  # No conviction_id — gap already logged in attribute_outcome
             attributions.append(attr)
             # Write outcome back to conviction_scores.
-            with self.db._lock, self.db.conn:
+            with self.db.transaction():
                 self.db.execute(
                     "UPDATE conviction_scores SET outcome = ?, outcome_ts = ? WHERE id = ?",
                     (float(attr.realized_pnl), utc_now().isoformat(), int(attr.conviction_id)),
@@ -710,7 +710,7 @@ class StratificationTracker:
 
     def record_signal(self, signal_id: str, symbol: str, confidence: float, direction: str, ts: datetime) -> None:
         bucket = self._bucket(confidence)
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 """INSERT OR IGNORE INTO signal_stratification
                    (signal_id, symbol, confidence, bucket, direction, created_at)
@@ -719,7 +719,7 @@ class StratificationTracker:
             )
 
     def record_outcome(self, signal_id: str, realized_pnl_usd: float, ts: datetime) -> None:
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 """UPDATE signal_stratification
                    SET outcome_pnl_usd = ?, attributed_at = ?

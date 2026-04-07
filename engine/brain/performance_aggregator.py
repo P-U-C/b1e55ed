@@ -247,7 +247,7 @@ class PerformanceAggregator:
             grouped[(producer_id, asset, horizon, "all")].append(out)
 
         inserted = 0
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             for (producer_id, asset, horizon, regime), rows in grouped.items():
                 n = len(rows)
                 wins = sum(1 for r in rows if bool(r.get("direction_correct")))
@@ -336,7 +336,7 @@ class PerformanceAggregator:
             by_market[(asset, horizon)].append(episode)
 
         inserted = 0
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             for (asset, horizon), market_episodes in by_market.items():
                 producers = sorted({p for ep in market_episodes for p in ep})
                 for producer_a, producer_b in combinations(producers, 2):

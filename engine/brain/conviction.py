@@ -218,7 +218,7 @@ class ConvictionEngine:
         contribution = float(contribution_weight)
 
         # Also persist to conviction_scores + conviction_log tables for learning.
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 """
                 INSERT INTO conviction_scores (

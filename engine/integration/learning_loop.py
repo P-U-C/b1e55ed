@@ -81,7 +81,7 @@ class LearningLoopIntegration:
         wa = result.weight_adjustment
         # Persist domain weight changes to DB history.
         if wa.applied and wa.new_weights != wa.previous_weights:
-            with self.db._lock, self.db.conn:
+            with self.db.transaction():
                 for domain, old_w in wa.previous_weights.items():
                     new_w = float(wa.new_weights.get(domain, old_w))
                     delta = float(new_w - float(old_w))
@@ -115,7 +115,7 @@ class LearningLoopIntegration:
         # Weekly: only propose/compute weight adjustment.
         wa = self.loop.adjust_domain_weights()
         if wa.applied and wa.new_weights != wa.previous_weights:
-            with self.db._lock, self.db.conn:
+            with self.db.transaction():
                 for domain, old_w in wa.previous_weights.items():
                     new_w = float(wa.new_weights.get(domain, old_w))
                     delta = float(new_w - float(old_w))

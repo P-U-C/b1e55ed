@@ -41,7 +41,7 @@ class AuditLogger:
 
     def log_action(self, action: str, actor: str | None, details: dict[str, Any] | None = None) -> None:
         payload = json.dumps(details or {}, sort_keys=True)
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 "INSERT INTO audit_log (action, actor, component, details) VALUES (?, ?, ?, ?)",
                 (action, actor, self.component, payload),

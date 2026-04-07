@@ -8,6 +8,7 @@ If you cannot remember the past, you will repeat it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging as _logging
 import sqlite3
@@ -680,8 +681,16 @@ class Database:
     def __post_init__(self) -> None:
         self.db_path = Path(self.db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        # Set connection-level pragmas before any other DB operations.
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
+        # isolation_level=None: manual transaction control via explicit BEGIN/COMMIT.
+        # We use BEGIN EXCLUSIVE in append_event/append_events_batch to serialise
+        # hash-chain writes across processes sharing the same WAL file. Python's
+        # default autocommit behavior (isolation_level="") would conflict with our
+        # explicit transaction management.
+        #
+        # Other write paths (paper.py, conviction.py) must wrap their multi-statement
+        # writes in explicit BEGIN/COMMIT blocks. Single statements are auto-committed.
+        #
         # busy_timeout: retry for 5s on SQLITE_BUSY instead of failing immediately.
         # WAL + synchronous are set in _init_schema via executescript.
         self.conn.execute("PRAGMA busy_timeout=5000")
@@ -693,6 +702,24 @@ class Database:
 
     def close(self) -> None:
         self.conn.close()
+
+    @contextlib.contextmanager
+    def transaction(self, *, exclusive: bool = False):
+        """Context manager for explicit transaction control.
+
+        With isolation_level=None, all transactions must be explicit.
+        Use ``exclusive=True`` for write paths that need cross-process serialisation
+        (hash chain appends). Regular writes can use the default DEFERRED mode.
+        """
+        begin = "BEGIN EXCLUSIVE" if exclusive else "BEGIN"
+        with self._lock:
+            self.conn.execute(begin)
+            try:
+                yield
+                self.conn.execute("COMMIT")
+            except Exception:
+                self.conn.execute("ROLLBACK")
+                raise
 
     # Seventy-one voices, one gate. The lock does not slow the crowd;
     # it keeps the crowd from becoming a mob.
@@ -712,11 +739,12 @@ class Database:
             return self.conn.execute(sql, params).fetchall()
 
     def _init_schema(self) -> None:
-        with self.conn:
-            self.conn.executescript(SCHEMA)
-            self.conn.execute("PRAGMA journal_mode=WAL")
-            self.conn.execute("PRAGMA synchronous=NORMAL")
-            self.conn.execute("PRAGMA foreign_keys=ON")
+        # executescript manages its own transactions (implicit COMMIT before + after).
+        # PRAGMAs run outside transactions in autocommit mode.
+        self.conn.executescript(SCHEMA)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA foreign_keys=ON")
 
         # Lightweight migrations for additive columns (SQLite-friendly).
         self._ensure_column("events", "contributor_id", "TEXT")
@@ -748,16 +776,15 @@ class Database:
         # Default to datetime('now') so existing rows are treated as recent.
         self._ensure_column("conviction_scores", "created_at", "TEXT")
         # Performance: index on created_at (prevents linear scan on every insert)
-        with self.conn:
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
-            # events.symbol: generated column replaces unindexable json_extract queries.
-            # VIRTUAL generated columns can be added via ALTER TABLE on SQLite 3.31+.
-            self._ensure_column(
-                "events",
-                "symbol",
-                "TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL",
-            )
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
+        # events.symbol: generated column replaces unindexable json_extract queries.
+        # VIRTUAL generated columns can be added via ALTER TABLE on SQLite 3.31+.
+        self._ensure_column(
+            "events",
+            "symbol",
+            "TEXT GENERATED ALWAYS AS (json_extract(payload, '$.symbol')) VIRTUAL",
+        )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_symbol ON events(symbol)")
         # Benchmark stratification: additive columns for benchmark comparison rows.
         self._ensure_column("signal_stratification", "position_id", "TEXT")
         self._ensure_column("signal_stratification", "benchmark_name", "TEXT")
@@ -767,9 +794,8 @@ class Database:
         self._ensure_column("signal_stratification", "system_confidence", "REAL")
         self._ensure_column("signal_stratification", "system_direction", "TEXT")
         self._ensure_column("signal_stratification", "recorded_at", "TEXT")
-        with self.conn:
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_position ON signal_stratification(position_id)")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_benchmark ON signal_stratification(benchmark_name)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_position ON signal_stratification(position_id)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_strat_benchmark ON signal_stratification(benchmark_name)")
         # ERC-8004 E1 — on-chain identity columns
         self._ensure_column("contributors", "agent_id", "INTEGER")
         self._ensure_column("contributors", "chain_tx_hash", "TEXT")
@@ -783,8 +809,7 @@ class Database:
         ).fetchone()
         if row is not None:
             return
-        with self.conn:
-            self.conn.executescript(SCHEMA)
+        self.conn.executescript(SCHEMA)
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
         # Use table_xinfo (available since SQLite 3.26) instead of table_info:
@@ -792,8 +817,8 @@ class Database:
         cols = [str(r[1]) for r in self.conn.execute(f"PRAGMA table_xinfo({table})").fetchall()]
         if column in cols:
             return
-        with self.conn:
-            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+        # DDL auto-commits in autocommit mode (isolation_level=None).
+        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
     # Stratigraphy rule: add new layers, do not erase old artifacts.
     # These migrations are additive so the chain's history stays verifiable.
@@ -830,6 +855,7 @@ class Database:
         # Rebuild: keep the earliest row per trade_id (deduplicate), add UNIQUE constraint.
         self.conn.execute("PRAGMA foreign_keys=OFF")
         try:
+            self.conn.execute("BEGIN")
             self.conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS karma_intents_new (
@@ -864,7 +890,10 @@ class Database:
             self.conn.execute("DROP TABLE karma_intents")
             self.conn.execute("ALTER TABLE karma_intents_new RENAME TO karma_intents")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_karma_intents_settled ON karma_intents(settled)")
-            self.conn.commit()
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
         finally:
             self.conn.execute("PRAGMA foreign_keys=ON")
 
@@ -1065,7 +1094,12 @@ class Database:
                     getattr(event_type, "value", str(event_type)),
                 )
 
-        with self._lock, self.conn:
+        # BEGIN EXCLUSIVE acquires a database-level write lock *before* we read
+        # prev_hash.  This prevents cross-process races where two writers read the
+        # same prev_hash and both insert — creating a hash-chain fork.
+        # The RLock (inside transaction()) serialises in-process threads; EXCLUSIVE
+        # serialises across all processes sharing the same SQLite WAL file.
+        with self.transaction(exclusive=True):
             ev = self._append_event_inner(
                 event_type=event_type,
                 payload=payload,
@@ -1079,7 +1113,6 @@ class Database:
                 ts=ts,
             )
             # Periodic cleanup of stale api_rate_limits records (every 500 appends).
-            # Runs inside the existing transaction to avoid an extra round-trip.
             self._cleanup_counter += 1
             if self._cleanup_counter >= 500:
                 self._cleanup_counter = 0
@@ -1115,23 +1148,23 @@ class Database:
             return []
 
         out: list[Event] = []
-        with self._lock:
-            # Save state for rollback on failure.
-            saved_hash = self._last_hash
-            try:
-                with self.conn:
-                    for et, payload, dedupe_key in event_list:
-                        ev = self._append_event_inner(
-                            event_type=et,
-                            payload=payload,
-                            dedupe_key=dedupe_key,
-                            source=source,
-                        )
-                        out.append(ev)
-            except Exception:
-                # Restore cached hash on failure — the transaction rolled back.
-                self._last_hash = saved_hash
-                raise
+        # Save state for rollback on failure.
+        saved_hash = self._last_hash
+        try:
+            # BEGIN EXCLUSIVE: same cross-process serialisation as append_event().
+            with self.transaction(exclusive=True):
+                for et, payload, dedupe_key in event_list:
+                    ev = self._append_event_inner(
+                        event_type=et,
+                        payload=payload,
+                        dedupe_key=dedupe_key,
+                        source=source,
+                    )
+                    out.append(ev)
+        except Exception:
+            # Restore cached hash on failure — the transaction rolled back.
+            self._last_hash = saved_hash
+            raise
         return out
 
     def prune_old_data(self, retention: Any) -> dict[str, int]:
@@ -1147,56 +1180,51 @@ class Database:
             return {}
 
         deleted: dict[str, int] = {}
-        with self._lock:
-            with self.conn:
-                # Events: keep last N days.
-                # Bug fix: must delete from event_dedup (FK child) BEFORE events (FK parent)
-                # to avoid FOREIGN KEY constraint violations when foreign_keys=ON.
-                old_event_rows = self.conn.execute(
-                    "SELECT id FROM events WHERE created_at < datetime('now', ?)",
-                    (f"-{retention.events_keep_days} days",),
-                ).fetchall()
-                old_event_ids = [str(r[0]) for r in old_event_rows]
-                if old_event_ids:
-                    placeholders = ",".join("?" * len(old_event_ids))
-                    self.conn.execute(
-                        f"DELETE FROM event_dedup WHERE event_id IN ({placeholders})",
-                        old_event_ids,
-                    )
-                    self.conn.execute(
-                        f"DELETE FROM events WHERE id IN ({placeholders})",
-                        old_event_ids,
-                    )
-                deleted["events"] = len(old_event_ids)
-
-                # conviction_scores: only rows that have been resolved (outcome IS NOT NULL).
-                # Bug fix: created_at column is added via migration in _init_schema();
-                # referencing it here is now safe.
-                cursor = self.conn.execute(
-                    "DELETE FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
-                    (f"-{retention.conviction_log_keep_days} days",),
+        with self.transaction():
+            # Events: keep last N days.
+            # Bug fix: must delete from event_dedup (FK child) BEFORE events (FK parent)
+            # to avoid FOREIGN KEY constraint violations when foreign_keys=ON.
+            old_event_rows = self.conn.execute(
+                "SELECT id FROM events WHERE created_at < datetime('now', ?)",
+                (f"-{retention.events_keep_days} days",),
+            ).fetchall()
+            old_event_ids = [str(r[0]) for r in old_event_rows]
+            if old_event_ids:
+                placeholders = ",".join("?" * len(old_event_ids))
+                self.conn.execute(
+                    f"DELETE FROM event_dedup WHERE event_id IN ({placeholders})",
+                    old_event_ids,
                 )
-                deleted["conviction_scores"] = cursor.rowcount
-
-                # feature_snapshots
-                cursor = self.conn.execute(
-                    "DELETE FROM feature_snapshots WHERE created_at < datetime('now', ?)",
-                    (f"-{retention.feature_snapshots_keep_days} days",),
+                self.conn.execute(
+                    f"DELETE FROM events WHERE id IN ({placeholders})",
+                    old_event_ids,
                 )
-                deleted["feature_snapshots"] = cursor.rowcount
+            deleted["events"] = len(old_event_ids)
 
-                # api_rate_limits: window_start is an INTEGER epoch (seconds since Unix epoch).
-                # Bug fix: old code compared integer epoch to datetime text, which always
-                # evaluated as zero deleted rows.  Use strftime('%s','now') arithmetic instead.
-                cursor = self.conn.execute(
-                    "DELETE FROM api_rate_limits WHERE window_start < strftime('%s','now') - (? * 3600)",
-                    (retention.api_rate_limits_keep_hours,),
-                )
-                deleted["api_rate_limits"] = cursor.rowcount
+            # conviction_scores: only rows that have been resolved (outcome IS NOT NULL).
+            cursor = self.conn.execute(
+                "DELETE FROM conviction_scores WHERE created_at < datetime('now', ?) AND outcome IS NOT NULL",
+                (f"-{retention.conviction_log_keep_days} days",),
+            )
+            deleted["conviction_scores"] = cursor.rowcount
 
-            # VACUUM must run outside the transaction block
-            if getattr(retention, "vacuum_on_prune", True) and any(v > 0 for v in deleted.values()):
-                self.conn.execute("VACUUM")
+            # feature_snapshots
+            cursor = self.conn.execute(
+                "DELETE FROM feature_snapshots WHERE created_at < datetime('now', ?)",
+                (f"-{retention.feature_snapshots_keep_days} days",),
+            )
+            deleted["feature_snapshots"] = cursor.rowcount
+
+            # api_rate_limits
+            cursor = self.conn.execute(
+                "DELETE FROM api_rate_limits WHERE window_start < strftime('%s','now') - (? * 3600)",
+                (retention.api_rate_limits_keep_hours,),
+            )
+            deleted["api_rate_limits"] = cursor.rowcount
+
+        # VACUUM must run outside the transaction block
+        if getattr(retention, "vacuum_on_prune", True) and any(v > 0 for v in deleted.values()):
+            self.conn.execute("VACUUM")
 
         return deleted
 

@@ -138,7 +138,7 @@ class OutcomeResolver:
                 outcome = self._compute_outcome(forecast_with_prices, float(actual_price))
                 outcome_event_id = self._write_outcome(outcome)
 
-                with self.db._lock, self.db.conn:
+                with self.db.transaction():
                     self.db.execute(
                         """
                         INSERT OR IGNORE INTO forecast_resolution_state

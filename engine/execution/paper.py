@@ -159,7 +159,7 @@ class PaperBroker:
         position_id = str(uuid.uuid4())
 
         # For Sprint 2A we open a new position per intent. Closing is done via PnLTracker.
-        with self.db._lock, self.db.conn:
+        with self.db.transaction():
             self.db.execute(
                 """
                 INSERT INTO positions (

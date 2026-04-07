@@ -420,7 +420,7 @@ class BrainOrchestrator:
 
             # Persist feature snapshot row (reproducibility)
             snap = synth_results[sym_upper].snapshot
-            with self.db._lock, self.db.conn:
+            with self.db.transaction():
                 self.db.execute(
                     """
                     INSERT INTO feature_snapshots (cycle_id, symbol, ts, features, source_event_ids, regime, version)
@@ -642,7 +642,7 @@ class BrainOrchestrator:
                                 else:  # short
                                     _drawdown = max(0.0, (_mark - _entry_px) / _entry_px)
                                 if _drawdown > _existing_dd:
-                                    with self.db._lock, self.db.conn:
+                                    with self.db.transaction():
                                         self.db.execute(
                                             "UPDATE positions SET max_drawdown_during = ? WHERE id = ? AND status = 'open'",
                                             (_drawdown, _pid),
