@@ -20,6 +20,7 @@ universe:
     - SOL
     - SUI
     - HYPE
+    - DOGE
 
 execution:
   paper_ignore_consecutive_loss_gate: true
