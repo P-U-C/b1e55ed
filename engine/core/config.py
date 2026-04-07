@@ -142,10 +142,11 @@ class ExecutionConfig(BaseModel):
     confirmation_threshold_usd: float = 500.0
     paper_min_days: int = 14
     # Paper-mode throughput settings
-    paper_max_positions_per_symbol: int = 2
+    paper_max_positions_per_symbol: int = 1
     """Maximum concurrent open positions per symbol in paper mode.
-    Default: 2 (allows conviction-flip / new entries while one is open).
-    Set to 1 to restore legacy behaviour."""
+    Default: 1 (one position per symbol — prevents duplicate entries from
+    consecutive brain cycles). Set to 2 to allow conviction-flip entries
+    while one is still open."""
 
     paper_max_hold_hours: int = 72
     """Auto-close paper positions older than this many hours. 0 = disabled. Default: 72h."""

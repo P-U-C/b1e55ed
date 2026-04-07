@@ -523,6 +523,18 @@ class BrainOrchestrator:
                 should_auto_trade = confidence >= min_conf or strong_directional
 
                 if should_auto_trade and self.kill_switch.level == KillSwitchLevel.SAFE:
+                    # Fix 0: Skip if symbol already has an open position.
+                    # Prevents consecutive brain cycles from opening duplicate positions.
+                    _open_row = self.db.fetchone(
+                        "SELECT COUNT(*) FROM positions WHERE asset = ? AND status = 'open'",
+                        (sym,),
+                    )
+                    _open_count = int(_open_row[0]) if _open_row else 0
+                    _max_per_sym = int(getattr(self.config.execution, "paper_max_positions_per_symbol", 1) or 1)
+                    if _open_count >= _max_per_sym:
+                        _log.info("auto-paper-trade skipped: %s already has %d open position(s) (limit=%d)", sym, _open_count, _max_per_sym)
+                        continue
+
                     gate_decision = self._bundle_auto_trade_policy(sym)
                     if not gate_decision.allowed:
                         _log.info(
