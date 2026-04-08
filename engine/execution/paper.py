@@ -164,9 +164,7 @@ class PaperBroker:
         # trades on consecutive cycles (e.g. two DOGE shorts seconds apart).
         # A conviction-flip (long -> short or vice-versa) is still allowed.
         if self._has_open_position_for_direction(sym, dirn):
-            raise ValueError(
-                f"duplicate_open_position: {sym} already has an open {dirn} position"
-            )
+            raise ValueError(f"duplicate_open_position: {sym} already has an open {dirn} position")
 
         # Deduplication: reject if open positions for this symbol exceed the limit.
         # In paper mode paper_max_positions_per_symbol (default 2) allows a second
