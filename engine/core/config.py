@@ -115,6 +115,22 @@ class RiskConfig(BaseModel):
         return v
 
 
+class CTSCalibrationConfig(BaseModel):
+    """CTS sigmoid centers from brain.db P75 percentiles.
+
+    These values are data-driven: run calibration against brain.db to
+    determine the 75th percentile for each feature.  Fallbacks are
+    provided for cold-start.
+    """
+
+    rsi_center: float = 60.16
+    funding_center: float = 4.58  # annualized, not rate
+    basis_center: float = 2.33
+    oi_roc_center: float = 3.0  # fallback: no OI data
+    calibrated_at: str = ""
+    recalibrate_interval_days: int = 30
+
+
 class BrainConfig(BaseModel):
     cycle_interval_seconds: int = 1800
     auto_paper_trade: bool = True
@@ -134,6 +150,16 @@ class BrainConfig(BaseModel):
     WARNING: Values below 3.0 will trade on weak signals and are only appropriate
     for testing.  Default: 5.0 (production-safe).
     Recommended testing range: 2.5–4.0."""
+
+    use_regime_v2: bool = False
+    """Feature flag: enable continuous regime detector + CTS v2.
+
+    When True, uses weighted continuous regime scoring and sigmoid-based CTS.
+    When False (default), uses the original binary vote regime detector + binary CTS.
+    """
+
+    cts_calibration: CTSCalibrationConfig = Field(default_factory=CTSCalibrationConfig)
+    """CTS sigmoid centers calibrated from brain.db P75 percentiles."""
 
 
 class ExecutionConfig(BaseModel):

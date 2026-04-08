@@ -1,7 +1,7 @@
 # User config — personal overrides on top of defaults and preset.
 
 api:
-  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
+  auth_token: "CHANGE_ME"  # Placeholder — override in ~/.b1e55ed/config/user.yaml or B1E55ED_API__AUTH_TOKEN env var
 
 daemon:
   brain_interval_seconds: 300
@@ -11,7 +11,15 @@ daemon:
 brain:
   auto_paper_trade: true
   auto_paper_trade_min_confidence: 0.35
-  auto_paper_trade_min_magnitude: 2.0
+  auto_paper_trade_min_magnitude: 3.0
+  use_regime_v2: false
+  cts_calibration:
+    rsi_center: 60.16
+    funding_center: 4.58
+    basis_center: 2.33
+    oi_roc_center: 3.0
+    calibrated_at: "2026-04-07T00:00:00Z"
+    recalibrate_interval_days: 30
 
 universe:
   symbols:

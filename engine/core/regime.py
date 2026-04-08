@@ -12,6 +12,10 @@ REGIME_CAPS: dict[str, float] = {
     "BEAR": 7.0,
     "TRANSITION": 6.0,
     "CRISIS": 4.0,
+    # V2 regime labels (continuous detector)
+    "LEAN_BULL": 10.0,
+    "LEAN_BEAR": 8.0,
+    "NEUTRAL": 8.0,
 }
 
 

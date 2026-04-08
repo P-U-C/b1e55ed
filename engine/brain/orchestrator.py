@@ -36,12 +36,14 @@ except ImportError:  # pragma: no cover
 
 
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
+from engine.brain.conviction_v2_bridge import compute_v2_overrides, detect_regime_v2
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
 from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
 from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel, PauseGate
 from engine.brain.learning import StratificationTracker
 from engine.brain.regime import RegimeDetector, RegimeResult
+from engine.brain.regime_v2 import RegimeDetectorV2
 from engine.brain.synthesis import SynthesisResult, VectorSynthesis
 from engine.core.config import Config
 from engine.core.database import Database
@@ -87,6 +89,7 @@ class BrainOrchestrator:
         self.data_quality = DataQualityMonitor(config, db)
         self.synthesis = VectorSynthesis(config, db)
         self.regime = RegimeDetector(db)
+        self._regime_v2 = RegimeDetectorV2(db) if getattr(config.brain, "use_regime_v2", False) else None
         self.kill_switch = KillSwitch(config, db)
         self.pause_gate = PauseGate(db)
         self.conviction = ConvictionEngine(config, db, node_id=identity.node_id)
@@ -487,6 +490,9 @@ class BrainOrchestrator:
         regime_res = self.regime.detect(as_of=now, btc_snapshot=(btc.snapshot if btc else None))
         self.regime.emit_if_changed(regime_res)
 
+        # V2 regime (parallel, for feature-flagged path)
+        _regime_v2_result = detect_regime_v2(self._regime_v2, btc.snapshot if btc else None)
+
         # Kill switch escalation if crisis.
         ks_dec = None
         if regime_res.state.regime == "CRISIS":
@@ -503,7 +509,18 @@ class BrainOrchestrator:
         intents: list[dict] = []
 
         for sym, synth in synth_results.items():
-            conv = self.conviction.compute(synthesis=synth, regime=regime_res.state.regime, as_of=now)
+            # Compute v2 overrides (regime multiplier + CTS) when flag is on
+            cal = getattr(self.config.brain, "cts_calibration", None)
+            cal_dict = cal.model_dump() if cal is not None else None
+            v2 = compute_v2_overrides(_regime_v2_result, synth.snapshot.features, cal_dict)
+
+            conv = self.conviction.compute(
+                synthesis=synth,
+                regime=v2.regime_label if v2 else regime_res.state.regime,
+                as_of=now,
+                regime_multiplier_v2=v2.regime_multiplier if v2 else None,
+                cts_v2=v2.cts if v2 else None,
+            )
             convictions[sym] = conv
             self.conviction.emit(conv, cycle_id=cycle_id)
 
