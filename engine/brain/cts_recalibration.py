@@ -6,16 +6,21 @@ Reads recent feature_snapshots from brain.db, computes P75 (75th percentile)
 values for each CTS calibration parameter, and updates the cts_calibration
 section in config/user.yaml.
 
+Features are stored as a nested JSON blob in the ``features`` column:
+  - RSI:     ``json_extract(features, '$.technical.rsi_14')``
+  - Funding: ``json_extract(features, '$.tradfi.funding_annualized')``
+  - Basis:   ``json_extract(features, '$.tradfi.basis_annualized')``
+  - OI:      ``json_extract(features, '$.tradfi.oi_change_pct')``
+
 Designed to run as a daemon scheduler task every ``recalibrate_interval_days``
 days, or manually via ``b1e55ed recalibrate-cts``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import statistics
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +30,18 @@ from engine.core.database import Database
 
 logger = logging.getLogger("b1e55ed.cts_recalibration")
 
-# Minimum number of feature snapshots required to recalibrate.
-# Below this threshold we keep the existing (or default) calibration.
+# Minimum number of non-null samples required per feature to recalibrate.
+# Below this threshold we keep the existing (or default) calibration for that feature.
 _MIN_SAMPLES = 20
+
+# Feature extraction paths within the JSON blob stored in feature_snapshots.features.
+# key: calibration parameter name -> (json_extract path, use_abs)
+_FEATURE_SPEC: dict[str, tuple[str, bool]] = {
+    "rsi_center": ("$.technical.rsi_14", False),
+    "funding_center": ("$.tradfi.funding_annualized", True),
+    "basis_center": ("$.tradfi.basis_annualized", True),
+    "oi_roc_center": ("$.tradfi.oi_change_pct", True),
+}
 
 
 def _percentile_75(values: list[float]) -> float:
@@ -35,10 +49,31 @@ def _percentile_75(values: list[float]) -> float:
     if not values:
         return 0.0
     sorted_vals = sorted(values)
-    # Use statistics.quantiles (Python 3.8+) for a clean implementation.
-    # quantiles(data, n=4) returns [Q1, Q2, Q3].
+    # statistics.quantiles(data, n=4) returns [Q1, Q2, Q3].
     quartiles = statistics.quantiles(sorted_vals, n=4)
     return quartiles[2]  # Q3 = P75
+
+
+def _query_feature_values(
+    db: Database,
+    json_path: str,
+    lookback_days: int,
+    *,
+    use_abs: bool = False,
+) -> list[float]:
+    """Extract non-null numeric feature values from recent snapshots via json_extract."""
+    extract = f"json_extract(features, '{json_path}')"
+    value_expr = f"ABS({extract})" if use_abs else extract
+    cutoff = f"-{lookback_days} days"
+
+    rows = db.fetchall(
+        f"SELECT {value_expr} AS val FROM feature_snapshots "  # noqa: S608
+        f"WHERE created_at > datetime('now', ?) "
+        f"AND {extract} IS NOT NULL "
+        f"AND typeof({extract}) IN ('integer', 'real')",
+        (cutoff,),
+    )
+    return [float(r[0]) for r in rows]
 
 
 def compute_calibration_from_db(
@@ -50,58 +85,31 @@ def compute_calibration_from_db(
 
     Returns a dict with keys ``rsi_center``, ``funding_center``,
     ``basis_center``, ``oi_roc_center``, ``calibrated_at`` — or None if
-    insufficient data.
+    insufficient data for every feature.
     """
-    cutoff = f"-{lookback_days} days"
-    rows = db.execute(
-        "SELECT features FROM feature_snapshots WHERE created_at > datetime('now', ?)",
-        (cutoff,),
-    ).fetchall()
-
-    if len(rows) < _MIN_SAMPLES:
-        logger.info(
-            "Insufficient data for recalibration: %d snapshots (need %d). Skipping.",
-            len(rows),
-            _MIN_SAMPLES,
-        )
-        return None
-
-    rsi_values: list[float] = []
-    funding_values: list[float] = []
-    basis_values: list[float] = []
-    oi_values: list[float] = []
-
-    for row in rows:
-        try:
-            features = json.loads(row["features"]) if isinstance(row["features"], str) else row["features"]
-        except (json.JSONDecodeError, TypeError):
-            continue
-
-        if features.get("rsi_14") is not None:
-            rsi_values.append(float(features["rsi_14"]))
-        if features.get("funding_annualized") is not None:
-            funding_values.append(abs(float(features["funding_annualized"])))
-        if features.get("basis_annualized") is not None:
-            basis_values.append(abs(float(features["basis_annualized"])))
-        if features.get("oi_change_pct") is not None:
-            oi_values.append(abs(float(features["oi_change_pct"])))
-
     result: dict[str, Any] = {}
+    sample_counts: dict[str, int] = {}
 
-    if len(rsi_values) >= _MIN_SAMPLES:
-        result["rsi_center"] = round(_percentile_75(rsi_values), 2)
-    if len(funding_values) >= _MIN_SAMPLES:
-        result["funding_center"] = round(_percentile_75(funding_values), 2)
-    if len(basis_values) >= _MIN_SAMPLES:
-        result["basis_center"] = round(_percentile_75(basis_values), 2)
-    if len(oi_values) >= _MIN_SAMPLES:
-        result["oi_roc_center"] = round(_percentile_75(oi_values), 2)
+    for key, (json_path, use_abs) in _FEATURE_SPEC.items():
+        values = _query_feature_values(db, json_path, lookback_days, use_abs=use_abs)
+        sample_counts[key] = len(values)
+        if len(values) >= _MIN_SAMPLES:
+            result[key] = round(_percentile_75(values), 2)
+            logger.info("Recalibration %s: P75=%.2f (n=%d)", key, result[key], len(values))
+        else:
+            logger.info(
+                "Insufficient data for %s: %d samples (need %d). Keeping current value.",
+                key,
+                len(values),
+                _MIN_SAMPLES,
+            )
 
     if not result:
         logger.info("No feature had enough samples for recalibration. Skipping.")
         return None
 
-    result["calibrated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result["calibrated_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result["_sample_counts"] = sample_counts
     return result
 
 
@@ -146,12 +154,17 @@ def run_recalibration(
     if new_cal is None:
         return {"status": "skipped", "reason": "insufficient_data"}
 
-    summary = {
+    sample_counts = new_cal.pop("_sample_counts", {})
+    calibrated_at = new_cal.get("calibrated_at", "")
+    new_values = {k: v for k, v in new_cal.items() if k != "calibrated_at"}
+
+    summary: dict[str, Any] = {
         "status": "recalibrated",
-        "old": {k: old_cal.get(k) for k in new_cal if k != "calibrated_at"},
-        "new": {k: v for k, v in new_cal.items() if k != "calibrated_at"},
-        "calibrated_at": new_cal["calibrated_at"],
+        "old": {k: old_cal.get(k) for k in new_values},
+        "new": new_values,
+        "calibrated_at": calibrated_at,
         "lookback_days": lookback_days,
+        "sample_counts": sample_counts,
     }
 
     if dry_run:
@@ -160,7 +173,7 @@ def run_recalibration(
     else:
         _update_user_yaml(user_yaml_path, new_cal)
         logger.info(
-            "CTS recalibration complete. Updated %s -> %s",
+            "CTS recalibration complete. Old: %s -> New: %s",
             summary["old"],
             summary["new"],
         )
