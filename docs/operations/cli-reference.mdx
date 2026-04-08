@@ -576,6 +576,18 @@ Automatically run by the daemon every 30 minutes via `resolve-outcomes`. Use thi
 
 ---
 
+### `b1e55ed recalibrate-cts`
+
+Recalibrate CTS sigmoid centers from the last 30 days of feature snapshots in brain.db.
+
+```bash
+b1e55ed recalibrate-cts [--dry-run] [--json]
+```
+
+Computes P75 (75th percentile) values for RSI, funding, basis, and OI change from `feature_snapshots`. Updates `cts_calibration` in `config/user.yaml`. Use `--dry-run` to preview without writing. Automatically run by the daemon when `recalibrate_interval_days` has elapsed.
+
+---
+
 ### `b1e55ed flush-karma`
 
 Flush all pending entries in the karma queue to the on-chain Reputation Registry (ERC-8004).
