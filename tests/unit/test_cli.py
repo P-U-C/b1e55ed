@@ -72,6 +72,8 @@ def test_cli_help_includes_subcommands(capsys: pytest.CaptureFixture[str]) -> No
     assert "positions" in out
     assert "webhooks" in out
     assert "kill-switch" in out
+    assert "pause" in out
+    assert "resume" in out
     assert "health" in out
     assert "api" in out
     assert "dashboard" in out
@@ -106,6 +108,8 @@ def test_cli_unknown_command_errors(capsys: pytest.CaptureFixture[str]) -> None:
         "positions",
         "webhooks",
         "kill-switch",
+        "pause",
+        "resume",
         "health",
         "api",
         "dashboard",
@@ -217,6 +221,28 @@ def test_cli_kill_switch_set_and_show(tmp_path: Path, monkeypatch: pytest.Monkey
     assert rc == 0
     show_payload = json.loads(capsys.readouterr().out)
     assert show_payload["level"] == 3
+
+
+def test_cli_pause_and_resume_emit_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    repo_root = _scaffold_repo(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo_root)
+
+    rc = main(["pause", "--reason", "reviewing signals", "--json"])
+    assert rc == 0
+    pause_payload = json.loads(capsys.readouterr().out)
+    assert pause_payload["payload"]["reason"] == "reviewing signals"
+
+    rc = main(["resume", "--json"])
+    assert rc == 0
+    resume_payload = json.loads(capsys.readouterr().out)
+    assert resume_payload["payload"]["consumed_by"] == "operator"
+
+    db = Database(tmp_path / "home" / ".b1e55ed" / "data" / "brain.db")
+    pause_events = db.get_events(event_type=EventType.PAUSE_V1, limit=1)
+    consumed_events = db.get_events(event_type=EventType.PAUSE_CONSUMED_V1, limit=1)
+
+    assert pause_events
+    assert consumed_events
 
 
 def test_cli_alerts_and_positions_json_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

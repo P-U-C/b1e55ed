@@ -9,6 +9,7 @@ Auto-escalate, never auto-de-escalate.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -42,6 +43,62 @@ class KillSwitchDecision:
     previous_level: KillSwitchLevel
     reason: str
     auto: bool
+
+
+class PauseGate:
+    """Single-cycle pause gate with immutable event-log semantics.
+
+    Pause is active when the latest ``system.pause.v1`` event is newer than
+    the latest ``system.pause.consumed.v1`` event.
+
+    Consuming a pause writes ``system.pause.consumed.v1`` and never mutates
+    existing events.
+    """
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    def is_paused(self) -> tuple[bool, str | None]:
+        """Return ``(paused, reason)`` for the current pause gate state."""
+        import json as _json
+
+        try:
+            pause_row = self.db.fetchone(
+                "SELECT rowid, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1",
+                (EventType.PAUSE_V1.value,),
+            )
+            if not pause_row:
+                return False, None
+
+            pause_rowid = int(pause_row[0])
+            pause_payload = pause_row[1]
+
+            consumed_row = self.db.fetchone(
+                "SELECT rowid FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1",
+                (EventType.PAUSE_CONSUMED_V1.value,),
+            )
+            if consumed_row is not None and int(consumed_row[0]) >= pause_rowid:
+                return False, None
+
+            data = _json.loads(pause_payload) if isinstance(pause_payload, str) else pause_payload
+            if not isinstance(data, dict):
+                return True, "operator pause"
+
+            reason = data.get("reason")
+            if reason is None or str(reason).strip() == "":
+                return True, "operator pause"
+            return True, str(reason)
+        except Exception:
+            return False, None
+
+    def consume(self) -> None:
+        """Write a consumed marker for the active pause (best effort)."""
+        with contextlib.suppress(Exception):
+            self.db.append_event(
+                event_type=EventType.PAUSE_CONSUMED_V1,
+                payload={"consumed_by": "orchestrator", "auto": True},
+                source="brain.orchestrator",
+            )
 
 
 class KillSwitch:

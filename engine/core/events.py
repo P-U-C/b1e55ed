@@ -60,8 +60,10 @@ class EventType(StrEnum):
     POSITION_CLOSED_V1 = "execution.position_closed.v1"
     POSITION_UPDATED_V1 = "execution.position_updated.v1"
 
-    # Kill switch
+    # Kill switch and cycle pause controls
     KILL_SWITCH_V1 = "system.kill_switch.v1"
+    PAUSE_V1 = "system.pause.v1"
+    PAUSE_CONSUMED_V1 = "system.pause.consumed.v1"
 
     # Karma
     KARMA_INTENT_V1 = "karma.intent.v1"
