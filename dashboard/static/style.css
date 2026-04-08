@@ -36,6 +36,8 @@
   --regime-crisis:      var(--red);
   --regime-choppy:      var(--neutral);
   --regime-transition:  var(--blue);
+  --regime-lean-bull:   #4ADE80;
+  --regime-lean-bear:   #F87171;
 
   /* Typography */
   --mono: 'JetBrains Mono', 'Courier New', monospace;
@@ -242,6 +244,8 @@ a:hover { color: var(--green); }
 .regime-crisis        { color: var(--red);    border-color: rgba(220,38,38,0.2); }
 .regime-choppy        { color: var(--neutral); border-color: rgba(107,114,128,0.2); }
 .regime-transition    { color: var(--blue);   border-color: rgba(59,130,246,0.2); }
+.regime-lean_bull     { color: #4ADE80;        border-color: rgba(74,222,128,0.2); }
+.regime-lean_bear     { color: #F87171;        border-color: rgba(248,113,113,0.2); }
 .regime-unknown       { color: var(--text-dim); border-color: var(--border); }
 
 /* ── Page Layout ─────────────────────────────── */
@@ -348,6 +352,8 @@ a:hover { color: var(--green); }
 .regime-banner.crisis        { border-left-color: var(--red); }
 .regime-banner.choppy        { border-left-color: var(--neutral); }
 .regime-banner.transition    { border-left-color: var(--blue); }
+.regime-banner.lean_bull    { border-left-color: #4ADE80; }
+.regime-banner.lean_bear    { border-left-color: #F87171; }
 
 /* ── Data Elements ───────────────────────────── */
 
