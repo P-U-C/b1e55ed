@@ -87,6 +87,8 @@ class PnLTracker:
         realized = (xp - entry) * qty if direction == "long" else (entry - xp) * qty
 
         now = _utc_now().isoformat()
+        _ks_escalate = False  # defer kill switch evaluation outside the transaction
+        _ks_loss_count = 0
         with self.db.transaction():
             self.db.execute(
                 "UPDATE positions SET status = 'closed', closed_at = ?, realized_pnl = ? WHERE id = ?",
@@ -99,12 +101,9 @@ class PnLTracker:
                     ("position_closed", "system", "execution.pnl", f"{position_id}:{reason}"),
                 )
 
-            # KS-1: Consecutive loss tracking
+            # KS-1: Consecutive loss tracking (state update inside transaction,
+            # kill switch evaluation deferred to after COMMIT to avoid nested BEGIN).
             try:
-                # In paper mode with paper_ignore_consecutive_loss_gate=True (default),
-                # we track the count but never escalate the kill switch.  This keeps
-                # paper trading alive through losing streaks without contaminating
-                # live-mode circuit-breaker state.
                 _paper_gate_bypass = (
                     self._config is not None
                     and str(getattr(self._config.execution, "mode", "paper")) == "paper"
@@ -119,11 +118,8 @@ class PnLTracker:
                         (str(count),),
                     )
                     if not _paper_gate_bypass and count >= 3 and self._config is not None:
-                        from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
-
-                        ks = KillSwitch(self._config, self.db)
-                        ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
-                        _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", count)
+                        _ks_escalate = True
+                        _ks_loss_count = count
                     elif _paper_gate_bypass and count >= 3:
                         _log.info(
                             "KS-1: %d consecutive paper losses — kill-switch escalation suppressed (paper_ignore_consecutive_loss_gate=True)",
@@ -133,6 +129,18 @@ class PnLTracker:
                     self.db.execute("INSERT OR REPLACE INTO system_state (key, value, updated_at) VALUES ('consecutive_loss_count', '0', datetime('now'))")
             except Exception:
                 _log.warning("KS-1 consecutive loss tracking failed", exc_info=True)
+
+        # KS-1: Escalate kill switch AFTER the transaction commits.
+        # ks.evaluate() calls db.append_event() which needs its own BEGIN EXCLUSIVE.
+        if _ks_escalate:
+            try:
+                from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
+
+                ks = KillSwitch(self._config, self.db)
+                ks.evaluate(manual_level=KillSwitchLevel.DEFENSIVE, reason="consecutive_losses_3")
+                _log.warning("KS-1: %d consecutive losses, escalating to DEFENSIVE", _ks_loss_count)
+            except Exception:
+                _log.warning("KS-1 kill switch escalation failed", exc_info=True)
 
         # Best-effort outcome attribution — never block execution on failure.
         if self._config is not None:
