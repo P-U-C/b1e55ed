@@ -78,35 +78,39 @@ class CounterThesis:
     high-confidence mistakes, not to find trades.
     """
 
+    @staticmethod
+    def _linear_ramp(value: float, lo: float, hi: float, max_score: float) -> float:
+        """Linear interpolation: 0 at *lo*, *max_score* at *hi*, clamped."""
+        if value <= lo:
+            return 0.0
+        if value >= hi:
+            return max_score
+        return max_score * (value - lo) / (hi - lo)
+
     def compute(self, *, synthesis: SynthesisResult, pcs: float, regime: str) -> float:
         # Return 0..100 (higher = more counter-evidence).
         snap = synthesis.snapshot
         tech = snap.features.get("technical", {})
         tradfi = snap.features.get("tradfi", {})
 
-        penalties: list[float] = []
+        score = 0.0
 
         rsi = tech.get("rsi_14")
-        if rsi is not None and float(rsi) >= 70.0:
-            penalties.append(25.0)
+        if rsi is not None:
+            score += self._linear_ramp(float(rsi), 55.0, 80.0, 25.0)
 
         funding = tradfi.get("funding_annualized")
-        if funding is not None and float(funding) >= 30.0:
-            penalties.append(25.0)
+        if funding is not None:
+            score += self._linear_ramp(float(funding), 10.0, 40.0, 25.0)
 
         basis = tradfi.get("basis_annualized")
-        if basis is not None and float(basis) >= 8.0:
-            penalties.append(20.0)
+        if basis is not None:
+            score += self._linear_ramp(float(basis), 4.0, 12.0, 20.0)
 
         if regime == "CRISIS":
-            penalties.append(30.0)
+            score += 30.0
 
-        # If we have any explicit contradictions, CTS ramps.
-        base = sum(penalties)
-        if base > 0:
-            base += 10.0
-
-        return float(_clamp(base, 0.0, 100.0))
+        return float(_clamp(score, 0.0, 100.0))
 
 
 class ConvictionEngine:

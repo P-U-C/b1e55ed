@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover
 
 import pytest
 
-from engine.brain.conviction import ConvictionEngine, _confidence_v1
+from engine.brain.conviction import ConvictionEngine, CounterThesis, _confidence_v1
 from engine.core.database import Database
 from engine.core.types import FeatureSnapshot
 from engine.security.identity import generate_node_identity
@@ -200,3 +200,79 @@ def test_confidence_always_clamped_to_contract_bounds(regime: str | None) -> Non
         for cts in range(-100, 401, 25):
             confidence = _confidence_v1(pcs=float(pcs), cts=float(cts), regime=regime)
             assert 0.1 <= confidence <= 0.95
+
+
+# --- CTS continuous scoring tests ---
+
+
+class TestCounterThesisContinuousScoring:
+    """Verify that CTS uses continuous ramps instead of binary thresholds."""
+
+    ct = CounterThesis()
+
+    def _synth(self, features: dict[str, dict[str, float]]):
+        return _build_synthesis(weighted_score=0.8, features=features)
+
+    def test_rsi_gradient(self) -> None:
+        """RSI penalty should increase continuously between 55 and 80."""
+        scores = []
+        for rsi in [50, 55, 60, 67.5, 75, 80, 90]:
+            synth = self._synth({"technical": {"rsi_14": float(rsi)}})
+            cts = self.ct.compute(synthesis=synth, pcs=80.0, regime="BULL")
+            scores.append(cts)
+
+        # Below 55: zero
+        assert scores[0] == 0.0
+        assert scores[1] == 0.0
+        # Midpoint (67.5) should give 12.5
+        assert scores[3] == pytest.approx(12.5)
+        # At 80: full 25
+        assert scores[4] < scores[5]
+        assert scores[5] == pytest.approx(25.0)
+        # Above 80: still capped at 25
+        assert scores[6] == pytest.approx(25.0)
+        # Monotonically non-decreasing
+        for i in range(1, len(scores)):
+            assert scores[i] >= scores[i - 1]
+
+    def test_funding_gradient(self) -> None:
+        """Funding penalty should ramp from 0 at 10 to 25 at 40."""
+        synth_lo = self._synth({"tradfi": {"funding_annualized": 10.0}})
+        synth_mid = self._synth({"tradfi": {"funding_annualized": 25.0}})
+        synth_hi = self._synth({"tradfi": {"funding_annualized": 40.0}})
+
+        assert self.ct.compute(synthesis=synth_lo, pcs=80.0, regime="BULL") == 0.0
+        assert self.ct.compute(synthesis=synth_mid, pcs=80.0, regime="BULL") == pytest.approx(12.5)
+        assert self.ct.compute(synthesis=synth_hi, pcs=80.0, regime="BULL") == pytest.approx(25.0)
+
+    def test_basis_gradient(self) -> None:
+        """Basis penalty should ramp from 0 at 4 to 20 at 12."""
+        synth_lo = self._synth({"tradfi": {"basis_annualized": 4.0}})
+        synth_mid = self._synth({"tradfi": {"basis_annualized": 8.0}})
+        synth_hi = self._synth({"tradfi": {"basis_annualized": 12.0}})
+
+        assert self.ct.compute(synthesis=synth_lo, pcs=80.0, regime="BULL") == 0.0
+        assert self.ct.compute(synthesis=synth_mid, pcs=80.0, regime="BULL") == pytest.approx(10.0)
+        assert self.ct.compute(synthesis=synth_hi, pcs=80.0, regime="BULL") == pytest.approx(20.0)
+
+    def test_crisis_still_binary(self) -> None:
+        """CRISIS regime should still add a flat +30."""
+        synth = self._synth({"technical": {"rsi_14": 50.0}})
+        cts = self.ct.compute(synthesis=synth, pcs=80.0, regime="CRISIS")
+        assert cts == pytest.approx(30.0)
+
+    def test_no_base_penalty(self) -> None:
+        """No extra +10 base penalty -- continuous scoring makes it unnecessary."""
+        synth = self._synth({"technical": {"rsi_14": 56.0}})
+        cts = self.ct.compute(synthesis=synth, pcs=80.0, regime="BULL")
+        # RSI=56 => ramp = 25 * (56-55)/(80-55) = 1.0; no +10 base
+        assert cts == pytest.approx(1.0)
+
+    def test_total_clamped_to_100(self) -> None:
+        """Even with all penalties maxed, CTS should not exceed 100."""
+        synth = self._synth({
+            "technical": {"rsi_14": 90.0},
+            "tradfi": {"funding_annualized": 50.0, "basis_annualized": 20.0},
+        })
+        cts = self.ct.compute(synthesis=synth, pcs=80.0, regime="CRISIS")
+        assert cts == pytest.approx(100.0)
