@@ -95,6 +95,61 @@ def test_paper_multi_position_same_symbol(temp_dir: Path) -> None:
         )
 
 
+def test_paper_same_direction_dedup_blocks_duplicate(temp_dir: Path) -> None:
+    """Same symbol + same direction must be rejected even when max_positions_per_symbol=2."""
+    db = Database(temp_dir / "brain.db")
+    cfg = PaperConfig(max_positions_per_symbol=2)
+    broker = PaperBroker(db, config=cfg)
+
+    broker.execute_market(
+        symbol="DOGE",
+        direction="short",
+        notional_usd=500.0,
+        leverage=1.0,
+        mid_price=0.15,
+        idempotency_key="doge-short-1",
+    )
+
+    # Second short on same symbol must be rejected (direction-level dedup)
+    with pytest.raises(ValueError, match="duplicate_open_position.*open short"):
+        broker.execute_market(
+            symbol="DOGE",
+            direction="short",
+            notional_usd=500.0,
+            leverage=1.0,
+            mid_price=0.15,
+            idempotency_key="doge-short-2",
+        )
+
+
+def test_paper_conviction_flip_allowed(temp_dir: Path) -> None:
+    """Opposite direction (conviction flip) must still be allowed."""
+    db = Database(temp_dir / "brain.db")
+    cfg = PaperConfig(max_positions_per_symbol=2)
+    broker = PaperBroker(db, config=cfg)
+
+    fill1 = broker.execute_market(
+        symbol="BTC",
+        direction="long",
+        notional_usd=1000.0,
+        leverage=1.0,
+        mid_price=50_000.0,
+        idempotency_key="btc-long-1",
+    )
+
+    # Short on same symbol must succeed (different direction)
+    fill2 = broker.execute_market(
+        symbol="BTC",
+        direction="short",
+        notional_usd=1000.0,
+        leverage=1.0,
+        mid_price=50_000.0,
+        idempotency_key="btc-short-1",
+    )
+
+    assert fill1.position_id != fill2.position_id
+
+
 def test_paper_single_position_legacy_blocks_duplicate(temp_dir: Path) -> None:
     """max_positions_per_symbol=1 (legacy default) still blocks a second position."""
     db = Database(temp_dir / "brain.db")

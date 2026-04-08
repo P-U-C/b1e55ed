@@ -67,9 +67,18 @@ class PriceAlertsProducer(BaseProducer):
         """Optional custom/paid data endpoint override."""
         return os.getenv("B1E55ED_PRICE_WS_URL") or os.getenv("PRICE_WS_URL")
 
+    def _all_subscribed_symbols(self) -> list[str]:
+        """Return deduplicated symbol list from universe.symbols AND bundle symbols.
+
+        Uses ``active_symbols()`` which merges enabled bundle symbols with
+        explicit ``universe.symbols`` — ensures assets like DOGE that live only
+        in a bundle still receive price data.
+        """
+        return [s.upper().strip() for s in self.ctx.config.universe.active_symbols()]
+
     def _collect_from_custom(self, url: str) -> list[dict[str, Any]]:
         """Fetch from a custom POST endpoint (original behaviour)."""
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        symbols = self._all_subscribed_symbols()
         data: Any = asyncio.run(self.ctx.client.request_json("POST", url, expected=(list, dict), json={"symbols": symbols}))
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
@@ -92,7 +101,7 @@ class PriceAlertsProducer(BaseProducer):
 
     def _collect_free(self) -> list[dict[str, Any]]:
         """Free public API fallback (Binance Ticker). Always available."""
-        symbols = [s.upper().strip() for s in self.ctx.config.universe.symbols]
+        symbols = self._all_subscribed_symbols()
         results: list[dict[str, Any]] = []
 
         _cap = getattr(self.ctx.config.universe, "max_symbols", 0)

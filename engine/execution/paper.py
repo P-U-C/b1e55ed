@@ -84,6 +84,18 @@ class PaperBroker:
         )
         return int(row[0]) if row else 0
 
+    def _has_open_position_for_direction(self, symbol: str, direction: str) -> bool:
+        """Return True if there is already an open position for *symbol* in the same *direction*.
+
+        This prevents the brain from double-firing identical trades on consecutive
+        cycles (e.g. two DOGE shorts opened seconds apart with identical parameters).
+        """
+        row = self.db.fetchone(
+            "SELECT 1 FROM positions WHERE asset = ? AND direction = ? AND status = 'open' LIMIT 1",
+            (symbol, direction),
+        )
+        return row is not None
+
     def execute_market(
         self,
         *,
@@ -145,6 +157,15 @@ class PaperBroker:
                 notional_usd=float(n_usd),
                 fee_usd=float(fee),
                 realized_pnl_usd=None,
+            )
+
+        # Direction-level deduplication: reject if the same asset+direction is
+        # already open.  This prevents the brain from double-firing identical
+        # trades on consecutive cycles (e.g. two DOGE shorts seconds apart).
+        # A conviction-flip (long -> short or vice-versa) is still allowed.
+        if self._has_open_position_for_direction(sym, dirn):
+            raise ValueError(
+                f"duplicate_open_position: {sym} already has an open {dirn} position"
             )
 
         # Deduplication: reject if open positions for this symbol exceed the limit.
