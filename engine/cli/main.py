@@ -1224,7 +1224,25 @@ def _cmd_signal(ctx: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
-def _latest_mark_prices(db) -> dict[str, float]:
+def _fetch_price_from_binance(symbol: str) -> float | None:
+    """Fallback: Binance public ticker API (same as position_monitor)."""
+    import urllib.request as _urllib_request
+
+    try:
+        ticker_symbol = f"{symbol.upper()}USDT"
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={ticker_symbol}"
+        req = _urllib_request.Request(url, headers={"User-Agent": "b1e55ed/1.0"})
+        with _urllib_request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            price = float(data.get("price", 0))
+            if price > 0:
+                return price
+    except Exception:
+        pass
+    return None
+
+
+def _latest_mark_prices(db, symbols: list[str] | None = None) -> dict[str, float]:
     from engine.core.events import EventType
 
     prices: dict[str, float] = {}
@@ -1234,6 +1252,16 @@ def _latest_mark_prices(db) -> dict[str, float]:
         px = ev.payload.get("price")
         if sym and px is not None and sym not in prices:
             prices[sym] = float(px)
+
+    # Binance fallback for any requested symbols still missing a price
+    if symbols:
+        for sym in symbols:
+            sym_upper = sym.upper()
+            if sym_upper not in prices:
+                bp = _fetch_price_from_binance(sym_upper)
+                if bp is not None:
+                    prices[sym_upper] = bp
+
     return prices
 
 
@@ -1317,6 +1345,10 @@ def _cmd_positions_close(ctx: CliContext, args: argparse.Namespace) -> int:
         except Exception:
             pass
 
+    # Binance fallback (same as position_monitor / dashboard)
+    if exit_price is None:
+        exit_price = _fetch_price_from_binance(asset)
+
     if exit_price is None:
         print("error: could not resolve market price; provide --exit-price", file=sys.stderr)
         return 1
@@ -1348,10 +1380,11 @@ def _cmd_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     db = Database(_resolve_db_path(repo_root))
     tracker = PnLTracker(db)
 
-    mark = _latest_mark_prices(db)
     rows = db.fetchall(
         "SELECT id, asset, direction, entry_price, size_notional, leverage, opened_at FROM positions WHERE status = 'open' ORDER BY opened_at DESC"
     )
+    _symbols = list({str(r[1]).upper() for r in rows})
+    mark = _latest_mark_prices(db, symbols=_symbols)
 
     out = []
     for r in rows:
@@ -1953,12 +1986,13 @@ def _cmd_alerts(ctx: CliContext, args: argparse.Namespace) -> int:
         )
 
     # Position stops/targets (with stop proximity)
-    mark = _latest_mark_prices(db)
     pos = db.fetchall(
         "SELECT asset, direction, stop_loss, take_profit, opened_at, id "
         "FROM positions "
         "WHERE status = 'open' AND (stop_loss IS NOT NULL OR take_profit IS NOT NULL)"
     )
+    _pos_symbols = list({str(r[0]).upper() for r in pos})
+    mark = _latest_mark_prices(db, symbols=_pos_symbols)
     for r in pos:
         sym = str(r[0]).upper()
         direction = str(r[1])
