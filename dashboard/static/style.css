@@ -37,6 +37,13 @@
   --regime-choppy:      var(--neutral);
   --regime-transition:  var(--blue);
 
+  /* Regime v2 */
+  --regime-bull:        var(--green);
+  --regime-lean-bull:   #4ade80;
+  --regime-bear:        var(--red);
+  --regime-lean-bear:   #f87171;
+  --regime-neutral:     var(--neutral);
+
   /* Typography */
   --mono: 'JetBrains Mono', 'Courier New', monospace;
   --sans: 'JetBrains Mono', monospace;
@@ -244,6 +251,13 @@ a:hover { color: var(--green); }
 .regime-transition    { color: var(--blue);   border-color: rgba(59,130,246,0.2); }
 .regime-unknown       { color: var(--text-dim); border-color: var(--border); }
 
+/* Regime v2 labels */
+.regime-bull          { color: var(--green);   border-color: rgba(34,197,94,0.2); }
+.regime-lean_bull     { color: #4ade80;        border-color: rgba(74,222,128,0.2); }
+.regime-bear          { color: var(--red);     border-color: rgba(220,38,38,0.2); }
+.regime-lean_bear     { color: #f87171;        border-color: rgba(248,113,113,0.2); }
+.regime-neutral       { color: var(--neutral); border-color: rgba(107,114,128,0.2); }
+
 /* ── Page Layout ─────────────────────────────── */
 
 .page {
@@ -348,6 +362,13 @@ a:hover { color: var(--green); }
 .regime-banner.crisis        { border-left-color: var(--red); }
 .regime-banner.choppy        { border-left-color: var(--neutral); }
 .regime-banner.transition    { border-left-color: var(--blue); }
+
+/* Regime v2 labels */
+.regime-banner.bull          { border-left-color: var(--green); }
+.regime-banner.lean_bull     { border-left-color: #4ade80; }
+.regime-banner.bear          { border-left-color: var(--red); }
+.regime-banner.lean_bear     { border-left-color: #f87171; }
+.regime-banner.neutral       { border-left-color: var(--neutral); }
 
 /* ── Data Elements ───────────────────────────── */
 
