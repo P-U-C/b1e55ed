@@ -2,7 +2,7 @@
 # Reconciled 2026-04-07: aligned with runtime ~/.b1e55ed/config/user.yaml
 
 api:
-  auth_token: ""  # REQUIRED: set via B1E55ED_API__AUTH_TOKEN env var or in ~/.b1e55ed/config/user.yaml
+  auth_token: "CHANGE_ME"  # Placeholder — override in ~/.b1e55ed/config/user.yaml or B1E55ED_API__AUTH_TOKEN env var
 
 daemon:
   brain_interval_seconds: 300
