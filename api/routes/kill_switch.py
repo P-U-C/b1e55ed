@@ -9,7 +9,7 @@ from api.deps import get_db, get_kill_switch
 from engine.brain.kill_switch import KillSwitch
 from engine.core.database import Database
 
-router = APIRouter(prefix="/kill-switch", dependencies=[AuthDep], tags=["brain"])
+router = APIRouter(prefix="/kill-switch", tags=["brain"])
 
 
 class KillSwitchSetRequest(BaseModel):
@@ -17,8 +17,9 @@ class KillSwitchSetRequest(BaseModel):
     reason: str = Field("manual", description="Human readable reason")
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[AuthDep])
 def status(ks: KillSwitch = Depends(get_kill_switch)) -> dict:
+    """Read-only kill switch level. Uses general API auth (not kill_switch_token)."""
     return {"level": int(ks.level)}
 
 
