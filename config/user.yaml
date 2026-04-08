@@ -1,7 +1,7 @@
 # User config — personal overrides on top of defaults and preset.
 
 api:
-  auth_token: ""
+  auth_token: "CHANGE_ME"  # Placeholder — override in ~/.b1e55ed/config/user.yaml or B1E55ED_API__AUTH_TOKEN env var
 
 daemon:
   brain_interval_seconds: 300
