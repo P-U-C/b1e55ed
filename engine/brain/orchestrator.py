@@ -42,6 +42,7 @@ from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
 from engine.brain.kill_switch import KillSwitch, KillSwitchDecision, KillSwitchLevel, PauseGate
 from engine.brain.learning import StratificationTracker
 from engine.brain.regime import RegimeDetector, RegimeResult
+from engine.brain.regime_v2 import RegimeDetectorV2
 from engine.brain.synthesis import SynthesisResult, VectorSynthesis
 from engine.core.config import Config
 from engine.core.database import Database
@@ -87,6 +88,7 @@ class BrainOrchestrator:
         self.data_quality = DataQualityMonitor(config, db)
         self.synthesis = VectorSynthesis(config, db)
         self.regime = RegimeDetector(db)
+        self._regime_v2 = RegimeDetectorV2(db) if getattr(config.brain, "use_regime_v2", False) else None
         self.kill_switch = KillSwitch(config, db)
         self.pause_gate = PauseGate(db)
         self.conviction = ConvictionEngine(config, db, node_id=identity.node_id)
@@ -487,6 +489,14 @@ class BrainOrchestrator:
         regime_res = self.regime.detect(as_of=now, btc_snapshot=(btc.snapshot if btc else None))
         self.regime.emit_if_changed(regime_res)
 
+        # V2 regime (parallel, for feature-flagged path)
+        _regime_v2_result = None
+        if self._regime_v2 is not None and btc is not None:
+            try:
+                _regime_v2_result = self._regime_v2.detect_for_asset(btc.snapshot)
+            except Exception:
+                logging.getLogger("b1e55ed.orchestrator").warning("regime_v2 failed, falling back to v1", exc_info=True)
+
         # Kill switch escalation if crisis.
         ks_dec = None
         if regime_res.state.regime == "CRISIS":
@@ -503,7 +513,35 @@ class BrainOrchestrator:
         intents: list[dict] = []
 
         for sym, synth in synth_results.items():
-            conv = self.conviction.compute(synthesis=synth, regime=regime_res.state.regime, as_of=now)
+            # Compute v2 CTS and regime multiplier when flag is on
+            _v2_mult: float | None = None
+            _v2_cts: float | None = None
+            if self._regime_v2 is not None and _regime_v2_result is not None:
+                from engine.brain.cts_v2 import compute_cts as _compute_cts_v2
+
+                _v2_mult = _regime_v2_result.multiplier
+                # Extract raw features for CTS from the per-symbol snapshot
+                snap = synth.snapshot
+                _tradfi = snap.features.get("tradfi", {})
+                _tech = snap.features.get("technical", {})
+                _cts_features: dict[str, float | None] = {
+                    "rsi_14": _tech.get("rsi_14"),
+                    "funding_annualized": _tradfi.get("funding_annualized"),
+                    "basis_annualized": _tradfi.get("basis_annualized"),
+                    "oi_change_pct": _tradfi.get("oi_change_pct"),
+                }
+                cal = getattr(self.config.brain, "cts_calibration", None)
+                cal_dict = cal.model_dump() if cal is not None else None
+                _v2_cts = _compute_cts_v2(_cts_features, cal_dict)
+
+            _regime_label = _regime_v2_result.label if _regime_v2_result is not None else regime_res.state.regime
+            conv = self.conviction.compute(
+                synthesis=synth,
+                regime=_regime_label,
+                as_of=now,
+                regime_multiplier_v2=_v2_mult,
+                cts_v2=_v2_cts,
+            )
             convictions[sym] = conv
             self.conviction.emit(conv, cycle_id=cycle_id)
 

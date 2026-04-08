@@ -56,6 +56,19 @@ def _confidence_v1(*, pcs: float, cts: float, regime: str | None) -> float:
     return float(_clamp(0.5 + (_pcs_component * 0.5 * _regime_factor) - _cts_penalty, 0.1, 0.95))
 
 
+def _confidence_v2(*, pcs: float, regime_multiplier: float) -> float:
+    """V2 confidence formula.
+
+    Same structure as v1 but uses continuous regime_multiplier instead of
+    categorical lookup, and CTS is already folded into PCS via the domain
+    scoring pipeline.
+
+    confidence = 0.5 + (pcs - 50) / 50 * 0.5 * regime_multiplier
+    """
+    _pcs_component = (pcs - 50.0) / 50.0
+    return float(_clamp(0.5 + (_pcs_component * 0.5 * regime_multiplier), 0.1, 0.95))
+
+
 @dataclass(frozen=True, slots=True)
 class ConvictionResult:
     score: ConvictionScore
@@ -120,6 +133,10 @@ class ConvictionEngine:
         self.node_id = node_id
         self.counter_thesis = CounterThesis()
 
+    @property
+    def _use_v2(self) -> bool:
+        return getattr(getattr(self.config, "brain", None), "use_regime_v2", False)
+
     def compute(
         self,
         *,
@@ -127,7 +144,35 @@ class ConvictionEngine:
         regime: str,
         as_of: datetime | None = None,
         timeframe: str = "4h",
+        regime_multiplier_v2: float | None = None,
+        cts_v2: float | None = None,
     ) -> ConvictionResult:
+        # Feature-flag dispatch: v2 when enabled and v2 inputs are provided.
+        if self._use_v2 and regime_multiplier_v2 is not None:
+            return self._compute_v2(
+                synthesis=synthesis,
+                regime=regime,
+                as_of=as_of,
+                timeframe=timeframe,
+                regime_multiplier_v2=regime_multiplier_v2,
+                cts_v2=cts_v2 or 0.0,
+            )
+        return self._compute_v1(
+            synthesis=synthesis,
+            regime=regime,
+            as_of=as_of,
+            timeframe=timeframe,
+        )
+
+    def _compute_v1(
+        self,
+        *,
+        synthesis: SynthesisResult,
+        regime: str,
+        as_of: datetime | None = None,
+        timeframe: str = "4h",
+    ) -> ConvictionResult:
+        """Original v1 conviction computation."""
         now = as_of or datetime.now(tz=UTC)
 
         # PCS is 0..100
@@ -186,6 +231,90 @@ class ConvictionEngine:
             score=score,
             pcs=pcs,
             cts=cts,
+            final_conviction=final,
+            domain_scores=dict(synthesis.domain_scores),
+            weights_used=dict(synthesis.weights_used),
+            snapshot=synthesis.snapshot,
+            capped_by_regime=capped_by_regime,
+            pre_cap_magnitude=pre_cap_magnitude,
+        )
+
+    def _compute_v2(
+        self,
+        *,
+        synthesis: SynthesisResult,
+        regime: str,
+        as_of: datetime | None = None,
+        timeframe: str = "4h",
+        regime_multiplier_v2: float,
+        cts_v2: float,
+    ) -> ConvictionResult:
+        """V2 conviction: continuous regime multiplier + gradient CTS.
+
+        PCS is boosted by CTS (0-35 range added to domain score) then confidence
+        uses the continuous regime_multiplier instead of categorical lookup.
+        """
+        now = as_of or datetime.now(tz=UTC)
+
+        # Base PCS from synthesis
+        base_pcs = float(_clamp(synthesis.weighted_score * 100.0, 0.0, 100.0))
+
+        # CTS v2 contributes positively to PCS (0-35 range).
+        # In v2, CTS measures "how interesting/actionable is the market" not "counter-evidence".
+        pcs = float(_clamp(base_pcs + cts_v2, 0.0, 100.0))
+
+        # Confidence from v2 formula
+        confidence = _confidence_v2(pcs=pcs, regime_multiplier=regime_multiplier_v2)
+
+        # Direction + magnitude from final PCS
+        final = pcs
+        if final >= 55.0:
+            direction = "long"
+        elif final <= 45.0:
+            direction = "short"
+        else:
+            direction = "neutral"
+
+        magnitude = float(_clamp(abs(final - 50.0) / 5.0, 0.0, 10.0))
+
+        # V2 still respects regime caps for safety
+        regime_key = regime.upper() if regime else "NEUTRAL"
+        cap = _REGIME_CAPS.get(regime_key, _REGIME_CAPS.get("TRANSITION", 6.0))
+        capped_by_regime = magnitude > cap
+        pre_cap_magnitude = magnitude if capped_by_regime else None
+        magnitude = min(magnitude, cap)
+
+        payload_wo_commit = {
+            "symbol": synthesis.snapshot.symbol,
+            "direction": direction,
+            "magnitude": magnitude,
+            "timeframe": timeframe,
+            "pcs_score": pcs,
+            "cts_score": cts_v2,
+            "regime": regime,
+            "domains_used": sorted(list(synthesis.domain_scores.keys())),
+        }
+        commitment = _commitment_hash(payload_wo_commit)
+
+        score = ConvictionScore(
+            node_id=self.node_id,
+            symbol=synthesis.snapshot.symbol,
+            direction=direction,
+            magnitude=magnitude,
+            timeframe=timeframe,
+            ts=now,
+            commitment_hash=commitment,
+            pcs_score=pcs,
+            cts_score=cts_v2,
+            regime=regime,
+            domains_used=sorted(list(synthesis.domain_scores.keys())),
+            confidence=confidence,
+        )
+
+        return ConvictionResult(
+            score=score,
+            pcs=pcs,
+            cts=cts_v2,
             final_conviction=final,
             domain_scores=dict(synthesis.domain_scores),
             weights_used=dict(synthesis.weights_used),
