@@ -680,7 +680,7 @@ class Database:
     def __post_init__(self) -> None:
         self.db_path = Path(self.db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
         # Set connection-level pragmas before any other DB operations.
         # These MUST run before _init_schema() and outside any transaction:
         # journal_mode=WAL cannot be changed inside a transaction, and
@@ -1077,6 +1077,9 @@ class Database:
             # between our read and insert — the default BEGIN DEFERRED only
             # acquires a shared lock on read, allowing two writers to fork
             # the hash chain.
+            # Commit any implicit transaction from Python's sqlite3
+            # auto-transaction (isolation_level="") before starting ours.
+            self.conn.commit()
             self.conn.execute("BEGIN EXCLUSIVE")
             try:
                 ev = self._append_event_inner(
@@ -1137,6 +1140,7 @@ class Database:
             saved_hash = self._last_hash
             # Use BEGIN EXCLUSIVE so concurrent connections (other processes)
             # cannot read last_hash while we are building the batch chain.
+            self.conn.commit()
             self.conn.execute("BEGIN EXCLUSIVE")
             try:
                 for et, payload, dedupe_key in event_list:
@@ -1169,7 +1173,8 @@ class Database:
 
         deleted: dict[str, int] = {}
         with self._lock:
-            with self.conn:
+            self.conn.execute("BEGIN")
+            try:
                 # Events: keep last N days.
                 # Bug fix: must delete from event_dedup (FK child) BEFORE events (FK parent)
                 # to avoid FOREIGN KEY constraint violations when foreign_keys=ON.
@@ -1214,6 +1219,11 @@ class Database:
                     (retention.api_rate_limits_keep_hours,),
                 )
                 deleted["api_rate_limits"] = cursor.rowcount
+
+                self.conn.execute("COMMIT")
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
 
             # VACUUM must run outside the transaction block
             if getattr(retention, "vacuum_on_prune", True) and any(v > 0 for v in deleted.values()):
