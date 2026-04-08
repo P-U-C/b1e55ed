@@ -498,7 +498,10 @@ def run_daemon(repo_root: Path, config: Any) -> int:
     # CTS recalibration scheduler — reads recalibrate_interval_days from config
     brain_cfg = getattr(config, "brain", None)
     cts_cal_cfg = getattr(brain_cfg, "cts_calibration", None) if brain_cfg else None
-    recal_days = getattr(cts_cal_cfg, "recalibrate_interval_days", 30) if cts_cal_cfg else 30
+    try:
+        recal_days = int(getattr(cts_cal_cfg, "recalibrate_interval_days", 30) if cts_cal_cfg else 30)
+    except (TypeError, ValueError):
+        recal_days = 30
     recal_interval = max(recal_days, 1) * 86400  # convert days to seconds
     schedulers.append(
         Scheduler(
