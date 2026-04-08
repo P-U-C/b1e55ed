@@ -1,7 +1,7 @@
 # User config — personal overrides on top of defaults and preset.
 
 api:
-  auth_token: "d3FlLSCvNcxEGDexTReZmdJfP7JIwnB0OtoTrsklCYE"
+  auth_token: ""
 
 daemon:
   brain_interval_seconds: 300
@@ -11,7 +11,7 @@ daemon:
 brain:
   auto_paper_trade: true
   auto_paper_trade_min_confidence: 0.35
-  auto_paper_trade_min_magnitude: 2.0
+  auto_paper_trade_min_magnitude: 3.0
 
 universe:
   symbols:
