@@ -1071,25 +1071,36 @@ class Database:
                     getattr(event_type, "value", str(event_type)),
                 )
 
-        with self._lock, self.conn:
-            ev = self._append_event_inner(
-                event_type=event_type,
-                payload=payload,
-                event_id=event_id,
-                observed_at=observed_at,
-                source=source,
-                contributor_id=contributor_id,
-                trace_id=trace_id,
-                schema_version=schema_version,
-                dedupe_key=dedupe_key,
-                ts=ts,
-            )
-            # Periodic cleanup of stale api_rate_limits records (every 500 appends).
-            # Runs inside the existing transaction to avoid an extra round-trip.
-            self._cleanup_counter += 1
-            if self._cleanup_counter >= 500:
-                self._cleanup_counter = 0
-                self.conn.execute("DELETE FROM api_rate_limits WHERE window_start < (strftime('%s', 'now') - 3600)")
+        with self._lock:
+            # Use BEGIN EXCLUSIVE to prevent concurrent connections (other
+            # processes sharing this WAL-mode database) from reading last_hash
+            # between our read and insert — the default BEGIN DEFERRED only
+            # acquires a shared lock on read, allowing two writers to fork
+            # the hash chain.
+            self.conn.execute("BEGIN EXCLUSIVE")
+            try:
+                ev = self._append_event_inner(
+                    event_type=event_type,
+                    payload=payload,
+                    event_id=event_id,
+                    observed_at=observed_at,
+                    source=source,
+                    contributor_id=contributor_id,
+                    trace_id=trace_id,
+                    schema_version=schema_version,
+                    dedupe_key=dedupe_key,
+                    ts=ts,
+                )
+                # Periodic cleanup of stale api_rate_limits records (every 500 appends).
+                # Runs inside the existing transaction to avoid an extra round-trip.
+                self._cleanup_counter += 1
+                if self._cleanup_counter >= 500:
+                    self._cleanup_counter = 0
+                    self.conn.execute("DELETE FROM api_rate_limits WHERE window_start < (strftime('%s', 'now') - 3600)")
+                self.conn.execute("COMMIT")
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
 
         # Side effects (best-effort): outbound webhooks.
         try:
@@ -1124,19 +1135,23 @@ class Database:
         with self._lock:
             # Save state for rollback on failure.
             saved_hash = self._last_hash
+            # Use BEGIN EXCLUSIVE so concurrent connections (other processes)
+            # cannot read last_hash while we are building the batch chain.
+            self.conn.execute("BEGIN EXCLUSIVE")
             try:
-                with self.conn:
-                    for et, payload, dedupe_key in event_list:
-                        ev = self._append_event_inner(
-                            event_type=et,
-                            payload=payload,
-                            dedupe_key=dedupe_key,
-                            source=source,
-                        )
-                        out.append(ev)
-            except Exception:
+                for et, payload, dedupe_key in event_list:
+                    ev = self._append_event_inner(
+                        event_type=et,
+                        payload=payload,
+                        dedupe_key=dedupe_key,
+                        source=source,
+                    )
+                    out.append(ev)
+                self.conn.execute("COMMIT")
+            except BaseException:
                 # Restore cached hash on failure — the transaction rolled back.
                 self._last_hash = saved_hash
+                self.conn.execute("ROLLBACK")
                 raise
         return out
 
