@@ -606,6 +606,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
 
+    # -- recalibrate-cts --
+    p_recal = sub.add_parser("recalibrate-cts", help="Recalibrate CTS sigmoid centers from recent data")
+    p_recal.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show new calibration values without writing them.",
+    )
+    p_recal.add_argument(
+        "--lookback-days",
+        type=int,
+        default=None,
+        help="Override lookback window (default: recalibrate_interval_days from config).",
+    )
+    p_recal.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
     # -- replay --
     p_replay = sub.add_parser("replay", help="Rebuild projections from event replay")
     p_replay.add_argument("--from", dest="from_id", help="Start from event ID (inclusive)")
@@ -3231,6 +3246,45 @@ def _write_user_config(*, user_cfg_path: Path, preset: str) -> None:
     user_cfg_path.write_text(content, encoding="utf-8")
 
 
+def _cmd_recalibrate_cts(ctx: CliContext, args: argparse.Namespace) -> int:
+    """Recalibrate CTS sigmoid centers from recent feature snapshots."""
+    from engine.brain.cts_recalibration import run_recalibration
+    from engine.core.config import Config
+    from engine.core.database import Database
+
+    repo_root = ctx.repo_root
+    cfg_path = repo_root / "config" / "user.yaml"
+    config = Config.from_yaml(cfg_path) if cfg_path.exists() else Config.from_repo_defaults(repo_root)
+    db = Database(_resolve_db_path(repo_root, config))
+
+    lookback = getattr(args, "lookback_days", None) or config.brain.cts_calibration.recalibrate_interval_days
+    dry_run = bool(getattr(args, "dry_run", False))
+
+    try:
+        result = run_recalibration(repo_root, db, lookback_days=lookback, dry_run=dry_run)
+
+        if getattr(args, "json", False):
+            print(_json_dumps(result))
+        else:
+            if result["status"] == "skipped":
+                print(f"Recalibration skipped: {result.get('reason', 'unknown')}")
+            elif result["status"] == "dry_run":
+                print("Dry run — proposed calibration changes:")
+                for key, val in result.get("new", {}).items():
+                    old_val = result.get("old", {}).get(key, "?")
+                    print(f"  {key}: {old_val} -> {val}")
+            else:
+                print("CTS recalibration complete.")
+                for key, val in result.get("new", {}).items():
+                    old_val = result.get("old", {}).get(key, "?")
+                    print(f"  {key}: {old_val} -> {val}")
+                print(f"  calibrated_at: {result.get('calibrated_at', '')}")
+    finally:
+        db.close()
+
+    return 0
+
+
 def _cmd_prune(ctx: CliContext, args: argparse.Namespace) -> int:
     """Prune old records according to retention policy."""
     from engine.core.config import Config
@@ -4270,7 +4324,7 @@ def main(argv: list[str] | None = None) -> int:
     # Operational commands are identity-gate exempt — they must run to diagnose the identity itself.
     # An operator with a broken identity still needs doctor/health/integrity to recover.
     # These commands may still REPORT identity status internally, but they must not be blocked.
-    identity_gate_exempt = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair"}
+    identity_gate_exempt = {"health", "doctor", "integrity", "verify-chain", "replay", "prune", "reconcile", "repair", "recalibrate-cts"}
 
     cmd = getattr(args, "command", None)
 
@@ -4347,6 +4401,7 @@ def main(argv: list[str] | None = None) -> int:
         "uninstall": _cmd_uninstall,
         "report": lambda ctx, args: __import__("engine.cli.commands.report", fromlist=["run_report"]).run_report(ctx, args),
         "spi": _cmd_spi,
+        "recalibrate-cts": _cmd_recalibrate_cts,
     }
 
     fn = dispatch.get(str(args.command))

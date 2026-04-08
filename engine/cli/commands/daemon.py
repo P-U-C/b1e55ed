@@ -495,6 +495,23 @@ def run_daemon(repo_root: Path, config: Any) -> int:
         )
         print(f"[daemon] Prune scheduler: every {prune_interval}s")
 
+    # CTS recalibration scheduler — reads recalibrate_interval_days from config
+    brain_cfg = getattr(config, "brain", None)
+    cts_cal_cfg = getattr(brain_cfg, "cts_calibration", None) if brain_cfg else None
+    try:
+        recal_days = int(getattr(cts_cal_cfg, "recalibrate_interval_days", 30) if cts_cal_cfg else 30)
+    except (TypeError, ValueError):
+        recal_days = 30
+    recal_interval = max(recal_days, 1) * 86400  # convert days to seconds
+    schedulers.append(
+        Scheduler(
+            "recalibrate-cts",
+            _cmd(["recalibrate-cts"]),
+            interval=recal_interval,
+        )
+    )
+    print(f"[daemon] CTS recalibration: every {recal_days}d ({recal_interval}s)")
+
     supervisor = Supervisor(services, schedulers, log_dir=log_dir, api_port=api_port)
 
     print(f"b1e55ed daemon starting — logs: {log_dir}")
@@ -508,6 +525,7 @@ def run_daemon(repo_root: Path, config: Any) -> int:
         print(f"  prune:      every {prune_interval}s ({prune_interval // 3600}h)")
     else:
         print("  prune:      disabled (prune_interval_seconds=0) — run 'b1e55ed prune' manually")
+    print(f"  recal-cts:  every {recal_days}d")
     print()
 
     # Set PYTHONPATH so subprocesses can import engine
