@@ -29,6 +29,7 @@ class DecisionContext:
     regime: str
     kill_level: KillSwitchLevel
     source_event_ids: list[str] = field(default_factory=list)
+    horizon: str | None = None
 
 
 @runtime_checkable
@@ -91,6 +92,7 @@ class DefaultDecisionPolicy:
             rationale=rationale,
             stop_loss_pct=0.05,
             take_profit_pct=0.10,
+            horizon=ctx.horizon,
             source_event_ids=list(ctx.source_event_ids),
         )
 
@@ -117,6 +119,7 @@ class DecisionEngine:
         source: str = "brain.decision",
         trace_id: str | None = None,
         source_event_ids: list[str] | None = None,
+        horizon: str | None = None,
     ) -> TradeIntent | None:
         ctx = DecisionContext(
             symbol=str(symbol).upper(),
@@ -124,6 +127,7 @@ class DecisionEngine:
             regime=str(regime),
             kill_level=kill_level,
             source_event_ids=list(source_event_ids or []),
+            horizon=horizon,
         )
         intent = self.policy.decide(ctx)
         if intent is None:

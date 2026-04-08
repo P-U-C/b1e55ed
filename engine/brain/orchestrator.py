@@ -514,10 +514,29 @@ class BrainOrchestrator:
             cal_dict = cal.model_dump() if cal is not None else None
             v2 = compute_v2_overrides(_regime_v2_result, synth.snapshot.features, cal_dict)
 
+            # Extract dominant horizon from contributing forecast events.
+            # Most recent/frequent horizon wins; default to "4h" if none found.
+            _dominant_horizon = "4h"
+            try:
+                _src_ids = list(synth.snapshot.source_event_ids or [])
+                if _src_ids:
+                    _ph = ",".join("?" * len(_src_ids))
+                    _h_rows = self.db.fetchall(
+                        f"SELECT json_extract(payload, '$.horizon') as h FROM events WHERE id IN ({_ph}) AND h IS NOT NULL",
+                        tuple(_src_ids),
+                    )
+                    _horizons = [str(r[0]) for r in _h_rows if r[0]]
+                    if _horizons:
+                        from collections import Counter
+                        _dominant_horizon = Counter(_horizons).most_common(1)[0][0]
+            except Exception:
+                pass  # fall back to "4h"
+
             conv = self.conviction.compute(
                 synthesis=synth,
                 regime=v2.regime_label if v2 else regime_res.state.regime,
                 as_of=now,
+                timeframe=_dominant_horizon,
                 regime_multiplier_v2=v2.regime_multiplier if v2 else None,
                 cts_v2=v2.cts if v2 else None,
             )
@@ -540,6 +559,7 @@ class BrainOrchestrator:
                 kill_level=self.kill_switch.level,
                 trace_id=cycle_id,
                 source_event_ids=list(synth.snapshot.source_event_ids or []),
+                horizon=conv.score.timeframe,
             )
             if intent is not None:
                 # TradeIntent is a frozen slots dataclass.
@@ -632,6 +652,7 @@ class BrainOrchestrator:
                             rationale="auto_paper_trade:high_confidence",
                             stop_loss_pct=0.05,
                             take_profit_pct=0.10,
+                            horizon=conv.score.timeframe,  # signal-driven hold duration
                             intended_price=mid_price,
                             conviction_id=_conv_id,
                             source_event_ids=list(synth_results[sym].snapshot.source_event_ids or []),
