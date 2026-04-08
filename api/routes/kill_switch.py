@@ -9,7 +9,7 @@ from engine.brain.kill_switch import KillSwitch, KillSwitchLevel
 from engine.core.database import Database
 from engine.core.kill_switch_alerts import notify_kill_switch_escalated, notify_kill_switch_reset
 
-router = APIRouter(prefix="/kill-switch", dependencies=[KillSwitchAuthDep], tags=["brain"])
+router = APIRouter(prefix="/kill-switch", tags=["brain"])
 
 
 class KillSwitchSetRequest(BaseModel):
@@ -22,7 +22,7 @@ def status(ks: KillSwitch = Depends(get_kill_switch)) -> dict:
     return {"level": int(ks.level)}
 
 
-@router.post("/set")
+@router.post("/set", dependencies=[KillSwitchAuthDep])
 def set_level(
     payload: KillSwitchSetRequest,
     db: Database = Depends(get_db),
