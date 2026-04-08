@@ -114,10 +114,18 @@ class RegimeDetector:
 
         if crisis >= 2:
             regime = "CRISIS"
-        elif bull >= 3:
+        elif bull >= 2 and bull > bear:
             regime = "BULL"
-        elif bear >= 3:
+        elif bear >= 2 and bear > bull:
             regime = "BEAR"
+        elif bull >= 2 and bull == bear:
+            # Tiebreaker: fear_greed sentiment breaks the deadlock.
+            if fng is not None and fng < 25.0:
+                regime = "BEAR"
+            elif fng is not None and fng > 40.0:
+                regime = "BULL"
+            else:
+                regime = "TRANSITION"
         else:
             regime = "TRANSITION"
 
