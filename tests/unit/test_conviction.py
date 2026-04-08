@@ -270,9 +270,11 @@ class TestCounterThesisContinuousScoring:
 
     def test_total_clamped_to_100(self) -> None:
         """Even with all penalties maxed, CTS should not exceed 100."""
-        synth = self._synth({
-            "technical": {"rsi_14": 90.0},
-            "tradfi": {"funding_annualized": 50.0, "basis_annualized": 20.0},
-        })
+        synth = self._synth(
+            {
+                "technical": {"rsi_14": 90.0},
+                "tradfi": {"funding_annualized": 50.0, "basis_annualized": 20.0},
+            }
+        )
         cts = self.ct.compute(synthesis=synth, pcs=80.0, regime="CRISIS")
         assert cts == pytest.approx(100.0)
