@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover
 
 
 from engine.brain.conviction import ConvictionEngine, ConvictionResult
+from engine.brain.conviction_v2_bridge import compute_v2_overrides, detect_regime_v2
 from engine.brain.data_quality import DataQualityMonitor, DataQualityResult
 from engine.brain.decision import DecisionEngine
 from engine.brain.hooks import BrainHooks, PostCycleContext, PreCycleContext
@@ -490,12 +491,7 @@ class BrainOrchestrator:
         self.regime.emit_if_changed(regime_res)
 
         # V2 regime (parallel, for feature-flagged path)
-        _regime_v2_result = None
-        if self._regime_v2 is not None and btc is not None:
-            try:
-                _regime_v2_result = self._regime_v2.detect_for_asset(btc.snapshot)
-            except Exception:
-                logging.getLogger("b1e55ed.orchestrator").warning("regime_v2 failed, falling back to v1", exc_info=True)
+        _regime_v2_result = detect_regime_v2(self._regime_v2, btc.snapshot if btc else None)
 
         # Kill switch escalation if crisis.
         ks_dec = None
@@ -513,34 +509,17 @@ class BrainOrchestrator:
         intents: list[dict] = []
 
         for sym, synth in synth_results.items():
-            # Compute v2 CTS and regime multiplier when flag is on
-            _v2_mult: float | None = None
-            _v2_cts: float | None = None
-            if self._regime_v2 is not None and _regime_v2_result is not None:
-                from engine.brain.cts_v2 import compute_cts as _compute_cts_v2
+            # Compute v2 overrides (regime multiplier + CTS) when flag is on
+            cal = getattr(self.config.brain, "cts_calibration", None)
+            cal_dict = cal.model_dump() if cal is not None else None
+            v2 = compute_v2_overrides(_regime_v2_result, synth.snapshot.features, cal_dict)
 
-                _v2_mult = _regime_v2_result.multiplier
-                # Extract raw features for CTS from the per-symbol snapshot
-                snap = synth.snapshot
-                _tradfi = snap.features.get("tradfi", {})
-                _tech = snap.features.get("technical", {})
-                _cts_features: dict[str, float | None] = {
-                    "rsi_14": _tech.get("rsi_14"),
-                    "funding_annualized": _tradfi.get("funding_annualized"),
-                    "basis_annualized": _tradfi.get("basis_annualized"),
-                    "oi_change_pct": _tradfi.get("oi_change_pct"),
-                }
-                cal = getattr(self.config.brain, "cts_calibration", None)
-                cal_dict = cal.model_dump() if cal is not None else None
-                _v2_cts = _compute_cts_v2(_cts_features, cal_dict)
-
-            _regime_label = _regime_v2_result.label if _regime_v2_result is not None else regime_res.state.regime
             conv = self.conviction.compute(
                 synthesis=synth,
-                regime=_regime_label,
+                regime=v2.regime_label if v2 else regime_res.state.regime,
                 as_of=now,
-                regime_multiplier_v2=_v2_mult,
-                cts_v2=_v2_cts,
+                regime_multiplier_v2=v2.regime_multiplier if v2 else None,
+                cts_v2=v2.cts if v2 else None,
             )
             convictions[sym] = conv
             self.conviction.emit(conv, cycle_id=cycle_id)

@@ -39,7 +39,10 @@ def _to_float(v: Any) -> float | None:
     if v is None:
         return None
     try:
-        return float(v)
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
     except (TypeError, ValueError):
         return None
 
@@ -142,7 +145,7 @@ def regime_multiplier(score: float) -> float:
     Uses a sqrt curve: fast gains from ambiguity, diminishing at extremes.
     """
     magnitude = abs(score)
-    return 0.65 + (math.sqrt(magnitude) * 0.30)
+    return _clamp(0.65 + (math.sqrt(magnitude) * 0.30), 0.65, 1.0)
 
 
 def regime_label(score: float) -> str:
