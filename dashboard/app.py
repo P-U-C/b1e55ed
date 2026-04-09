@@ -574,13 +574,11 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 horizon_hours = float(h)
         if horizon_hours and opened_at_str and status.lower() != "closed":
             with contextlib.suppress(Exception):
-                from datetime import datetime as _dt, timezone as _tz
-
-                opened_dt = _dt.fromisoformat(str(opened_at_str))
+                opened_dt = datetime.fromisoformat(str(opened_at_str))
                 if opened_dt.tzinfo is None:
-                    opened_dt = opened_dt.replace(tzinfo=_tz.utc)
+                    opened_dt = opened_dt.replace(tzinfo=UTC)
                 close_dt = opened_dt + timedelta(hours=horizon_hours)
-                now_dt = _dt.now(tz=_tz.utc)
+                now_dt = datetime.now(tz=UTC)
                 remaining = close_dt - now_dt
                 if remaining.total_seconds() > 0:
                     hrs, rem = divmod(int(remaining.total_seconds()), 3600)
