@@ -528,6 +528,7 @@ class BrainOrchestrator:
                     _horizons = [str(r[0]) for r in _h_rows if r[0]]
                     if _horizons:
                         from collections import Counter
+
                         _dominant_horizon = Counter(_horizons).most_common(1)[0][0]
             except Exception:
                 pass  # fall back to "4h"
