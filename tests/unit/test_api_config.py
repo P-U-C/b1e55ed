@@ -13,10 +13,11 @@ from tests.unit._api_test_client import make_client
 async def test_config_read_validate_save(temp_dir, test_config, monkeypatch):
     test_config = test_config.model_copy(update={"api": test_config.api.model_copy(update={"auth_token": "secret"})})
 
-    # Ensure cwd is temp_dir so api routes write there
-    monkeypatch.chdir(temp_dir)
-    (temp_dir / "config").mkdir(parents=True, exist_ok=True)
-    (temp_dir / "config" / "default.yaml").write_text("preset: balanced\n")
+    # Redirect config_dir so the save endpoint writes to temp_dir, not ~/.b1e55ed
+    config_subdir = temp_dir / "config"
+    config_subdir.mkdir(parents=True, exist_ok=True)
+    (config_subdir / "default.yaml").write_text("preset: balanced\n")
+    monkeypatch.setattr("engine.core.paths.config_dir", lambda: config_subdir)
 
     app = create_app()
     app.state.config = test_config
