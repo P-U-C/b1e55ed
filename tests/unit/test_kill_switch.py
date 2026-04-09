@@ -40,7 +40,7 @@ def test_crisis_hysteresis_prevents_instant_lockdown(test_config, temp_dir):
     db = Database(temp_dir / "brain.db")
     ks = KillSwitch(test_config, db)
     threshold = test_config.kill_switch.l3_crisis_threshold
-    hysteresis = test_config.kill_switch.l3_crisis_hysteresis  # default 3
+    assert test_config.kill_switch.l3_crisis_hysteresis == 3  # sanity check
 
     # First CRISIS cycle — should NOT escalate yet
     d = ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
