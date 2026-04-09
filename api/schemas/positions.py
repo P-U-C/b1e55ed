@@ -24,6 +24,7 @@ class PositionResponse(BaseModel):
     regime_at_entry: str | None = None
     pcs_at_entry: float | None = None
     cts_at_entry: float | None = None
+    horizon_hours: float | None = None
 
 
 class PublicPositionResponse(BaseModel):

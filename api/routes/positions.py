@@ -52,6 +52,7 @@ def _row_to_position(r) -> PositionResponse:
         regime_at_entry=str(r[15]) if r[15] is not None else None,
         pcs_at_entry=float(r[16]) if r[16] is not None else None,
         cts_at_entry=float(r[17]) if r[17] is not None else None,
+        horizon_hours=float(r[18]) if len(r) > 18 and r[18] is not None else None,
     )
 
 
@@ -109,7 +110,7 @@ def _fetch_row(db: Database, position_id: str):
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage, margin_type,
                stop_loss, take_profit, opened_at, closed_at, status, realized_pnl, conviction_id,
-               regime_at_entry, pcs_at_entry, cts_at_entry
+               regime_at_entry, pcs_at_entry, cts_at_entry, horizon_hours
         FROM positions
         WHERE id = ?
         LIMIT 1
@@ -167,7 +168,7 @@ def list_positions(
         """
         SELECT id, platform, asset, direction, entry_price, size_notional, leverage, margin_type,
                stop_loss, take_profit, opened_at, closed_at, status, realized_pnl, conviction_id,
-               regime_at_entry, pcs_at_entry, cts_at_entry
+               regime_at_entry, pcs_at_entry, cts_at_entry, horizon_hours
         FROM positions
         ORDER BY opened_at DESC
         LIMIT ? OFFSET ?
