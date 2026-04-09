@@ -35,6 +35,75 @@ def test_kill_switch_5_levels_escalates_and_never_auto_deescalates(test_config, 
     assert ks.level == KillSwitchLevel.SHUTDOWN
 
 
+def test_crisis_hysteresis_prevents_instant_lockdown(test_config, temp_dir):
+    """Crisis must be sustained for l3_crisis_hysteresis cycles before L3."""
+    db = Database(temp_dir / "brain.db")
+    ks = KillSwitch(test_config, db)
+    threshold = test_config.kill_switch.l3_crisis_threshold
+    hysteresis = test_config.kill_switch.l3_crisis_hysteresis  # default 3
+
+    # First CRISIS cycle — should NOT escalate yet
+    d = ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert d is None
+    assert ks.level == KillSwitchLevel.SAFE
+
+    # Second CRISIS cycle — still below hysteresis
+    d = ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert d is None
+    assert ks.level == KillSwitchLevel.SAFE
+
+    # Third CRISIS cycle — meets hysteresis, should escalate
+    d = ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert d is not None
+    assert ks.level == KillSwitchLevel.LOCKDOWN
+
+
+def test_crisis_hysteresis_resets_on_non_crisis(test_config, temp_dir):
+    """A non-crisis cycle resets the crisis tick counter."""
+    db = Database(temp_dir / "brain.db")
+    ks = KillSwitch(test_config, db)
+    threshold = test_config.kill_switch.l3_crisis_threshold
+
+    # Two crisis cycles (below hysteresis of 3)
+    ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert ks.level == KillSwitchLevel.SAFE
+
+    # Non-crisis cycle resets counter
+    ks.evaluate(is_crisis=False)
+
+    # Need 3 consecutive again
+    ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert ks.level == KillSwitchLevel.SAFE  # still only 2
+
+
+def test_auto_deescalation_from_lockdown(test_config, temp_dir):
+    """L3 auto-de-escalates to L2 after l3_cooldown_cycles non-crisis cycles."""
+    db = Database(temp_dir / "brain.db")
+    ks = KillSwitch(test_config, db)
+    threshold = test_config.kill_switch.l3_crisis_threshold
+    hysteresis = test_config.kill_switch.l3_crisis_hysteresis
+    cooldown = test_config.kill_switch.l3_cooldown_cycles  # default 6
+
+    # Escalate to L3 via sustained crisis
+    for _ in range(hysteresis):
+        ks.evaluate(crisis_conditions=threshold, is_crisis=True, reason="regime_crisis")
+    assert ks.level == KillSwitchLevel.LOCKDOWN
+
+    # Non-crisis cycles below cooldown — stays at L3
+    for i in range(cooldown - 1):
+        d = ks.evaluate(is_crisis=False)
+        assert d is None, f"unexpected de-escalation at cycle {i+1}"
+        assert ks.level == KillSwitchLevel.LOCKDOWN
+
+    # Cooldown met — auto-de-escalate to DEFENSIVE
+    d = ks.evaluate(is_crisis=False)
+    assert d is not None
+    assert d.level == KillSwitchLevel.DEFENSIVE
+    assert ks.level == KillSwitchLevel.DEFENSIVE
+
+
 def test_pause_gate_not_paused_by_default(temp_dir):
     db = Database(temp_dir / "brain.db")
     gate = PauseGate(db)

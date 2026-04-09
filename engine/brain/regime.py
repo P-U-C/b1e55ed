@@ -35,6 +35,7 @@ class RegimeResult:
     state: RegimeState
     changed: bool
     previous: str | None
+    crisis_count: int = 0
 
 
 def _to_float(v: Any) -> float | None:
@@ -56,10 +57,13 @@ class RegimeDetector:
 
         features: dict[str, float] = {}
         if btc_snapshot is not None:
-            # Pull a few canonical indicators from available domains
-            tech = btc_snapshot.features.get("technical", {})
-            tradfi = btc_snapshot.features.get("tradfi", {})
-            sent = btc_snapshot.features.get("social", {})
+            # Use raw (undecayed) features for regime classification.
+            # Freshness decay is useful for scoring but distorts absolute
+            # thresholds used in regime rules (e.g. fear_greed < 15).
+            _src = btc_snapshot.raw_features if btc_snapshot.raw_features else btc_snapshot.features
+            tech = _src.get("technical", {})
+            tradfi = _src.get("tradfi", {})
+            sent = _src.get("social", {})
 
             rsi = _to_float(tech.get("rsi_14"))
             if rsi is not None:
@@ -136,7 +140,7 @@ class RegimeDetector:
         changed = prev is not None and prev != regime
         self._last_regime = regime
 
-        return RegimeResult(state=state, changed=changed, previous=prev)
+        return RegimeResult(state=state, changed=changed, previous=prev, crisis_count=crisis)
 
     # Ashby's Law of Requisite Variety: a controller needs at least as much variety as the system it controls.
     # One global regime for n assets has less variety than the market. Per-asset is the correct resolution.

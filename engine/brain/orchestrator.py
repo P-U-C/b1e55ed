@@ -493,17 +493,20 @@ class BrainOrchestrator:
         # V2 regime (parallel, for feature-flagged path)
         _regime_v2_result = detect_regime_v2(self._regime_v2, btc.snapshot if btc else None)
 
-        # Kill switch escalation if crisis.
-        ks_dec = None
-        if regime_res.state.regime == "CRISIS":
-            ks_dec = self.kill_switch.evaluate(crisis_conditions=self.config.kill_switch.l3_crisis_threshold, reason="regime_crisis")
-            if ks_dec is not None:
-                notify_kill_switch_escalated(
-                    previous_level=int(ks_dec.previous_level),
-                    level=int(ks_dec.level),
-                    level_name=ks_dec.level.name,
-                    reason=ks_dec.reason,
-                )
+        # Kill switch: evaluate every cycle (for hysteresis + cooldown tracking).
+        is_crisis = regime_res.state.regime == "CRISIS"
+        ks_dec = self.kill_switch.evaluate(
+            crisis_conditions=regime_res.crisis_count if is_crisis else 0,
+            is_crisis=is_crisis,
+            reason="regime_crisis" if is_crisis else None,
+        )
+        if ks_dec is not None:
+            notify_kill_switch_escalated(
+                previous_level=int(ks_dec.previous_level),
+                level=int(ks_dec.level),
+                level_name=ks_dec.level.name,
+                reason=ks_dec.reason,
+            )
 
         convictions: dict[str, ConvictionResult] = {}
         intents: list[dict] = []

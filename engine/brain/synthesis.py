@@ -211,6 +211,7 @@ class VectorSynthesis:
         now = as_of or datetime.now(tz=UTC)
 
         feats: dict[str, dict[str, float]] = {d: {} for d in self.DOMAINS}
+        raw_feats: dict[str, dict[str, float]] = {d: {} for d in self.DOMAINS}
         source_event_ids: list[str] = []
 
         # We use latest per event type for simplicity and determinism.
@@ -237,12 +238,15 @@ class VectorSynthesis:
 
             factor = _freshness_factor(chosen.ts, now)
             decayed_vec = {k: float(v) * factor for k, v in vec.items()}
+            raw_vec = {k: float(v) for k, v in vec.items()}
 
             feats[dom].update(decayed_vec)
+            raw_feats[dom].update(raw_vec)
             source_event_ids.append(chosen.id)
 
         # Drop empty domains to keep snapshot compact.
         feats = {d: v for (d, v) in feats.items() if v}
+        raw_feats = {d: v for (d, v) in raw_feats.items() if v}
 
         return FeatureSnapshot(
             cycle_id=cycle_id,
@@ -252,6 +256,7 @@ class VectorSynthesis:
             source_event_ids=sorted(set(source_event_ids)),
             regime=None,
             version="v2",
+            raw_features=raw_feats,
         )
 
     def domain_score(

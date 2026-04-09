@@ -2,7 +2,7 @@
 
 One kill switch. Five levels.
 
-Auto-escalate, never auto-de-escalate.
+Auto-escalate with hysteresis. Auto-de-escalate from L3 after cooldown.
 
 "L5 is not a bug. It is a feature. The most important one." (Easter egg)
 """
@@ -108,10 +108,12 @@ class KillSwitch:
         self.config = config
         self.db = db
         self._level: KillSwitchLevel = KillSwitchLevel.SAFE
+        self._crisis_ticks: int = 0  # consecutive CRISIS cycles seen
+        self._non_crisis_ticks: int = 0  # consecutive non-CRISIS cycles seen
         self._restore_from_db()
 
     def _restore_from_db(self) -> None:
-        """Restore kill switch level from the latest persisted event.
+        """Restore kill switch level and tick counters from the latest persisted event.
 
         Without this, the kill switch resets to SAFE on every process restart —
         meaning the 5-minute brain cron effectively has no kill switch at all.
@@ -129,6 +131,8 @@ class KillSwitch:
                 data = _json.loads(row[0])
                 persisted = int(data.get("level", 0))
                 self._level = KillSwitchLevel(persisted)
+                self._crisis_ticks = int(data.get("crisis_ticks", 0))
+                self._non_crisis_ticks = int(data.get("non_crisis_ticks", 0))
         except Exception:
             # Fail-open: if we can't read, stay at SAFE (existing behavior).
             pass
@@ -146,8 +150,17 @@ class KillSwitch:
         max_drawdown_pct: float | None = None,
         manual_level: KillSwitchLevel | None = None,
         reason: str | None = None,
+        is_crisis: bool = False,
     ) -> KillSwitchDecision | None:
-        """Return an escalation decision or None."""
+        """Return an escalation or de-escalation decision, or None."""
+
+        # Track consecutive crisis / non-crisis cycles for hysteresis.
+        if is_crisis:
+            self._crisis_ticks += 1
+            self._non_crisis_ticks = 0
+        else:
+            self._non_crisis_ticks += 1
+            self._crisis_ticks = 0
 
         prev = self._level
         target = prev
@@ -169,17 +182,47 @@ class KillSwitch:
             why = why or f"portfolio_heat_pct={portfolio_heat_pct:.3f}"
 
         if crisis_conditions is not None and crisis_conditions >= self.config.kill_switch.l3_crisis_threshold:
-            target = max(target, KillSwitchLevel.LOCKDOWN)
-            crisis_reason = f"crisis_conditions={crisis_conditions}"
-            if why:
-                if crisis_reason not in why:
-                    why = f"{why};{crisis_reason}"
-            else:
-                why = crisis_reason
+            hysteresis = getattr(self.config.kill_switch, "l3_crisis_hysteresis", 1)
+            if self._crisis_ticks >= hysteresis:
+                target = max(target, KillSwitchLevel.LOCKDOWN)
+                crisis_reason = f"crisis_conditions={crisis_conditions};sustained={self._crisis_ticks}"
+                if why:
+                    if "crisis_conditions" not in why:
+                        why = f"{why};{crisis_reason}"
+                else:
+                    why = crisis_reason
 
         if max_drawdown_pct is not None and max_drawdown_pct >= self.config.kill_switch.l4_max_drawdown_pct:
             target = max(target, KillSwitchLevel.EMERGENCY)
             why = why or f"max_drawdown_pct={max_drawdown_pct:.3f}"
+
+        # Auto-de-escalation: step down from L3 (LOCKDOWN) after cooldown,
+        # but only if the level was set by crisis (not manual or higher triggers).
+        cooldown = getattr(self.config.kill_switch, "l3_cooldown_cycles", 0)
+        if (
+            cooldown > 0
+            and prev == KillSwitchLevel.LOCKDOWN
+            and target == prev  # no new escalation this cycle
+            and self._non_crisis_ticks >= cooldown
+        ):
+            target = KillSwitchLevel.DEFENSIVE
+            why = f"auto_deescalate;non_crisis_cycles={self._non_crisis_ticks}"
+            self._level = target
+            dec = KillSwitchDecision(level=target, previous_level=prev, reason=why, auto=True)
+            payload = {
+                "level": int(target),
+                "previous_level": int(prev),
+                "reason": why,
+                "auto": True,
+                "actor": "system",
+                "crisis_ticks": self._crisis_ticks,
+                "non_crisis_ticks": self._non_crisis_ticks,
+            }
+            self.db.append_event(event_type=EventType.KILL_SWITCH_V1, payload=payload, source="brain.kill_switch")
+            return dec
+
+        # Always persist tick counters so they survive process restarts.
+        self._persist_ticks()
 
         if target <= prev:
             return None
@@ -193,9 +236,33 @@ class KillSwitch:
             "reason": why or LEVEL_MESSAGES[target],
             "auto": bool(auto),
             "actor": "system" if auto else "operator",
+            "crisis_ticks": self._crisis_ticks,
+            "non_crisis_ticks": self._non_crisis_ticks,
         }
         self.db.append_event(event_type=EventType.KILL_SWITCH_V1, payload=payload, source="brain.kill_switch")
         return dec
+
+    def _persist_ticks(self) -> None:
+        """Persist tick counters by updating the latest kill switch event payload."""
+        import json as _json
+
+        try:
+            canonical_type = getattr(EventType.KILL_SWITCH_V1, "value", str(EventType.KILL_SWITCH_V1))
+            legacy_type = "KILL_SWITCH_V1"
+            row = self.db.fetchone(
+                "SELECT rowid, payload FROM events WHERE type IN (?, ?) ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (canonical_type, legacy_type),
+            )
+            if row:
+                data = _json.loads(row[1])
+                data["crisis_ticks"] = self._crisis_ticks
+                data["non_crisis_ticks"] = self._non_crisis_ticks
+                self.db.execute(
+                    "UPDATE events SET payload = ? WHERE rowid = ?",
+                    (_json.dumps(data), row[0]),
+                )
+        except Exception:
+            pass
 
     def can_open_new_positions(self) -> bool:
         return self._level < KillSwitchLevel.DEFENSIVE
