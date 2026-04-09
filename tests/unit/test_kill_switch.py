@@ -94,7 +94,7 @@ def test_auto_deescalation_from_lockdown(test_config, temp_dir):
     # Non-crisis cycles below cooldown — stays at L3
     for i in range(cooldown - 1):
         d = ks.evaluate(is_crisis=False)
-        assert d is None, f"unexpected de-escalation at cycle {i+1}"
+        assert d is None, f"unexpected de-escalation at cycle {i + 1}"
         assert ks.level == KillSwitchLevel.LOCKDOWN
 
     # Cooldown met — auto-de-escalate to DEFENSIVE
