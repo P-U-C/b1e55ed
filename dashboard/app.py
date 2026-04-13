@@ -740,8 +740,11 @@ def _annotate_positions_with_convictions(positions: list[dict[str, Any]], client
     if not positions:
         return positions
 
-    symbols = {str(p.get("symbol") or "").strip().upper() for p in positions if str(p.get("symbol") or "").strip()}
-    conviction_map = _latest_convictions_by_symbol(client, symbols=symbols)
+    # Only look up convictions for open positions — closed positions don't need current conviction.
+    open_symbols = {
+        str(p.get("symbol") or "").strip().upper() for p in positions if str(p.get("symbol") or "").strip() and str(p.get("status") or "").lower() != "closed"
+    }
+    conviction_map = _latest_convictions_by_symbol(client, symbols=open_symbols) if open_symbols else {}
 
     for p in positions:
         symbol = str(p.get("symbol") or "").strip().upper()
@@ -1348,11 +1351,13 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
     if not raw:
         res = client.get_positions()
         raw = res.data if res.ok and isinstance(res.data, list) else []
-    all_positions = _annotate_positions_with_convictions(_map_positions(raw), client)
+    all_mapped = _map_positions(raw)
 
-    closed_positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
-    open_positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    closed_positions = [p for p in all_mapped if str(p.get("status") or "").lower() == "closed"]
+    open_positions = [p for p in all_mapped if str(p.get("status") or "").lower() != "closed"]
+    # Only annotate the view being displayed — conviction lookup is expensive.
     positions = closed_positions if view == "closed" else open_positions
+    positions = _annotate_positions_with_convictions(positions, client)
 
     pnl_values: list[float] = []
     for p in positions:
@@ -2859,11 +2864,13 @@ def positions_list_partial(request: Request, view: str = "open") -> HTMLResponse
     if not raw:
         res = client.get_positions()
         raw = res.data if res.ok and isinstance(res.data, list) else []
-    all_positions = _annotate_positions_with_convictions(_map_positions(raw), client)
+    all_mapped = _map_positions(raw)
 
-    closed_positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
-    open_positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    closed_positions = [p for p in all_mapped if str(p.get("status") or "").lower() == "closed"]
+    open_positions = [p for p in all_mapped if str(p.get("status") or "").lower() != "closed"]
+    # Only annotate the view being displayed — conviction lookup is expensive.
     positions = closed_positions if view == "closed" else open_positions
+    positions = _annotate_positions_with_convictions(positions, client)
 
     pnl_values: list[float] = []
     for p in positions:
