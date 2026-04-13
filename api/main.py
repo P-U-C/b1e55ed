@@ -16,7 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from api.errors import B1e55edError, b1e55ed_error_handler
 from api.routes import get_api_router
 from engine.core.config import Config
-from engine.core.rate_limiter import ApiRateLimiter
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -31,6 +30,11 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
 
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
+    # In-memory rate limiter — avoids DB writes that block on brain cycle locks.
+    _counters: dict[str, tuple[int, int]] = {}  # key -> (window_start, count)
+    _window = 60
+    _max_requests = 240
+
     async def dispatch(self, request, call_next):
         # Allow health/docs without rate limiting
         if request.url.path in ("/health", "/api/v1/health", "/docs", "/openapi.json", "/api/v1/openapi.json"):
@@ -40,19 +44,25 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
         auth = request.headers.get("authorization") or ""
         key = "ip:" + (request.client.host if request.client else "unknown")
         if auth.lower().startswith("bearer "):
-            # Avoid storing raw token; use a stable hash.
             import hashlib
 
             tok = auth.split(" ", 1)[1].strip().encode("utf-8")
             key = "token:" + hashlib.sha256(tok).hexdigest()
 
-        db = getattr(request.app.state, "db", None)
-        if db is None:
-            return await call_next(request)
+        from time import time as _time
 
-        limiter = ApiRateLimiter(db, window_seconds=60, max_requests=240)
-        allowed, retry_after = limiter.allow(key=key)
-        if not allowed:
+        now = int(_time())
+        window_start = now - (now % self._window)
+
+        prev = self._counters.get(key)
+        if prev is not None and prev[0] == window_start:
+            count = prev[1] + 1
+        else:
+            count = 1
+        self._counters[key] = (window_start, count)
+
+        if count > self._max_requests:
+            retry_after = max(1, (window_start + self._window) - now)
             return JSONResponse(
                 status_code=429,
                 content={

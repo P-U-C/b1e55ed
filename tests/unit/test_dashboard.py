@@ -629,7 +629,11 @@ class PositionsConflictApiClient(DummyApiClient):
 
 
 def test_positions_page_short_loss_uses_red_and_shows_conflict_badge() -> None:
-    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = PositionsConflictApiClient()
         resp = client.get("/positions?view=open")
         assert resp.status_code == 200
@@ -639,7 +643,11 @@ def test_positions_page_short_loss_uses_red_and_shows_conflict_badge() -> None:
 
 
 def test_position_partial_keeps_conviction_conflict_badge() -> None:
-    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"BTC": 110.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = PositionsConflictApiClient()
         resp = client.get("/partials/position/HL-123")
         assert resp.status_code == 200
@@ -709,7 +717,11 @@ class PositionsInvertedShortApiClient(DummyApiClient):
 
 
 def test_positions_page_autocorrects_legacy_short_risk_levels_for_display() -> None:
-    with patch("dashboard.app._latest_mark_prices", return_value={"SOL": 88.5}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"SOL": 88.5}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = PositionsInvertedShortApiClient()
         resp = client.get("/positions?view=open")
         assert resp.status_code == 200
@@ -785,7 +797,11 @@ class ClosedPositionApiClient(DummyApiClient):
 
 def test_brain_positions_partial_excludes_closed_positions() -> None:
     """Bug: closed positions must NEVER appear in /partials/positions (brain page)."""
-    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0, "ETH": 3100.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0, "ETH": 3100.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = ClosedPositionApiClient()
         resp = client.get("/partials/positions")
         assert resp.status_code == 200
@@ -810,7 +826,11 @@ def test_conviction_partial_returns_fragment_not_shell_html() -> None:
 
 def test_closed_positions_page_hides_action_buttons() -> None:
     """Bug: positions.html showed Adjust Stop/Target/Close buttons for closed positions."""
-    with patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"BTC": 79000.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = ClosedPositionApiClient()
         resp = client.get("/positions?view=closed")
         assert resp.status_code == 200
@@ -821,7 +841,11 @@ def test_closed_positions_page_hides_action_buttons() -> None:
 
 def test_open_positions_page_shows_action_buttons() -> None:
     """Regression guard: open positions must still show action buttons."""
-    with patch("dashboard.app._latest_mark_prices", return_value={"ETH": 3100.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"ETH": 3100.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         client.app.state.api_client = ClosedPositionApiClient()
         resp = client.get("/positions?view=open")
         assert resp.status_code == 200
@@ -833,7 +857,11 @@ def test_open_positions_page_shows_action_buttons() -> None:
 def test_positions_panel_pnl_negative_shows_bear_class() -> None:
     """Bug: positions_panel.html used pnl_pct >= 0 showing 0% as green.
     Fix: use > 0 / < 0 / else dim, consistent with position_detail_panel."""
-    with patch("dashboard.app._latest_mark_prices", return_value={"ETH": 2900.0}), TestClient(app) as client:
+    with (
+        patch("dashboard.app._latest_mark_prices", return_value={"ETH": 2900.0}),
+        patch("dashboard.app._positions_from_db", return_value=[]),
+        TestClient(app) as client,
+    ):
         # ETH open: entry=3000, current=2900 -> pnl_pct ~= -3.3% (negative = bear)
         client.app.state.api_client = ClosedPositionApiClient()
         resp = client.get("/partials/positions")
