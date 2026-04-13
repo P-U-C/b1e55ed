@@ -127,6 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_scores_symbol ON conviction_scores(symbol);
 CREATE INDEX IF NOT EXISTS idx_scores_ts ON conviction_scores(ts);
 CREATE INDEX IF NOT EXISTS idx_scores_node ON conviction_scores(node_id);
 CREATE INDEX IF NOT EXISTS idx_scores_cycle ON conviction_scores(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_scores_symbol_ts ON conviction_scores(symbol, ts DESC);
 
 -- ============================================================
 -- Positions (projection from events)
