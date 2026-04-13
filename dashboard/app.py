@@ -550,23 +550,26 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         elif direction in {"long", "buy"} and entry > 0 and stop > entry and target < entry:
             stop, target = target, stop
 
-        current_price = mark_prices.get(asset) if asset and asset != "—" else None
-        if current_price is None:
-            current = float(entry if entry > 0 else 0.0)
-        else:
-            current = float(current_price)
-
+        current_price = None
         if status.lower() == "closed":
             pnl_usd = float(p.get("realized_pnl") or 0.0)
-            # Compute pct from realized_pnl / notional (positions table has no pnl_pct col)
             _notional = abs(float(p.get("size_notional") or 0.0))
             pnl_pct = (pnl_usd / _notional * 100.0) if _notional > 0 else 0.0
+            # Compute exit price from realized P&L (no exit_price column in DB).
+            if entry > 0 and _notional > 0:
+                qty = _notional / entry
+                if direction in {"short", "sell"}:
+                    current = entry - (pnl_usd / qty) if qty > 0 else entry
+                else:
+                    current = entry + (pnl_usd / qty) if qty > 0 else entry
+            else:
+                current = entry
         else:
+            current_price = mark_prices.get(asset) if asset and asset != "—" else None
+            current = float(current_price) if current_price is not None else float(entry if entry > 0 else 0.0)
             if direction in {"short", "sell"}:
-                # Short: profit when price falls. entry > current → positive pnl.
                 raw_pct = ((entry - current) / entry * 100.0) if entry > 0 else 0.0
             else:
-                # Long: profit when price rises. current > entry → positive pnl.
                 raw_pct = ((current - entry) / entry * 100.0) if entry > 0 else 0.0
             pnl_pct = round(raw_pct, 4)
             pnl_usd = (pnl_pct / 100.0) * notional_for_pnl if notional_for_pnl > 0 else 0.0
@@ -681,22 +684,32 @@ def _latest_convictions_by_symbol(client: Any, symbols: set[str] | None = None) 
         db_path = _get_brain_db()
         if db_path:
             try:
-                conn = sqlite3.connect(str(db_path))
+                conn = sqlite3.connect(str(db_path), timeout=2)
                 conn.row_factory = sqlite3.Row
-                raw = conn.execute(
-                    """
-                    SELECT cs.symbol, cs.direction, cs.confidence, cs.ts
-                    FROM conviction_scores cs
-                    INNER JOIN (
-                        SELECT symbol, MAX(ts) AS max_ts
-                        FROM conviction_scores
-                        GROUP BY symbol
-                    ) latest ON cs.symbol = latest.symbol AND cs.ts = latest.max_ts
-                    ORDER BY cs.ts DESC
-                    """
-                ).fetchall()
+                if requested:
+                    # Per-symbol lookup using idx_scores_symbol_ts — fast index scan.
+                    for sym in requested:
+                        row = conn.execute(
+                            "SELECT symbol, direction, confidence, ts FROM conviction_scores WHERE symbol = ? ORDER BY ts DESC LIMIT 1",
+                            (sym,),
+                        ).fetchone()
+                        if row:
+                            rows.append(dict(row))
+                else:
+                    raw = conn.execute(
+                        """
+                        SELECT cs.symbol, cs.direction, cs.confidence, cs.ts
+                        FROM conviction_scores cs
+                        INNER JOIN (
+                            SELECT symbol, MAX(ts) AS max_ts
+                            FROM conviction_scores
+                            GROUP BY symbol
+                        ) latest ON cs.symbol = latest.symbol AND cs.ts = latest.max_ts
+                        ORDER BY cs.ts DESC
+                        """
+                    ).fetchall()
+                    rows = [dict(r) for r in raw]
                 conn.close()
-                rows = [dict(r) for r in raw]
             except Exception:
                 rows = []
 
