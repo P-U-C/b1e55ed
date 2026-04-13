@@ -6,9 +6,6 @@
 <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem;">
   <h1 style="font-size:0.7rem; font-weight:300; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim);">Positions</h1>
   <div style="display:flex; align-items:center; gap:0.75rem;">
-    {% if positions %}
-    <span style="font-size:0.75rem; color:var(--text-dim); font-family:var(--mono);">{{ positions | length }} {{ view }}</span>
-    {% endif %}
     <div style="display:flex; gap:0.5rem;">
       <button class="btn {% if view == 'open' %}active{% endif %}"
               hx-get="/partials/positions-list?view=open"
@@ -16,14 +13,14 @@
               hx-swap="innerHTML"
               hx-push-url="/positions?view=open"
               onclick="this.classList.add('active');this.nextElementSibling.classList.remove('active')"
-              style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open</button>
+              style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open ({{ open_count }})</button>
       <button class="btn {% if view == 'closed' %}active{% endif %}"
               hx-get="/partials/positions-list?view=closed"
               hx-target="#positions-content"
               hx-swap="innerHTML"
               hx-push-url="/positions?view=closed"
               onclick="this.classList.add('active');this.previousElementSibling.classList.remove('active')"
-              style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed</button>
+              style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed ({{ closed_count }})</button>
     </div>
   </div>
 </div>

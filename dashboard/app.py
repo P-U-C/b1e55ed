@@ -425,6 +425,30 @@ def _fetch_live_price_fallback(sym: str) -> float:
     return price
 
 
+def _positions_from_db() -> list[dict[str, Any]]:
+    """Read positions directly from brain.db — bypasses the API to avoid DB lock contention."""
+    db_path = _get_brain_db()
+    if db_path is None:
+        return []
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=2)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT id, asset, direction, entry_price, size_notional, leverage,
+                   stop_loss, take_profit, opened_at, closed_at, status,
+                   realized_pnl, conviction_id, regime_at_entry, horizon_hours
+            FROM positions
+            ORDER BY opened_at DESC
+            LIMIT 200
+            """
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
 def _latest_mark_prices(symbols: set[str] | None = None) -> dict[str, float]:
     """Best-effort latest mark prices from WS price signals."""
     requested = {str(s).strip().upper() for s in (symbols or set()) if str(s).strip()}
@@ -488,12 +512,13 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
 
-    symbols = {
+    # Only fetch mark prices for open positions — closed positions use realized P&L.
+    open_symbols = {
         str(p.get("asset") or p.get("symbol") or "").strip().upper()
         for p in raw
-        if isinstance(p, dict) and str(p.get("asset") or p.get("symbol") or "").strip()
+        if isinstance(p, dict) and str(p.get("asset") or p.get("symbol") or "").strip() and str(p.get("status") or "").lower() != "closed"
     }
-    mark_prices = _latest_mark_prices(symbols=symbols)
+    mark_prices = _latest_mark_prices(symbols=open_symbols) if open_symbols else {}
 
     out: list[dict[str, Any]] = []
     for p in raw:
@@ -1318,13 +1343,18 @@ def brain_overview(request: Request) -> HTMLResponse:
 @app.get("/positions", response_class=HTMLResponse)
 def positions_page(request: Request, view: str = "open") -> HTMLResponse:
     client = _api(request)
-    res = client.get_positions()
-    all_positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
+    # Read positions directly from DB to avoid API lock contention during brain cycles.
+    raw = _positions_from_db()
+    if not raw:
+        res = client.get_positions()
+        raw = res.data if res.ok and isinstance(res.data, list) else []
+    all_positions = _annotate_positions_with_convictions(_map_positions(raw), client)
 
-    if view == "closed":
-        positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
-    else:
-        positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    closed_positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
+    open_positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    positions = closed_positions if view == "closed" else open_positions
+    open_count = len(open_positions)
+    closed_count = len(closed_positions)
 
     pnl_values: list[float] = []
     for p in positions:
@@ -1345,6 +1375,8 @@ def positions_page(request: Request, view: str = "open") -> HTMLResponse:
             **_shell(request, "positions"),
             "view": view,
             "positions": positions,
+            "open_count": open_count,
+            "closed_count": closed_count,
             "net_pnl": net_pnl,
             "gross_profit": gross_profit,
             "gross_loss": gross_loss,
@@ -2825,13 +2857,15 @@ def regime_banner(request: Request) -> HTMLResponse:
 def positions_list_partial(request: Request, view: str = "open") -> HTMLResponse:
     """HTMX partial for tab switching — returns just the position cards + P&L summary."""
     client = _api(request)
-    res = client.get_positions()
-    all_positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
+    raw = _positions_from_db()
+    if not raw:
+        res = client.get_positions()
+        raw = res.data if res.ok and isinstance(res.data, list) else []
+    all_positions = _annotate_positions_with_convictions(_map_positions(raw), client)
 
-    if view == "closed":
-        positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
-    else:
-        positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    closed_positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
+    open_positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+    positions = closed_positions if view == "closed" else open_positions
 
     pnl_values: list[float] = []
     for p in positions:
@@ -2852,6 +2886,8 @@ def positions_list_partial(request: Request, view: str = "open") -> HTMLResponse
             "request": request,
             "view": view,
             "positions": positions,
+            "open_count": len(open_positions),
+            "closed_count": len(closed_positions),
             "net_pnl": net_pnl,
             "gross_profit": gross_profit,
             "gross_loss": gross_loss,
