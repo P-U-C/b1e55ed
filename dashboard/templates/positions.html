@@ -76,8 +76,8 @@
     <!-- Price grid -->
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1rem; font-size:0.8125rem;">
       <div>
-        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Current</span><br>
-        <span class="data-live">${{ '%.2f' | format(p.current) }}</span>
+        <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">{{ 'Exit' if p.status == 'closed' else 'Current' }}</span><br>
+        <span class="{{ '' if p.status == 'closed' else 'data-live' }}">${{ '%.2f' | format(p.current) }}</span>
       </div>
       <div>
         <span class="text-dim" style="font-size:0.65rem; text-transform:uppercase; letter-spacing:0.1em;">Entry</span><br>

@@ -27,6 +27,12 @@ class ApiClient:
         self.token = token
         self._timeout = httpx.Timeout(10.0)
         self._long_timeout = httpx.Timeout(60.0)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        self._client = httpx.Client(
+            base_url=self.base_url,
+            timeout=self._timeout,
+            headers=headers,
+        )
 
     def _headers(self) -> dict[str, str]:
         if not self.token:
@@ -34,44 +40,36 @@ class ApiClient:
         return {"Authorization": f"Bearer {self.token}"}
 
     def _get_json(self, path: str, params: dict[str, Any] | None = None) -> ApiResult:
-        url = f"{self.base_url}{path}"
         try:
-            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
-                resp = client.get(url, params=params)
-                resp.raise_for_status()
-                return ApiResult(resp.json(), True)
+            resp = self._client.get(path, params=params)
+            resp.raise_for_status()
+            return ApiResult(resp.json(), True)
         except Exception:
             return ApiResult(None, False)
 
     # GET is observation. POST is intervention.
     # Heisenberg's dashboard: the moment you seed the watchlist, you change what you're watching.
     def _post_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:
-        url = f"{self.base_url}{path}"
         try:
-            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
-                resp = client.post(url, json=body or {})
-                resp.raise_for_status()
-                return ApiResult(resp.json(), True)
+            resp = self._client.post(path, json=body or {})
+            resp.raise_for_status()
+            return ApiResult(resp.json(), True)
         except Exception:
             return ApiResult(None, False)
 
     def _patch_json(self, path: str, body: dict[str, Any] | None = None) -> ApiResult:
-        url = f"{self.base_url}{path}"
         try:
-            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
-                resp = client.patch(url, json=body or {})
-                resp.raise_for_status()
-                return ApiResult(resp.json(), True)
+            resp = self._client.patch(path, json=body or {})
+            resp.raise_for_status()
+            return ApiResult(resp.json(), True)
         except Exception:
             return ApiResult(None, False)
 
     def _delete_json(self, path: str) -> ApiResult:
-        url = f"{self.base_url}{path}"
         try:
-            with httpx.Client(timeout=self._timeout, headers=self._headers()) as client:
-                resp = client.delete(url)
-                resp.raise_for_status()
-                return ApiResult(resp.json(), True)
+            resp = self._client.delete(path)
+            resp.raise_for_status()
+            return ApiResult(resp.json(), True)
         except Exception:
             return ApiResult(None, False)
 
