@@ -16,14 +16,14 @@
               hx-swap="innerHTML"
               hx-push-url="/positions?view=open"
               onclick="this.classList.add('active');this.nextElementSibling.classList.remove('active')"
-              style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open</button>
+              style="{% if view == 'open' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Open ({{ open_count }})</button>
       <button class="btn {% if view == 'closed' %}active{% endif %}"
               hx-get="/partials/positions-list?view=closed"
               hx-target="#positions-content"
               hx-swap="innerHTML"
               hx-push-url="/positions?view=closed"
               onclick="this.classList.add('active');this.previousElementSibling.classList.remove('active')"
-              style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed</button>
+              style="{% if view == 'closed' %}color:var(--text-bright);border-color:var(--border-active);{% endif %}">Closed ({{ closed_count }})</button>
     </div>
   </div>
 </div>
