@@ -550,6 +550,7 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
         elif direction in {"long", "buy"} and entry > 0 and stop > entry and target < entry:
             stop, target = target, stop
 
+        current_price = None
         if status.lower() == "closed":
             pnl_usd = float(p.get("realized_pnl") or 0.0)
             _notional = abs(float(p.get("size_notional") or 0.0))
