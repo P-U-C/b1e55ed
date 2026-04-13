@@ -564,6 +564,29 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
             else:
                 near_stop = current <= stop * 1.005
 
+        # Timeframe and countdown
+        horizon_hours = None
+        closes_in = None
+        opened_at_str = p.get("opened_at")
+        with contextlib.suppress(Exception):
+            h = p.get("horizon_hours")
+            if h is not None:
+                horizon_hours = float(h)
+        if horizon_hours and opened_at_str and status.lower() != "closed":
+            with contextlib.suppress(Exception):
+                opened_dt = datetime.fromisoformat(str(opened_at_str))
+                if opened_dt.tzinfo is None:
+                    opened_dt = opened_dt.replace(tzinfo=UTC)
+                close_dt = opened_dt + timedelta(hours=horizon_hours)
+                now_dt = datetime.now(tz=UTC)
+                remaining = close_dt - now_dt
+                if remaining.total_seconds() > 0:
+                    hrs, rem = divmod(int(remaining.total_seconds()), 3600)
+                    mins = rem // 60
+                    closes_in = f"{hrs}h {mins}m" if hrs else f"{mins}m"
+                else:
+                    closes_in = "overdue"
+
         out.append(
             {
                 "id": str(p.get("id") or "—"),
@@ -587,6 +610,9 @@ def _map_positions(raw: Any) -> list[dict[str, Any]]:
                 "regime_entry": p.get("regime_at_entry"),
                 "held": None,
                 "status": p.get("status"),
+                "horizon": f"{int(horizon_hours)}h" if horizon_hours else None,
+                "closes_in": closes_in,
+                "closed_at": p.get("closed_at"),
             }
         )
     return out
@@ -2793,6 +2819,45 @@ def regime_banner(request: Request) -> HTMLResponse:
         "</div>"
     )
     return HTMLResponse(html)
+
+
+@app.get("/partials/positions-list", response_class=HTMLResponse)
+def positions_list_partial(request: Request, view: str = "open") -> HTMLResponse:
+    """HTMX partial for tab switching — returns just the position cards + P&L summary."""
+    client = _api(request)
+    res = client.get_positions()
+    all_positions = _annotate_positions_with_convictions(_map_positions(res.data), client)
+
+    if view == "closed":
+        positions = [p for p in all_positions if str(p.get("status") or "").lower() == "closed"]
+    else:
+        positions = [p for p in all_positions if str(p.get("status") or "").lower() != "closed"]
+
+    pnl_values: list[float] = []
+    for p in positions:
+        with contextlib.suppress(Exception):
+            pnl_values.append(float(p.get("pnl_usd") or 0.0))
+
+    net_pnl = sum(pnl_values)
+    gross_profit = sum(v for v in pnl_values if v > 0)
+    gross_loss = abs(sum(v for v in pnl_values if v < 0))
+    winners = sum(1 for v in pnl_values if v > 0)
+    total_with_pnl = sum(1 for v in pnl_values if v != 0)
+    win_rate = (winners / total_with_pnl * 100) if total_with_pnl > 0 else 0
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/positions_list.html",
+        context={
+            "request": request,
+            "view": view,
+            "positions": positions,
+            "net_pnl": net_pnl,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+            "win_rate": win_rate,
+        },
+    )
 
 
 @app.get("/partials/positions", response_class=HTMLResponse)
