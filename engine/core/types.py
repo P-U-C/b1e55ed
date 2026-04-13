@@ -96,6 +96,7 @@ class FeatureSnapshot:
     source_event_ids: list[str] = field(default_factory=list)
     regime: str | None = None
     version: str = "v1"
+    raw_features: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 class ProducerHealth(StrEnum):

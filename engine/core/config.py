@@ -214,6 +214,8 @@ class KillSwitchConfig(BaseModel):
     l1_daily_loss_pct: float = 0.03
     l2_portfolio_heat_pct: float = 0.06
     l3_crisis_threshold: int = 2
+    l3_crisis_hysteresis: int = 3  # consecutive CRISIS cycles before L3 escalation
+    l3_cooldown_cycles: int = 6  # consecutive non-CRISIS cycles before auto-de-escalation from L3
     l4_max_drawdown_pct: float = 0.30
 
 
