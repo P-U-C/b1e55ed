@@ -26,6 +26,10 @@ def _build_engine(test_config, temp_dir, monkeypatch) -> ConvictionEngine:
 
 
 def _build_synthesis(*, weighted_score: float, features: dict[str, dict[str, float]]):
+    # Ensure at least 2 domains so single-domain PCS cap doesn't interfere.
+    # Add a minimal second domain with neutral values that won't affect CTS.
+    if len(features) < 2:
+        features = {**features, "events": {"event_count": 0.0}}
     snap = FeatureSnapshot(
         cycle_id="c",
         symbol="BTC",
