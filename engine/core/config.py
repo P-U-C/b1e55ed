@@ -151,6 +151,10 @@ class BrainConfig(BaseModel):
     for testing.  Default: 5.0 (production-safe).
     Recommended testing range: 2.5–4.0."""
 
+    single_domain_max_pcs: float = 45.0
+    """Hard ceiling on PCS when only one domain contributed to synthesis.
+    Prevents single-domain paths from entering the High conviction cohort."""
+
     use_regime_v2: bool = False
     """Feature flag: enable continuous regime detector + CTS v2.
 

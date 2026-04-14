@@ -222,3 +222,64 @@ def test_primary_feature_is_max_absolute_value(test_config, temp_dir, monkeypatc
     assert row is not None
     assert str(row["feature_key"]) == "ema"
     assert float(row["feature_value"]) == pytest.approx(-0.9)
+
+
+def test_single_domain_pcs_capped(test_config, temp_dir, monkeypatch):
+    """Single-domain trades should have PCS capped at single_domain_max_pcs."""
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "test")
+    ident = generate_node_identity()
+
+    db = Database(temp_dir / "brain.db")
+    eng = ConvictionEngine(test_config, db, node_id=ident.node_id)
+
+    # Single domain: social only, high score
+    snapshot = FeatureSnapshot(
+        cycle_id="cycle-cap",
+        symbol="HYPE",
+        ts=datetime.now(tz=UTC),
+        features={"social": {"fear_greed": 80.0, "score": 0.9}},
+        source_event_ids=["evt-1"],
+        regime="BULL",
+        version="v2",
+    )
+    synthesis = SimpleNamespace(
+        snapshot=snapshot,
+        domain_scores={"social": 0.75},
+        weights_used={"social": 0.15, "technical": 0.10, "tradfi": 0.20},
+        weighted_score=0.75,  # would give PCS=75 uncapped
+    )
+
+    result = eng.compute(synthesis=synthesis, regime="BULL", as_of=datetime.now(tz=UTC))
+    assert result.pcs <= test_config.brain.single_domain_max_pcs
+
+
+def test_multi_domain_pcs_not_capped(test_config, temp_dir, monkeypatch):
+    """Multi-domain trades should not be capped by single_domain_max_pcs."""
+    monkeypatch.setenv("B1E55ED_MASTER_PASSWORD", "test")
+    ident = generate_node_identity()
+
+    db = Database(temp_dir / "brain.db")
+    eng = ConvictionEngine(test_config, db, node_id=ident.node_id)
+
+    snapshot = FeatureSnapshot(
+        cycle_id="cycle-multi",
+        symbol="BTC",
+        ts=datetime.now(tz=UTC),
+        features={
+            "tradfi": {"funding_annualized": 20.0},
+            "technical": {"rsi_14": 70.0},
+        },
+        source_event_ids=["evt-1"],
+        regime="BULL",
+        version="v2",
+    )
+    synthesis = SimpleNamespace(
+        snapshot=snapshot,
+        domain_scores={"tradfi": 0.8, "technical": 0.7},
+        weights_used={"tradfi": 0.6, "technical": 0.4},
+        weighted_score=0.76,
+    )
+
+    result = eng.compute(synthesis=synthesis, regime="BULL", as_of=datetime.now(tz=UTC))
+    # Multi-domain should not be capped at 45
+    assert result.pcs > test_config.brain.single_domain_max_pcs

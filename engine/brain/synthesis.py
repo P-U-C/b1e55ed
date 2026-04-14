@@ -483,6 +483,12 @@ class VectorSynthesis:
                 weighted_score = 0.0
                 for dom, s in domain_scores.items():
                     weighted_score += float(weights_effective.get(dom, 0.0)) * float(s)
+
+                # Coverage discount: fewer active domains → lower confidence.
+                # 1 domain → ×0.57, 2 → ×0.64, 3 → ×0.71, all → ×1.0.
+                n_possible = max(sum(1 for v in weights_used.values() if v > 0), len(domain_scores))
+                coverage = len(domain_scores) / max(n_possible, 1)
+                weighted_score = weighted_score * (0.5 + 0.5 * coverage)
             else:
                 # All scored domains were quality-gated to zero weight.
                 # Respect the gate and remain neutral.

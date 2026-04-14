@@ -116,7 +116,10 @@ def test_synthesis_sparse_domains_do_not_default_bearish(test_config, temp_dir):
 
     assert set(res.domain_scores) == {"social"}
     assert res.weights_used["social"] == pytest.approx(1.0)
-    assert res.weighted_score == pytest.approx(res.domain_scores["social"])
+    # Coverage discount: 1 domain active → score is discounted (not 1:1 with domain score).
+    # Key invariant: single-domain should NOT default to bearish.
+    assert res.weighted_score > 0.0
+    assert res.weighted_score < res.domain_scores["social"]  # discounted
 
 
 def test_synthesis_no_domain_evidence_stays_neutral(test_config, temp_dir):
