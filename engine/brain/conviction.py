@@ -177,6 +177,13 @@ class ConvictionEngine:
 
         # PCS is 0..100
         pcs = float(_clamp(synthesis.weighted_score * 100.0, 0.0, 100.0))
+
+        # Hard cap: single-domain paths cannot enter High conviction.
+        n_domains = len(synthesis.domain_scores)
+        if n_domains <= 1:
+            cap = float(getattr(self.config.brain, "single_domain_max_pcs", 45.0))
+            pcs = min(pcs, cap)
+
         cts = float(self.counter_thesis.compute(synthesis=synthesis, pcs=pcs, regime=regime))
 
         # Final conviction: penalize PCS by up to 50% (cts=100 => -50%)
@@ -258,6 +265,12 @@ class ConvictionEngine:
 
         # Base PCS from synthesis
         base_pcs = float(_clamp(synthesis.weighted_score * 100.0, 0.0, 100.0))
+
+        # Hard cap: single-domain paths cannot enter High conviction.
+        n_domains = len(synthesis.domain_scores)
+        if n_domains <= 1:
+            cap = float(getattr(self.config.brain, "single_domain_max_pcs", 45.0))
+            base_pcs = min(base_pcs, cap)
 
         # CTS v2 contributes positively to PCS (0-35 range).
         # In v2, CTS measures "how interesting/actionable is the market" not "counter-evidence".
