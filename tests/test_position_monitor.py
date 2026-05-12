@@ -6,9 +6,9 @@ Tests:
 1. stop_loss triggers a position close (short: price rises above stop)
 2. take_profit triggers a position close (short: price falls below target)
 3. Long stop_loss triggers a position close (long: price falls below stop)
-4. Time-based stop: position open > 72h AND losing > 5% → close
-5. Time-based stop does NOT trigger when position is < 72h old
-6. Time-based stop does NOT trigger when position is not losing > 5%
+4. Time-based stop: position open > execution.paper_max_hold_hours → close
+5. Time-based stop does NOT trigger when position is younger than max hold
+6. Time-based stop closes old positions regardless of PnL
 7. No close when neither stop nor time-stop condition is met
 8. consecutive_loss_count = 2 does NOT block new trades (kill switch stays SAFE)
 9. Bias-flip close: conviction flips direction for same (symbol, horizon) → close
@@ -252,8 +252,8 @@ class TestTimeStop:
         assert row["status"] == "open", "Young position should NOT be time-stopped"
         assert stats["closed_time_stop"] == 0
 
-    def test_time_stop_does_not_trigger_when_small_loss(self, tmp_db: Database, paper_config: Config):
-        """Position > 72h but loss < 5% should NOT be time-stopped."""
+    def test_time_stop_triggers_when_old_even_with_small_loss(self, tmp_db: Database, paper_config: Config):
+        """paper_max_hold_hours is a hard max hold, not a loss-only stop."""
         old_open = datetime.now(tz=UTC) - timedelta(hours=100)
         pos_id = _insert_position(
             tmp_db,
@@ -264,13 +264,33 @@ class TestTimeStop:
             opened_at=old_open,
         )
 
-        mark_price = 89.23 * 1.03  # only 3% adverse — below 5% threshold
+        mark_price = 89.23 * 1.03  # only 3% adverse — still stale past max hold
         with _mark_price_side_effect(mark_price):
             stats = monitor_positions(tmp_db, paper_config)
 
         row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
-        assert row["status"] == "open", "Small-loss old position should NOT be time-stopped"
-        assert stats["closed_time_stop"] == 0
+        assert row["status"] == "closed", "Old paper position should close at max hold regardless of loss size"
+        assert stats["closed_time_stop"] == 1
+
+    def test_time_stop_triggers_when_old_and_profitable(self, tmp_db: Database, paper_config: Config):
+        """Profitable paper positions should not become zombies past max hold."""
+        old_open = datetime.now(tz=UTC) - timedelta(hours=100)
+        pos_id = _insert_position(
+            tmp_db,
+            direction="short",
+            entry_price=100.0,
+            stop_loss=120.0,
+            take_profit=80.0,
+            opened_at=old_open,
+        )
+
+        with _mark_price_side_effect(95.0):  # profitable short, no target hit
+            stats = monitor_positions(tmp_db, paper_config)
+
+        row = tmp_db.fetchone("SELECT status, realized_pnl FROM positions WHERE id = ?", (pos_id,))
+        assert row["status"] == "closed"
+        assert row["realized_pnl"] > 0
+        assert stats["closed_time_stop"] == 1
 
     def test_no_close_when_no_condition_met(self, tmp_db: Database, paper_config: Config):
         """Position with no stop/target/time-stop condition → stays open."""
@@ -569,8 +589,8 @@ class TestHorizonExpiryClose:
         assert row["status"] == "open", "Position younger than horizon should stay open"
         assert stats["closed_horizon_expiry"] == 0
 
-    def test_horizon_expiry_does_not_trigger_when_null(self, tmp_db: Database, paper_config: Config):
-        """Position with horizon_hours=NULL → no expiry, stays open."""
+    def test_null_horizon_old_position_falls_back_to_max_hold_close(self, tmp_db: Database, paper_config: Config):
+        """horizon_hours=NULL should not let an old paper position live forever."""
         pos_id = _insert_position(
             tmp_db,
             asset="ETH",
@@ -586,8 +606,9 @@ class TestHorizonExpiryClose:
             stats = monitor_positions(tmp_db, paper_config)
 
         row = tmp_db.fetchone("SELECT status FROM positions WHERE id = ?", (pos_id,))
-        assert row["status"] == "open"
+        assert row["status"] == "closed"
         assert stats["closed_horizon_expiry"] == 0
+        assert stats["closed_time_stop"] == 1
 
     def test_stop_loss_takes_priority_over_horizon_expiry(self, tmp_db: Database, paper_config: Config):
         """When both stop_loss and horizon_expiry would trigger, stop_loss wins."""
