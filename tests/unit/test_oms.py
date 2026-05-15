@@ -48,6 +48,7 @@ def test_submit_intent_paper_creates_fill_and_events(temp_dir: Path, test_config
     pos = db.conn.execute("SELECT * FROM positions WHERE id = ?", (res.position_id,)).fetchone()
     assert pos is not None
     assert pos["status"] == "open"
+    assert float(pos["horizon_hours"]) == float(test_config.execution.paper_max_hold_hours)
 
     # execution events emitted
     # Note: trade_intent.v1 is now emitted by decision.py, not OMS

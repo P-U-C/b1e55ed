@@ -2406,7 +2406,15 @@ def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     db = Database(_resolve_db_path(ctx.repo_root))
     config = _load_config(ctx)
 
-    result: dict = {"evaluated": 0, "closed_stop": 0, "closed_target": 0, "closed_time_stop": 0, "errors": 0}
+    result: dict = {
+        "evaluated": 0,
+        "closed_stop": 0,
+        "closed_target": 0,
+        "closed_time_stop": 0,
+        "closed_bias_flip": 0,
+        "closed_horizon_expiry": 0,
+        "errors": 0,
+    }
     try:
         result = monitor_positions(db, config)
     except Exception as exc:
@@ -2419,12 +2427,21 @@ def _cmd_monitor_positions(ctx: CliContext, args: argparse.Namespace) -> int:
     if bool(getattr(args, "json", False)):
         print(_json_dumps(result))
     else:
-        closed = result["closed_stop"] + result["closed_target"] + result["closed_time_stop"]
+        close_keys = (
+            "closed_stop",
+            "closed_target",
+            "closed_time_stop",
+            "closed_bias_flip",
+            "closed_horizon_expiry",
+        )
+        closed = sum(int(result.get(k, 0) or 0) for k in close_keys)
         print(
             f"position-monitor: evaluated={result['evaluated']} "
             f"closed_stop={result['closed_stop']} "
             f"closed_target={result['closed_target']} "
             f"closed_time_stop={result['closed_time_stop']} "
+            f"closed_bias_flip={result.get('closed_bias_flip', 0)} "
+            f"closed_horizon_expiry={result.get('closed_horizon_expiry', 0)} "
             f"errors={result['errors']}"
         )
         if closed:

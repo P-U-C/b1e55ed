@@ -137,9 +137,14 @@ class OMS:
 
                 # Parse horizon string (e.g. "4h") to numeric hours for
                 # position_monitor bias-flip scoping + horizon-expiry close.
+                # If no horizon is supplied, fall back to paper_max_hold_hours
+                # so paper positions always have an expiry anchor and cannot
+                # become stale zombies with horizon_hours=NULL.
                 _horizon_hours = None
                 if intent.horizon:
                     _horizon_hours = _parse_horizon_to_hours(intent.horizon)
+                if _horizon_hours is None:
+                    _horizon_hours = float(getattr(self.config.execution, "paper_max_hold_hours", 72) or 72)
 
                 fill = self.paper.execute_market(
                     symbol=intent.symbol,

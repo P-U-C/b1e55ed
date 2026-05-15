@@ -4,8 +4,8 @@ Standalone position monitor for paper trading Phase 0.
 
 Responsibilities:
 1. Evaluate stop_loss and take_profit for every open position each run.
-2. Time-based stop: close any paper position open > 72 hours that is also
-   losing > 5% (prevents stale positions blocking the trade count).
+2. Time-based stop: close any paper position open longer than the configured
+   paper max hold. A max hold is a hard exit, not a loss-only stop.
 3. Fetch mark prices from Binance (same logic as the dashboard / orchestrator).
 4. Call PnLTracker.close_position when a stop/target is triggered.
 5. Emit a clear audit event for every auto-close.
@@ -45,7 +45,7 @@ _log = logging.getLogger("b1e55ed.position_monitor")
 # ---------------------------------------------------------------------------
 
 PAPER_TIME_STOP_HOURS: float = 72.0
-PAPER_TIME_STOP_LOSS_PCT: float = 0.05  # 5 %
+
 
 # ---------------------------------------------------------------------------
 # Bias-flip: max age (seconds) for a conviction to count as "current"
@@ -208,31 +208,35 @@ def monitor_positions(db: Database, config: Config) -> dict:
                 close_reason = "take_profit"
 
         # --- time-based stop (paper mode only) ----------------------------
+        # paper_max_hold_hours is a hard maximum hold.  The old implementation
+        # only closed stale positions when they were down >= 5%, which let flat
+        # or profitable paper trades become zombies forever and block learning.
         if close_reason is None and is_paper and opened_at_raw and entry_price > 0:
             try:
                 opened_at = datetime.fromisoformat(opened_at_raw)
                 if opened_at.tzinfo is None:
                     opened_at = opened_at.replace(tzinfo=UTC)
                 age_hours = (now - opened_at).total_seconds() / 3600.0
+                max_hold_hours = float(getattr(getattr(config, "execution", None), "paper_max_hold_hours", PAPER_TIME_STOP_HOURS) or 0.0)
 
-                if age_hours >= PAPER_TIME_STOP_HOURS:
+                if max_hold_hours > 0 and age_hours >= max_hold_hours:
                     if direction == "long":
-                        loss_pct = (entry_price - mark) / entry_price
+                        pnl_pct = (mark - entry_price) / entry_price
                     else:  # short
-                        loss_pct = (mark - entry_price) / entry_price
+                        pnl_pct = (entry_price - mark) / entry_price
 
-                    if loss_pct >= PAPER_TIME_STOP_LOSS_PCT:
-                        close_reason = "time_stop"
-                        _log.info(
-                            "time-stop triggered: position %s %s %s open %.1fh loss=%.2f%% entry=%.4f mark=%.4f",
-                            pos_id,
-                            direction,
-                            asset,
-                            age_hours,
-                            loss_pct * 100,
-                            entry_price,
-                            mark,
-                        )
+                    close_reason = "time_stop"
+                    _log.info(
+                        "time-stop triggered: position %s %s %s open %.1fh >= max_hold %.1fh pnl=%.2f%% entry=%.4f mark=%.4f",
+                        pos_id,
+                        direction,
+                        asset,
+                        age_hours,
+                        max_hold_hours,
+                        pnl_pct * 100,
+                        entry_price,
+                        mark,
+                    )
             except Exception:
                 _log.debug("time-stop calculation failed for %s", pos_id, exc_info=True)
 
