@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from engine.brain.kill_switch import KillSwitchLevel
 from engine.core.config import Config
@@ -121,6 +122,39 @@ class OMS:
                 take_profit = float(mid_price) * (1.0 + float(intent.take_profit_pct))
 
         if mode == "paper":
+            cooldown_hours = float(getattr(self.config.execution, "paper_reentry_cooldown_hours", 72) or 0)
+            if cooldown_hours > 0:
+                row = self.db.fetchone(
+                    """
+                    SELECT closed_at FROM positions
+                    WHERE asset = ?
+                      AND direction = ?
+                      AND status = 'closed'
+                      AND closed_at IS NOT NULL
+                    ORDER BY closed_at DESC
+                    LIMIT 1
+                    """,
+                    (str(intent.symbol).upper(), str(intent.direction).lower()),
+                )
+                if row is not None and row[0]:
+                    try:
+                        closed_at = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+                        if closed_at.tzinfo is None:
+                            closed_at = closed_at.replace(tzinfo=UTC)
+                        age_hours = (datetime.now(tz=UTC) - closed_at).total_seconds() / 3600.0
+                        if age_hours < cooldown_hours:
+                            return OMSResult(
+                                status="rejected",
+                                mode=mode,
+                                reasons=[f"paper_reentry_cooldown: {str(intent.symbol).upper()} {str(intent.direction).lower()} recently closed"],
+                            )
+                    except Exception:
+                        logging.getLogger("b1e55ed.execution.oms").debug(
+                            "paper re-entry cooldown check failed for %s %s",
+                            intent.symbol,
+                            intent.direction,
+                            exc_info=True,
+                        )
             try:
                 # Look up cts_score from conviction_scores table using conviction_id.
                 _cts_at_entry: float | None = None
@@ -240,8 +274,6 @@ class OMS:
                             source="execution.oms",
                         )
             except Exception:
-                import logging
-
                 logging.getLogger("b1e55ed.execution.oms").warning("KS-5 fill divergence check failed", exc_info=True)
 
             return OMSResult(

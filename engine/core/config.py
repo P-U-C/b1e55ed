@@ -180,6 +180,11 @@ class ExecutionConfig(BaseModel):
     paper_max_hold_hours: int = 72
     """Auto-close paper positions older than this many hours. 0 = disabled. Default: 72h."""
 
+    paper_reentry_cooldown_hours: int = 72
+    """Reject same-symbol/same-direction paper re-entry for this many hours after a close.
+    Prevents stale high-conviction signals from immediately reopening positions that
+    were just exited by time-stop/horizon-expiry. 0 = disabled. Default: 72h."""
+
     paper_ignore_consecutive_loss_gate: bool = True
     """Bypass the KS-1 consecutive-loss kill-switch escalation in paper mode.
     Keeps kill-switch at SAFE so repeated paper losses don't freeze paper trading. Default: True."""

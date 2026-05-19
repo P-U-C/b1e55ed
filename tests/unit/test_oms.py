@@ -98,3 +98,52 @@ def test_submit_intent_short_uses_inverted_stop_and_target(temp_dir: Path, test_
     # For shorts: stop above entry, target below entry.
     assert float(pos["stop_loss"]) == 105.0
     assert float(pos["take_profit"]) == 90.0
+
+
+def test_submit_rejects_same_direction_reentry_during_paper_cooldown(temp_dir: Path, test_config: Config) -> None:
+    db = Database(temp_dir / "brain.db")
+    ks = KillSwitch(test_config, db)
+
+    pol = TradingPolicy(
+        max_daily_loss_usd=0.0,
+        max_position_size_pct=test_config.risk.max_position_pct,
+        kill_switch_enabled=True,
+        max_leverage_default=test_config.risk.max_leverage,
+    )
+    policy_engine = TradingPolicyEngine(policy=pol)
+
+    preflight = Preflight(policy=policy_engine, kill_switch=ks)
+    sizer = default_sizer_from_config(test_config)
+    oms = OMS(config=test_config, db=db, preflight=preflight, sizer=sizer)
+
+    intent = TradeIntent(
+        symbol="SOL",
+        direction="short",
+        size_pct=0.05,
+        leverage=1.0,
+        conviction_score=80.0,
+        regime="BEAR",
+        rationale="unit test reentry guard",
+        stop_loss_pct=0.05,
+        take_profit_pct=0.10,
+    )
+
+    first = oms.submit(intent, mid_price=100.0, equity_usd=10_000.0)
+    assert first.status == "filled"
+    assert first.position_id is not None
+
+    from engine.execution.pnl import PnLTracker
+
+    PnLTracker(db, test_config).close_position(
+        position_id=first.position_id,
+        exit_price=90.0,
+        reason="time_stop",
+    )
+
+    second = oms.submit(intent, mid_price=100.0, equity_usd=10_000.0)
+
+    assert second.status == "rejected"
+    assert second.reasons is not None
+    assert second.reasons == ["paper_reentry_cooldown: SOL short recently closed"]
+    open_count = db.fetchone("SELECT COUNT(*) FROM positions WHERE asset = 'SOL' AND status = 'open'")[0]
+    assert open_count == 0
